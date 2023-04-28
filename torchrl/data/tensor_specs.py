@@ -135,7 +135,12 @@ def _slice_indexing(shape: list[int], idx: slice):
     return [n_items] + shape[1:]
 
 
-def _shape_indexing(shape: list[int], idx: SHAPE_INDEX_TYPING):
+def _shape_indexing(
+    shape: Union[list[int], torch.Size, tuple], idx: SHAPE_INDEX_TYPING
+):
+    if not isinstance(shape, list):
+        shape = list(shape)
+
     if idx is Ellipsis or (
         isinstance(idx, slice) and (idx.step is idx.start is idx.stop is None)
     ):
@@ -168,18 +173,17 @@ def _shape_indexing(shape: list[int], idx: SHAPE_INDEX_TYPING):
 
     if isinstance(idx, tuple):
         # Supports int, None, slice and ellipsis indices
-        head_new_axes, tail_new_axes = 0, 0
         # Index on the current shape dimension
         shape_idx = 0
+        none_dims = 0
         ellipsis = False
         prev_is_list = False
         shape_len = len(shape)
         for item_idx, item in enumerate(idx):
             if item is None:
-                if ellipsis:
-                    tail_new_axes += 1
-                else:
-                    head_new_axes += 1
+                shape = shape[:shape_idx] + [1] + shape[shape_idx:]
+                shape_idx += 1
+                none_dims += 1
             elif isinstance(item, int):
                 _validate_idx(shape, item, shape_idx)
                 del shape[shape_idx]
@@ -220,14 +224,14 @@ def _shape_indexing(shape: list[int], idx: SHAPE_INDEX_TYPING):
                 shape_idx += len(res)
             else:
                 raise IndexError(
-                    f"tuple indexing only supports integers, slices (`:`), ellipsis (`...`), new axis (`None`), tuples and list indices. {str(type(idx))} received"
+                    f"tuple indexing only supports integers, ranges, slices (`:`), ellipsis (`...`), new axis (`None`), tuples, list, tensor and ndarray indices. {str(type(idx))} received"
                 )
 
-        if len(idx) - head_new_axes - tail_new_axes - int(ellipsis) > shape_len:
+        if len(idx) - none_dims - int(ellipsis) > shape_len:
             raise IndexError(
-                f"shape is {shape_len}-dimensional, but {len(idx) - head_new_axes - tail_new_axes - int(ellipsis)} dimensions were indexed"
+                f"shape is {shape_len}-dimensional, but {len(idx) - none_dims - int(ellipsis)} dimensions were indexed"
             )
-        return [1] * head_new_axes + shape + [1] * tail_new_axes
+        return shape
 
     if isinstance(idx, list):
         # int indexing only
@@ -928,6 +932,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         >>> print(chosen_action_value)
         tensor([ 3.,  7., 11.])
 
+    The last dimension of the shape (variable domain) cannot be indexed.
+
     Args:
         n (int): number of possible outcomes.
         shape (torch.Size, optional): total shape of the sampled tensors.
@@ -1110,9 +1116,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index.
 
-        The last dimension of the spec corresponding to the variable domain is non-indexable.
+        The last dimension of the spec corresponding to the variable domain cannot be indexed.
         """
-        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             n=self.space.n,
             shape=torch.Size(indexed_shape + [self.shape[-1]]),
@@ -1401,7 +1407,7 @@ class BoundedTensorSpec(TensorSpec):
             "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
         )
 
-        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         # Expand is required as pytorch.tensor indexing
         return self.__class__(
             minimum=self.space.minimum[idx].clone().expand(indexed_shape),
@@ -1486,7 +1492,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
@@ -1578,13 +1584,15 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
 @dataclass(repr=False)
 class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """A concatenation of one-hot discrete tensor spec.
+
+    The last dimension of the shape (domain of the tensor elements) cannot be indexed.
 
     Args:
         nvec (iterable of integers): cardinality of each of the elements of
@@ -1801,8 +1809,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
         The last dimension of the spec corresponding to the domain of the tensor elements is non-indexable.
         """
-        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
-        print(indexed_shape, [self.shape[-1]])
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             nvec=self.nvec,
             shape=torch.Size(indexed_shape + [self.shape[-1]]),
@@ -1817,6 +1824,7 @@ class DiscreteTensorSpec(TensorSpec):
     An alternative to OneHotTensorSpec for categorical variables in TorchRL. Instead of
     using multiplication, categorical variables perform indexing which can speed up
     computation and reduce memory cost for large categorical variables.
+    The last dimension of the spec (length n of the binary vector) cannot be indexed
 
     Example:
         >>> batch, size = 3, 4
@@ -1877,7 +1885,7 @@ class DiscreteTensorSpec(TensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        indexed_shape = torch.Size(_shape_indexing(list(self.shape), idx))
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(
             n=self.space.n,
             shape=indexed_shape,
@@ -2060,9 +2068,9 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index.
 
-        The last dimension of the spec (length n of the binary vector) is non-indexable.
+        The last dimension of the spec (length n of the binary vector) cannot be indexed.
         """
-        indexed_shape = _shape_indexing(list(self.shape[:-1]), idx)
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
         return self.__class__(
             n=self.shape[-1],
             shape=torch.Size(indexed_shape + [self.shape[-1]]),
@@ -2480,15 +2488,55 @@ class CompositeSpec(TensorSpec):
         device = torch.device(device)
         self.to(device)
 
-    def __getitem__(self, item):
-        if isinstance(item, tuple) and len(item) > 1:
-            return self[item[0]][item[1:]]
-        elif isinstance(item, tuple):
-            return self[item[0]]
+    def __getitem__(self, idx):
+        """Indexes the current CompositeSpec based on the provided index."""
+        if (
+            isinstance(idx, str)
+            or isinstance(idx, tuple)
+            and all(isinstance(item, str) for item in idx)
+        ):
+            if isinstance(idx, tuple) and len(idx) > 1:
+                return self[idx[0]][idx[1:]]
+            elif isinstance(idx, tuple):
+                return self[idx[0]]
 
-        if item in {"shape", "device", "dtype", "space"}:
-            raise AttributeError(f"CompositeSpec has no key {item}")
-        return self._specs[item]
+            if idx in {"shape", "device", "dtype", "space"}:
+                raise AttributeError(f"CompositeSpec has no key {idx}")
+            return self._specs[idx]
+
+        indexed_shape = _shape_indexing(self.shape, idx)
+        indexed_specs = {}
+        for k, v in self._specs.items():
+            _idx = idx
+            if isinstance(idx, tuple):
+                protected_dims = (
+                    1
+                    if any(
+                        isinstance(v, spec_class)
+                        for spec_class in [
+                            BinaryDiscreteTensorSpec,
+                            MultiDiscreteTensorSpec,
+                            OneHotDiscreteTensorSpec,
+                        ]
+                    )
+                    else 0
+                )
+                # TensorSpecs dims which are not part of the composite shape cannot be indexed
+                _idx = idx + (slice(None),) * (
+                    len(v.shape) - len(self.shape) - protected_dims
+                )
+            indexed_specs[k] = v[_idx]
+
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
+
+        return self.__class__(
+            indexed_specs,
+            shape=indexed_shape,
+            device=device,
+        )
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
