@@ -12,8 +12,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 import torch
 
 from tensordict import is_tensorclass
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, \
-    TensorDictBase, is_tensor_collection
+from tensordict.tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import expand_as_right
 
 from torchrl.data.utils import DEVICE_TYPING
@@ -673,9 +677,8 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
         if is_tensor_collection(tensordicts):
             tensordicts = TensorDict(
-                {"_data": tensordicts},
-                batch_size=tensordicts.batch_size[:1]
-                )
+                {"_data": tensordicts}, batch_size=tensordicts.batch_size[:1]
+            )
             if tensordicts.batch_dims > 1:
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter

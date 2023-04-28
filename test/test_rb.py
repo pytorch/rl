@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, make_tc
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -373,14 +373,22 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
+@pytest.mark.parametrize("datatype", ["tc", "tb"])
 @pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
-def test_replay_buffer_trajectories(stack, reduction):
+def test_replay_buffer_trajectories(stack, reduction, datatype):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
     )
+    if datatype == "tc":
+        c = make_tc(traj_td)
+        traj_td = c(**traj_td, batch_size=traj_td.batch_size)
+        assert is_tensorclass(traj_td)
+    elif datatype != "tb":
+        raise NotImplementedError
+
     if stack:
-        traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
+        traj_td = torch.stack([td for td in traj_td], 0)
 
     rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
@@ -394,6 +402,9 @@ def test_replay_buffer_trajectories(stack, reduction):
     )
     rb.extend(traj_td)
     sampled_td = rb.sample()
+    if datatype == "tc":
+        assert is_tensorclass(traj_td)
+
     sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(include_info=True)
@@ -649,6 +660,12 @@ def test_prb(priority_key, contiguous, device):
         },
         batch_size=[3],
     ).to(device)
+
+    if datatype == "tc":
+        c = make_tc(traj_td)
+        traj_td = c(**traj_td, batch_size=traj_td.batch_size)
+        assert is_tensorclass(traj_td)
+
     rb.extend(td1)
     s = rb.sample()
     assert s.batch_size == torch.Size([5])
