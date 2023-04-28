@@ -81,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         local_optim.step()
         print("optimisation step!")
 
-        # Update grad_worker policy, not needed in this dummy local example
+        # Update grad_worker policy, not needed in this dummy local example.
 
 
 if __name__ == "__main__":
