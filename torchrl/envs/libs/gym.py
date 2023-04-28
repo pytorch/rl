@@ -143,9 +143,12 @@ def gym_backend(submodule=None):
 
     Examples:
         >>> import mo_gymnasium
-        >>> set_gym_backend(mo_gymnasium)
-        >>> wrappers = gym_backend('wrappers')
-        >>> print(wrappers)
+        >>> with set_gym_backend("gym"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        >>> with set_gym_backend("gymnasium"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
     """
     global IMPORT_ERROR
     global DEFAULT_GYM

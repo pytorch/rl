@@ -422,11 +422,11 @@ in the relevant functions:
     >>> with set_gym_backend(gymnasium):
     ...     print(gym_backend())
     ...     env1 = GymEnv("Pendulum-v1")
-    <module 'gymnasium' from '/Users/vmoens/venv/rl/lib/python3.9/site-packages/gymnasium/__init__.py'>
+    <module 'gymnasium' from '/path/to/venv/python3.9/site-packages/gymnasium/__init__.py'>
     >>> with set_gym_backend(gym):
     ...     print(gym_backend())
     ...     env2 = GymEnv("Pendulum-v1")
-    <module 'gym' from '/Users/vmoens/venv/rl/lib/python3.9/site-packages/gym/__init__.py'>
+    <module 'gym' from '/path/to/venv/python3.9/site-packages/gym/__init__.py'>
     >>> print(env1._env.env.env)
     <gymnasium.envs.classic_control.pendulum.PendulumEnv at 0x15147e190>
     >>> print(env2._env.env.env)
@@ -437,6 +437,18 @@ which can be further used to indicate which library needs to be used for
 the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
 we can use it to tell to a specific function what gym backend needs to be used
 during its execution.
+The :func:`torchrl.envs.libs.gym.gym_backend` function allows you to gather
+the current gym backend or any of its modules:
+
+        >>> import mo_gymnasium
+        >>> with set_gym_backend("gym"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gym.wrappers' from '/path/to/venv/python3.9/site-packages/gym/wrappers/__init__.py'>
+        >>> with set_gym_backend("gymnasium"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gymnasium.wrappers' from '/path/to/venv/python3.9/site-packages/gymnasium/wrappers/__init__.py'>
 
 Another tool that comes in handy with gym and other external dependencies is
 the :class:`torchrl._utils.implement_for` class. Decorating a function
