@@ -111,6 +111,7 @@ fi
 
 
 # https://github.com/lhelontra/tensorflow-on-arm/issues/13#issuecomment-489296444
+apt-get install software-properties-common
 add-apt-repository ppa:ubuntu-toolchain-r/test
 apt-get update
 apt-get install gcc-4.9
