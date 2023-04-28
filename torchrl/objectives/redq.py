@@ -25,7 +25,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     FUNCTORCH_ERR = ""
     _has_functorch = True
