@@ -26,6 +26,7 @@ if [ ! -d "${conda_dir}" ]; then
 fi
 
 eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
+conda config --set channel_priority strict
 
 # 2. Create test environment at ./env
 if [ ! -d "${env_dir}" ]; then
