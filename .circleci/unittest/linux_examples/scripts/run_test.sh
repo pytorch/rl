@@ -10,9 +10,8 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update
 apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev gcc g++
-apt-get upgrade libstdc++6
+apt-get upgrade libstdc++6 -y
 
 # find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)

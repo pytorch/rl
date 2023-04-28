@@ -9,9 +9,8 @@ set -e
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update
 apt-get update && apt-get install -y git wget gcc g++ tar
-apt-get upgrade libstdc++6
+apt-get upgrade libstdc++6 -y
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
