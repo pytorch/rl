@@ -43,8 +43,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_actor, local_critic = make_ppo_models(cfg)
     local_actor = local_actor.to(local_model_device)
     local_critic = local_critic.to(local_model_device)
-    # TODO: I should not need a local loss module
-    local_loss_module, _ = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
+    # TODO: I should not need a local loss module, can I get the dict of name params somehow else?
+    local_loss_module = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
 
     # Create a second copy of all modules
