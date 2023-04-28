@@ -11,12 +11,13 @@ from torch import Tensor
 
 from .common import Logger
 
-
+WANDB_ERR = None
 try:
     import wandb
 
     _has_wandb = True
-except ImportError:
+except ImportError as err:
+    WANDB_ERR = err
     _has_wandb = False
 
 
@@ -51,7 +52,7 @@ class WandbLogger(Logger):
         **kwargs,
     ) -> None:
         if not _has_wandb:
-            raise ImportError("wandb could not be imported")
+            raise ImportError("wandb could not be imported") from err
 
         log_dir = kwargs.pop("log_dir", None)
         self.offline = offline
