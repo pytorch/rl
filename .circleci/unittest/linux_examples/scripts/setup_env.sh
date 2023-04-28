@@ -112,6 +112,7 @@ fi
 
 # https://github.com/lhelontra/tensorflow-on-arm/issues/13#issuecomment-489296444
 export TZ=Europe/London
+export DEBIAN_FRONTEND=noninteractive
 apt-get install software-properties-common -y
 add-apt-repository ppa:ubuntu-toolchain-r/test
 apt-get update
