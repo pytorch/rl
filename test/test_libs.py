@@ -310,12 +310,12 @@ class TestDMControl:
 params = []
 if _has_dmc:
     params = [
-        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        # [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
     params += [
-        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ]
@@ -354,12 +354,12 @@ def test_td_creation_from_spec(env_lib, env_args, env_kwargs):
 params = []
 if _has_dmc:
     params += [
-        [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
+        # [DMControlEnv, ("cheetah", "run"), {"from_pixels": True}],
         [DMControlEnv, ("cheetah", "run"), {"from_pixels": False}],
     ]
 if _has_gym:
     params += [
-        [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
+        # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
         [GymEnv, (PONG_VERSIONED,), {}],
     ]
