@@ -4,6 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y git wget gcc g++
 
 set -e
 
@@ -22,6 +23,7 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
+
 
 # submodules
 git submodule sync && git submodule update --init --recursive
@@ -43,4 +45,7 @@ pip install git+https://github.com/pytorch/torchsnapshot
 pip install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
-python setup.py develop
+pip3 install -e .
+
+# smoke test
+python -c "import torchrl"
