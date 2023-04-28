@@ -69,32 +69,6 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-
-conda install -c conda-forge gcc -y
-conda install -c conda-forge glew -y
-
-## Search for the glew.h file
-#glew_path=$(find $conda_dir -name glew.h 2>/dev/null)
-#
-## Check if glew.h file is found
-#if [ -z "$glew_path" ]; then
-#    echo "glew.h file not found"
-#    exit 1
-#fi
-#
-#echo "glew.h path: $glew_path"
-
-conda install -c anaconda mesa-libegl-cos6-x86_64 -y
-
-echo "Installing X11 with conda"
-conda install -c anaconda libx11-devel-cos6-x86_64 -y -v
-
-#fatal error: X11/X.h: No such file or directory
-#   44 | #include <X11/X.h>
-#      |          ^~~~~~~~~
-conda install -c anaconda xorg-x11-proto-devel-cos6-x86_64 -y -v
-
-
 export MUJOCO_GL=egl
 conda env config vars set \
   MUJOCO_GL=egl \

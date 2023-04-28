@@ -14,10 +14,7 @@ conda activate ./env
 $DIR/install.sh
 
 # Extracted from run_test.sh to run once.
-#yum makecache && yum install libX11-devel xorg-x11-server-Xvfb glew glew-devel -y
-apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev libx11-dev x11proto-dev
-
-#pip install pyopengl==3.1.0
+apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev libx11-dev x11proto-dev g++
 
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
