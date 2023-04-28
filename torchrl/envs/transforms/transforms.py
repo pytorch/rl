@@ -3956,10 +3956,7 @@ class Reward2GoTransform(Transform):
                 item = self._inv_apply_transform(
                     tensordict.get(in_key), done_or_truncated
                 )
-                tensordict.set(
-                    out_key,
-                    item,
-                )
+                tensordict.set(out_key, item, inplace=True)
         if not found:
             raise KeyError(f"Could not find any of the input keys {self.in_keys}.")
         return tensordict

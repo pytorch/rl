@@ -4,7 +4,7 @@ env:
   env_task: ""
   env_library: gym
   record_video: 0
-  stacked_frames: 5
+  stacked_frames: 20
   n_samples_stats: 1000
   frame_skip: 1
   from_pixels: False

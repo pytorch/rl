@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 import torch.nn as nn
 import transformers
@@ -47,18 +45,18 @@ class DecisionTransformer(nn.Module):
         action: torch.Tensor,
         return_to_go: torch.Tensor,
         timesteps: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        mask_context: bool = True,
     ):
         batch_size, seq_length = observation.shape[0], observation.shape[1]
 
-        if seq_length == self.inference_context:
-            observation, action, return_to_go, timesteps, seq_length = self.pad_context(
-                observation, action, return_to_go, timesteps
-            )
-
-        if padding_mask is None:
-            # attention mask for GPT: 1 if can be attended to, 0 if not
-            padding_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
+        if mask_context:
+            (
+                observation,
+                action,
+                return_to_go,
+                timesteps,
+                seq_length,
+            ) = self.mask_context(observation, action, return_to_go, timesteps)
 
         # embed each modality with a different head
         state_embeddings = self.embed_state(observation)
@@ -85,17 +83,9 @@ class DecisionTransformer(nn.Module):
         )
         stacked_inputs = self.embed_ln(stacked_inputs)
 
-        # to make the attention mask fit the stacked inputs, have to stack it as well
-        stacked_padding_mask = (
-            torch.stack((padding_mask, padding_mask, padding_mask), dim=1)
-            .permute(0, 2, 1)
-            .reshape(batch_size, 3 * seq_length)
-        )
-
         # we feed in the input embeddings (not word indices as in NLP) to the model
         transformer_outputs = self.transformer(
             inputs_embeds=stacked_inputs,
-            attention_mask=stacked_padding_mask,
         )
         x = transformer_outputs["last_hidden_state"]
 
@@ -105,35 +95,19 @@ class DecisionTransformer(nn.Module):
 
         return x[:, 1]  # only state tokens
 
-    def pad_context(
+    def mask_context(
         self,
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
         timesteps: torch.Tensor,
     ):
-        observation = torch.nn.functional.pad(
-            observation,
-            (0, 0, self.train_context - self.inference_context, 0),
-            mode="constant",
-            value=0,
+        """Mask the context of the input sequences."""
+        observation[:, : -self.inference_context, :] = 0
+        action[:, : -self.inference_context, :] = 0
+        action = torch.cat(
+            [action[:, 1:], torch.zeros(action.shape[0], 1, self.action_dim)], dim=-2
         )
-        action = torch.nn.functional.pad(
-            action,
-            (0, 0, self.train_context - self.inference_context - 1, 1),
-            mode="constant",
-            value=0,
-        )  # pad first action with 0
-        return_to_go = torch.nn.functional.pad(
-            return_to_go,
-            (0, 0, self.train_context - self.inference_context - 1, 1),
-            mode="constant",
-            value=0,
-        )
-        timesteps = torch.nn.functional.pad(
-            timesteps,
-            (0, 0, self.train_context - self.inference_context, 0),
-            mode="constant",
-            value=0,
-        )
+        return_to_go[:, : -self.inference_context, :] = 0
+        timesteps[:, : -self.inference_context] = 0
         return observation, action, return_to_go, timesteps, self.train_context

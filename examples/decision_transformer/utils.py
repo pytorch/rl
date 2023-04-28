@@ -7,7 +7,9 @@ from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffe
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.envs import (
     CatFrames,
+    Compose,
     EnvCreator,
+    ExcludeTransform,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
@@ -157,6 +159,8 @@ def make_collector(cfg, policy):
     collector_cfg = cfg.collector
     collector_class = SyncDataCollector
     state_dict = get_stats(env_cfg)
+    # to exclude inference target returns
+    exclude = ExcludeTransform("return_to_go")  # next return to go
     collector = collector_class(
         make_parallel_env(env_cfg, state_dict=state_dict),
         policy,
@@ -164,15 +168,19 @@ def make_collector(cfg, policy):
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_devices,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
+        postproc=exclude,
     )
     return collector
 
 
 def make_replay_buffer(rb_cfg):
     r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    transforms = [r2g]
     sampler = RandomSampler()
     return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(rb_cfg.capacity), sampler=sampler, transform=r2g
+        storage=LazyMemmapStorage(rb_cfg.capacity),
+        sampler=sampler,
+        transform=Compose(*transforms),
     )
 
 

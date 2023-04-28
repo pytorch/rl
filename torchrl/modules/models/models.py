@@ -1200,8 +1200,11 @@ class DTActor(nn.Module):
         action: torch.Tensor,
         return_to_go: torch.Tensor,
         timesteps: torch.Tensor,
+        mask_context: bool = True,
     ) -> torch.Tensor:
-        hidden_state = self.transformer(observation, action, return_to_go, timesteps)
+        hidden_state = self.transformer(
+            observation, action, return_to_go, timesteps, mask_context
+        )
         out = self.mlp(hidden_state)[:, -1]
         mu, log_std = out.chunk(2, -1)
         log_std = torch.tanh(log_std)
