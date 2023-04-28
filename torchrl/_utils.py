@@ -314,18 +314,15 @@ class implement_for:
                             f"Using the last queried ({module} with version {version})."
                         )
                     implementations[func_name] = fn
-                    self.module_set()
-                return implementations[func_name]
-
             except ModuleNotFoundError:
                 # then it's ok, there is no conflict
-                # overwrite the previous implementation
-                implementations[func_name] = fn
-                self.module_set()
-                return fn
+                return implementations[func_name]
+            self.module_set()
+            return implementations[func_name]
         try:
             version = self.import_module(self.module_name)
             if self.check_version(version, self.from_version, self.to_version):
+                print("checked!", self.module_name, self.from_version, self.to_version)
                 implementations[func_name] = fn
                 self.module_set()
                 return fn
