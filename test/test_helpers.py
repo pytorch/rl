@@ -147,6 +147,8 @@ def test_dqn_maker(
             "done",
             "action",
             "action_value",
+            "step_count",
+            "is_init",
         ]
         if from_pixels:
             expected_keys += [
@@ -213,7 +215,13 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
                 actor(td.unsqueeze(0))
             else:
                 actor(td)
-        expected_keys = ["done", "action", "param"]
+        expected_keys = [
+            "done",
+            "action",
+            "param",
+            "step_count",
+            "is_init",
+        ]
         if from_pixels:
             expected_keys += [
                 "pixels",
@@ -342,6 +350,8 @@ def test_ppo_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
+            "step_count",
+            "is_init",
         ]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
@@ -387,6 +397,8 @@ def test_ppo_maker(
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if shared_mapping:
             expected_keys += ["hidden"]
@@ -496,6 +508,8 @@ def test_a2c_maker(
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
+            "step_count",
+            "is_init",
         ]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
@@ -541,6 +555,8 @@ def test_a2c_maker(
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if shared_mapping:
             expected_keys += ["hidden"]
@@ -632,6 +648,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "action",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -664,6 +682,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "state_action_value",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -684,6 +704,8 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             "observation_vector",
             "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -754,6 +776,8 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             "sample_log_prob",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -788,6 +812,8 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             "state_action_value",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]

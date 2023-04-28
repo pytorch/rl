@@ -154,9 +154,9 @@ if __name__ == "__main__":
         entropy_coef=entropy_eps,  # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
         critic_coef=1.0,
-        gamma=0.99,
         loss_critic_type="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=0.99)
 
     # 7. Define optimizer
     optim = torch.optim.Adam(loss_module.parameters(), lr)

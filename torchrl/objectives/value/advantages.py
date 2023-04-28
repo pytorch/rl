@@ -66,12 +66,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     value_network: Union[TensorDictModule, Callable]
     value_key: Union[Tuple[str], str]
-    DIFF_DEPREC_MSG = (
-        "differentiable=False will soon be deprecated and all value computations will be made"
-        "differentiable. "
-        "Consider using differentiable=True and "
-        "decorate your function with `torch.no_grad()` or pass detached functional parameters."
-    )
 
     @abc.abstractmethod
     def forward(
@@ -115,8 +109,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.differentiable = differentiable
         self.skip_existing = skip_existing
         self.value_network = value_network
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
         self.value_key = value_key
         if (
             hasattr(value_network, "out_keys")
@@ -344,7 +336,7 @@ class TD0Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
@@ -519,7 +511,7 @@ class TD1Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
@@ -704,7 +696,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             )  # we must update the rewards if they are used later in the code
 
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
