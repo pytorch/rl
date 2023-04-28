@@ -845,7 +845,7 @@ logs = defaultdict(list)
 for _ in pbar:
     init_td = env.reset(env.gen_params(batch_size=[batch_size]))
     rollout = env.rollout(100, policy, tensordict=init_td, auto_reset=False)
-    traj_return = rollout["reward"].mean()
+    traj_return = rollout["next", "reward"].mean()
     (-traj_return).backward()
     gn = torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optim.step()
@@ -855,7 +855,7 @@ for _ in pbar:
         f"last reward: {rollout[..., -1]['reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
     )
     logs["return"].append(traj_return.item())
-    logs["last_reward"].append(rollout[..., -1]["reward"].mean().item())
+    logs["last_reward"].append(rollout[..., -1]["next", "reward"].mean().item())
     scheduler.step()
 
 

@@ -268,10 +268,8 @@ def _loss_actor(
     tensordict,
 ) -> torch.Tensor:
     td_copy = tensordict.select(*self.actor_in_keys)
-    # Get an action from the actor network
-    td_copy = self.actor_network(
-        td_copy,
-    )
+    # Get an action from the actor network: since we made it functional, we need to pass the params
+    td_copy = self.actor_network(td_copy, params=self.actor_network_params)
     # get the value associated with that action
     td_copy = self.value_network(
         td_copy,
@@ -482,6 +480,7 @@ from torchrl.envs import (
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    InitTracker,
     ObservationNorm,
     ParallelEnv,
     RewardScaling,
@@ -535,6 +534,9 @@ def make_transformed_env(
     )
 
     env.append_transform(StepCounter(max_frames_per_traj))
+
+    # We need a marker for the start of trajectories for our OU exploration:
+    env.append_transform(InitTracker())
 
     return env
 
