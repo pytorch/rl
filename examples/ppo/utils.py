@@ -12,6 +12,7 @@ from torchrl.envs import (
     CatTensors,
     DoubleToFloat,
     EnvCreator,
+    ExplorationType,
     GrayScale,
     NoopResetEnv,
     ObservationNorm,
@@ -278,7 +279,7 @@ def make_ppo_models(cfg):
         del td
 
     actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_operator()
+    critic = actor_critic.get_value_head()
 
     return actor, critic
 
@@ -345,7 +346,7 @@ def make_ppo_modules_state(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define another head for the value
@@ -425,7 +426,7 @@ def make_ppo_modules_pixels(proof_environment):
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
-        default_interaction_mode="random",
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
     # Define another head for the value
@@ -464,9 +465,9 @@ def make_loss(loss_cfg, actor_network, value_network):
         loss_critic_type=loss_cfg.loss_critic_type,
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
-        gamma=loss_cfg.gamma,
         normalize_advantage=True,
     )
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
 
 

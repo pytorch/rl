@@ -755,7 +755,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
         data, info = super().sample(batch_size, return_info=True)
         if include_info in (True, None):
             for k, v in info.items():
-                data.set(k, expand_as_right(torch.tensor(v, device=data.device), data))
+                if not isinstance(v, torch.Tensor):
+                    v = torch.tensor(v, device=data.device)
+                data.set(k, expand_as_right(v, data))
         if return_info:
             return data, info
         return data
