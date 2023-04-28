@@ -379,6 +379,7 @@ class GymWrapper(GymLikeEnv):
     @implement_for("gym", None, "0.19.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         from .utils import GymPixelObservationWrapper as PixelObservationWrapper
+
         return PixelObservationWrapper(env, pixels_only=pixels_only)
 
     @implement_for("gym", "0.19.0", "0.26.0")
