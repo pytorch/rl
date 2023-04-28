@@ -8,7 +8,7 @@ set -v
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 # loop through all the .py files in the directory
-for file in "$DIR"/*.py
+for file in $(ls -r "$DIR"/*.py)
 do
   # execute each Python script using the 'exec' function
   echo $file

@@ -852,7 +852,7 @@ for _ in pbar:
     optim.zero_grad()
     pbar.set_description(
         f"reward: {traj_return: 4.4f}, "
-        f"last reward: {rollout[..., -1]['reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
+        f"last reward: {rollout[..., -1]['next', 'reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
     )
     logs["return"].append(traj_return.item())
     logs["last_reward"].append(rollout[..., -1]["next", "reward"].mean().item())
