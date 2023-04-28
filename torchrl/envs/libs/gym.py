@@ -3,8 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
-import inspect
-import sys
 import warnings
 from copy import copy
 from types import ModuleType
@@ -344,30 +342,28 @@ class GymWrapper(GymLikeEnv):
         # try gym
         try:
             import gym
-            if isinstance(
-                env.action_space,
-                gym.spaces.space.Space
-            ):
+
+            if isinstance(env.action_space, gym.spaces.space.Space):
                 return gym
         except ImportError:
             pass
         try:
             import gymnasium
-            if isinstance(
-                env.action_space,
-                gymnasium.spaces.space.Space
-            ):
+
+            if isinstance(env.action_space, gymnasium.spaces.space.Space):
                 return gymnasium
         except ImportError:
             pass
-        raise RuntimeError(f"Could not find the library of env {env}. Please file an issue on torchrl github repo.")
+        raise RuntimeError(
+            f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
+        )
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
-        if 'env' in kwargs:
+        if "env" in kwargs:
             with set_gym_backend(self.get_library_name(kwargs["env"])):
                 super().__init__(**kwargs)
         else:
