@@ -11,12 +11,14 @@ from _utils_internal import PONG_VERSIONED
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 
+TB_ERR = None
 try:
     from torch.utils.tensorboard import SummaryWriter
 
     _has_tb = True
-except ImportError:
+except ImportError as err:
     _has_tb = False
+    TB_ERR = err
 
 
 def test_dm_control():
@@ -54,7 +56,9 @@ def test_gym():
 
 
 def test_tb():
-    assert _has_tb
+    if not _has_tb:
+        # raise the proper error
+        raise TB_ERR
     test_rounds = 100
     while test_rounds > 0:
         try:
