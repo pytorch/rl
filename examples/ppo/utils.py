@@ -460,6 +460,10 @@ def make_loss(loss_cfg, actor_network, value_network):
     return loss_module
 
 
+# ====================================================================
+# Optimizer
+# ---------
+
 def make_optim(optim_cfg, actor_network, value_network):
     optim = torch.optim.Adam(
         list(actor_network.parameters()) + list(value_network.parameters()),
