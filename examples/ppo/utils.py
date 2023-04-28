@@ -35,7 +35,6 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
-from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -446,7 +445,19 @@ def make_ppo_modules_pixels(proof_environment):
 # PPO Loss
 # ---------
 
+
+def make_advantage_module(loss_cfg, value_network):
+    advantage_module = GAE(
+        gamma=loss_cfg.gamma,
+        lmbda=loss_cfg.gae_lamdda,
+        value_network=value_network,
+        average_gae=True,
+    )
+    return advantage_module
+
+
 def make_loss(loss_cfg, actor_network, value_network):
+    advantage_module = make_advantage_module(loss_cfg, value_network)
     loss_module = ClipPPOLoss(
         actor=actor_network,
         critic=value_network,
@@ -456,13 +467,9 @@ def make_loss(loss_cfg, actor_network, value_network):
         critic_coef=loss_cfg.critic_coef,
         normalize_advantage=True,
     )
-    loss_module.make_value_estimator(ValueEstimators.GAE, gamma=loss_cfg.gamma)
-    return loss_module
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    return loss_module, advantage_module
 
-
-# ====================================================================
-# Optimizer
-# ---------
 
 def make_optim(optim_cfg, actor_network, value_network):
     optim = torch.optim.Adam(
