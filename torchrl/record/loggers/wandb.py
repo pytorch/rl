@@ -52,7 +52,7 @@ class WandbLogger(Logger):
         **kwargs,
     ) -> None:
         if not _has_wandb:
-            raise ImportError("wandb could not be imported") from err
+            raise ImportError("wandb could not be imported") from WANDB_ERR
 
         log_dir = kwargs.pop("log_dir", None)
         self.offline = offline
