@@ -12,13 +12,11 @@ for file in $(ls -r "$DIR"/*.py)
 do
   # execute each Python script using the 'exec' function
   echo $file
-  if [ $file == '/Users/vmoens/Repos/RL/torch_rl/tutorials/sphinx-tutorials/torchrl_envs.py' ] ; then
-    python -c """
+  python -c """
 with open('$file') as f:
     source = f.read()
 code = compile(source, '$file', 'exec')
 
 exec(code)
 """
-  fi
 done
