@@ -2509,18 +2509,16 @@ class CompositeSpec(TensorSpec):
         for k, v in self._specs.items():
             _idx = idx
             if isinstance(idx, tuple):
-                protected_dims = (
-                    1
-                    if any(
-                        isinstance(v, spec_class)
-                        for spec_class in [
-                            BinaryDiscreteTensorSpec,
-                            MultiDiscreteTensorSpec,
-                            OneHotDiscreteTensorSpec,
-                        ]
-                    )
-                    else 0
-                )
+                protected_dims = 0
+                if any(
+                    isinstance(v, spec_class)
+                    for spec_class in [
+                        BinaryDiscreteTensorSpec,
+                        MultiDiscreteTensorSpec,
+                        OneHotDiscreteTensorSpec,
+                    ]
+                ):
+                    protected_dims = 1
                 # TensorSpecs dims which are not part of the composite shape cannot be indexed
                 _idx = idx + (slice(None),) * (
                     len(v.shape) - len(self.shape) - protected_dims
