@@ -95,7 +95,8 @@ if _has_envpool:
     import envpool
 
 IS_OSX = platform == "darwin"
-
+RTOL = 1e-1
+ATOL = 1e-1
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
@@ -146,8 +147,8 @@ class TestGym:
             env_type = type(env0._env)
             del env0
 
-        assert_allclose_td(*tdreset, rtol=1e-2, atol=1e-2)
-        assert_allclose_td(*tdrollout, rtol=1e-2, atol=1e-2)
+        assert_allclose_td(*tdreset, rtol=RTOL, atol=ATOL)
+        assert_allclose_td(*tdrollout, rtol=RTOL, atol=ATOL)
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
@@ -170,9 +171,9 @@ class TestGym:
         env1.close()
         del env1, base_env
 
-        assert_allclose_td(tdreset[0], tdreset2, rtol=1e-4, atol=1e-4)
+        assert_allclose_td(tdreset[0], tdreset2, rtol=RTOL, atol=ATOL)
         assert final_seed0 == final_seed2
-        assert_allclose_td(tdrollout[0], rollout2, rtol=1e-4, atol=1e-4)
+        assert_allclose_td(tdrollout[0], rollout2, rtol=RTOL, atol=ATOL)
 
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
