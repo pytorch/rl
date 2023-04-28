@@ -116,5 +116,6 @@ conda install -c conda-forge libstdcxx-ng -y
 echo "Importing tensorboard"
 python -c """
 import tensorboard
+from torch.utils.tensorboard import SummaryWriter
 print('tb successfully imported!')
 """
