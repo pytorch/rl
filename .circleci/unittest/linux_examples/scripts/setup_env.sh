@@ -109,9 +109,11 @@ else
   pip install "gymnasium[atari,accept-rom-license]"
 fi
 
-sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+
+# https://github.com/lhelontra/tensorflow-on-arm/issues/13#issuecomment-489296444
+add-apt-repository ppa:ubuntu-toolchain-r/test
 apt-get update
-sudo apt-get install gcc-4.9
+apt-get install gcc-4.9
 apt-get install --only-upgrade libstdc++6
 
 python -c """
