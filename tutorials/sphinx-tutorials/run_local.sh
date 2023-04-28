@@ -12,7 +12,7 @@ for file in "$DIR"/*.py
 do
   # execute each Python script using the 'exec' function
   echo $file
-  exec python -c """
+  python -c """
 with open('$file') as f:
     source = f.read()
 code = compile(source, '$file', 'exec')

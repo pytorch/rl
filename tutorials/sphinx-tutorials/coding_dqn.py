@@ -438,7 +438,8 @@ def get_collector(
 
 
 def get_loss_module(actor, gamma):
-    loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
+    loss_module = DQNLoss(actor, delay_value=True)
+    loss_module.make_value_estimator(gamma=gamma)
     target_updater = SoftUpdate(loss_module)
     return loss_module, target_updater
 
