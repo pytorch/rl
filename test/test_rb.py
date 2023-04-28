@@ -388,7 +388,7 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
         raise NotImplementedError
 
     if stack:
-        traj_td = torch.stack([td for td in traj_td], 0)
+        traj_td = torch.stack(list(traj_td), 0)
 
     rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
@@ -660,11 +660,6 @@ def test_prb(priority_key, contiguous, device):
         },
         batch_size=[3],
     ).to(device)
-
-    if datatype == "tc":
-        c = make_tc(traj_td)
-        traj_td = c(**traj_td, batch_size=traj_td.batch_size)
-        assert is_tensorclass(traj_td)
 
     rb.extend(td1)
     s = rb.sample()
