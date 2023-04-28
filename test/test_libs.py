@@ -98,6 +98,7 @@ IS_OSX = platform == "darwin"
 RTOL = 1e-1
 ATOL = 1e-1
 
+
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
 @pytest.mark.parametrize(
     "env_name",
