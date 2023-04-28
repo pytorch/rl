@@ -68,8 +68,10 @@ class GradientCollector:
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
     ) -> None:
-        raise NotImplementedError
-
+        # TODO: is this correct ?
+        params = TensorDict(dict(self.objective.named_parameters()), [])
+        params.apply(lambda x: x.data).update_(policy_weights)
+        
     def shutdown(self):
         raise NotImplementedError
 

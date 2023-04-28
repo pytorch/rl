@@ -81,7 +81,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         local_optim.step()
         print("optimisation step!")
 
-        # Update grad_worker policy, not needed in this dummy local example.
+        # Update grad collector policy
+        params = TensorDict(dict(local_loss_module.named_parameters()), [])
+        grad_worker.update_policy_weights_(params)
 
 
 if __name__ == "__main__":
