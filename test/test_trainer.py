@@ -852,7 +852,7 @@ class TestRecorder:
         args.record_interval = 2
         args.catframes = 4
         args.image_size = 84
-        args.collector_devices = ["cpu"]
+        args.collector_device = ["cpu"]
         args.categorical_action_encoding = False
         return args
 

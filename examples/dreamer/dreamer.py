@@ -177,10 +177,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=exploration_policy,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device}
-        #     for device in cfg.collector_devices
-        # ],
     )
     print("collector:", collector)
 
@@ -190,7 +186,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(
+        environment=make_recorder_env(
             cfg=cfg,
             video_tag=video_tag,
             obs_norm_state_dict=obs_norm_state_dict,

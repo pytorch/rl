@@ -175,10 +175,10 @@ class DreamerActorLoss(LossModule):
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
         if lmbda is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
@@ -232,7 +232,10 @@ class DreamerActorLoss(LossModule):
         )
         return self.value_estimator.value_estimate(input_tensordict)
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
