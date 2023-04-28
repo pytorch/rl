@@ -12,7 +12,7 @@ import _utils_internal
 import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.envs.libs.gym import set_gym_backend
+from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
@@ -71,6 +71,17 @@ def test_get_binary_env_var_wrong_value():
     finally:
         if key in os.environ:
             del os.environ[key]
+
+
+def uncallable(f):
+    class UncallableObject:
+        def __init__(self, other):
+            for k, v in other.__dict__.items():
+                if k not in ("__call__", "__dict__", "__weakref__"):
+                    setattr(self, k, v)
+
+    g = UncallableObject(f)
+    return g
 
 
 class implement_for_test_functions:
@@ -193,12 +204,12 @@ def test_set_gym_environments(
     expected_to_version_gymnasium,
 ):
     # mock gym and gymnasium imports
-    mock_gym = mock.MagicMock()
+    mock_gym = uncallable(mock.MagicMock())
     mock_gym.__version__ = gym_version
     mock_gym.__name__ = "gym"
     sys.modules["gym"] = mock_gym
 
-    mock_gymnasium = mock.MagicMock()
+    mock_gymnasium = uncallable(mock.MagicMock())
     mock_gymnasium.__version__ = gymnasium_version
     mock_gymnasium.__name__ = "gymnasium"
     sys.modules["gymnasium"] = mock_gymnasium
@@ -235,7 +246,7 @@ def test_set_gym_environments(
 def test_set_gym_environments_no_version_gymnasium_found():
     gymnasium_version = "0.26.0"
     gymnasium_name = "gymnasium"
-    mock_gymnasium = mock.MagicMock()
+    mock_gymnasium = uncallable(mock.MagicMock())
     mock_gymnasium.__version__ = gymnasium_version
     mock_gymnasium.__name__ = gymnasium_name
     sys.modules["gymnasium"] = mock_gymnasium
@@ -248,6 +259,25 @@ def test_set_gym_environments_no_version_gymnasium_found():
     with pytest.raises(ImportError, match=msg) as exc_info:
         with set_gym_backend(gymnasium):
             _utils_internal._set_gym_environments()
+
+
+def test_set_gym_backend_types():
+    mock_gym = uncallable(mock.MagicMock())
+    gym_version = "0.26.0"
+    mock_gym.__version__ = gym_version
+    mock_gym.__name__ = "gym"
+    sys.modules["gym"] = mock_gym
+
+    import gym
+
+    assert not callable(gym)
+
+    with set_gym_backend("gym"):
+        assert gym_backend() == gym
+    with set_gym_backend(lambda: gym):
+        assert gym_backend() == gym
+    with set_gym_backend(gym):
+        assert gym_backend() == gym
 
 
 if __name__ == "__main__":
