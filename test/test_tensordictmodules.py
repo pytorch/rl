@@ -29,7 +29,10 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 _has_functorch = False
 try:
-    from torch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
 except ImportError:

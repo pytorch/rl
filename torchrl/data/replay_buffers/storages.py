@@ -11,8 +11,8 @@ from copy import copy
 from typing import Any, Dict, Sequence, Union
 
 import torch
+from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor
-from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 

@@ -293,7 +293,7 @@ class ConvNet(nn.Sequential):
             default:  SquashDims;
         aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
         squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
-            default: True.
+            default: False.
         device (Optional[DEVICE_TYPING]): device to create the module on.
 
     Examples:

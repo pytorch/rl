@@ -4,6 +4,10 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
+apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
+
+# find libstdc
+STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env

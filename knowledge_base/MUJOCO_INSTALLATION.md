@@ -126,11 +126,16 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
 1. GL/glew.h not found
     ```
     /path/to/mujoco-py/mujoco_py/gl/eglshim.c:4:10: fatal error: GL/glew.h: No such file or directory
-     #include <GL/glew.h>
-              ^~~~~~~~~~~
-    ```
+    4 | #include <GL/glew.h>
+      |          ^~~~~~~~~~~
+   ```
 
-    _Solution_: make sure glew is installed (see above: `conda install -c conda-forge glew` or the `apt-get` version of it).
+   _Solution_: install glew and glew-devel
+
+   - Ubuntu: `sudo apt-get install libglew-dev libglew`
+   - CentOS: `sudo yum install glew glew-devel`
+   - Conda: `conda install -c conda-forge glew`
+
 2. 
     ```
     include/GL/glu.h:38:10: fatal error: GL/gl.h: No such file or directory
@@ -199,7 +204,10 @@ The result should contain a filename with the tag `linuxgpuextensionbuilder`.
 RuntimeError: Failed to initialize OpenGL
 ```
 
-> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES (when used with job schedulers like slurm) returns the local device ids. This can be worked around by setting the `GPUS` environment variable to the global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
+> Mujoco's EGL code indexes devices globally while CUDA_VISIBLE_DEVICES 
+  (when used with job schedulers like slurm) returns the local device ids. 
+  This can be worked around by setting the `GPUS` environment variable to the 
+  global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
 
 2. Rendered images are completely black.
 
@@ -222,3 +230,38 @@ RuntimeError: Failed to initialize OpenGL
 6. `cannot find -lGL: No such file or directory`
 
    _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
+
+7. ```
+   RuntimeError: Failed to initialize OpenGL
+   ```
+
+   _Solution_: Install libEGL:
+
+   - Ubuntu: `sudo apt install libegl-dev libegl`
+   - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
+   - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
+
+8. ```
+   fatal error: X11/Xlib.h: No such file or directory
+      | #include <X11/Xlib.h>
+      |          ^~~~~~~~~~~~
+   ```
+
+   _Solution_: Install X11:
+
+   - Ubuntu: `sudo apt install libx11-dev`
+   - CentOS: `sudo yum install libX11`
+   - Conda: `conda install -c conda-forge xorg-libx11`
+
+9. ```
+   fatal error: GL/osmesa.h: No such file or directory
+       1 | #include <GL/osmesa.h>
+         |          ^~~~~~~~~~~~~
+   compilation terminated.
+   ```
+
+   _Solution_: Install Osmesa:
+
+10. Ubuntu: `sudo apt-get install libosmesa6-dev`
+11. CentOS: `sudo yum install mesa-libOSMesa-devel`
+12. Conda: `conda install -c menpo osmesa`
