@@ -6,6 +6,7 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -112,6 +113,8 @@ fi
 # GLIBCXX_3.4.29 not found
 conda install -c conda-forge libstdcxx-ng -y
 
+echo "Importing tensorboard"
 python -c """
 import tensorboard
+print('tb successfully imported!')
 """

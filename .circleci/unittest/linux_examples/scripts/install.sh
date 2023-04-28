@@ -7,6 +7,7 @@ unset PYTORCH_VERSION
 apt-get update && apt-get install -y git wget gcc g++
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
