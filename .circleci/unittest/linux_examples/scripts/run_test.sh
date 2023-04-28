@@ -7,6 +7,7 @@
 # rendering with this version of gym / mujoco-py.
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
