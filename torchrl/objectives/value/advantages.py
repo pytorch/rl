@@ -66,13 +66,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     value_network: Union[TensorDictModule, Callable]
     value_key: Union[Tuple[str], str]
-    DIFF_DEPREC_MSG = (
-        "differentiable=False will soon be deprecated and all value "
-        "computations will be made differentiable. "
-        "Consider using differentiable=True and "
-        "decorate your function with `torch.no_grad()` or pass detached "
-        "functional parameters."
-    )
 
     @abc.abstractmethod
     def forward(
@@ -116,8 +109,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.differentiable = differentiable
         self.skip_existing = skip_existing
         self.value_network = value_network
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
         self.value_key = value_key
         if (
             hasattr(value_network, "out_keys")
