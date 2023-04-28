@@ -107,3 +107,6 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 else
   pip install "gymnasium[atari,accept-rom-license]"
 fi
+
+# GLIBCXX_3.4.29 not found
+conda install -c conda-forge libstdcxx-ng -y
