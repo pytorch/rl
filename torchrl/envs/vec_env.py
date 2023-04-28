@@ -1240,8 +1240,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         if isinstance(x, treevalue.TreeValue):
             ret = self._treevalue_to_dict(x)
-        else:
+        elif not isinstance(x, dict):
             ret = {"observation": torch.tensor(x)}
+        else:
+            ret = x
         return ret
 
     def _treevalue_to_dict(
