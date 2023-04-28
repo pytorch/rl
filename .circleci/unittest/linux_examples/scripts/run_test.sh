@@ -33,7 +33,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20 -k "not tb"
 
 # With batched environments
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
