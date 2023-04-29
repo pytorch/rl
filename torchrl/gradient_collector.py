@@ -29,15 +29,19 @@ class GradientCollector:
 
     This class is an iterable that yields model gradients until a target number of collected
     frames is reached.
+
+    Args:
+        policy (Callable): Instance of TensorDictModule class.
+            Must accept TensorDictBase object as input.
     """
     def __init__(
         self,
         policy: Callable[[TensorDict], TensorDict],
-        critic: Callable[[TensorDict], TensorDict],
         collector: DataCollectorBase,  # TODO: can we get away passing the instantiated class ?
         objective: LossModule,  # TODO: can we get away passing the instantiated class ?
         replay_buffer: ReplayBuffer,  # TODO: can we get away passing the instantiated class ?
         optimizer: Optimizer = Adam,  # TODO: can we get away passing the instantiated class ?
+        critic: Callable[[TensorDict], TensorDict] = None,
         updates_per_batch: int = 1,
         device: torch.device = "cpu",
     ):
@@ -47,12 +51,14 @@ class GradientCollector:
 
         # Get Actor Critic instance
         # Could be instantiated passing class + params if necessary
-        self.policy = policy
-        self.critic = critic
+        self.policy = policy  # TODO: do I really need the policy if we can get the params from objective ?
+        self.policy_params = TensorDict(dict(self.policy.named_parameters()), [])
+        self.critic = critic  # TODO: do I really need the critic if we can get the params from objective ?
 
         # Get loss instance
         # Could be instantiated passing class + params if necessary
         self.objective = objective
+        self.objective_params = TensorDict(dict(self.objective.named_parameters()), [])
 
         # Get collector instance.
         # Could be instantiated passing class + params if necessary.
@@ -72,9 +78,10 @@ class GradientCollector:
                 warnings.warn(f"{name} is NOT being tracked by the optimizer")
 
         # Check if critic parameters are being tracked by optimizer
-        for name, param in critic.named_parameters():
-            if optimizer.state.get(name) is None:
-                warnings.warn(f"{name} is NOT being tracked by the optimizer")
+        if self.critic is not None:
+            for name, param in critic.named_parameters():
+                if optimizer.state.get(name) is None:
+                    warnings.warn(f"{name} is NOT being tracked by the optimizer")
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -96,14 +103,9 @@ class GradientCollector:
 
         # TODO: is this the right way to do it ?
         # Update policy and critic
-        params = TensorDict(dict(self.objective.named_parameters()), [])
-        params.apply(lambda x: x.data).update_(policy_weights)
+        self.objective_params.apply(lambda x: x.data).update_(policy_weights)
 
-        # TODO: should I also update the collector policy?
-        # params = TensorDict(dict(self.collector.policy.named_parameters()), [])
-        # params.apply(lambda x: x.data).update_(policy_weights)
-
-        # self.collector.update_policy_weights_(policy_weights)
+        self.collector.update_policy_weights_()
 
     def shutdown(self):
         self.collector.shutdown()
@@ -136,6 +138,9 @@ class GradientCollector:
                 # Get gradients as a Tensordict
                 params = TensorDict(dict(self.objective.named_parameters()), [])
                 grads = params.apply(lambda x: x.grad)
+
+                del mini_batch
+                del params
 
                 yield grads
 

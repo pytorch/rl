@@ -51,9 +51,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     distributed_model_device = cfg.optim.device
     distributed_actor = deepcopy(local_actor).to(distributed_model_device)
     distributed_critic = deepcopy(local_critic).to(distributed_model_device)
-    distributed_collector = make_collector(cfg, policy=local_actor)
+    distributed_collector = make_collector(cfg, policy=distributed_actor)
     distributed_data_buffer = make_data_buffer(cfg)
-    distributed_loss_module = deepcopy(local_loss_module)
+    distributed_loss_module = make_loss(cfg.loss, actor_network=distributed_actor, value_network=distributed_critic)
     distributed_optim = make_optim(cfg.optim, actor_network=distributed_actor, value_network=distributed_critic)
 
     grad_worker = GradientCollector(
@@ -119,6 +119,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     collected_frames,
                 )
                 local_actor.train()
+                del td_test
+
+        del grads
+        del params
+        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
