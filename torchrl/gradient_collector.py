@@ -54,6 +54,7 @@ class GradientCollector:
         self.policy = policy  # TODO: do I really need the policy if we can get the params from objective ?
         self.policy_params = TensorDict(dict(self.policy.named_parameters()), [])
         self.critic = critic  # TODO: do I really need the critic if we can get the params from objective ?
+        self.critic_params = TensorDict(dict(self.critic.named_parameters()), [])
 
         # Get loss instance
         # Could be instantiated passing class + params if necessary
@@ -98,12 +99,24 @@ class GradientCollector:
             return None
 
     def update_policy_weights_(
-        self, policy_weights: Optional[TensorDictBase] = None
+            self,
+            policy_weights: Optional[TensorDictBase] = None,
+            critic_weights: Optional[TensorDictBase] = None,
+            objective_weights: Optional[TensorDictBase] = None,
     ) -> None:
 
         # TODO: is this the right way to do it ?
         # Update policy and critic
-        self.objective_params.apply(lambda x: x.data).update_(policy_weights)
+        self.objective_params.apply(lambda x: x.data).update_(objective_weights)
+        self.policy_params.apply(lambda x: x.data).update_(policy_weights)
+        self.critic_params.apply(lambda x: x.data).update_(critic_weights)
+
+        for name, param in self.objective.named_parameters():
+            param.data = objective_weights.get(name)
+        for name, param in self.policy.named_parameters():
+            param.data = policy_weights.get(name)
+        for name, param in self.critic.named_parameters():
+            param.data = critic_weights.get(name)
 
         self.collector.update_policy_weights_()
 
@@ -136,13 +149,14 @@ class GradientCollector:
                 loss_sum.backward()
 
                 # Get gradients as a Tensordict
-                params = TensorDict(dict(self.objective.named_parameters()), [])
-                grads = params.apply(lambda x: x.grad)
+                objective_params = TensorDict(dict(self.objective.named_parameters()), [])
+                objective_grads = objective_params.apply(lambda x: x.grad)
+                actor_params = TensorDict(dict(self.policy.named_parameters()), [])
+                actor_grads = actor_params.apply(lambda x: x.grad)
+                critic_params = TensorDict(dict(self.critic.named_parameters()), [])
+                critic_grads = critic_params.apply(lambda x: x.grad)
 
-                del mini_batch
-                del params
-
-                yield grads
+                yield (objective_grads, actor_grads, critic_grads)
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         self.collector.set_seed(seed, static_seed)

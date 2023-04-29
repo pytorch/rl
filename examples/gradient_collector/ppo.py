@@ -77,10 +77,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     for grads in grad_worker:
 
+        (objective_grads, actor_grads, critic_grads) = grads
+
         # Apply gradients
         # TODO: is there a better way ? How to do it with TensorDicts?
         for name, param in local_loss_module.named_parameters():
-            param.grad = grads.get(name)
+            param.grad = objective_grads.get(name)
+        for name, param in local_actor.named_parameters():
+            param.grad = actor_grads.get(name)
+        for name, param in local_critic.named_parameters():
+            param.grad = critic_grads.get(name)
 
         # Process grads
         grad_norm = torch.nn.utils.clip_grad_norm_(local_loss_module.parameters(), max_norm=0.5)
@@ -90,8 +96,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         print("optimisation step!")
 
         # Update grad collector policy
-        params = TensorDict(dict(local_loss_module.named_parameters()), [])
-        grad_worker.update_policy_weights_(params)
+        policy_params = TensorDict(dict(local_actor.named_parameters()), [])
+        critic_params = TensorDict(dict(local_critic.named_parameters()), [])
+        objective_params = TensorDict(dict(local_loss_module.named_parameters()), [])
+        grad_worker.update_policy_weights_(policy_params, critic_params, objective_params)
 
         # Update counter
         collected_frames += frames_in_batch
@@ -121,8 +129,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 local_actor.train()
                 del td_test
 
-        del grads
-        del params
         torch.cuda.empty_cache()
 
 
