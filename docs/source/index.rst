@@ -50,7 +50,7 @@ Intermediate
 
    tutorials/torch_envs
    tutorials/pretrained_models
-   tutorials/dqn_with_rnn.py
+   tutorials/dqn_with_rnn
 
 Advanced
 --------
