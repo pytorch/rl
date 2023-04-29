@@ -34,22 +34,47 @@ class GradientCollector:
         self,
         policy: Callable[[TensorDict], TensorDict],
         critic: Callable[[TensorDict], TensorDict],
-        collector: DataCollectorBase,
-        objective: LossModule,
-        replay_buffer: ReplayBuffer,
-        optimizer: Optimizer = Adam,
+        collector: DataCollectorBase,  # TODO: can we get away passing the instantiated class ?
+        objective: LossModule,  # TODO: can we get away passing the instantiated class ?
+        replay_buffer: ReplayBuffer,  # TODO: can we get away passing the instantiated class ?
+        optimizer: Optimizer = Adam,  # TODO: can we get away passing the instantiated class ?
         updates_per_batch: int = 1,
         device: torch.device = "cpu",
     ):
 
         self.device = device
+        self.updates_per_batch = updates_per_batch
+
+        # Get Actor Critic instance
+        # Could be instantiated passing class + params if necessary
         self.policy = policy
         self.critic = critic
+
+        # Get loss instance
+        # Could be instantiated passing class + params if necessary
         self.objective = objective
+
+        # Get collector instance.
+        # Could be instantiated passing class + params if necessary.
         self.collector = collector
+
+        # Get storage instance.
+        # Could be instantiated passing class + params if necessary
         self.replay_buffer = replay_buffer
+
+        # Get storage instance.
+        # Could be instantiated passing class + params if necessary
         self.optimizer = optimizer
-        self.updates_per_batch = updates_per_batch
+
+        # Check if policy parameters are being tracked by optimizer
+        for name, param in policy.named_parameters():
+            if optimizer.state.get(name) is None:
+                warnings.warn(f"{name} is NOT being tracked by the optimizer")
+
+        # Check if critic parameters are being tracked by optimizer
+        for name, param in critic.named_parameters():
+            if optimizer.state.get(name) is None:
+                warnings.warn(f"{name} is NOT being tracked by the optimizer")
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -69,53 +94,53 @@ class GradientCollector:
         self, policy_weights: Optional[TensorDictBase] = None
     ) -> None:
 
-        # TODO: is this correct ?
-        # params = TensorDict(dict(self.objective.named_parameters()), [])
+        # TODO: is this the right way to do it ?
+        # Update policy and critic
+        params = TensorDict(dict(self.objective.named_parameters()), [])
+        params.apply(lambda x: x.data).update_(policy_weights)
+
+        # TODO: should I also update the collector policy?
+        # params = TensorDict(dict(self.collector.policy.named_parameters()), [])
         # params.apply(lambda x: x.data).update_(policy_weights)
 
-        # TODO: How to do it with Tensordicts?
-        for name, param in self.objective.named_parameters():
-            if name in policy_weights:
-                param.data = policy_weights[name]
-
-        self.collector.update_policy_weights_(policy_weights)
+        # self.collector.update_policy_weights_(policy_weights)
 
     def shutdown(self):
-        raise NotImplementedError
+        self.collector.shutdown()
 
     def iterator(self) -> Iterator[TensorDictBase]:
         grads = self._step_iterator()
         return grads
 
     def _step_iterator(self):
+        """Computes next gradient in each iteration."""
 
-        # Collect batch
-        data = self.collector.next()
+        for data in self.collector:
 
-        # Add to replay buffer
-        self.replay_buffer.extend(data)
+            # Add to replay buffer
+            self.replay_buffer.extend(data)
 
-        for _ in range(self.updates_per_batch):
+            for _ in range(self.updates_per_batch):
 
-            # Sample batch from replay buffer
-            mini_batch = self.replay_buffer.sample().to(self.device)
+                # Sample batch from replay buffer
+                mini_batch = self.replay_buffer.sample().to(self.device)
 
-            # Compute loss
-            loss = self.objective(mini_batch)
-            loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
+                # Compute loss
+                loss = self.objective(mini_batch)
+                loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
 
-            # Backprop loss
-            self.optimizer.zero_grad()
-            loss_sum.backward()
+                # Backprop loss
+                self.optimizer.zero_grad()
+                loss_sum.backward()
 
-            # Get gradients as a Tensordict
-            params = TensorDict(dict(self.objective.named_parameters()), [])
-            grads = params.apply(lambda x: x.grad)
+                # Get gradients as a Tensordict
+                params = TensorDict(dict(self.objective.named_parameters()), [])
+                grads = params.apply(lambda x: x.grad)
 
-            yield grads
+                yield grads
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        raise NotImplementedError
+        self.collector.set_seed(seed, static_seed)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError

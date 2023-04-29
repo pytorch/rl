@@ -36,10 +36,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
     cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
-    batch_size = cfg.collector.total_frames * cfg.env.num_envs
-    num_mini_batches = batch_size // cfg.loss.mini_batch_size
+    num_mini_batches = (cfg.collector.frames_per_batch // cfg.loss.mini_batch_size) * cfg.loss.ppo_epochs
 
-    # Create one copy of all modules
+    # Create local modules
     local_model_device = cfg.optim.device
     local_actor, local_critic = make_ppo_models(cfg)
     local_actor = local_actor.to(local_model_device)
@@ -48,7 +47,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_loss_module = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
 
-    # Create a second copy of all modules
+    # Create distributed modules
     distributed_model_device = cfg.optim.device
     distributed_actor = deepcopy(local_actor).to(distributed_model_device)
     distributed_critic = deepcopy(local_critic).to(distributed_model_device)
@@ -64,7 +63,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         objective=distributed_loss_module,
         replay_buffer=distributed_data_buffer,
         optimizer=distributed_optim,
-        updates_per_batch=num_mini_batches * cfg.loss.ppo_epochs,
+        updates_per_batch=num_mini_batches,
         device=distributed_model_device,
     )
 
@@ -94,6 +93,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         params = TensorDict(dict(local_loss_module.named_parameters()), [])
         grad_worker.update_policy_weights_(params)
 
+        # Update counter
+        collected_frames += frames_in_batch
+
         # Test current policy
         if (
             logger is not None
@@ -104,7 +106,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             with torch.no_grad():
                 test_env.eval()
                 local_actor.eval()
-                # Generate a complete episode
                 td_test = test_env.rollout(
                     policy=local_actor,
                     max_steps=10_000_000,
