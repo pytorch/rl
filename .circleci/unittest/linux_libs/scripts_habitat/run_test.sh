@@ -18,7 +18,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
-# smoke test
+# smoke test  
 python -c "import habitat;import habitat.gym"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
