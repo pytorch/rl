@@ -68,10 +68,18 @@ class GradientCollector:
     def update_policy_weights_(
         self, policy_weights: Optional[TensorDictBase] = None
     ) -> None:
+
         # TODO: is this correct ?
-        params = TensorDict(dict(self.objective.named_parameters()), [])
-        params.apply(lambda x: x.data).update_(policy_weights)
-        
+        # params = TensorDict(dict(self.objective.named_parameters()), [])
+        # params.apply(lambda x: x.data).update_(policy_weights)
+
+        # TODO: How to do it with Tensordicts?
+        for name, param in self.objective.named_parameters():
+            if name in policy_weights:
+                param.data = policy_weights[name]
+
+        self.collector.update_policy_weights_(policy_weights)
+
     def shutdown(self):
         raise NotImplementedError
 

@@ -15,6 +15,7 @@ from copy import deepcopy
 from torchrl.gradient_collector import GradientCollector
 from tensordict import TensorDict
 
+
 @hydra.main(config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
@@ -67,10 +68,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=distributed_model_device,
     )
 
+    logger = None
+    if cfg.logger.backend:
+        logger = make_logger(cfg.logger)
+    test_env = make_test_env(cfg.env)
+    record_interval = cfg.logger.log_interval
+    frames_in_batch = cfg.collector.frames_per_batch
+    collected_frames = 0
+
     for grads in grad_worker:
 
-        # TODO: is there a better way ?
         # Apply gradients
+        # TODO: is there a better way ? How to do it with TensorDicts?
         for name, param in local_loss_module.named_parameters():
             param.grad = grads.get(name)
 
@@ -84,6 +93,31 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update grad collector policy
         params = TensorDict(dict(local_loss_module.named_parameters()), [])
         grad_worker.update_policy_weights_(params)
+
+        # Test current policy
+        if (
+            logger is not None
+            and (collected_frames - frames_in_batch) // record_interval
+            < collected_frames // record_interval
+        ):
+
+            with torch.no_grad():
+                test_env.eval()
+                local_actor.eval()
+                # Generate a complete episode
+                td_test = test_env.rollout(
+                    policy=local_actor,
+                    max_steps=10_000_000,
+                    auto_reset=True,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                ).clone()
+                logger.log_scalar(
+                    "reward_testing",
+                    td_test["next", "reward"].sum().item(),
+                    collected_frames,
+                )
+                local_actor.train()
 
 
 if __name__ == "__main__":
