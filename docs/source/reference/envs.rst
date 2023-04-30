@@ -237,7 +237,7 @@ It is now apparent that this can bring a significant speedup depending on the ki
 operations that is to be computed.
 
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
-The same can be achieved with TorchRL transformed environments: the :doc:`parent` attribute will
+The same can be achieved with TorchRL transformed environments: the ``parent`` attribute will
 return a new :class:`TransformedEnv` with all the transforms up to the transform of interest.
 Re-using the example above:
 
@@ -248,15 +248,15 @@ Re-using the example above:
 
 
 Transformed environment can be used with vectorized environments.
-Since each transform uses a :doc:`"in_keys"`/:doc:`"out_keys"` set of keyword argument, it is
+Since each transform uses a ``"in_keys"``/``"out_keys"`` set of keyword argument, it is
 also easy to root the transform graph to each component of the observation data (e.g.
 pixels or states etc).
 
-Transforms also have an :doc:`inv` method that is called before
+Transforms also have an ``inv`` method that is called before
 the action is applied in reverse order over the composed transform chain:
 this allows to apply transforms to data in the environment before the action is taken
 in the environment. The keys to be included in this inverse transform are passed through the
-:doc:`"in_keys_inv"` keyword argument:
+``"in_keys_inv"`` keyword argument:
 
 .. code-block::
    :caption: Inverse transform
