@@ -139,7 +139,7 @@ DEFAULT_Y = 1.0
 # 0 too.
 #
 # Coding the effect of an action: :func:`~torchrl.envs.EnvBase._step`
-# ------------------------------------------------------------------
+# -------------------------------------------------------------------
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
@@ -263,7 +263,7 @@ def angle_normalize(x):
 
 ######################################################################
 # Resetting the simulator: :func:`~torchrl.envs.EnvBase._reset`
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 #
 # The second method we need to care about is the
 # :meth:`~torchrl.envs.EnvBase._reset` method. Like
@@ -464,7 +464,7 @@ def _set_seed(self, seed: Optional[int]):
 
 ######################################################################
 # Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
-# -----------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # We can finally put together the pieces and design our environment class.
 # The specs initialization needs to be performed during the environment

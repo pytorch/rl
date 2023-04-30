@@ -18,7 +18,7 @@ TorchRL objectives: Coding a DDPG loss
 #
 # To this aim, we will be focusing on DDPG, which is a relatively straightforward
 # algorithm to code.
-# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>_`_)
+# DDPG (`Deep Deterministic Policy Gradient <https://arxiv.org/abs/1509.02971>`_)
 # is a simple continuous control algorithm. It consists in learning a
 # parametric value function for an action-observation pair, and
 # then learning a policy that outputs actions that maximise this value
@@ -71,7 +71,7 @@ device = (
 
 ###############################################################################
 # torchrl :class:`~torchrl.objectives.LossModule`
-# ----------------------------------------------
+# -----------------------------------------------
 #
 # TorchRL provides a series of losses to use in your training scripts.
 # The aim is to have losses that are easily reusable/swappable and that have
@@ -614,8 +614,6 @@ backend = "gym"
 #   training script when dealing with frame skipping as this may lead to
 #   biased comparisons between training strategies.
 #
-
-###############################################################################
 # Scaling the reward helps us control the signal magnitude for a more
 # efficient learning.
 reward_scaling = 5.0
@@ -963,7 +961,7 @@ buffer_scratch_dir = tmpdir.name
 
 ###############################################################################
 # Replay buffer storage and batch size
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # TorchRL replay buffer counts the number of elements along the first dimension.
 # Since we'll be feeding trajectories to our buffer, we need to adapt the buffer
@@ -1051,7 +1049,7 @@ loss_module.make_value_estimator(ValueEstimators.TDLambda, gamma=gamma, lmbda=lm
 #   estimates.
 #
 # Target network updater
-# ^^^^^^^^^^^^^^^^^^^^^^
+# ~~~~~~~~~~~~~~~~~~~~~~
 #
 # Target networks are a crucial part of off-policy RL algorithms.
 # Updating the target network parameters is made easy thanks to the

@@ -394,11 +394,12 @@ for i, data in enumerate(collector):
 ######################################################################
 # Let's plot our results:
 #
-from matplotlib import pyplot as plt
+if traj_lens:
+    from matplotlib import pyplot as plt
 
-plt.plot(traj_lens)
-plt.xlabel("Test collection")
-plt.title("Test trajectory lengths")
+    plt.plot(traj_lens)
+    plt.xlabel("Test collection")
+    plt.title("Test trajectory lengths")
 
 ######################################################################
 # Conclusion

@@ -43,6 +43,7 @@ env = GymEnv("Pendulum-v1")
 
 ###############################################################################
 # The list of available environment can be accessed through this command:
+#
 
 GymEnv.available_envs[:10]
 
