@@ -44,19 +44,17 @@ class Mixer(nn.Module):
                 f"Mixer network expected chosen_action_value with last 2 dimensions {[self.n_agents, 1]},"
                 f" but got {chosen_action_value.shape}"
             )
-        print("chosen_action_value shape", chosen_action_value.shape)
+
         if not self.needs_state:
             output = self.mix(chosen_action_value, None)
         else:
             output = self.mix(chosen_action_value, state)
-        print("output shape pre", output.shape)
 
         output = (
             output.view(*output.shape[:-1], 1)
             .unsqueeze(-2)
             .expand(*output.shape[:-1], self.n_agents, 1)
         )
-        print("output shape post", output.shape)
 
         if output.shape[-2:] != (self.n_agents, 1):
             raise ValueError(

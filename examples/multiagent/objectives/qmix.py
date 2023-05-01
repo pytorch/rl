@@ -11,16 +11,16 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
 
-from torchrl.envs.utils import step_mdp
-from torchrl.modules.tensordict_module.actors import (
-    DistributionalQValueActor,
-    QValueActor,
-)
+from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.modules.utils.utils import _find_action_space
 from torchrl.objectives import LossModule, ValueEstimators
-from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING, default_value_kwargs, distance_loss
-from torchrl.objectives.value import TD1Estimator, TD0Estimator, TDLambdaEstimator
+from torchrl.objectives.utils import (
+    _GAMMA_LMBDA_DEPREC_WARNING,
+    default_value_kwargs,
+    distance_loss,
+)
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
 class QMixLoss(LossModule):
@@ -210,7 +210,8 @@ class QMixLoss(LossModule):
         pred_val_index = td_copy.get("chosen_action_value")
 
         target_value = self.value_estimator.value_estimate(
-            tensordict.clone(False), target_params=self.target_global_value_network_params
+            tensordict.clone(False),
+            target_params=self.target_global_value_network_params,
         )
 
         priority_tensor = (pred_val_index - target_value).pow(2)

@@ -2,11 +2,11 @@ import time
 
 import torch
 import wandb
-from tensordict.nn import TensorDictModule
+from models.mixers import QMixer
+from models.mlp import MultiAgentMLP
 
 from objectives.qmix import QMixLoss
-from models.mixers import VDNMixer, QMixer
-from models.mlp import MultiAgentMLP
+from tensordict.nn import TensorDictModule
 
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -15,8 +15,8 @@ from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper, QValueActor, SafeSequential, QValueModule
-from torchrl.objectives import DQNLoss, ValueEstimators, SoftUpdate
+from torchrl.modules import EGreedyWrapper, QValueActor
+from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 
