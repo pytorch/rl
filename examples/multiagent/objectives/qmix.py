@@ -24,7 +24,7 @@ from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimat
 
 
 class QMixLoss(LossModule):
-    """The DQN Loss class.
+    """The QMIX Loss class.
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.

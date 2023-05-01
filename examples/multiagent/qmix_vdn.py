@@ -131,7 +131,9 @@ if __name__ == "__main__":
     if config["mixer_type"] == "qmix":
         mixer = TensorDictModule(
             module=QMixer(
-                state_shape=env.unbatched_output_spec["observation"]["observation"].shape,
+                state_shape=env.unbatched_output_spec["observation"][
+                    "observation"
+                ].shape,
                 mixing_embed_dim=256,
                 n_agents=env.n_agents,
                 device=training_device,
@@ -177,7 +179,9 @@ if __name__ == "__main__":
     # Logging
     if log:
         config.update({"model": model_config, "env": env_config})
-        model_name = ("Het" if not model_config["shared_parameters"] else "") + config["mixer_type"].upper()
+        model_name = ("Het" if not model_config["shared_parameters"] else "") + config[
+            "mixer_type"
+        ].upper()
         logger = WandbLogger(
             exp_name=generate_exp_name(env_config["scenario_name"], model_name),
             project=f"torchrl_{env_config['scenario_name']}",
