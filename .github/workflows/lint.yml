@@ -60,7 +60,7 @@ jobs:
 
         echo '::group::Lint C source'
         set +e
-        ./.circleci/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable /opt/clang-format
+        ./.circleci/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable ./clang-format
         
         if [ $? -ne 0 ]; then
           git --no-pager diff
