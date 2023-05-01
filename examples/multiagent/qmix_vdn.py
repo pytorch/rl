@@ -2,7 +2,7 @@ import time
 
 import torch
 import wandb
-from models.mixers import QMixer
+from models.mixers import QMixer, VDNMixer
 from models.mlp import MultiAgentMLP
 
 from objectives.qmix import QMixLoss
