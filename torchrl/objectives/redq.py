@@ -25,7 +25,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     FUNCTORCH_ERR = ""
     _has_functorch = True
@@ -202,12 +205,12 @@ class REDQLoss(LossModule):
                 actor_params,
             )
             if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = self.actor_network[-1].out_keys[0]
+                sample_key = "action"
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             else:
-                sample_key = self.actor_network.out_keys[0]
+                sample_key = "action"
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )

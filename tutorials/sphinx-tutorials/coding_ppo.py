@@ -172,7 +172,7 @@ max_grad_norm = 1.0
 frame_skip = 1
 frames_per_batch = 1000 // frame_skip
 # For a complete training, bring the number of frames up to 1M
-total_frames = 50_000 // frame_skip
+total_frames = 10_000 // frame_skip
 
 ######################################################################
 # PPO parameters

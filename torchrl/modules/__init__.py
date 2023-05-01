@@ -7,6 +7,7 @@ from .distributions import (
     Delta,
     distributions_maps,
     IndependentNormal,
+    MaskedCategorical,
     NormalParamWrapper,
     OneHotCategorical,
     TanhDelta,

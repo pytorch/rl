@@ -48,7 +48,7 @@ class LossModule(nn.Module):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
-    :cvar defaylt_value_type: The default value type of the class.
+    :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
         pointer. This class attribute indicates which value estimator will be
         used if none other is specified.

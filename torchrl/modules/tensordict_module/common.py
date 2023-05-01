@@ -180,7 +180,7 @@ class SafeModule(TensorDictModule):
     One can use a vmap operator to call the functional module. In this case the tensordict is expanded to match the
     batch size (i.e. the tensordict isn't modified in-place anymore):
         >>> # Model ensemble using vmap
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params_repeat = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
