@@ -41,7 +41,7 @@ jobs:
   c-source:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      repository: pytorch/vision
+      repository: pytorch/rl
       script: |
         set -euo pipefail
         
