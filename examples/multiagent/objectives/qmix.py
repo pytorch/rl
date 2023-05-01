@@ -28,6 +28,8 @@ class QMixLoss(LossModule):
 
     Args:
         value_network (QValueActor or nn.Module): a Q value operator.
+        mixer_network (TensorDictModule or nn.Module): a mixer network mapping the agents' local Q values
+         (contained in "chosen_action_value") and an optional state to the global Q value (rewritten in "chosen_action_value")
 
     Keyword Args:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
@@ -47,6 +49,11 @@ class QMixLoss(LossModule):
             If not provided, an attempt to retrieve it from the value network
             will be made.
 
+    .. note::
+        This is a multi-agent loss, as such the penultimate dimension in the tensordict keys has to be the number of agents.
+        This dimension is needed for all keys such as reward, done, values, actions, etc.
+        Since some of these keys are global (e.g. rewards are shared for all agents in qmix), you may need to perform an
+        expand operation before feeding data to this loss.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -157,7 +164,7 @@ class QMixLoss(LossModule):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
-        """Computes the DQN loss given a tensordict sampled from the replay buffer.
+        """Computes the QMIX  loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
@@ -167,7 +174,7 @@ class QMixLoss(LossModule):
                 the value network (observations, "done", "reward" in a "next" tensordict).
 
         Returns:
-            a tensor containing the DQN loss.
+            a tensor containing the QMIX loss.
 
         """
         device = self.device if self.device is not None else input_tensordict.device
@@ -195,7 +202,7 @@ class QMixLoss(LossModule):
         )
 
         action = tensordict.get("action")
-        pred_val = td_copy.get("action_value")
+        pred_val = td_copy.get("action_value")  # [*B, n_agents, n_actions]
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -205,14 +212,15 @@ class QMixLoss(LossModule):
             action = action.to(torch.float)
             pred_val_index = (pred_val * action).sum(-1, keepdim=True)
 
-        td_copy.set("chosen_action_value", pred_val_index)
+        td_copy.set("chosen_action_value", pred_val_index)  # [*B, n_agents, 1]
         self.mixer_network(td_copy, params=self.mixer_network_params)
         pred_val_index = td_copy.get("chosen_action_value")
+        # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
 
         target_value = self.value_estimator.value_estimate(
             tensordict.clone(False),
             target_params=self.target_global_value_network_params,
-        )
+        )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
