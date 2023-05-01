@@ -37,7 +37,7 @@ if __name__ == "__main__":
     torch.manual_seed(seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
     frames_per_batch = 10_000  # Frames sampled each sampling iteration
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     vmas_envs = frames_per_batch // max_steps
     n_iters = 500  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch * 50  # 500_000 frames
+    memory_size = frames_per_batch * 100  # 1_000_000 frames
 
     scenario_name = "balance"
     env_config = {
@@ -53,6 +53,8 @@ if __name__ == "__main__":
     }
 
     config = {
+        # QMIX
+        "mixer_type": "qmix",
         # DQN
         "tau": 0.001,  # Decay factor for the target network
         # RL
@@ -67,8 +69,8 @@ if __name__ == "__main__":
         "memory_size": memory_size,
         "vmas_device": vmas_device,
         # Training
-        "num_epochs": 45,  # optimization steps per batch of data collected
-        "minibatch_size": 10_000,  # size of minibatches used in each epoch
+        "num_epochs": 10,  # optimization steps per batch of data collected
+        "minibatch_size": 50_000,  # size of minibatches used in each epoch
         "lr": 5e-4,
         "max_grad_norm": 40.0,
         "training_device": training_device,
@@ -105,7 +107,7 @@ if __name__ == "__main__":
     env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
-    local_qnet = MultiAgentMLP(
+    qnet = MultiAgentMLP(
         n_agent_inputs=env.observation_spec["observation"].shape[-1],
         n_agent_outputs=env.action_spec.space.n,
         n_agents=env.n_agents,
@@ -116,40 +118,45 @@ if __name__ == "__main__":
         num_cells=256,
         activation_class=nn.Tanh,
     )
-
-    local_qnet = QValueActor(
-        module=local_qnet,
+    qnet = QValueActor(
+        module=qnet,
         spec=env.unbatched_input_spec["action"],
         in_keys=["observation"],
     )
 
-    local_qnet = EGreedyWrapper(local_qnet, annealing_num_steps=total_frames)
-
-    mixer = TensorDictModule(
-        module=QMixer(
-            state_shape=env.unbatched_output_spec["observation"]["observation"].shape,
-            mixing_embed_dim=256,
-            n_agents=env.n_agents,
-            device=training_device,
-        ),
-        in_keys=["chosen_action_value", "observation"],
-        out_keys=["chosen_action_value"],
+    qnet = EGreedyWrapper(
+        qnet, eps_init=0.2, eps_end=0, annealing_num_steps=int(total_frames * (2 / 3))
     )
-    # mixer = TensorDictModule(
-    #     module=VDNMixer(
-    #         n_agents=env.n_agents,
-    #         device=training_device,
-    #     ),
-    #     in_keys=["chosen_action_value"],
-    #     out_keys=["chosen_action_value"],
-    # )
+
+    if config["mixer_type"] == "qmix":
+        mixer = TensorDictModule(
+            module=QMixer(
+                state_shape=env.unbatched_output_spec["observation"]["observation"].shape,
+                mixing_embed_dim=256,
+                n_agents=env.n_agents,
+                device=training_device,
+            ),
+            in_keys=["chosen_action_value", "observation"],
+            out_keys=["chosen_action_value"],
+        )
+    elif config["mixer_type"] == "vdn":
+        mixer = TensorDictModule(
+            module=VDNMixer(
+                n_agents=env.n_agents,
+                device=training_device,
+            ),
+            in_keys=["chosen_action_value"],
+            out_keys=["chosen_action_value"],
+        )
+    else:
+        raise ValueError("Mixer type not in the example")
 
     with set_exploration_type(ExplorationType.RANDOM):
-        mixer(local_qnet(env.reset().to(training_device)))
+        qnet(env.reset().to(training_device))
 
     collector = SyncDataCollector(
         env,
-        local_qnet,
+        qnet,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
     )
@@ -161,7 +168,7 @@ if __name__ == "__main__":
         collate_fn=lambda x: x,  # Make it not clone when sampling
     )
 
-    loss_module = QMixLoss(local_qnet, mixer, delay_value=True)
+    loss_module = QMixLoss(qnet, mixer, delay_value=True)
     target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
@@ -170,7 +177,7 @@ if __name__ == "__main__":
     # Logging
     if log:
         config.update({"model": model_config, "env": env_config})
-        model_name = ("Het" if not model_config["shared_parameters"] else "") + "IQL"
+        model_name = ("Het" if not model_config["shared_parameters"] else "") + config["mixer_type"].upper()
         logger = WandbLogger(
             exp_name=generate_exp_name(env_config["scenario_name"], model_name),
             project=f"torchrl_{env_config['scenario_name']}",
@@ -215,7 +222,7 @@ if __name__ == "__main__":
 
             target_net_updater.step()
 
-        local_qnet.step(frames=current_frames)  # Update exploration annealing
+        qnet.step(frames=current_frames)  # Update exploration annealing
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")
@@ -248,7 +255,7 @@ if __name__ == "__main__":
                 env_test.frames = []
                 rollouts = env_test.rollout(
                     max_steps=max_steps,
-                    policy=local_qnet,
+                    policy=qnet,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
                     break_when_any_done=False,

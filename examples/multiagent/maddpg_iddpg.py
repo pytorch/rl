@@ -45,7 +45,7 @@ if __name__ == "__main__":
     frames_per_batch = 10_000  # Frames sampled each sampling iteration
     max_steps = 200
     vmas_envs = frames_per_batch // max_steps
-    n_iters = 500  # Number of sampling/training iterations
+    n_iters = 1000  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
     memory_size = frames_per_batch * 50  # 500_000 frames
 
@@ -131,7 +131,9 @@ if __name__ == "__main__":
         },
         return_log_prob=False,
     )
-    policy = AdditiveGaussianWrapper(policy, annealing_num_steps=total_frames)
+    policy = AdditiveGaussianWrapper(
+        policy, annealing_num_steps=int(total_frames * (2 / 3))
+    )
 
     # Critic
     module = MultiAgentMLP(

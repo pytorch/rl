@@ -3,7 +3,6 @@ import time
 import torch
 import wandb
 from models.mlp import MultiAgentMLP
-
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -12,7 +11,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueActor
-from torchrl.objectives import DQNLoss, ValueEstimators, SoftUpdate
+from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     vmas_envs = frames_per_batch // max_steps
     n_iters = 500  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch * 50  # 500_000 frames
+    memory_size = frames_per_batch * 100  # 1_000_000 frames
 
     scenario_name = "balance"
     env_config = {
@@ -50,7 +49,7 @@ if __name__ == "__main__":
 
     config = {
         # DQN
-        "tau": 0.001, # Decay factor for the target network
+        "tau": 0.001,  # Decay factor for the target network
         # RL
         "gamma": 0.9,
         "seed": seed,
@@ -63,8 +62,8 @@ if __name__ == "__main__":
         "memory_size": memory_size,
         "vmas_device": vmas_device,
         # Training
-        "num_epochs": 45,  # optimization steps per batch of data collected
-        "minibatch_size": 10_000,  # size of minibatches used in each epoch
+        "num_epochs": 10,  # optimization steps per batch of data collected
+        "minibatch_size": 50_000,  # size of minibatches used in each epoch
         "lr": 5e-4,
         "max_grad_norm": 40.0,
         "training_device": training_device,
@@ -118,7 +117,9 @@ if __name__ == "__main__":
         in_keys=["observation"],
     )
 
-    qnet = EGreedyWrapper(qnet, annealing_num_steps=total_frames)
+    qnet = EGreedyWrapper(
+        qnet, eps_init=0.2, eps_end=0, annealing_num_steps=int(total_frames * (2 / 3))
+    )
 
     with set_exploration_type(ExplorationType.RANDOM):
         qnet(env.reset().to(training_device))
