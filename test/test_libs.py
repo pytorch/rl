@@ -383,6 +383,9 @@ class TestCollectorLib:
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
         # env = SerialEnv(3, env_fn)
         env = ParallelEnv(3, env_fn)
+        # check_env_specs(env)
+
+        # env = ParallelEnv(3, env_fn)
         frames_per_batch = 21
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],

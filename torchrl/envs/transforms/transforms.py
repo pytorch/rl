@@ -548,7 +548,7 @@ but got an object of type {type(transform)}."""
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-        return self.output_spec["reward"]
+        return self.output_spec[("reward", *self.reward_key)]
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -558,7 +558,7 @@ but got an object of type {type(transform)}."""
     @property
     def done_spec(self) -> TensorSpec:
         """Done spec of the transformed environment."""
-        return self.output_spec["done"]
+        return self.output_spec[("done", *self.done_key)]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)

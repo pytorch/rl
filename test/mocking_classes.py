@@ -146,6 +146,15 @@ class MockSerialEnv(EnvBase):
         cls._output_spec["done"] = done_spec
         cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
+
+        if not isinstance(cls._output_spec["reward"], CompositeSpec):
+            cls._output_spec["reward"] = CompositeSpec(
+                reward=cls._output_spec["reward"], shape=batch_size
+            )
+        if not isinstance(cls._output_spec["done"], CompositeSpec):
+            cls._output_spec["done"] = CompositeSpec(
+                done=cls._output_spec["done"], shape=batch_size
+            )
         return super().__new__(*args, **kwargs)
 
     def __init__(self, device):
@@ -244,6 +253,14 @@ class MockBatchedLockedEnv(EnvBase):
         cls._output_spec["reward"] = reward_spec
         cls._output_spec["done"] = done_spec
         cls._output_spec["observation"] = observation_spec
+        if not isinstance(cls._output_spec["reward"], CompositeSpec):
+            cls._output_spec["reward"] = CompositeSpec(
+                reward=cls._output_spec["reward"], shape=batch_size
+            )
+        if not isinstance(cls._output_spec["done"], CompositeSpec):
+            cls._output_spec["done"] = CompositeSpec(
+                done=cls._output_spec["done"], shape=batch_size
+            )
         cls._input_spec = input_spec
         return super().__new__(
             cls,

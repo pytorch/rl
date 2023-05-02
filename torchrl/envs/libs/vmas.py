@@ -223,11 +223,13 @@ class VmasWrapper(_EnvWrapper):
         else:
             observation_spec = CompositeSpec(observation=multi_agent_observation_spec)
 
-        self.output_spec = CompositeSpec(
-            observation=observation_spec,
-            reward=multi_agent_reward_spec,
-            done=done_spec,
-        ).expand(self.batch_size)
+        self.observation_spec = observation_spec.expand(
+            *self.batch_size, *observation_spec.shape
+        )
+        self.reward_spec = multi_agent_reward_spec.expand(
+            *self.batch_size, *multi_agent_reward_spec.shape
+        )
+        self.done_spec = done_spec.expand(*self.batch_size, *done_spec.shape)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:

@@ -428,24 +428,32 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
-        keys = self.output_spec["done"].keys(True, True)
-        for key in keys:
-            # the first key is the done
-            if not isinstance(key, tuple):
-                key = (key,)
+        try:
+            return self.__dict__["_done_key"]
+        except KeyError:
+            keys = self.output_spec["done"].keys(True, True)
+            for key in keys:
+                # the first key is the done
+                if not isinstance(key, tuple):
+                    key = (key,)
+                self._done_key = key
+                break
+            else:
+                raise ValueError("Could not find done spec")
             return key
 
     # Done spec: done specs belong to output_spec
     @property
     def done_spec(self) -> TensorSpec:
         try:
-            return self.output_spec[("done", *self.done_key)]
+            out = self.output_spec[("done", *self.done_key)]
         except KeyError:
             # populate the "done" entry
             self.done_spec = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
-            return self.output_spec[("done", *self.done_key)]
+            out = self.output_spec[("done", *self.done_key)]
+        return out
 
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
