@@ -3,7 +3,9 @@ import torch.optim
 from tensordict.nn import TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
+from torchrl.data.datasets.d4rl import D4RLExperienceReplay
+from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.envs import (
     CatFrames,
@@ -13,7 +15,6 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
-    RenameTransform,
     Reward2GoTransform,
     StepCounter,
     TargetReturn,
@@ -23,19 +24,10 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import (
-    AdditiveGaussianWrapper,
-    ConvNet,
-    MLP,
-    OrnsteinUhlenbeckProcessWrapper,
-    ProbabilisticActor,
-    TanhDelta,
-    ValueOperator,
-)
+from torchrl.modules import DTActor, ProbabilisticActor, TanhNormal
 from torchrl.objectives import SoftUpdate, TD3Loss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
-from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 DEFAULT_REWARD_SCALING = {
@@ -83,9 +75,10 @@ def make_transformed_env_states(base_env, env_cfg):
     transformed_env = TransformedEnv(base_env)
 
     transformed_env.append_transform(StepCounter())
-    transformed_env.append_transform(
-        RenameTransform(["step_count"], ["timesteps"], create_copy=True)
-    )
+    # Only needed if ordering True -> Default is False
+    # transformed_env.append_transform(
+    #     RenameTransform(["step_count"], ["timesteps"], create_copy=True)
+    # )
     transformed_env.append_transform(
         TargetReturn(
             200 * 0.01, out_keys=["return_to_go"]
@@ -109,11 +102,11 @@ def make_transformed_env_states(base_env, env_cfg):
     transformed_env.append_transform(
         CatFrames(in_keys=["return_to_go"], N=env_cfg.stacked_frames, dim=-2)
     )
-
-    transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["timesteps"]))
-    transformed_env.append_transform(
-        CatFrames(in_keys=["timesteps"], N=env_cfg.stacked_frames, dim=-2)
-    )
+    # Only needed if ordering True -> Default is False
+    # transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["timesteps"]))
+    # transformed_env.append_transform(
+    #     CatFrames(in_keys=["timesteps"], N=env_cfg.stacked_frames, dim=-2)
+    # )
 
     return transformed_env
 
@@ -184,6 +177,28 @@ def make_replay_buffer(rb_cfg):
     )
 
 
+def make_offline_replay_buffer(rb_cfg):
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    data = D4RLExperienceReplay(
+        rb_cfg.dataset,
+        split_trajs=False,
+        batch_size=rb_cfg.batch_size,
+        sampler=SamplerWithoutReplacement(drop_last=False),
+        transform=r2g,
+    )
+    # data.append_transform(
+    #     Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    # )
+    # data.append_transform(
+
+    # )
+    # data.append_transform(
+
+    # )
+
+    return data
+
+
 # ====================================================================
 # Model
 # -----
@@ -194,158 +209,78 @@ def make_replay_buffer(rb_cfg):
 #
 
 
-def make_td3_model(cfg):
+def make_decision_transformer_model(cfg):
     env_cfg = cfg.env
-    model_cfg = cfg.model
+    # model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
     # we must initialize the observation norm transform
     init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
-    env_specs = proof_environment.specs
-    from_pixels = env_cfg.from_pixels
+    action_spec = proof_environment.action_spec
 
-    if not from_pixels:
-        actor_net, q_net = make_td3_modules_state(model_cfg, proof_environment)
-        in_keys = ["observation_vector"]
-        out_keys = ["param"]
-    else:
-        actor_net, q_net = make_td3_modules_pixels(model_cfg, proof_environment)
-        in_keys = ["pixels"]
-        out_keys = ["param", "hidden"]
+    in_keys = [
+        "observation",
+        "action",
+        "return_to_go",
+        # "timesteps",
+    ]  # return_to_go, timesteps
 
-    actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
+    actor_net = DTActor(action_dim=1)
 
-    # We use a ProbabilisticActor to make sure that we map the
-    # network output to the right space using a TanhDelta
-    # distribution.
-    actor = ProbabilisticActor(
-        module=actor_module,
-        in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
-        safe=False,
-        distribution_class=TanhDelta,
-        distribution_kwargs={
-            "min": env_specs["input_spec"]["action"].space.minimum,
-            "max": env_specs["input_spec"]["action"].space.maximum,
-        },
+    dist_class = TanhNormal
+    dist_kwargs = {
+        "min": -1.0,
+        "max": 1.0,
+        "tanh_loc": False,
+    }
+
+    actor_module = TensorDictModule(
+        actor_net, in_keys=in_keys, out_keys=["loc", "scale"]  # , "hidden_state"],
     )
-
-    if not from_pixels:
-        in_keys = ["observation_vector", "action"]
-    else:
-        in_keys = ["pixels", "action"]
-
-    out_keys = ["state_action_value"]
-    qvalue = ValueOperator(
-        in_keys=in_keys,
-        out_keys=out_keys,
-        module=q_net,
+    actor = ProbabilisticActor(
+        spec=action_spec,
+        in_keys=["loc", "scale"],  # , "hidden_state"],
+        out_keys=["action", "log_prob"],  # , "hidden_state"],
+        module=actor_module,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs,
+        default_interaction_mode="random",
+        cache_dist=True,
+        return_log_prob=False,
     )
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_mode("random"):
-        # for t in proof_environment.transform:
-        #     if isinstance(t, ObservationNorm):
-        #         t.init_stats(2)
         td = proof_environment.rollout(max_steps=1000)
         print(td)
         actor(td)
-        qvalue(td)
 
-    return actor, qvalue
-
-
-def make_td3_modules_state(model_cfg, proof_environment):
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
-
-    actor_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": out_features,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-    actor_net = MLP(**actor_net_kwargs)
-
-    qvalue_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-
-    q_net = MLP(**qvalue_net_kwargs)
-    return actor_net, q_net
-
-
-def make_td3_modules_pixels(model_cfg, proof_environment):
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
-
-    actor_net = torch.nn.ModuleList()
-
-    actor_convnet_kwargs = {"activation_class": ACTIVATIONS[model_cfg.activation]}
-    actor_net.append(ConvNet(**actor_convnet_kwargs))
-
-    actor_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": out_features,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-    actor_net.append(MLP(**actor_net_kwargs))
-
-    q_net = torch.nn.ModuleList()
-
-    q_net_convnet_kwargs = {"activation_class": ACTIVATIONS[model_cfg.activation]}
-    q_net.append(ConvNet(**q_net_convnet_kwargs))
-
-    qvalue_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-
-    q_net.append(MLP(**qvalue_net_kwargs))
-
-    return actor_net, q_net
-
-
-def make_policy(model_cfg, actor):
-    if model_cfg.ou_exploration:
-        return OrnsteinUhlenbeckProcessWrapper(actor)
-    else:
-        return AdditiveGaussianWrapper(actor)
+    return actor
 
 
 # ====================================================================
-# TD3 Loss
+# Decision Transformer Loss
 # ---------
 
 
-def make_loss(loss_cfg, actor_network, qvalue_network):
+def make_loss(loss_cfg, actor_network):
     loss = TD3Loss(
         actor_network,
-        qvalue_network,
         gamma=loss_cfg.gamma,
         loss_function=loss_cfg.loss_function,
-        policy_noise=0.2,
-        noise_clip=0.5,
     )
     target_net_updater = SoftUpdate(loss, 1 - loss_cfg.tau)
     target_net_updater.init_()
     return loss, target_net_updater
 
 
-def make_td3_optimizer(optim_cfg, actor_network, qvalue_network):
-    actor_optim = torch.optim.Adam(
+def make_dt_optimizer(optim_cfg, actor_network):
+    optimizer = torch.optim.Adam(
         actor_network.parameters(),
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )
-    critic_optim = torch.optim.Adam(
-        qvalue_network.parameters(),
-        lr=optim_cfg.lr,
-        weight_decay=optim_cfg.weight_decay,
-    )
-    return actor_optim, critic_optim
+    return optimizer
 
 
 # ====================================================================

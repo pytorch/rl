@@ -33,6 +33,8 @@ logger:
 
 # Buffer
 replay_buffer:
+  dataset: hopper-medium-v2
+  batch_size: 256
   prb: 0
   buffer_prefetch: 64
   capacity: 1_000_000
