@@ -1140,6 +1140,7 @@ class RewardClipping(Transform):
             reward = reward.clamp_max(self.clamp_max)
         return reward
 
+    @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
             return BoundedTensorSpec(
@@ -1183,6 +1184,7 @@ class BinarizeReward(Transform):
             )
         return (reward > 0.0).to(torch.long)
 
+    @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         return BinaryDiscreteTensorSpec(
             n=1, device=reward_spec.device, shape=reward_spec.shape
@@ -1475,6 +1477,7 @@ class UnsqueezeTransform(Transform):
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         return self._inv_transform_spec(input_spec)
 
+    @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.in_keys:
             reward_spec = self._transform_spec(reward_spec)
@@ -2039,6 +2042,7 @@ class RewardScaling(Transform):
             reward = reward * scale + loc
             return reward
 
+    @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
             return reward_spec
@@ -2124,6 +2128,7 @@ class DoubleToFloat(Transform):
             self._transform_spec(input_spec[key])
         return input_spec
 
+    @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         if "reward" in self.in_keys:
             if reward_spec.dtype is not torch.double:

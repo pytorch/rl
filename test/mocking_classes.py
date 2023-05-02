@@ -61,7 +61,16 @@ class _MockEnv(EnvBase):
         cls._output_spec["reward"] = cls._output_spec["reward"].to(
             torch.get_default_dtype()
         )
-        return super().__new__(*args, **kwargs)
+        if not isinstance(cls._output_spec["reward"], CompositeSpec):
+            cls._output_spec["reward"] = CompositeSpec(
+                reward=cls._output_spec["reward"],
+                shape=cls._output_spec["reward"].shape[:-1],
+            )
+        if not isinstance(cls._output_spec["done"], CompositeSpec):
+            cls._output_spec["done"] = CompositeSpec(
+                done=cls._output_spec["done"], shape=cls._output_spec["done"].shape[:-1]
+            )
+        return super().__new__(cls, *args, **kwargs)
 
     def __init__(
         self,
@@ -524,7 +533,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         cls._output_spec["observation"] = observation_spec
         cls._input_spec = input_spec
         cls.from_pixels = from_pixels
-        return super().__new__(*args, **kwargs)
+        return super().__new__(cls, *args, **kwargs)
 
     def _get_in_obs(self, obs):
         return obs
