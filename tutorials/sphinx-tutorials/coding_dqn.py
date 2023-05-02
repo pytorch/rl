@@ -438,7 +438,8 @@ def get_collector(
 
 
 def get_loss_module(actor, gamma):
-    loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
+    loss_module = DQNLoss(actor, delay_value=True)
+    loss_module.make_value_estimator(gamma=gamma)
     target_updater = SoftUpdate(loss_module)
     return loss_module, target_updater
 
@@ -563,7 +564,6 @@ test_env = make_env(parallel=False, obs_norm_sd=stats)
 # Get model
 actor, actor_explore = make_model(test_env)
 loss_module, target_net_updater = get_loss_module(actor, gamma)
-target_net_updater.init_()
 
 collector = get_collector(
     stats, num_collectors, actor_explore, frames_per_batch, total_frames, device
@@ -618,7 +618,7 @@ recorder = Recorder(
     frame_skip=1,
     policy_exploration=actor_explore,
     environment=test_env,
-    exploration_type="mode",
+    exploration_type=ExplorationType.MODE,
     log_keys=[("next", "reward")],
     out_keys={("next", "reward"): "rewards"},
     log_pbar=True,

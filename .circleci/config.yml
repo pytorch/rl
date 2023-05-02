@@ -850,7 +850,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda117"
+      image_name: "nvidia/cudagl:11.4.0-base"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -875,8 +875,7 @@ jobs:
             - env
       - run:
           name: Install torchrl, run tests
-          command: |
-            docker run -t --env=CUDA_VISIBLE_DEVICES="" --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_libs/scripts_gym/batch_scripts.sh
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_gym/batch_scripts.sh
       - run:
           name: Codecov upload
           command: |
@@ -895,7 +894,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda117"
+      image_name: "nvidia/cudagl:11.4.0-base"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -936,7 +935,7 @@ jobs:
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/install.sh
       - run:
           name: Run tests
-          command: bash .circleci/unittest/linux_optdeps/scripts/run_test.sh
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_optdeps/scripts/run_test.sh
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
@@ -1070,7 +1069,7 @@ jobs:
       image: ubuntu-2004-cuda-11.4:202110-01
     resource_class: gpu.nvidia.medium
     environment:
-      image_name: "pytorch/manylinux-cuda116"
+      image_name: "nvidia/cudagl:11.4.0-base"
       TAR_OPTIONS: --no-same-owner
       PYTHON_VERSION: << parameters.python_version >>
       CU_VERSION: << parameters.cu_version >>
@@ -1096,8 +1095,7 @@ jobs:
       - run:
           name: Install torchrl, run tests
           command: |
-            docker run -t --env=CUDA_VISIBLE_DEVICES="" --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
-#            docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
+            docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
       - run:
           name: Codecov upload
           command: |
@@ -1106,7 +1104,7 @@ jobs:
             ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F olddeps-gpu
       - run:
           name: Post process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
+          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
       - store_test_results:
           path: test-results
 

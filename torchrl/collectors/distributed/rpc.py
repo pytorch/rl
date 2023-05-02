@@ -238,7 +238,9 @@ class RPCDataCollector(DataCollectorBase):
         visible_devices=None,
         tensorpipe_options=None,
     ):
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":

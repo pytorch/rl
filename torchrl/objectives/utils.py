@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import warnings
 from enum import Enum
 from typing import Iterable, Optional, Union
 
@@ -138,53 +139,59 @@ class TargetNetUpdater:
 
     def __init__(
         self,
-        loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        loss_module: "LossModule",  # noqa: F821
     ):
+        _has_update_associated = getattr(loss_module, "_has_update_associated", None)
+        loss_module._has_update_associated = True
+        try:
+            _target_names = []
+            # for properties
+            for name in loss_module.__class__.__dict__:
+                if (
+                    name.startswith("target_")
+                    and (name.endswith("params") or name.endswith("buffers"))
+                    and (getattr(loss_module, name) is not None)
+                ):
+                    _target_names.append(name)
 
-        _target_names = []
-        # for properties
-        for name in loss_module.__class__.__dict__:
-            if (
-                name.startswith("target_")
-                and (name.endswith("params") or name.endswith("buffers"))
-                and (getattr(loss_module, name) is not None)
-            ):
-                _target_names.append(name)
+            # for regular lists: raise an exception
+            for name in loss_module.__dict__:
+                if (
+                    name.startswith("target_")
+                    and (name.endswith("params") or name.endswith("buffers"))
+                    and (getattr(loss_module, name) is not None)
+                ):
+                    raise RuntimeError(
+                        "Your module seems to have a target tensor list contained "
+                        "in a non-dynamic structure (such as a list). If the "
+                        "module is cast onto a device, the reference to these "
+                        "tensors will be lost."
+                    )
 
-        # for regular lists: raise an exception
-        for name in loss_module.__dict__:
-            if (
-                name.startswith("target_")
-                and (name.endswith("params") or name.endswith("buffers"))
-                and (getattr(loss_module, name) is not None)
-            ):
+            if len(_target_names) == 0:
                 raise RuntimeError(
-                    "Your module seems to have a target tensor list contained "
-                    "in a non-dynamic structure (such as a list). If the "
-                    "module is cast onto a device, the reference to these "
-                    "tensors will be lost."
+                    "Did not find any target parameters or buffers in the loss module."
                 )
 
-        if len(_target_names) == 0:
-            raise RuntimeError(
-                "Did not find any target parameters or buffers in the loss module."
-            )
+            _source_names = ["".join(name.split("target_")) for name in _target_names]
 
-        _source_names = ["".join(name.split("target_")) for name in _target_names]
+            for _source in _source_names:
+                try:
+                    getattr(loss_module, _source)
+                except AttributeError:
+                    raise RuntimeError(
+                        f"Incongruent target and source parameter lists: "
+                        f"{_source} is not an attribute of the loss_module"
+                    )
 
-        for _source in _source_names:
-            try:
-                getattr(loss_module, _source)
-            except AttributeError:
-                raise RuntimeError(
-                    f"Incongruent target and source parameter lists: "
-                    f"{_source} is not an attribute of the loss_module"
-                )
-
-        self._target_names = _target_names
-        self._source_names = _source_names
-        self.loss_module = loss_module
-        self.initialized = False
+            self._target_names = _target_names
+            self._source_names = _source_names
+            self.loss_module = loss_module
+            self.initialized = False
+            self.init_()
+            _has_update_associated = True
+        finally:
+            loss_module._has_update_associated = _has_update_associated
 
     @property
     def _targets(self):
@@ -201,6 +208,8 @@ class TargetNetUpdater:
         )
 
     def init_(self) -> None:
+        if self.initialized:
+            warnings.warn("Updated already initialized.")
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)

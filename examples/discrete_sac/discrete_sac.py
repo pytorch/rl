@@ -174,10 +174,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         qvalue_network=model[1],
         num_actions=num_actions,
         num_qvalue_nets=2,
-        gamma=cfg.gamma,
         target_entropy_weight=cfg.target_entropy_weight,
         loss_function="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
@@ -210,8 +210,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None

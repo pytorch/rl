@@ -72,7 +72,9 @@ class DQNLoss(LossModule):
         super().__init__()
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
-            module=value_network, wrapper_type=QValueActor
+            module=value_network,
+            wrapper_type=QValueActor,
+            action_space=action_space,
         )
 
         self.convert_to_functional(
@@ -91,18 +93,27 @@ class DQNLoss(LossModule):
                 action_space = value_network.spec
             except AttributeError:
                 # let's try with action_space then
-                pass
-            try:
-                action_space = self.value_network.action_space
-            except AttributeError:
-                raise ValueError(self.ACTION_SPEC_ERROR)
+                try:
+                    action_space = value_network.action_space
+                except AttributeError:
+                    raise ValueError(self.ACTION_SPEC_ERROR)
+        if action_space is None:
+            warnings.warn(
+                "action_space was not specified. DQNLoss will default to 'one-hot'."
+                "This behaviour will be deprecated soon and a space will have to be passed."
+                "Check the DQNLoss documentation to see how to pass the action space. "
+            )
+            action_space = "one-hot"
         self.action_space = _find_action_space(action_space)
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
@@ -394,7 +405,10 @@ class DistributionalDQNLoss(LossModule):
         loss_td = TensorDict({"loss": loss.mean()}, [])
         return loss_td
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if value_type is ValueEstimators.TD1:
             raise NotImplementedError(
                 f"value type {value_type} is not implemented for {self.__class__.__name__}."

@@ -52,7 +52,7 @@ print([_env for _env in HabitatEnv.available_envs if _env.startswith("Habitat")]
   ```
 
 2. `ImportError: /usr/lib/x86_64-linux-gnu/libOpenGL.so.0: undefined symbol: _glapi_tls_Current`
-  **Solution**: as in [MUJOCO]([url](https://github.com/pytorch/rl/blob/main/knowledge_base/MUJOCO_INSTALLATION.md)) debug, Link conda to the right libOpenGL.so file (replace /path/to/conda and mujoco_env with the proper paths and names):
+  **Solution**: as in [MUJOCO](https://github.com/pytorch/rl/blob/main/knowledge_base/MUJOCO_INSTALLATION.md) debug, Link conda to the right libOpenGL.so file (replace /path/to/conda and mujoco_env with the proper paths and names):
   ```shell
   conda install -y -c conda-forge libglvnd-glx-cos7-x86_64 --force-reinstall
   conda install -y -c conda-forge xvfbwrapper --force-reinstall

@@ -96,13 +96,7 @@ def make_replay_buffer(
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = (
-        torch.device("cuda:0")
-        if torch.cuda.is_available()
-        and torch.cuda.device_count() > 0
-        and cfg.device == "cuda:0"
-        else torch.device("cpu")
-    )
+    device = torch.device(cfg.device)
 
     exp_name = generate_exp_name("TD3", cfg.exp_name)
     logger = get_logger(
@@ -219,9 +213,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_network=model[0],
         qvalue_network=model[1],
         num_qvalue_nets=2,
-        gamma=cfg.gamma,
         loss_function="smooth_l1",
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
@@ -236,6 +230,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
         total_frames=cfg.total_frames,
+        device=cfg.collector_device,
     )
     collector.set_seed(cfg.seed)
 
@@ -260,8 +255,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None

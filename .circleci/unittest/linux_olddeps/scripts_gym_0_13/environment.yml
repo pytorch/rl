@@ -8,9 +8,8 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym==0.13
+    - gym[atari]==0.13
     - pygame
-    - gym[atari]
     - moviepy
     - tqdm
     - pytest

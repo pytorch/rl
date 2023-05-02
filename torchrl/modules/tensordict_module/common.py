@@ -180,7 +180,7 @@ class SafeModule(TensorDictModule):
     One can use a vmap operator to call the functional module. In this case the tensordict is expanded to match the
     batch size (i.e. the tensordict isn't modified in-place anymore):
         >>> # Model ensemble using vmap
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params_repeat = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
@@ -361,6 +361,7 @@ def ensure_tensordict_compatible(
     out_keys: Optional[Iterable[str]] = None,
     safe: bool = False,
     wrapper_type: Optional[Type] = TensorDictModule,
+    **kwargs,
 ):
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
@@ -395,7 +396,6 @@ def ensure_tensordict_compatible(
         )
 
     # TODO: Check whether out_keys match (at least in number) if they are provided.
-    kwargs = {}
     if in_keys is not None:
         kwargs["in_keys"] = in_keys
     if out_keys is not None:

@@ -14,8 +14,7 @@ from_pixels: True
 # we want 50 frames / traj in the replay buffer. Given the frame_skip=2 this makes each traj 100 steps long
 env_per_collector: 8
 num_workers: 8
-# collector_devices: [cuda:1]
-collector_devices: cuda:1  # [cpu,cpu,cpu,cpu,cpu,cpu,cpu,cpu]
+collector_device: cuda:1
 frames_per_batch: 800
 optim_steps_per_batch: 80
 record_interval: 30

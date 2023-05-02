@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import warnings
 from copy import deepcopy
 
 from packaging import version as pack_version
@@ -1963,7 +1964,6 @@ class TestREDQ:
 
         if delay_qvalue:
             target_updater = SoftUpdate(loss_fn)
-            target_updater.init_()
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -3728,7 +3728,6 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         )
     elif mode == "soft":
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
-    upd.init_()
     for _, _v in upd._targets.items(True, True):
         if _v.dtype is not torch.int64:
             _v.copy_(torch.randn_like(_v))
@@ -5086,6 +5085,18 @@ class TestBase:
 
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
+
+
+@pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])
+def test_updater_warning(updater):
+    with warnings.catch_warnings():
+        dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
+    with pytest.warns(UserWarning):
+        dqn.target_value_network_params
+    with warnings.catch_warnings():
+        updater(dqn)
+    with warnings.catch_warnings():
+        dqn.target_value_network_params
 
 
 if __name__ == "__main__":

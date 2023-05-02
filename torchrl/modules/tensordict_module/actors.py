@@ -1105,8 +1105,6 @@ class DistributionalQValueActor(QValueActor):
     ):
 
         action_space, spec = _process_action_space_spec(action_space, spec)
-
-        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
         out_keys = [
@@ -1190,7 +1188,7 @@ class ActorValueOperator(SafeSequential):
       refet to :class:`~.ActorCriticWrapper`.
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
-    will both return a stand-alone TDModule with the dedicated functionality.
+    will both return a standalone TDModule with the dedicated functionality.
 
     Args:
         common_operator (TensorDictModule): a common operator that reads
@@ -1283,7 +1281,7 @@ class ActorValueOperator(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a stand-alone policy operator that maps an observation to an action."""
+        """Returns a standalone policy operator that maps an observation to an action."""
         if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
             return SafeProbabilisticTensorDictSequential(
                 self.module[0], *self.module[1].module
@@ -1291,8 +1289,16 @@ class ActorValueOperator(SafeSequential):
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
+        """Returns a standalone value network operator that maps an observation to a value estimate."""
         return SafeSequential(self.module[0], self.module[2])
+
+    def get_policy_head(self) -> SafeSequential:
+        """Returns the policy head."""
+        return self.module[1]
+
+    def get_value_head(self) -> SafeSequential:
+        """Returns the value head."""
+        return self.module[2]
 
 
 class ActorCriticOperator(ActorValueOperator):
@@ -1333,7 +1339,7 @@ class ActorCriticOperator(ActorValueOperator):
 
 
     To facilitate the workflow, this  class comes with a get_policy_operator() method, which
-    will both return a stand-alone TDModule with the dedicated functionality. The get_critic_operator will return the
+    will both return a standalone TDModule with the dedicated functionality. The get_critic_operator will return the
     parent object, as the value is computed based on the policy output.
 
     Args:
@@ -1437,7 +1443,7 @@ class ActorCriticOperator(ActorValueOperator):
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
-        """Returns a stand-alone critic network operator that maps a state-action pair to a critic estimate."""
+        """Returns a standalone critic network operator that maps a state-action pair to a critic estimate."""
         return self
 
     def get_value_operator(self) -> TensorDictModuleWrapper:
@@ -1446,6 +1452,14 @@ class ActorCriticOperator(ActorValueOperator):
             "state/observation. This class computes the value of a state-action pair: to get the "
             "network computing this value, please call td_sequence.get_critic_operator()"
         )
+
+    def get_policy_head(self) -> SafeSequential:
+        """Returns the policy head."""
+        return self.module[1]
+
+    def get_value_head(self) -> SafeSequential:
+        """Returns the value head."""
+        return self.module[2]
 
 
 class ActorCriticWrapper(SafeSequential):
@@ -1473,7 +1487,7 @@ class ActorCriticWrapper(SafeSequential):
 
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
-    will both return a stand-alone TDModule with the dedicated functionality.
+    will both return a standalone TDModule with the dedicated functionality.
 
     Args:
         policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
@@ -1556,9 +1570,12 @@ class ActorCriticWrapper(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a stand-alone policy operator that maps an observation to an action."""
+        """Returns a standalone policy operator that maps an observation to an action."""
         return self.module[0]
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
+        """Returns a standalone value network operator that maps an observation to a value estimate."""
         return self.module[1]
+
+    get_policy_head = get_policy_operator
+    get_value_head = get_value_operator
