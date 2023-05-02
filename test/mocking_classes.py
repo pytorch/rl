@@ -977,6 +977,41 @@ class CountingEnv(EnvBase):
         return tensordict.select().set("next", tensordict)
 
 
+class NestedRewardEnv(CountingEnv):
+    # an env with nested reward and done states
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+        super().__init__(max_steps=max_steps, start_val=start_val, **kwargs)
+        self.observation_spec = CompositeSpec(
+            {("data", "states"): self.observation_spec["observation"].clone()},
+            shape=self.batch_size,
+        )
+        self.reward_spec = CompositeSpec(
+            {("data", "reward"): self.reward_spec.clone()}, shape=self.batch_size
+        )
+        self.done_spec = CompositeSpec(
+            {("data", "done"): self.done_spec.clone()}, shape=self.batch_size
+        )
+
+    def _reset(self, td):
+        td = super()._reset(td)
+        td[self.done_key] = td["done"]
+        del td["done"]
+        td["data", "states"] = td["observation"]
+        del td["observation"]
+        return td
+
+    def _step(self, td):
+        td_root = super()._step(td)
+        td = td_root["next"]
+        td[self.reward_key] = td["reward"]
+        del td["reward"]
+        td[self.done_key] = td["done"]
+        del td["done"]
+        td["data", "states"] = td["observation"]
+        del td["observation"]
+        return td_root
+
+
 class CountingBatchedEnv(EnvBase):
     """An env that is done after a given number of steps.
 

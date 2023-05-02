@@ -1280,6 +1280,40 @@ class TestConcurrentEnvs:
                     p.join(timeout=2)
 
 
+class TestNestedSpecs:
+    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedRewardEnv"])
+    def test_nested_reward(self, envclass):
+        from mocking_classes import NestedRewardEnv
+
+        if envclass == "CountingEnv":
+            env = CountingEnv()
+        elif envclass == "NestedRewardEnv":
+            env = NestedRewardEnv()
+        else:
+            raise NotImplementedError
+        reset = env.reset()
+        assert not isinstance(env.done_spec, CompositeSpec)
+        assert not isinstance(env.reward_spec, CompositeSpec)
+        assert env.done_spec == env.output_spec[("done", *env.done_key)]
+        assert env.reward_spec == env.output_spec[("reward", *env.reward_key)]
+        if envclass == "NestedRewardEnv":
+            assert ("data", "done") in reset.keys(True)
+            assert ("data", "states") in reset.keys(True)
+            assert ("data", "reward") not in reset.keys(True)
+        assert env.done_key in reset.keys(True)
+        assert env.reward_key not in reset.keys(True)
+
+        next_state = env.rand_step()
+        if envclass == "NestedRewardEnv":
+            assert ("next", "data", "done") in next_state.keys(True)
+            assert ("next", "data", "states") in next_state.keys(True)
+            assert ("next", "data", "reward") in next_state.keys(True)
+        assert ("next", *env.done_key) in next_state.keys(True)
+        assert ("next", *env.reward_key) in next_state.keys(True)
+
+        check_env_specs(env)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

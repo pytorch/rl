@@ -382,8 +382,14 @@ class ContinuousBox(Box):
         return self.__class__(self.minimum.clone(), self.maximum.clone())
 
     def __repr__(self):
-        min_str = f"minimum=Tensor(shape={self.minimum.shape}, device={self.minimum.device}, dtype={self.minimum.dtype}, contiguous={self.maximum.is_contiguous()})"
-        max_str = f"maximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})"
+        min_str = indent(
+            f"\nminimum=Tensor(shape={self.minimum.shape}, device={self.minimum.device}, dtype={self.minimum.dtype}, contiguous={self.maximum.is_contiguous()})",
+            " " * 4,
+        )
+        max_str = indent(
+            f"\nmaximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})",
+            " " * 4,
+        )
         return f"{self.__class__.__name__}({min_str}, {max_str})"
 
     def __eq__(self, other):
@@ -692,15 +698,15 @@ class TensorSpec:
         raise NotImplementedError
 
     def __repr__(self):
-        shape_str = "shape=" + str(self.shape)
-        space_str = "space=" + str(self.space)
-        device_str = "device=" + str(self.device)
-        dtype_str = "dtype=" + str(self.dtype)
-        domain_str = "domain=" + str(self.domain)
-        sub_string = ", ".join(
+        shape_str = indent("shape=" + str(self.shape), " " * 4)
+        space_str = indent("space=" + str(self.space), " " * 4)
+        device_str = indent("device=" + str(self.device), " " * 4)
+        dtype_str = indent("dtype=" + str(self.dtype), " " * 4)
+        domain_str = indent("domain=" + str(self.domain), " " * 4)
+        sub_string = ",\n".join(
             [shape_str, space_str, device_str, dtype_str, domain_str]
         )
-        string = f"{self.__class__.__name__}(\n     {sub_string})"
+        string = f"{self.__class__.__name__}(\n{sub_string})"
         return string
 
     @classmethod
