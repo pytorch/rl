@@ -16,3 +16,4 @@ dependencies:
     - pyyaml
     - scipy
     - coverage
+    - msvc-runtime
