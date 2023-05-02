@@ -1297,6 +1297,8 @@ class TestNestedSpecs:
         assert env.done_spec == env.output_spec[("done", *env.done_key)]
         assert env.reward_spec == env.output_spec[("reward", *env.reward_key)]
         if envclass == "NestedRewardEnv":
+            assert env.done_key == ("data", "done")
+            assert env.reward_key == ("data", "reward")
             assert ("data", "done") in reset.keys(True)
             assert ("data", "states") in reset.keys(True)
             assert ("data", "reward") not in reset.keys(True)

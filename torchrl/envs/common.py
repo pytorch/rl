@@ -372,11 +372,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the reward is in a nested tensordict, this property will return its
         location.
         """
-        keys = self.output_spec["reward"].keys(True, True)
-        for key in keys:
-            # the first key is the reward
-            if not isinstance(key, tuple):
-                key = (key,)
+        try:
+            return self.__dict__["_reward_key"]
+        except KeyError:
+            keys = self.output_spec["reward"].keys(True, True)
+            for key in keys:
+                # the first key is the reward
+                if not isinstance(key, tuple):
+                    key = (key,)
+                self.__dict__["_reward_key"] = key
+                break
+            else:
+                raise ValueError("Could not find reward spec")
             return key
 
     # Reward spec: reward specs belong to output_spec
@@ -393,6 +400,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
+        try:
+            delattr(self, "_reward_key")
+        except AttributeError:
+            pass
         if not hasattr(value, "shape"):
             raise TypeError(
                 f"reward_spec of type {type(value)} do not have a shape " f"attribute."
@@ -436,7 +447,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 # the first key is the done
                 if not isinstance(key, tuple):
                     key = (key,)
-                self._done_key = key
+                self.__dict__["_done_key"] = key
                 break
             else:
                 raise ValueError("Could not find done spec")
@@ -457,6 +468,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
+        try:
+            delattr(self, "_done_key")
+        except AttributeError:
+            pass
         if not hasattr(value, "shape"):
             raise TypeError(
                 f"done_spec of type {type(value)} do not have a shape " f"attribute."
