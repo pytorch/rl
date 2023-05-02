@@ -952,7 +952,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.clone().update(fake_obs)
 
+        # make sure that reward spec is instantiated
         reward_spec = self.output_spec["reward"]
+        # make sure that done spec is instantiated
+        _ = self.done_spec
         done_spec = self.output_spec["done"]
         fake_reward = reward_spec.zero()
         fake_done = done_spec.zero()
