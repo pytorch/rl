@@ -7,7 +7,7 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - pytest==7.3.0
+    - pytest
     - pytest-cov
     - pytest-mock
     - pytest-instafail
