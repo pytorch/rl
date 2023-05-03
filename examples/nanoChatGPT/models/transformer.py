@@ -9,6 +9,8 @@ from .utils import _remove_state_dict_prefixes, load_checkpoint
 
 HERE = Path(__file__).parent
 
+DEFAULT_VOCAB_SIZE = 50_304
+
 
 def init_transformer_scratch(config, model_kwargs):
     # attempt to derive vocab_size from the dataset
@@ -27,7 +29,7 @@ def init_transformer_scratch(config, model_kwargs):
             "defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)"
         )
     model_kwargs["vocab_size"] = (
-        meta_vocab_size if meta_vocab_size is not None else 50304
+        meta_vocab_size if meta_vocab_size is not None else DEFAULT_VOCAB_SIZE
     )
     gptconf = GPTConfig(**model_kwargs)
     return GPT(gptconf)
