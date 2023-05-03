@@ -40,17 +40,17 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-git clone https://github.com/vmoens/mujoco-py.git
-cd mujoco-py
-git checkout aws_fix2
-mkdir -p mujoco_py/binaries/linux \
-    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
-    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
-    && rm mujoco.tar.gz
-wget https://www.roboti.us/file/mjkey.txt
-cp mjkey.txt mujoco_py/binaries/
-pip install -e .
-cd ..
+#git clone https://github.com/vmoens/mujoco-py.git
+#cd mujoco-py
+#git checkout aws_fix2
+#mkdir -p mujoco_py/binaries/linux \
+#    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
+#    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
+#    && rm mujoco.tar.gz
+#wget https://www.roboti.us/file/mjkey.txt
+#cp mjkey.txt mujoco_py/binaries/
+#pip install -e .
+#cd ..
 
 #cd $this_dir
 
@@ -67,10 +67,10 @@ conda env config vars set \
   PYOPENGL_PLATFORM=egl \
   LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
-  sim_backend=MUJOCO \
-  MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
-  MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+  sim_backend=MUJOCO #\
+#  MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
+#  MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
+#  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -81,3 +81,5 @@ conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
 
 pip install git+https://github.com/vikashplus/robohive
+
+pip uninstall free-mujoco-py -y
