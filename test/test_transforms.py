@@ -406,28 +406,37 @@ class TestCatFrames(TransformBase):
         ):
             model(td)
 
-    def test_transform_rb(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    def test_transform_rb(self, dim, N):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(N=N, in_keys=out_keys, out_keys=out_keys, dim=dim)
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+        )
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        td = env.rollout(10)
+
         rb = ReplayBuffer(storage=LazyTensorStorage(20))
-        rb.append_transform(cat_frames)
-        rb.extend(td)
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            _ = rb.sample(10)
+        rb.append_transform(cat_frames2)
+        rb.add(td.exclude(*out_keys, ("next", out_keys[0])))
+        tdsample = rb.sample(1).squeeze(0).exclude("index")
+        for key in td.keys(True, True):
+            assert (tdsample[key] == td[key]).all(), key
+        assert (tdsample["out_" + key1] == td["out_" + key1]).all()
+        assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
 
     def test_catframes_transform_observation_spec(self):
         N = 4

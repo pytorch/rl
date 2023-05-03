@@ -322,7 +322,12 @@ class ReplayBuffer:
             if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             data = self._transform(data)
+            if is_locked:
+                data.lock_()
             if not is_td:
                 data = data["data"]
 
@@ -666,13 +671,18 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return priority
 
     def add(self, data: TensorDictBase) -> int:
+        if is_tensor_collection(data):
+            data = TensorDict(
+                {"_data": data},
+                batch_size=[],
+            )
         index = super().add(data)
-        data.set("index", index)
+        if is_tensor_collection(data):
+            data.set("index", index)
 
-        priority = self._get_priority(data)
-        if priority:
-            self.update_priority(index, priority)
-            print('Here!!')
+        # priority = self._get_priority(data)
+        # if priority:
+        self.update_tensordict_priority(data)
         return index
 
     def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
