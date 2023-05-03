@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from datasets import load_dataset
-from tensordict import tensorclass
+from tensordict import tensorclass, MemmapTensor
 from tqdm import tqdm
 
 from .utils import create_infinite_dataloader
@@ -28,37 +28,59 @@ class PairwiseDataset:
     rejected: torch.Tensor
     reward: Optional[torch.Tensor] = None
 
+    @staticmethod
+    def _encode(sample, max_length):
+        enc = tiktoken.get_encoding("gpt2")
+
+        prompt = sample["prompt"]
+        chosen = sample["chosen"]
+        rejected = sample["rejected"]
+
+        chosen = "\n".join([prompt, chosen])
+        rejected = "\n".join([prompt, rejected])
+
+        chosen = enc.encode(
+            "<|startoftext|>" + chosen + "<|endoftext|>", allowed_special="all"
+        )[-max_length:]
+        rejected = enc.encode(
+            "<|startoftext|>" + rejected + "<|endoftext|>", allowed_special="all"
+        )[-max_length:]
+        return chosen, rejected
+
     @classmethod
     def from_dataset(cls, dataset, max_length):
-        # TODO: check dtypes
-        data = cls(
-            chosen=torch.zeros(len(dataset), max_length, dtype=torch.int32),
-            rejected=torch.zeros(len(dataset), max_length, dtype=torch.int32),
-            batch_size=[len(dataset)],
-        )
-        enc = tiktoken.get_encoding("gpt2")
-        i = 0
-
-        for sample in tqdm(dataset, total=len(dataset)):
-            prompt = sample["prompt"]
-            chosen = sample["chosen"]
-            rejected = sample["rejected"]
-
-            if len(chosen.split()) < 5 or len(rejected.split()) < 5:
+        # we perform two passes over the dataset. during the first we determine which
+        # datapoints to skip. during the second we load the unskipped examples into
+        # a pre-allocated memory map. while we do end up paying the cost of iteration
+        # and encoding twice, it means we are able to load the full dataset into the
+        # memory map without ever having to hold the whole thing in memory
+        indices_to_skip = set()
+        for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
+            if len(sample["chosen"].split()) < 5 or len(sample["rejected"].split()) < 5:
+                indices_to_skip.add(idx)
                 continue
 
-            chosen = "\n".join([prompt, chosen])
-            rejected = "\n".join([prompt, rejected])
-
-            chosen = enc.encode(
-                "<|startoftext|>" + chosen + "<|endoftext|>", allowed_special="all"
-            )[-max_length:]
-            rejected = enc.encode(
-                "<|startoftext|>" + rejected + "<|endoftext|>", allowed_special="all"
-            )[-max_length:]
+            chosen, rejected = cls._encode(sample, max_length)
 
             if chosen == rejected:
+                indices_to_skip.add(idx)
+
+        data = cls(
+            chosen=MemmapTensor(
+                len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+            ),
+            rejected=MemmapTensor(
+                len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+            ),
+            batch_size=[len(dataset)],
+        )
+        i = 0
+
+        for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
+            if idx in indices_to_skip:
                 continue
+
+            chosen, rejected = cls._encode(sample, max_length)
 
             data[i] = cls(
                 chosen=F.pad(
@@ -71,8 +93,7 @@ class PairwiseDataset:
             )
             i += 1
 
-        # index because we will have skipped some datapoints
-        return data[:i]
+        return data
 
 
 def create_datasets(config):
