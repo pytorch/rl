@@ -5,12 +5,13 @@ import torch
 
 from data.shakespeare import get_dataloaders
 from models.reward import init_reward_model
+from models.transformer import DEFAULT_VOCAB_SIZE
 from tensordict.tensordict import TensorDict
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import step_mdp
@@ -59,9 +60,6 @@ def _reset(self, tensordict):
         {
             "prompt": batch.prompt[:, -self.config["block_size"] :],
             "done": torch.zeros((*batch.prompt.shape[:-1], 1, 1), dtype=torch.bool),
-            "reward": torch.zeros(
-                (*batch.prompt.shape[:-1], 1, 1), dtype=torch.float32
-            ),
         },
         tensordict.shape,
     )
@@ -71,8 +69,10 @@ def _reset(self, tensordict):
 def _make_spec(self):
     # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
-        prompt=UnboundedDiscreteTensorSpec(
-            shape=(self.config["batch_size"],),
+        prompt=BoundedTensorSpec(
+            minimum=0,
+            maximum=DEFAULT_VOCAB_SIZE,
+            shape=(self.config["batch_size"], self.config["block_size"]),
             dtype=torch.int64,
         ),
         shape=(self.config["batch_size"],),
@@ -81,14 +81,21 @@ def _make_spec(self):
     self.input_spec = self.observation_spec.clone()
     # action-spec will be automatically wrapped in input_spec, but the convenient
     # self.action_spec = spec is supported
-    self.action_spec = UnboundedDiscreteTensorSpec(
+    self.action_spec = BoundedTensorSpec(
+        minimum=0,
+        maximum=DEFAULT_VOCAB_SIZE,
         shape=(self.config["batch_size"], 1),
         dtype=torch.int64,
     )
     self.reward_spec = UnboundedContinuousTensorSpec(
         shape=(self.config["batch_size"], 1, 1)
     )
-    self.done_spec = self.reward_spec.clone()
+    self.done_spec = BoundedTensorSpec(
+        minimum=0,
+        maximum=1,
+        shape=(self.config["batch_size"], 1, 1),
+        dtype=torch.bool,
+    )
 
 
 def _set_seed(self, seed: Optional[int]):
@@ -123,11 +130,14 @@ class RLHFEnv(EnvBase):
 
 
 def main():
+    from torchrl.envs import check_env_specs
+
     config = load_and_update_config("config/train_rlhf.yaml")
     reward_model, _ = init_reward_model(config)
-    reward_model.to(config["device"])
     train_loader, _ = get_dataloaders(config)
     env = RLHFEnv(reward_model=reward_model, dataloader=train_loader, config=config)
+
+    check_env_specs(env)
 
     td = env.reset()
 
