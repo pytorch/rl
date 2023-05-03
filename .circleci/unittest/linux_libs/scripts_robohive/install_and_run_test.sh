@@ -4,7 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
-apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc libosmesa6-dev
 
 set -e
 set -v
@@ -79,6 +79,9 @@ devcount = torch.cuda.device_count()
 assert devcount
 print('device count', devcount)
 """
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
+
+echo $MUJOCO_GL
+
+MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
 coverage combine
 coverage xml -i
