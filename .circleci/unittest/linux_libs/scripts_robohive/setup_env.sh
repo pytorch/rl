@@ -82,4 +82,4 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 pip install git+https://github.com/vikashplus/robohive
 
-pip uninstall free-mujoco-py -y
+#pip uninstall free-mujoco-py -y
