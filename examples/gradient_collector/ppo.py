@@ -48,23 +48,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
 
     # Create distributed modules
-    distributed_model_device = cfg.optim.device
-    distributed_actor = deepcopy(local_actor).to(distributed_model_device)
-    distributed_critic = deepcopy(local_critic).to(distributed_model_device)
-    distributed_collector = make_collector(cfg, policy=distributed_actor)
-    distributed_data_buffer = make_data_buffer(cfg)
-    distributed_loss_module = make_loss(cfg.loss, actor_network=distributed_actor, value_network=distributed_critic)
-    distributed_optim = make_optim(cfg.optim, actor_network=distributed_actor, value_network=distributed_critic)
+    remote_model_device = cfg.optim.device
+    remote_actor = deepcopy(local_actor).to(remote_model_device)
+    remote_critic = deepcopy(local_critic).to(remote_model_device)
+    remote_collector = make_collector(cfg, policy=remote_actor)
+    remote_data_buffer = make_data_buffer(cfg)
+    remote_loss_module = make_loss(cfg.loss, actor_network=remote_actor, value_network=remote_critic)
+    remote_optim = make_optim(cfg.optim, actor_network=remote_actor, value_network=remote_critic)
 
     grad_worker = GradientCollector(
-        policy=distributed_actor,
-        critic=distributed_critic,
-        collector=distributed_collector,
-        objective=distributed_loss_module,
-        replay_buffer=distributed_data_buffer,
-        optimizer=distributed_optim,
+        policy=remote_actor,
+        critic=remote_critic,
+        collector=remote_collector,
+        objective=remote_loss_module,
+        replay_buffer=remote_data_buffer,
+        optimizer=remote_optim,
         updates_per_batch=num_mini_batches,
-        device=distributed_model_device,
+        device=remote_model_device,
     )
 
     logger = None
