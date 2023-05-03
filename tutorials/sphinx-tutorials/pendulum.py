@@ -139,7 +139,7 @@ DEFAULT_Y = 1.0
 # 0 too.
 #
 # Coding the effect of an action: :func:`~torchrl.envs.EnvBase._step`
-# ------------------------------------------------------------------
+# -------------------------------------------------------------------
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
@@ -263,7 +263,7 @@ def angle_normalize(x):
 
 ######################################################################
 # Resetting the simulator: :func:`~torchrl.envs.EnvBase._reset`
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 #
 # The second method we need to care about is the
 # :meth:`~torchrl.envs.EnvBase._reset` method. Like
@@ -464,7 +464,7 @@ def _set_seed(self, seed: Optional[int]):
 
 ######################################################################
 # Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
-# -----------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # We can finally put together the pieces and design our environment class.
 # The specs initialization needs to be performed during the environment
@@ -845,17 +845,17 @@ logs = defaultdict(list)
 for _ in pbar:
     init_td = env.reset(env.gen_params(batch_size=[batch_size]))
     rollout = env.rollout(100, policy, tensordict=init_td, auto_reset=False)
-    traj_return = rollout["reward"].mean()
+    traj_return = rollout["next", "reward"].mean()
     (-traj_return).backward()
     gn = torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optim.step()
     optim.zero_grad()
     pbar.set_description(
         f"reward: {traj_return: 4.4f}, "
-        f"last reward: {rollout[..., -1]['reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
+        f"last reward: {rollout[..., -1]['next', 'reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
     )
     logs["return"].append(traj_return.item())
-    logs["last_reward"].append(rollout[..., -1]["reward"].mean().item())
+    logs["last_reward"].append(rollout[..., -1]["next", "reward"].mean().item())
     scheduler.step()
 
 

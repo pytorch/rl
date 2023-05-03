@@ -86,7 +86,11 @@ if __name__ == "__main__":
         loss = DQNLoss(actor, loss_function="smooth_l1", action_space=env.action_spec)
         loss.make_value_estimator(gamma=0.0)
     policy = EGreedyWrapper(
-        actor, eps_greedy, 0.0, annealing_num_steps=n_steps, spec=env.action_spec
+        actor,
+        eps_init=eps_greedy,
+        eps_end=0.0,
+        annealing_num_steps=n_steps,
+        spec=env.action_spec,
     )
     optim = torch.optim.Adam(loss.parameters(), lr, weight_decay=wd)
 
