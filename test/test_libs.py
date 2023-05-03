@@ -41,6 +41,7 @@ from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -1322,6 +1323,11 @@ class TestOpenML:
             continue
         assert len(data) // 2048 in (i, i - 1)
 
+class TestRoboHive:
+    @pytest.mark.parametrize("envname", ["FK1_RelaxFixed-v4", "visutal_FK1_RelaxFixed-v4"])
+    def test_robohive(self, envname):
+        env = RoboHiveEnv(envname)
+        check_env_specs(env)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
