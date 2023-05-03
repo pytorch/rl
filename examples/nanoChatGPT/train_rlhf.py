@@ -1,17 +1,17 @@
 from pathlib import Path
 
 import torch
+
+from data.shakespeare import get_dataloaders
 from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from shared import setup
 from tensordict.nn import set_skip_existing
-from utils import load_and_update_config
 
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-
-from data.shakespeare import get_dataloaders
+from utils import load_and_update_config
 
 HERE = Path(__file__).parent
 
@@ -71,6 +71,7 @@ def main():
 
     # TODO: save model
     # TODO: generate something?
+
 
 if __name__ == "__main__":
     main()

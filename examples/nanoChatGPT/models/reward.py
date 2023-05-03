@@ -17,9 +17,7 @@ class RewardModel(nn.Module):
 
         self.n_embd = model.lm_head.in_features
         self.block_size = model.config.block_size
-        self.reward_head = nn.Linear(
-            self.model.lm_head.in_features, 1, bias=False
-        )
+        self.reward_head = nn.Linear(self.model.lm_head.in_features, 1, bias=False)
 
     def forward(self, idx):
         device = idx.device
@@ -44,8 +42,10 @@ class RewardModel(nn.Module):
 
 
 def init_reward_model(config):
-    # FIXME: Don't like this. include it into model
-    model, model_kwargs = init_transformer(config, as_tensordictmodule=False)
+    # skip compilation because we will compile the entire reward model as one
+    model, model_kwargs = init_transformer(
+        config, as_tensordictmodule=False, skip_compilation=True
+    )
     model = RewardModel(model)
 
     print("Config of model: ", model.config)

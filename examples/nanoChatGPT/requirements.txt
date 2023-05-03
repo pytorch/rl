@@ -1,3 +1,7 @@
+datasets
 numpy
+PyYAML
 requests
 tiktoken
+tqdm
+transformers
