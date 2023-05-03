@@ -1,13 +1,13 @@
 import os
+import time
 from pathlib import Path
 
-import time
 import torch
+
+from data.openai_summarize_comparisons import get_dataloaders
 from models.reward import init_reward_model
 from shared import create_lr_scheduler, setup
 from utils import load_and_update_config
-
-from data.openai_summarize_comparisons import get_dataloaders
 
 HERE = Path(__file__).parent
 
@@ -94,12 +94,15 @@ def main():
                         "config": config,
                     }
                     print(f"saving checkpoint to {config['out_dir_reward']}")
-                    torch.save(checkpoint, os.path.join(config["out_dir_reward"], "ckpt.pt"))
+                    torch.save(
+                        checkpoint, os.path.join(config["out_dir_reward"], "ckpt.pt")
+                    )
         elif iter_num % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
             print(f"iter {iter_num}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
         iter_num += 1
+
 
 if __name__ == "__main__":
     main()

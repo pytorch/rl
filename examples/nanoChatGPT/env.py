@@ -2,6 +2,9 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+
+from data.shakespeare import get_dataloaders
+from models.reward import init_reward_model
 from tensordict.tensordict import TensorDict
 
 from torchrl.data import (
@@ -13,11 +16,7 @@ from torchrl.envs import EnvBase
 from torchrl.envs.utils import step_mdp
 from utils import load_and_update_config
 
-from data.shakespeare import get_dataloaders
-from models.reward import init_reward_model
-
 HERE = Path(__file__).parent
-
 
 
 @torch.no_grad()
@@ -36,7 +35,9 @@ def _step(self, tensordict):
         done = torch.zeros_like(reward, dtype=torch.bool)
 
     # The output must be written in a ``"next"`` entry
-    next_prompt = torch.hstack((prompt, action[..., None]))[:, -self.config["block_size"]:]
+    next_prompt = torch.hstack((prompt, action[..., None]))[
+        :, -self.config["block_size"] :
+    ]
     out = TensorDict(
         {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
         tensordict.shape,
