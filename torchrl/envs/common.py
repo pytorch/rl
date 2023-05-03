@@ -15,14 +15,14 @@ import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
 
+from torchrl._utils import prod, seed_generator
+
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-
-from torchrl._utils import prod, seed_generator
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import get_available_libraries, step_mdp
 
