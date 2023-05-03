@@ -119,7 +119,18 @@ $ python
 ```
 This should trigger the building pipeline.
 
-**Known issues**
+
+**Sanity check**
+
+To check that your mujoco-py has been built against the GPU, run
+```python
+>>> import mujoco_py
+>>> print(mujoco_py.cymj) # check it has the tag: linuxgpuextensionbuilder
+```
+The result should contain a filename with the tag `linuxgpuextensionbuilder`.
+
+## Common Issues during import or when rendering Mujoco Environments
+
 The above setup will most likely cause some problems. We give a list of known 
 issues when running `import mujoco_py` and some troubleshooting for each of them:
 
@@ -181,18 +192,8 @@ issues when running `import mujoco_py` and some troubleshooting for each of them
     _Solution_: This can usually be sovled by setting EGL as your mujoco_gl backend: `MUJOCO_GL=egl python myscript.py`
 
 
-**Sanity check**
 
-To check that your mujoco-py has been built against the GPU, run
-```python
->>> import mujoco_py
->>> print(mujoco_py.cymj) # check it has the tag: linuxgpuextensionbuilder
-```
-The result should contain a filename with the tag `linuxgpuextensionbuilder`.
-
-## Common Issues when rendering Mujoco Environments
-
-1. RuntimeError with error stack like this when running jobs using schedulers like slurm:
+7. RuntimeError with error stack like this when running jobs using schedulers like slurm:
 
 ```
     File "mjrendercontext.pyx", line 46, in mujoco_py.cymj.MjRenderContext.__init__
@@ -209,59 +210,59 @@ RuntimeError: Failed to initialize OpenGL
   This can be worked around by setting the `GPUS` environment variable to the 
   global device id. For slurm, it can be obtained using `SLURM_STEP_GPUS` enviroment variable.
 
-2. Rendered images are completely black.
+8. Rendered images are completely black.
 
    _Solution_: Make sure to call `env.render()` before reading the pixels.
 
-3. `patchelf` dependency is missing.
+9. `patchelf` dependency is missing.
 
    _Solution_: Install using `conda install patchelf` or `pip install patchelf`
 
-4. Errors like "Onscreen rendering needs 101 device"
+10. Errors like "Onscreen rendering needs 101 device"
 
-   _Solution_: Make sure to set `DISPLAY` environment variable correctly.
+    _Solution_: Make sure to set `DISPLAY` environment variable correctly.
 
-5. `ImportError: Cannot initialize a headless EGL display.`
+11. `ImportError: Cannot initialize a headless EGL display.`
 
-   _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
-   Make sure you have set the `MUJOCO_GL=egl`.
-   Make sure you have a GPU accessible on your machine.
+    _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
+    Make sure you have set the `MUJOCO_GL=egl`.
+    Make sure you have a GPU accessible on your machine.
 
-6. `cannot find -lGL: No such file or directory`
+12. `cannot find -lGL: No such file or directory`
 
-   _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
+    _Solution_: call `conda install -c anaconda mesa-libgl-devel-cos6-x86_64`
 
-7. ```
-   RuntimeError: Failed to initialize OpenGL
-   ```
+13. ```
+    RuntimeError: Failed to initialize OpenGL
+    ```
 
-   _Solution_: Install libEGL:
+    _Solution_: Install libEGL:
 
-   - Ubuntu: `sudo apt install libegl-dev libegl`
-   - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
-   - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
+    - Ubuntu: `sudo apt install libegl-dev libegl`
+    - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
+    - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
 
-8. ```
-   fatal error: X11/Xlib.h: No such file or directory
-      | #include <X11/Xlib.h>
-      |          ^~~~~~~~~~~~
-   ```
+14. ```
+    fatal error: X11/Xlib.h: No such file or directory
+       | #include <X11/Xlib.h>
+       |          ^~~~~~~~~~~~
+    ```
 
-   _Solution_: Install X11:
+    _Solution_: Install X11:
 
-   - Ubuntu: `sudo apt install libx11-dev`
-   - CentOS: `sudo yum install libX11`
-   - Conda: `conda install -c conda-forge xorg-libx11`
+    - Ubuntu: `sudo apt install libx11-dev`
+    - CentOS: `sudo yum install libX11`
+    - Conda: `conda install -c conda-forge xorg-libx11`
 
-9. ```
-   fatal error: GL/osmesa.h: No such file or directory
-       1 | #include <GL/osmesa.h>
-         |          ^~~~~~~~~~~~~
-   compilation terminated.
-   ```
+15. ```
+    fatal error: GL/osmesa.h: No such file or directory
+        1 | #include <GL/osmesa.h>
+          |          ^~~~~~~~~~~~~
+    compilation terminated.
+    ```
 
-   _Solution_: Install Osmesa:
+    _Solution_: Install Osmesa:
 
-10. Ubuntu: `sudo apt-get install libosmesa6-dev`
-11. CentOS: `sudo yum install mesa-libOSMesa-devel`
-12. Conda: `conda install -c menpo osmesa`
+    - Ubuntu: `sudo apt-get install libosmesa6-dev`
+    - CentOS: `sudo yum install mesa-libOSMesa-devel`
+    - Conda: `conda install -c menpo osmesa`
