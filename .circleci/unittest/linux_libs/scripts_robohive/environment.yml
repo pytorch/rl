@@ -24,5 +24,4 @@ dependencies:
     - scipy
     - hydra-core
     - patchelf
-    - pyopengl==3.1.0
     - dm_control
