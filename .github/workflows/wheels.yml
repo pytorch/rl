@@ -9,7 +9,7 @@ on:
 jobs:
 
   build-wheel-linux:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
@@ -115,7 +115,7 @@ jobs:
     needs: [build-wheel-linux, build-wheel-mac]
     strategy:
       matrix:
-        os: [["linux", "ubuntu-18.04"], ["mac", "macos-latest"]]
+        os: [["linux", "ubuntu-20.04"], ["mac", "macos-latest"]]
         python_version: [ "3.7", "3.8", "3.9", "3.10" ]
     runs-on: ${{ matrix.os[1] }}
     steps:
