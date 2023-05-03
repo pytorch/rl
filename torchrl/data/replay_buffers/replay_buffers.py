@@ -537,9 +537,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
 
-    All arguments are keyword-only arguments.
-
-    Args:
+    Keyword Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
