@@ -27,7 +27,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
     err = ""
@@ -188,10 +191,13 @@ class SACLoss(LossModule):
             )
             make_functional(self.actor_critic)
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
@@ -733,7 +739,10 @@ class DiscreteSACLoss(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))

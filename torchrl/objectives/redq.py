@@ -25,7 +25,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     FUNCTORCH_ERR = ""
     _has_functorch = True
@@ -159,7 +162,7 @@ class REDQLoss(LossModule):
         )
         self.gSDE = gSDE
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     @property
@@ -202,12 +205,12 @@ class REDQLoss(LossModule):
                 actor_params,
             )
             if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = self.actor_network[-1].out_keys[0]
+                sample_key = "action"
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             else:
-                sample_key = self.actor_network.out_keys[0]
+                sample_key = "action"
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
@@ -324,7 +327,10 @@ class REDQLoss(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

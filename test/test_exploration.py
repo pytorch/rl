@@ -17,7 +17,7 @@ from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
-from torchrl.envs.transforms.transforms import gSDENoise
+from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
@@ -100,7 +100,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             batch_size=[batch],
             source={
                 "observation": torch.randn(batch, d_obs, device=device),
-                "step_count": torch.zeros(batch, device=device),
+                "is_init": torch.ones(batch, 1, dtype=torch.bool, device=device),
             },
             device=device,
         )
@@ -121,9 +121,9 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             out.append(tensordict.clone())
             out_noexp.append(tensordict_noexp.clone())
             tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
-            tensordict["step_count"] += 1
+            tensordict["is_init"][:] = 0
             if i == n_steps // 2:
-                tensordict["step_count"][: batch // 2] = 0
+                tensordict["is_init"][: batch // 2] = 1
 
         out = torch.stack(out, 0)
         out_noexp = torch.stack(out_noexp, 0)
@@ -139,7 +139,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             2,
             ContinuousActionVecMockEnv,
         )
-        env = env.to(device)
+        env = TransformedEnv(env.to(device), InitTracker())
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec

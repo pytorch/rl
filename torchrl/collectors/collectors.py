@@ -496,7 +496,9 @@ class SyncDataCollector(DataCollectorBase):
     ):
         self.closed = True
 
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -1049,7 +1051,9 @@ class _MultiDataCollector(DataCollectorBase):
         devices=None,
         storing_devices=None,
     ):
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         self.closed = True
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
@@ -1300,13 +1304,18 @@ also that the state dict is synchronised across processes if needed."""
         _check_for_faulty_process(self.procs)
         self.closed = True
         for idx in range(self.num_workers):
-            self.pipes[idx].send((None, "close"))
+            if not self.procs[idx].is_alive():
+                continue
+            try:
+                self.pipes[idx].send((None, "close"))
 
-            if self.pipes[idx].poll(10.0):
-                msg = self.pipes[idx].recv()
-                if msg != "closed":
-                    raise RuntimeError(f"got {msg} but expected 'close'")
-            else:
+                if self.pipes[idx].poll(10.0):
+                    msg = self.pipes[idx].recv()
+                    if msg != "closed":
+                        raise RuntimeError(f"got {msg} but expected 'close'")
+                else:
+                    continue
+            except BrokenPipeError:
                 continue
 
         for proc in self.procs:

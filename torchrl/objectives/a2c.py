@@ -106,7 +106,7 @@ class A2CLoss(LossModule):
             "critic_coef", torch.tensor(critic_coef, device=self.device)
         )
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
         self.loss_critic_type = loss_critic_type
 
@@ -182,7 +182,10 @@ class A2CLoss(LossModule):
             td_out.set("loss_critic", loss_critic.mean())
         return td_out
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
         if hasattr(self, "gamma"):

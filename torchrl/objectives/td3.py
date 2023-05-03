@@ -20,7 +20,10 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     FUNCTORCH_ERR = ""
     _has_functorch = True
@@ -103,7 +106,7 @@ class TD3Loss(LossModule):
         self.noise_clip = noise_clip
         self.max_action = actor_network.spec["action"].space.maximum.max().item()
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -229,7 +232,10 @@ class TD3Loss(LossModule):
 
         return td_out
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

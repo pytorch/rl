@@ -305,6 +305,8 @@ Regular modules
     MLP
     ConvNet
     LSTMNet
+    SqueezeLayer
+    Squeeze2dLayer
 
 Algorithm-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -391,8 +393,3 @@ Utils
     mappings
     inv_softplus
     biased_softplus
-
-.. currentmodule:: torchrl.modules.models.utils
-
-    SqueezeLayer
-    Squeeze2dLayer

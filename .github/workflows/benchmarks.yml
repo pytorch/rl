@@ -56,7 +56,7 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu18.04
+    container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
     steps:
     - name: Install deps
       run: |
