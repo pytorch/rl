@@ -644,11 +644,13 @@ class TensorDictReplayBuffer(ReplayBuffer):
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
+        if "_data" in tensordict.keys():
+            tensordict = tensordict.get("_data")
         if self.priority_key not in tensordict.keys():
             return self._sampler.default_priority
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recurse=False)
-            tensordict.batch_size = []
+        # if tensordict.batch_dims:
+        #     tensordict = tensordict.clone(recurse=False)
+        #     tensordict.batch_size = []
         try:
             priority = tensordict.get(self.priority_key)
             if priority.numel() > 1:
@@ -670,6 +672,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = self._get_priority(data)
         if priority:
             self.update_priority(index, priority)
+            print('Here!!')
         return index
 
     def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
