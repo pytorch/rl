@@ -156,7 +156,7 @@ class LossModule(nn.Module):
             if not isinstance(value, nn.Parameter):
                 key = sep.join(key) if not isinstance(key, str) else key
                 buffer_names.append(key)
-        functional_module = deepcopy(module)
+        functional_module = module
         repopulate_module(module, params)
 
         params_and_buffers = params

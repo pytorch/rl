@@ -137,7 +137,7 @@ class EnvCreator:
             raise RuntimeError("EnvCreator must be initialized before being called.")
         kwargs.update(self.create_env_kwargs)  # create_env_kwargs precedes
         env = self.create_env_fn(**kwargs)
-        env.load_state_dict(self._transform_state_dict, strict=False)
+        env.load_state_dict(self._transform_state_dict)  # strict=False)
         return env
 
     def state_dict(self) -> OrderedDict:
