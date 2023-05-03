@@ -4,7 +4,6 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 HERE = Path(__file__).parent
 
@@ -32,7 +31,6 @@ def setup(config):
     return ctx
 
 
-
 def create_lr_scheduler(config):
 
     # learning rate decay scheduler (cosine with warmup)
@@ -53,7 +51,7 @@ def create_lr_scheduler(config):
 
     def fixed_lr(_):
         return config["learning_rate"]
-    
+
     if config["decay_lr"]:
-        return scheduler    
+        return scheduler
     return fixed_lr

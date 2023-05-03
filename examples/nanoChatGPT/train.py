@@ -11,11 +11,11 @@ import time
 from pathlib import Path
 
 import torch
+
+from data.shakespeare import get_dataloaders
 from models.transformer import init_optimizer, init_transformer
 from shared import create_lr_scheduler, setup
 from utils import load_and_update_config
-
-from data.shakespeare import get_dataloaders
 
 HERE = Path(__file__).parent
 

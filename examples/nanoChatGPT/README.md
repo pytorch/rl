@@ -11,6 +11,18 @@ git submodule init
 git submodule update
 ```
 
+Make sure you have PyTorch 2.0 installed. You can find installation instructions [here](https://pytorch.org/get-started/locally/).
+
+You will also need to install the latest versions of tensordict and TorchRL.
+
+```sh
+pip install torchrl-nightly
+pip uninstall -y tensordict
+pip install tensordict-nightly
+```
+
+**Note**: `torchrl-nightly` has `tensordict` as a dependency, not `tensordict-nightly`, so after installing `torchrl-nightly` we uninstall `tensordict` before installing `tensordict-nightly` to avoid a clash.
+
 From this directory, you can install extra requirements for running these examples with
 
 ```sh

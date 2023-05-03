@@ -50,7 +50,9 @@ class ActorCritic(ActorValueOperator):
 
 
 def init_actor_critic(config):
-    model_base, _ = init_transformer(config, as_tensordictmodule=False, skip_compilation=True)
+    model_base, _ = init_transformer(
+        config, as_tensordictmodule=False, skip_compilation=True
+    )
     a2c_model = ActorCritic(model_base)
     a2c_model.to(config["device"])
     actor = a2c_model.get_policy_operator()
