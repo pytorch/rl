@@ -72,8 +72,13 @@ export MKL_THREADING_LAYER=GNU
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 20
 
-export DISPLAY=':99.0'
-Xvfb :99 -screen 0 1400x900x24 > /dev/null 2>&1 &
+# let's make sure we have a GPU at our disposal
+python -c """
+import torch
+devcount = torch.cuda.device_count()
+assert devcount
+print('device count', devcount)
+"""
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
 coverage combine
 coverage xml -i

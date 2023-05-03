@@ -65,12 +65,8 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
-  LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
-  sim_backend=MUJOCO #\
-#  MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
-#  MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-#  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+  sim_backend=MUJOCO
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
