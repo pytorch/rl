@@ -179,8 +179,12 @@ def _make_envs(
     env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
     env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
 
+    for key in env0.observation_spec.keys(True, True):
+        obs_key = key
+        break
+
     if transformed_out:
-        t_out = get_transform_out(env_name, transformed_in)
+        t_out = get_transform_out(env_name, transformed_in, obs_key=obs_key)
 
         env0 = TransformedEnv(
             env0,
@@ -232,47 +236,52 @@ def _make_multithreaded_env(
         device=device,
     )
 
+    for key in env_multithread.observation_spec.keys(True, True):
+        obs_key = key
+        break
     if transformed_out:
         env_multithread = TransformedEnv(
             env_multithread,
-            get_transform_out(env_name, transformed_in=False)(),
+            get_transform_out(env_name, transformed_in=False, obs_key=obs_key)(),
         )
     return env_multithread
 
 
-def get_transform_out(env_name, transformed_in):
+def get_transform_out(env_name, transformed_in, obs_key=None):
 
     if env_name == "ALE/Pong-v5":
+        if obs_key is None:
+            obs_key = "pixels"
 
         def t_out():
             return (
                 Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
                 if not transformed_in
-                else Compose(*[ObservationNorm(in_keys=["pixels"], loc=0, scale=1)])
+                else Compose(*[ObservationNorm(in_keys=[obs_key], loc=0, scale=1)])
             )
 
     elif env_name == "CheetahRun-v1":
+        if obs_key is None:
+            obs_key = ("observation", "velocity")
 
         def t_out():
             return Compose(
-                ObservationNorm(
-                    in_keys=[("observation", "velocity")], loc=0.5, scale=1.1
-                ),
+                ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
                 RewardClipping(0, 0.1),
             )
 
     else:
+        if obs_key is None:
+            obs_key = "observation"
 
         def t_out():
             return (
                 Compose(
-                    ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                    ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
                     RewardClipping(0, 0.1),
                 )
                 if not transformed_in
-                else Compose(
-                    ObservationNorm(in_keys=["observation"], loc=1.0, scale=1.0)
-                )
+                else Compose(ObservationNorm(in_keys=[obs_key], loc=1.0, scale=1.0))
             )
 
     return t_out
