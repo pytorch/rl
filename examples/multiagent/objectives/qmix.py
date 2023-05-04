@@ -3,13 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from copy import deepcopy
 from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential, make_functional, repopulate_module
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
+from torchrl.modules import SafeSequential
 
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
@@ -20,6 +22,7 @@ from torchrl.objectives.utils import (
     default_value_kwargs,
     distance_loss,
 )
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
@@ -72,6 +75,7 @@ class QMixLoss(LossModule):
 
         super().__init__()
         self.delay_value = delay_value
+
         value_network = ensure_tensordict_compatible(
             module=value_network,
             wrapper_type=QValueActor,
@@ -81,7 +85,12 @@ class QMixLoss(LossModule):
             module=mixer_network,
             out_keys=["chosen_action_value"],
         )
-        global_value_network = TensorDictSequential(value_network, mixer_network)
+
+        global_value_network = SafeSequential(value_network, mixer_network)
+        params = make_functional(global_value_network)
+        self.global_value_network = deepcopy(global_value_network)
+        repopulate_module(value_network, params["module", "0"])
+        repopulate_module(mixer_network, params["module", "1"])
 
         self.convert_to_functional(
             value_network,
@@ -93,11 +102,8 @@ class QMixLoss(LossModule):
             "mixer_network",
             create_target_params=self.delay_value,
         )
-        self.convert_to_functional(
-            global_value_network,
-            "global_value_network",
-            create_target_params=self.delay_value,
-        )
+        self.global_value_network.module[0] = self.value_network
+        self.global_value_network.module[1] = self.mixer_network
 
         self.loss_function = loss_function
         self.priority_key = priority_key
@@ -217,10 +223,22 @@ class QMixLoss(LossModule):
         pred_val_index = td_copy.get("chosen_action_value")
         # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
 
-        target_value = self.value_estimator.value_estimate(
-            tensordict.clone(False),
-            target_params=self.target_global_value_network_params,
-        )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
+        target_params = TensorDict(
+            {
+                "module": {
+                    "0": self.target_value_network_params,
+                    "1": self.target_mixer_network_params,
+                }
+            },
+            batch_size=self.target_value_network_params.batch_size,
+            device=self.target_value_network_params.device,
+        )
+
+        with set_exploration_type(ExplorationType.MODE):
+            target_value = self.value_estimator.value_estimate(
+                tensordict.clone(False),
+                target_params=target_params,
+            )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
