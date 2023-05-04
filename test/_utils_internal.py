@@ -182,6 +182,8 @@ def _make_envs(
     for key in env0.observation_spec.keys(True, True):
         obs_key = key
         break
+    else:
+        obs_key = None
 
     if transformed_out:
         t_out = get_transform_out(env_name, transformed_in, obs_key=obs_key)
@@ -239,6 +241,8 @@ def _make_multithreaded_env(
     for key in env_multithread.observation_spec.keys(True, True):
         obs_key = key
         break
+    else:
+        obs_key = None
     if transformed_out:
         env_multithread = TransformedEnv(
             env_multithread,
