@@ -234,11 +234,11 @@ class QMixLoss(LossModule):
             device=self.target_value_network_params.device,
         )
 
-        with set_exploration_type(ExplorationType.MODE):
-            target_value = self.value_estimator.value_estimate(
-                tensordict.clone(False),
-                target_params=target_params,
-            )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
+
+        target_value = self.value_estimator.value_estimate(
+            tensordict.clone(False),
+            target_params=target_params,
+        )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
