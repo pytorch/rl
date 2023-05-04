@@ -125,7 +125,7 @@ if __name__ == "__main__":
     )
 
     qnet = EGreedyWrapper(
-        qnet, eps_init=0.2, eps_end=0, annealing_num_steps=int(total_frames * (2 / 3))
+        qnet, eps_init=0.2, eps_end=0, annealing_num_steps=int(total_frames * (1/2))
     )
 
     if config["mixer_type"] == "qmix":
@@ -134,7 +134,7 @@ if __name__ == "__main__":
                 state_shape=env.unbatched_output_spec["observation"][
                     "observation"
                 ].shape,
-                mixing_embed_dim=256,
+                mixing_embed_dim=32,
                 n_agents=env.n_agents,
                 device=training_device,
             ),

@@ -221,7 +221,7 @@ class QMixLoss(LossModule):
         td_copy.set("chosen_action_value", pred_val_index)  # [*B, n_agents, 1]
         self.mixer_network(td_copy, params=self.mixer_network_params)
         pred_val_index = td_copy.get("chosen_action_value")
-        # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
+        # [*B, 1] this is global and shared among the agents as will be the target
 
         target_params = TensorDict(
             {
@@ -234,11 +234,10 @@ class QMixLoss(LossModule):
             device=self.target_value_network_params.device,
         )
 
-
         target_value = self.value_estimator.value_estimate(
             tensordict.clone(False),
             target_params=target_params,
-        )  # [*B, n_agents, 1] this has been expanded in the agent dimension as the value is shared
+        )  # [*B, 1]
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)

@@ -126,7 +126,7 @@ class QMixer(Mixer):
         """
         bs = chosen_action_value.shape[:-2]
         state = state.view(-1, self.state_dim)
-        chosen_action_value = chosen_action_value.transpose(-2, -1).view(
+        chosen_action_value = chosen_action_value.view(
             -1, 1, self.n_agents
         )
         # First layer
