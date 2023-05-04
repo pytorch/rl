@@ -1852,6 +1852,8 @@ class CatFrames(ObservationTransform):
             to be concatenated. Defaults to ["pixels"].
         out_keys (list of int, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
+        padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
+            Defaults to ``"same"``, ie. the first value is uesd for padding.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -1915,6 +1917,7 @@ class CatFrames(ObservationTransform):
         "dim must be > 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
+    ACCEPTED_PADDING = {"same", "zeros"}
 
     def __init__(
         self,
@@ -1922,6 +1925,7 @@ class CatFrames(ObservationTransform):
         dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        padding="same",
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -1930,6 +1934,9 @@ class CatFrames(ObservationTransform):
         if dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
+        if padding not in self.ACCEPTED_PADDING:
+            raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
+        self.padding = padding
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             setattr(
@@ -1998,9 +2005,15 @@ class CatFrames(ObservationTransform):
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
-                buffer[_reset] = buffer[_reset].copy_(
-                    data[_reset].repeat(shape).clone()
-                )
+                if self.padding == "same":
+                    buffer[_reset] = buffer[_reset].copy_(
+                        data[_reset].repeat(shape).clone()
+                    )
+                elif self.padding == "zeros":
+                    buffer[_reset] = 0
+                else:
+                    # make linter happy. An exception has already been raised
+                    raise NotImplementedError
             buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
             # add new obs
             idx = self.dim
@@ -2068,9 +2081,25 @@ class CatFrames(ObservationTransform):
                 )
                 first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
                 data0 = [first_val] * (self.N - 1)
-            else:
+                if self.padding == "zeros":
+                    data0 = [torch.zeros_like(elt) for elt in data0[:-1]] + data0[-1:]
+                elif self.padding == "same":
+                    pass
+                else:
+                    # make linter happy. An exception has already been raised
+                    raise NotImplementedError
+            elif self.padding == "same":
                 idx = [slice(None)] * (tensordict.ndim - 1) + [0]
                 data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
+            elif self.padding == "zeros":
+                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
+                data0 = [
+                    torch.zeros_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
+                ] * (self.N - 1)
+            else:
+                # make linter happy. An exception has already been raised
+                raise NotImplementedError
+
             data = torch.cat(data0 + [data], tensordict.ndim - 1)
 
             data = data.unfold(tensordict.ndim - 1, self.N, 1)

@@ -386,17 +386,21 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    def test_transform_model(self, dim, N):
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
         keys = [key1]
         out_keys = ["out_" + key1]
-        cat_frames = CatFrames(N=N, in_keys=out_keys, out_keys=out_keys, dim=dim)
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
         cat_frames2 = CatFrames(
             N=N,
             in_keys=keys + [("next", keys[0])],
             out_keys=out_keys + [("next", out_keys[0])],
             dim=dim,
+            padding=padding,
         )
         envbase = ContinuousActionVecMockEnv()
         env = TransformedEnv(
@@ -418,17 +422,21 @@ class TestCatFrames(TransformBase):
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    def test_transform_rb(self, dim, N):
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_rb(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
         keys = [key1]
         out_keys = ["out_" + key1]
-        cat_frames = CatFrames(N=N, in_keys=out_keys, out_keys=out_keys, dim=dim)
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
         cat_frames2 = CatFrames(
             N=N,
             in_keys=keys + [("next", keys[0])],
             out_keys=out_keys + [("next", out_keys[0])],
             dim=dim,
+            padding=padding,
         )
 
         env = TransformedEnv(
