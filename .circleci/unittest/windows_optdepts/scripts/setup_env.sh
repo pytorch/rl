@@ -30,14 +30,14 @@ eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 # 2. Create test environment at ./env
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+    conda create --clone base --prefix "${env_dir}" 
+    conda install --prefix "${env_dir}" python="$PYTHON_VERSION" -y
 fi
+conda activate "${env_dir}"
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
-conda env update --prefix "${env_dir}" --file "${this_dir}/environment.yml" --prune
-
-conda activate "${env_dir}"
+conda env update --file "${this_dir}/environment.yml" --prune
 
 # we don't use torchsnapshot
 conda env config vars set CKPT_BACKEND=torch
