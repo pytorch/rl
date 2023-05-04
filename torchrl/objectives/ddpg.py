@@ -14,8 +14,6 @@ import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -162,10 +160,9 @@ class DDPGLoss(LossModule):
             batch_size=self.target_actor_network_params.batch_size,
             device=self.target_actor_network_params.device,
         )
-        with set_exploration_type(ExplorationType.MODE):
-            target_value = self.value_estimator.value_estimate(
-                tensordict, target_params=target_params
-            ).squeeze(-1)
+        target_value = self.value_estimator.value_estimate(
+            tensordict, target_params=target_params
+        ).squeeze(-1)
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
