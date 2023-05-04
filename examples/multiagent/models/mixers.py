@@ -130,11 +130,9 @@ class QMixer(Mixer):
             state: Tensor of shape [*B, *state_shape]
         """
         bs = chosen_action_value.shape[:-2]
-        state = state.view(*bs, self.state_dim).view(-1, self.state_dim)
-        chosen_action_value = (
-            chosen_action_value.transpose(-2, -1)
-            .view(*bs, 1, self.n_agents)
-            .view(-1, 1, self.n_agents)
+        state = state.view(-1, self.state_dim)
+        chosen_action_value = chosen_action_value.transpose(-2, -1).view(
+            -1, 1, self.n_agents
         )
         # First layer
         w1 = torch.abs(self.hyper_w_1(state))
@@ -152,5 +150,5 @@ class QMixer(Mixer):
         # Compute final output
         y = torch.bmm(hidden, w_final) + v  # [-1, 1, 1]
         # Reshape and return
-        q_tot = y.squeeze(-1).view(*bs, 1)
+        q_tot = y.view(*bs, 1)
         return q_tot
