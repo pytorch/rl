@@ -4483,8 +4483,8 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
             UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
+            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
         )
 
     def test_single_trans_env_check(self):

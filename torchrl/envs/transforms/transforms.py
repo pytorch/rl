@@ -193,7 +193,7 @@ class Transform(nn.Module):
                     observation,
                 )
             elif not self.missing_tolerance:
-                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+                raise KeyError(f"{self}: '{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     @dispatch(source="in_keys", dest="out_keys")
@@ -1450,7 +1450,7 @@ class UnsqueezeTransform(Transform):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
-            in_keys = IMAGE_KEYS  # default
+            in_keys = []  # default
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -2537,7 +2537,6 @@ class DiscreteActionProjection(Transform):
             raise RuntimeError(
                 "The `max_actions` int must be greater or equal to `num_actions_effective`."
             )
-        print("DAP", self.in_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # We don't do anything here because the action is modified by the inv
