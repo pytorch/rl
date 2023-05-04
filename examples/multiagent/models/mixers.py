@@ -50,15 +50,10 @@ class Mixer(nn.Module):
         else:
             output = self.mix(chosen_action_value, state)
 
-        output = (
-            output.view(*output.shape[:-1], 1)
-            .unsqueeze(-2)
-            .expand(*output.shape[:-1], self.n_agents, 1)
-        )
 
-        if output.shape[-2:] != (self.n_agents, 1):
+        if output.shape[-1] != 1:
             raise ValueError(
-                f"Mixer network expected output with last 2 dimensions {[self.n_agents, 1]},"
+                f"Mixer network expected output with last dimension 1,"
                 f" but got {output.shape}"
             )
 

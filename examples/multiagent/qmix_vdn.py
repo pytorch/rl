@@ -200,6 +200,11 @@ if __name__ == "__main__":
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
+        # Remove agent dimension from done and reward
+        tensordict_data["next", "reward"] = tensordict_data["next", "reward"].mean(-2)
+        tensordict_data["next", "done"] = tensordict_data["next", "done"].any(-2)
+        tensordict_data["done"] = tensordict_data["done"].any(-2)
+
         current_frames = tensordict_data.numel()
         total_frames += current_frames
         data_view = tensordict_data.reshape(-1)
