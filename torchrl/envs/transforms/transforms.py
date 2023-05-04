@@ -149,6 +149,7 @@ class Transform(nn.Module):
         if out_keys_inv is None:
             out_keys_inv = copy(self.in_keys_inv)
         self.out_keys_inv = out_keys_inv
+        self._missing_tolerance = False
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
@@ -191,7 +192,7 @@ class Transform(nn.Module):
                     out_key,
                     observation,
                 )
-            else:
+            elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
@@ -200,13 +201,12 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in tensordict.keys(include_nested=True):
-                print("found", in_key)
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
                     observation,
                 )
-            else:
+            elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
@@ -245,7 +245,7 @@ class Transform(nn.Module):
                     out_key,
                     item,
                 )
-            else:
+            elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
 
         return tensordict
@@ -395,6 +395,13 @@ class Transform(nn.Module):
 
     def empty_cache(self):
         self.__dict__["_parent"] = None
+
+    def set_missing_tolerance(self, mode=False):
+        self._missing_tolerance = mode
+
+    @property
+    def missing_tolerance(self):
+        return self._missing_tolerance
 
 
 class TransformedEnv(EnvBase):
@@ -592,7 +599,11 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.clone(recurse=False)
         out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
+
+        mt_mode = self.transform.missing_tolerance
+        self.set_missing_tolerance(True)
         out_tensordict = self.transform._call(out_tensordict)
+        self.set_missing_tolerance(mt_mode)
         return out_tensordict
 
     def state_dict(self, *args, **kwargs) -> OrderedDict:
@@ -717,6 +728,10 @@ but got an object of type {type(transform)}."""
         # we may delete a TransformedEnv that contains an env contained by another
         # transformed env and that we don't want to close
         pass
+
+    def set_missing_tolerance(self, mode=False):
+        """Indicates if an KeyError should be raised whenever an in_key is missing from the input tensordict."""
+        self.transform.set_missing_tolerance(mode)
 
 
 class ObservationTransform(Transform):
@@ -884,6 +899,11 @@ class Compose(Transform):
         for t in self.transforms:
             transforms.append(t.clone())
         return Compose(*transforms)
+
+    def set_missing_tolerance(self, mode=False):
+        for t in self.transforms:
+            t.set_missing_tolerance(mode)
+        super().set_missing_tolerance(mode)
 
 
 class ToTensorImage(ObservationTransform):
@@ -1065,7 +1085,7 @@ class TargetReturn(Transform):
                     tensordict.get(in_key), tensordict.get(out_key)
                 )
                 tensordict.set(out_key, target_return)
-            else:
+            elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
@@ -3243,8 +3263,8 @@ class RewardSum(Transform):
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
-            in_keys = [("next", "reward")]
-        if out_keys is None and in_keys == [("next", "reward")]:
+            in_keys = ["reward"]
+        if out_keys is None and in_keys == ["reward"]:
             out_keys = ["episode_reward"]
         elif out_keys is None:
             raise RuntimeError(
@@ -3271,7 +3291,7 @@ class RewardSum(Transform):
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
-                elif in_key == ("next", "reward"):
+                elif in_key in ("reward", ("reward",)):
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict[out_key] = self.parent.reward_spec.zero()
@@ -3286,20 +3306,21 @@ class RewardSum(Transform):
                             f"observation_spec with keys "
                             f"{list(self.parent.observation_spec.keys(True))}. "
                         ) from err
-
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
+        next_tensordict = tensordict.get("next")
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(include_nested=True):
-                reward = tensordict.get(in_key)
-                if out_key not in tensordict.keys():
-                    tensordict.set(("next", out_key), torch.zeros_like(reward))
-                tensordict["next", out_key] = tensordict[out_key] + reward
-            else:
+            if in_key in next_tensordict.keys(include_nested=True):
+                reward = next_tensordict.get(in_key)
+                if out_key not in tensordict.keys(True):
+                    tensordict.set(out_key, torch.zeros_like(reward))
+                next_tensordict.set(out_key, tensordict.get(out_key) + reward)
+            elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+        tensordict.set("next", next_tensordict)
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -3324,7 +3345,7 @@ class RewardSum(Transform):
 
         else:
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
-            if set(self.in_keys) != {("next", "reward")}:
+            if set(self.in_keys) != {"reward"}:
                 raise KeyError(
                     "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
                 )
