@@ -191,13 +191,15 @@ class Transform(nn.Module):
                     out_key,
                     observation,
                 )
+            else:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(True):
+            if in_key in tensordict.keys(include_nested=True):
                 print("found", in_key)
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
@@ -237,12 +239,15 @@ class Transform(nn.Module):
         # # exposed to the user: we'd like that the input keys remain unchanged
         # # in the originating script if they're being transformed.
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
+            if in_key in tensordict.keys(include_nested=True):
                 item = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
                     item,
                 )
+            else:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+
         return tensordict
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
@@ -1055,12 +1060,13 @@ class TargetReturn(Transform):
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            is_tuple = isinstance(in_key, tuple)
-            if in_key in tensordict.keys(include_nested=is_tuple):
+            if in_key in tensordict.keys(include_nested=True):
                 target_return = self._apply_transform(
                     tensordict.get(in_key), tensordict.get(out_key)
                 )
                 tensordict.set(out_key, target_return)
+            else:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3287,11 +3293,13 @@ class RewardSum(Transform):
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(isinstance(in_key, tuple)):
+            if in_key in tensordict.keys(include_nested=True):
                 reward = tensordict.get(in_key)
                 if out_key not in tensordict.keys():
                     tensordict.set(("next", out_key), torch.zeros_like(reward))
                 tensordict["next", out_key] = tensordict[out_key] + reward
+            else:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
