@@ -2850,6 +2850,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2865,6 +2866,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2879,6 +2881,7 @@ class TestObservationNorm(TransformBase):
             SerialEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
@@ -2891,6 +2894,7 @@ class TestObservationNorm(TransformBase):
             ParallelEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
