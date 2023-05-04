@@ -30,8 +30,7 @@ eval "$(${conda_dir}/Scripts/conda.exe 'shell.bash' 'hook')"
 # 2. Create test environment at ./env
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
-    conda create --clone base --prefix "${env_dir}" 
-    conda install --prefix "${env_dir}" python="$PYTHON_VERSION" -y
+    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
 

@@ -4,6 +4,7 @@ channels:
 dependencies:
   - pip
   - pip:
+    - setuptools
     - hypothesis
     - future
     - cloudpickle
