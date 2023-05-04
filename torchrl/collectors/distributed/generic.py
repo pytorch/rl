@@ -385,7 +385,9 @@ class DistributedDataCollector(DataCollectorBase):
         launcher="submitit",
         tcp_port=None,
     ):
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
 
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector

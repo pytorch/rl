@@ -342,9 +342,7 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 #   For the sake of efficiency, we're only running a few thousands iterations
 #   here. In a real setting, the total number of frames should be set to 1M.
 #
-collector = SyncDataCollector(
-    env, stoch_policy, frames_per_batch=50, total_frames=10_000
-)
+collector = SyncDataCollector(env, stoch_policy, frames_per_batch=50, total_frames=200)
 rb = TensorDictReplayBuffer(
     storage=LazyMemmapStorage(20_000), batch_size=4, prefetch=10
 )
@@ -396,11 +394,12 @@ for i, data in enumerate(collector):
 ######################################################################
 # Let's plot our results:
 #
-from matplotlib import pyplot as plt
+if traj_lens:
+    from matplotlib import pyplot as plt
 
-plt.plot(traj_lens)
-plt.xlabel("Test collection")
-plt.title("Test trajectory lengths")
+    plt.plot(traj_lens)
+    plt.xlabel("Test collection")
+    plt.title("Test trajectory lengths")
 
 ######################################################################
 # Conclusion

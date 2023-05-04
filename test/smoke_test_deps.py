@@ -26,6 +26,7 @@ def test_dm_control():
     import dm_env  # noqa: F401
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
 
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
@@ -34,6 +35,8 @@ def test_dm_control():
 
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()
 
@@ -49,6 +52,8 @@ def test_gym():
             raise ImportError(
                 f"gym and gymnasium load failed. Gym got error {err}."
             ) from ERROR
+
+    from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
 
     assert _has_gym
     env = GymEnv(PONG_VERSIONED)
