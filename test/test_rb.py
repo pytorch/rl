@@ -840,6 +840,7 @@ transforms = [
 def test_smoke_replay_buffer_transform(transform):
     rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
 
+    # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
     rb.sample()
@@ -860,13 +861,15 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
-    if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
+    if transform == PinMemoryTransform and not torch.cuda.is_available():
         raise pytest.skip("No CUDA device detected, skipping PinMemory")
     rb = ReplayBuffer(
         collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
     )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    td = TensorDict(
+        {"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, []
+    )
     rb.add(td)
     rb.sample()
 

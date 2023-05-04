@@ -198,6 +198,7 @@ class Transform(nn.Module):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in tensordict.keys(True):
+                print("found", in_key)
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
@@ -2510,6 +2511,7 @@ class DiscreteActionProjection(Transform):
             raise RuntimeError(
                 "The `max_actions` int must be greater or equal to `num_actions_effective`."
             )
+        print("DAP", self.in_keys)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # We don't do anything here because the action is modified by the inv
