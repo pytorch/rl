@@ -508,18 +508,23 @@ plt.hist(sample["index"].numpy())
 # The data stored in a replay buffer may not be ready to be presented to a
 # loss module.
 # In some cases, the data produced by a collector can be too heavy to be
-# saved as-is. Examples of this include converting images from uint8 to
+# saved as-is. Examples of this include converting images from ``uint8`` to
 # floating point tensors, or concatenating successive frames when using
 # decision transformers.
 #
-# Data can be processed in and out of a buffer just by appending the appropriate transform to it.
+# Data can be processed in and out of a buffer just by appending the
+# appropriate transform to it.
 # Here are a few examples:
 #
-# ### Saving raw images
+# Saving raw images
+# ~~~~~~~~~~~~~~~~~
 #
-# `uint8`-typed tensors are comparatively much less memory expensive than the floating point tensors we usually feed to our models. For this reason, it can be useful to save the raw images.
-
-# In[22]:
+# ``uint8``-typed tensors are comparatively much less memory expensive than
+# the floating point tensors we usually feed to our models. For this reason,
+# it can be useful to save the raw images.
+# The following script show how one can build a collector that returns only
+# the raw images but uses the transformed ones for inference, and how these
+# transformations can be recycled in the replay buffer:
 
 
 from torchrl.collectors import RandomPolicy, SyncDataCollector
@@ -535,17 +540,18 @@ env = TransformedEnv(
     ),
 )
 
+######################################################################
 # let us have a look at a rollout:
 
 print(env.rollout(3))
 
 
-# We have just created an environment that produces pixels. These images are processed to be fed to a policy.
+######################################################################
+# We have just created an environment that produces pixels. These images
+# are processed to be fed to a policy.
 # We would like to store the raw images, and not their transforms.
-# To do this, we will append a transform to the collector to select the keys we want to see appearing:
-
-# In[23]:
-
+# To do this, we will append a transform to the collector to select the keys
+# we want to see appearing:
 
 from torchrl.envs import ExcludeTransform
 
@@ -558,9 +564,9 @@ collector = SyncDataCollector(
 )
 
 
-# Let us have a look at a batch of data, and control that the "pixels_trsf" have been discarded:
-
-# In[24]:
+######################################################################
+# Let us have a look at a batch of data, and control that the
+# ``"pixels_trsf"`` keys have been discarded:
 
 
 for data in collector:
@@ -568,10 +574,16 @@ for data in collector:
     break
 
 
+######################################################################
 # We create a replay buffer with the same transform as the environment.
-# There is, however, a detail that needs to be addressed: transforms used without environments are oblivious to the data structure. Our data comes with a nested "next" tensordict that will be ignored by our transform. We manually add these keys to the transform:
-
-# In[25]:
+# There is, however, a detail that needs to be addressed: transforms
+# used without environments are oblivious to the data structure.
+# When appending a transform to an environment, the data in the ``"next"``
+# nested tensordict is transformed first and then copied at the root during
+# the rollout execution. When working with static data, this is not the case.
+# Nevertheless, our data comes with a nested "next" tensordict that will be
+# ignored by our transform if we don't explicitly instruct it to take care of
+# it. We manually add these keys to the transform:
 
 
 t = Compose(
@@ -586,21 +598,30 @@ rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000), transform=t, batch_
 rb.extend(data)
 
 
-# Let us check that a sample sees the transformed images reappear:
-
-# In[26]:
-
-
+######################################################################
+# We can check that a ``sample`` method sees the transformed images reappear:
+#
 print(rb.sample())
 
 
-# ### A more complex examples: using CatFrames
-
-# In[27]:
-
+######################################################################
+# A more complex examples: using CatFrames
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The :class:`torchrl.envs.CatFrames` transform unfolds the observations
+# through time, creating a n-back memory of past events that allow the model
+# to take the past events into account (in the case of POMDPs or with
+# recurrent policies such as Decision Transformers). Storing these concatenated
+# frames can consume a considerable amount of memory. It can also be
+# problematic when the n-back window needs to be different (usually longer)
+# during training and inference. We solve this problem by executing the
+# ``CatFrames`` transform separately in the two phases.
 
 from torchrl.envs import CatFrames, UnsqueezeTransform
 
+######################################################################
+# We create a standard list of transforms for environments that return pixel-based
+# observations:
 env = TransformedEnv(
     GymEnv("CartPole-v1", from_pixels=True),
     Compose(
@@ -616,16 +637,15 @@ collector = SyncDataCollector(
     RandomPolicy(env.action_spec),
     frames_per_batch=10,
     total_frames=1000,
-    # postproc=ExcludeTransform("pixels_trsf", ("next", "pixels_trsf"), "collector")
 )
 for data in collector:
     print(data)
     break
 
-
-# In[28]:
-
-
+######################################################################
+# The buffer transform looks pretty much like the environment one, but with
+# extra ``("next", ...)`` keys like before:
+#
 t = Compose(
     ToTensorImage(
         in_keys=["pixels", ("next", "pixels")],
@@ -640,16 +660,23 @@ data_exclude = data.exclude("pixels_trsf", ("next", "pixels_trsf"))
 rb.add(data_exclude)
 
 
-# In[30]:
-
-
+######################################################################
+# Let us sample one element from the buffer. The shape of the transformed
+# pixel keys should have a length of 4 along the 4th dimension starting from
+# the end:
+#
 s = rb.sample(1)  # the buffer has only one element
-s
+print(s)
 
 
-# After a bit of processing (excluding non-used keys etc), we see that the data generated online and offline match!
+######################################################################
+# After a bit of processing (excluding non-used keys etc), we see that the
+# data generated online and offline match!
 
-# In[40]:
+assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector")).all()
 
-
-(data.exclude("collector") == s.squeeze(0).exclude("index", "collector")).all()
+######################################################################
+# Conclusion
+# ----------
+#
+#
