@@ -193,7 +193,9 @@ class Transform(nn.Module):
                     observation,
                 )
             elif not self.missing_tolerance:
-                raise KeyError(f"{self}: '{in_key}' not found in tensordict {tensordict}")
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
+                )
         return tensordict
 
     @dispatch(source="in_keys", dest="out_keys")

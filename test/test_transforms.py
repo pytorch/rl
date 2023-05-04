@@ -6528,7 +6528,7 @@ def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
