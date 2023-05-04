@@ -14,14 +14,7 @@ excludes = [
 ]
 
 [tool.pytest.ini_options]
-addopts =
-    # show summary of all tests that did not pass
-    -ra
-    # Make tracebacks shorter
-    --tb=native
-testpaths =
-    test
-xfail_strict = True
+addopts = "-ra --tb=native"
+testpaths = ["test"]
+xfail_strict = true
 pythonpath = "torchrl"
-
-
