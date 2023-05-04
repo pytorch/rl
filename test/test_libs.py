@@ -558,6 +558,7 @@ class TestEnvPool:
     def test_env_basic_operation(
         self, env_name, frame_skip, transformed_out, T=10, N=3
     ):
+        torch.manual_seed(0)
         env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,

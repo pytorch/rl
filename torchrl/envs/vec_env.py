@@ -1072,6 +1072,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         # Buffer to keep the latest observation for each worker
         # It's a TensorDict when the observation consists of several variables, e.g. "position" and "velocity"
+        print("self.observation_spec", self.observation_spec)
         self.obs: Union[torch.tensor, TensorDict] = self.observation_spec.zero()
 
     def _check_kwargs(self, kwargs: Dict):
