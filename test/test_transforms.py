@@ -384,41 +384,59 @@ class TestCatFrames(TransformBase):
         ).all()
         assert cloned is not env.transform
 
-    def test_transform_model(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
-
-        model = nn.Sequential(cat_frames, nn.Identity())
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            model(td)
-
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
-    def test_transform_rb(self, dim, N):
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_model(self, dim, N, padding):
         # test equivalence between transforms within an env and within a rb
         key1 = "observation"
         keys = [key1]
         out_keys = ["out_" + key1]
-        cat_frames = CatFrames(N=N, in_keys=out_keys, out_keys=out_keys, dim=dim)
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
         cat_frames2 = CatFrames(
             N=N,
             in_keys=keys + [("next", keys[0])],
             out_keys=out_keys + [("next", out_keys[0])],
             dim=dim,
+            padding=padding,
+        )
+        envbase = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            envbase,
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        torch.manual_seed(10)
+        env.set_seed(10)
+        td = env.rollout(10)
+        torch.manual_seed(10)
+        envbase.set_seed(10)
+        tdbase = envbase.rollout(10)
+
+        model = nn.Sequential(cat_frames2, nn.Identity())
+        model(tdbase)
+        assert (td == tdbase).all()
+
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_rb(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+            padding=padding,
         )
 
         env = TransformedEnv(
