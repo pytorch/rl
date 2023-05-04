@@ -2029,13 +2029,51 @@ class CatFrames(ObservationTransform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # it is assumed that the last dimension of the tensordict is the time dimension
+        if tensordict.names[-1] is not None and tensordict.names[-1] != "time":
+            raise ValueError(
+                "The last dimension of the tensordict must be marked as 'time'."
+            )
+        # first sort the in_keys with strings and non-strings
+        in_keys = list(
+            zip(
+                (in_key, out_key)
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+                if isinstance(in_key, str) or len(in_key) == 1
+            )
+        )
+        in_keys += list(
+            zip(
+                (in_key, out_key)
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+                if not isinstance(in_key, str) and not len(in_key) == 1
+            )
+        )
         for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # check if we have an obs in "next" that has already been processed.
+            # If so, we must add an offset
             data = tensordict.get(in_key)
-            idx = [...] + [0] + [slice(None)] * (abs(self.dim) - 1)
-            data0 = data[tuple(idx)].unsqueeze(self.dim)
-            data = torch.cat([data0] * (self.N - 1) + [data], self.dim)
+            if isinstance(in_key, tuple) and in_key[0] == "next":
 
-            data = data.unfold(self.dim, self.N, 1)
+                # let's get the out_key we have already processed
+                prev_out_key = dict(zip(self.in_keys, self.out_keys))[in_key[1]]
+                prev_val = tensordict.get(prev_out_key)
+                # the first item is located along `dim+1` at the last index of the
+                # first time index
+                idx = (
+                    [slice(None)] * (tensordict.ndim - 1)
+                    + [0]
+                    + [..., -1]
+                    + [slice(None)] * (abs(self.dim) - 1)
+                )
+                first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
+                data0 = [first_val] * (self.N - 1)
+            else:
+                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
+                data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
+            data = torch.cat(data0 + [data], tensordict.ndim - 1)
+
+            data = data.unfold(tensordict.ndim - 1, self.N, 1)
             data = data.permute(
                 *range(0, data.ndim + self.dim),
                 -1,
