@@ -10,8 +10,6 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -170,11 +168,10 @@ class IQLLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
-        with set_exploration_type(ExplorationType.MODE):
-            dist = self.actor_network.get_dist(
-                tensordict,
-                params=self.actor_network_params,
-            )
+        dist = self.actor_network.get_dist(
+            tensordict,
+            params=self.actor_network_params,
+        )
 
         log_prob = dist.log_prob(tensordict["action"])
 
