@@ -6237,7 +6237,8 @@ class TestTransforms:
             dim=-3,
         )
         t2 = FiniteTensorDictCheck()
-        compose = Compose(t1, t2)
+        t3 = StepCounter()
+        compose = Compose(t1, t2, t3)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
@@ -6248,10 +6249,15 @@ class TestTransforms:
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
+        if not batch:
+            with pytest.raises(
+                ValueError, match="The last dimension of the tensordict"
+            ):
+                compose(td.clone(False))
         with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
+            NotImplementedError, match="StepCounter cannot be called independently"
         ):
-            compose(td.clone(False))
+            compose[1:](td.clone(False))
         compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
@@ -6259,7 +6265,8 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = BoundedTensorSpec(0, 255, (nchannels, 16, 16))
-            observation_spec = compose.transform_observation_spec(observation_spec)
+            # StepCounter does not want non composite specs
+            observation_spec = compose[:2].transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
