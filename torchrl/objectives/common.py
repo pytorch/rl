@@ -237,7 +237,6 @@ class LossModule(nn.Module):
             if parameter not in prev_set_params:
                 setattr(self, sep.join([module_name, key]), parameter)
             else:
-                print("found!")
                 # if the parameter is already present, we register a string pointing
                 # to is instead. If the string ends with a '_detached' suffix, the
                 # value will be detached
@@ -270,10 +269,11 @@ class LossModule(nn.Module):
 
         # set the functional module: setting as a property will hide the module's parameters from the loss-module
         # since we register them elsewhere
+        setattr(self, "_" + module_name, [functional_module])
         setattr(
             self.__class__,
             module_name,
-            property(lambda _self: functional_module),
+            property(lambda _self: getattr(_self, "_" + module_name)[0]),
         )
 
         # creates a map nn.Parameter name -> expanded parameter name
