@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import warnings
-from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
@@ -156,6 +155,7 @@ class LossModule(nn.Module):
             if not isinstance(value, nn.Parameter):
                 key = sep.join(key) if not isinstance(key, str) else key
                 buffer_names.append(key)
+        # functional_module = deepcopy(module)
         functional_module = module
         repopulate_module(module, params)
 
@@ -237,6 +237,7 @@ class LossModule(nn.Module):
             if parameter not in prev_set_params:
                 setattr(self, sep.join([module_name, key]), parameter)
             else:
+                print("found!")
                 # if the parameter is already present, we register a string pointing
                 # to is instead. If the string ends with a '_detached' suffix, the
                 # value will be detached
@@ -267,8 +268,13 @@ class LossModule(nn.Module):
             property(lambda _self=self: _self._param_getter(module_name)),
         )
 
-        # set the functional module
-        setattr(self, module_name, functional_module)
+        # set the functional module: setting as a property will hide the module's parameters from the loss-module
+        # since we register them elsewhere
+        setattr(
+            self.__class__,
+            module_name,
+            property(lambda _self: functional_module),
+        )
 
         # creates a map nn.Parameter name -> expanded parameter name
         for key, value in params.items(True, True):
