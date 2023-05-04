@@ -2043,7 +2043,9 @@ class CatFrames(ObservationTransform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or (tensordict.names[-1] is not None and tensordict.names[-1] != "time"):
+        if not tensordict.ndim or (
+            tensordict.names[-1] is not None and tensordict.names[-1] != "time"
+        ):
             raise ValueError(
                 "The last dimension of the tensordict must be marked as 'time'."
             )
