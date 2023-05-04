@@ -4372,11 +4372,12 @@ class TestUnsqueezeTransform(TransformBase):
     def test_transform_inverse(self):
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED),
+            # the order is inverted
             Compose(
-                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
                 UnsqueezeTransform(
                     -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
                 ),
+                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
             ),
         )
         td = env.rollout(3)
@@ -4483,8 +4484,8 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
             UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
+            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
         )
 
     def test_single_trans_env_check(self):
@@ -6504,7 +6505,7 @@ def test_batch_locked_transformed(device):
     env = TransformedEnv(
         MockBatchedLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6528,7 +6529,7 @@ def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6548,7 +6549,7 @@ def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )

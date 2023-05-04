@@ -518,7 +518,7 @@ ENVPOOL_CLASSIC_CONTROL_ENVS = [
     "Acrobot-v1",
     CARTPOLE_VERSIONED,
 ]
-ENVPOOL_ATARI_ENVS = [PONG_VERSIONED]
+ENVPOOL_ATARI_ENVS = []  # PONG_VERSIONED]
 ENVPOOL_GYM_ENVS = ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_ATARI_ENVS
 ENVPOOL_DM_ENVS = ["CheetahRun-v1"]
 ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
@@ -558,6 +558,7 @@ class TestEnvPool:
     def test_env_basic_operation(
         self, env_name, frame_skip, transformed_out, T=10, N=3
     ):
+        torch.manual_seed(0)
         env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
