@@ -842,12 +842,7 @@ def test_smoke_replay_buffer_transform(transform):
 
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
-    if not isinstance(rb._transform[0], (CatFrames,)):
-        rb.sample()
-    else:
-        with pytest.raises(NotImplementedError):
-            rb.sample()
-        return
+    rb.sample()
 
     rb._transform = mock.MagicMock()
     rb._transform.__len__ = lambda *args: 3
