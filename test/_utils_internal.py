@@ -238,7 +238,7 @@ def _make_multithreaded_env(
         device=device,
     )
 
-    if transformed_out is not None:
+    if transformed_out:
         for key in env_multithread.observation_spec.keys(True, True):
             obs_key = key
             break
