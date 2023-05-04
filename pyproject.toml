@@ -4,6 +4,8 @@ first_party_detection = false
 [build-system]
 requires = ["setuptools", "wheel", "torch", "ninja"]
 
+build-backend = "setuptools.build_meta:__legacy__"
+
 first_party_detection = false
 
 target-version = ["py38"]
@@ -12,9 +14,3 @@ excludes = [
     "gallery",
     "tutorials",
 ]
-
-[tool.pytest.ini_options]
-addopts = "-ra --tb=native"
-testpaths = ["test"]
-xfail_strict = true
-pythonpath = "torchrl"
