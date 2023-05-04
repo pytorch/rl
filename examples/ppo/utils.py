@@ -112,9 +112,6 @@ def make_transformed_env_pixels(base_env, env_cfg):
             "action",
         ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
     env.append_transform(
         DoubleToFloat(
             in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
