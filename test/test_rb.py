@@ -867,7 +867,7 @@ def test_smoke_replay_buffer_transform_no_inkeys(transform):
         collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
     )
 
-    action = torch.zeros(3, dtype=torch.bool)
+    action = torch.zeros(3)
     action[..., 0] = 1
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": action}, [])
     rb.add(td)
