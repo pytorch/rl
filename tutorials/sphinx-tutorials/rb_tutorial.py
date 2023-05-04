@@ -181,9 +181,9 @@ buffer_lazymemmap = ReplayBuffer(
 )
 buffer_lazymemmap.extend(data)
 print(f"The buffer has {len(buffer_lazymemmap)} elements")
-print(f"the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
+print("the 'a' tensor is stored in", buffer_lazymemmap._storage._storage["a"].filename)
 print(
-    f"the ('b', 'c') tensor is stored in",
+    "the ('b', 'c') tensor is stored in",
     buffer_lazymemmap._storage._storage["b", "c"].filename,
 )
 
@@ -232,6 +232,7 @@ print(sample["index"])
 # encode datasets in a more explicit manner:
 
 from tensordict import tensorclass
+
 
 @tensorclass
 class MyData:
@@ -341,9 +342,9 @@ data = TensorDict(
 )
 
 buffer_lazymemmap.extend(data)
-for i, data in enumerate(buffer_lazymemmap):
+for _i, _ in enumerate(buffer_lazymemmap):
     continue
-print(f"A total of {i+1} batches have been collected")
+print(f"A total of {_i+1} batches have been collected")
 
 
 ######################################################################
