@@ -365,13 +365,17 @@ print("sampling 5 elements:", buffer_lazymemmap.sample(5))
 # Prioritized Replay buffers
 # --------------------------
 #
-# We provide an interface for prioritized replay buffers. This buffer class samples data according to a priority signal that is passed through the data.
+# TorchRL also provides an interface for prioritized replay buffers.
+# This buffer class samples data according to a priority signal that is passed
+# through the data.
 #
-# Although this tool is compatible with non-tensordict data, we encourage using TensorDict instead as it makes it possible to carry meta-data in and out of the buffer with little effort.
+# Although this tool is compatible with non-tensordict data, we encourage
+# using TensorDict instead as it makes it possible to carry meta-data in and
+# out from the buffer with little effort.
 #
-# Let us first see how to build a prioritized replay buffer in the generic case:
-
-# In[18]:
+# Let us first see how to build a prioritized replay buffer in the generic
+# case. The :math:`\alpha` and :math:`\beta` hyperparameters
+# have to be manually set:
 
 
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler
@@ -384,39 +388,75 @@ rb = ReplayBuffer(
     collate_fn=lambda x: x,
 )
 
-indices = rb.extend(["a", 1, None])
+######################################################################
+# Extending the replay buffer returns the items indices, which we will need
+# later to update the priority:
 
-# the sampler expects to have a priority for each element. This is done via the `update_priority` method.
-# We assign an artifically high priority to the second sample in the dataset
+indices = rb.extend([1, "foo", None])
+
+######################################################################
+# The sampler expects to have a priority for each element. When added to the
+# buffer, the priority is set to a default value of 1. Once the priority has
+# been computed (usually through the loss), it must be updated in the buffer.
+#
+# This is done via the `update_priority` method, which requires the indices
+# as well as the priority.
+# We assign an artificially high priority to the second sample in the dataset
+# to observe its effect on sampling:
+#
 rb.update_priority(index=indices, priority=torch.tensor([0, 1_000, 0.1]))
 
-# sampling should return mostly the second sample (1)
+######################################################################
+# We observe that sampling from the buffer returns mostly the second sample
+# (``"foo"``):
+#
+
 sample, info = rb.sample(10, return_info=True)
 print(sample)
 
-
-# In[19]:
-
-
+######################################################################
 # The info contains the relative weights of the items as well as the indices.
 print(info)
 
 
-# We see that using a prioritized replay buffer requires a series of extra steps in the training loop compared with a regular buffer:
-# - After collecting data and extending the buffer, the priority of the items must be updated;
-# - After computing the loss and getting a "priority signal" from it, we must update again the priority of the items in the buffer. This requires us to keep track of the indices.
+######################################################################
+# We see that using a prioritized replay buffer requires a series of extra
+# steps in the training loop compared with a regular buffer:
+# - After collecting data and extending the buffer, the priority of the
+#   items must be updated;
+# - After computing the loss and getting a "priority signal" from it, we must
+#   update again the priority of the items in the buffer.
+#   This requires us to keep track of the indices.
 #
-# This drastically hampers the reusability of the buffer: if one is to write a training script where both a prioritized and a regular buffer can be created, she must add a considerable amount of control flow to make sure that the appropriate methods are called at the appropriate place, if and only if a prioritized buffer is being used.
+# This drastically hampers the reusability of the buffer: if one is to write
+# a training script where both a prioritized and a regular buffer can be
+# created, she must add a considerable amount of control flow to make sure
+# that the appropriate methods are called at the appropriate place, if and
+# only if a prioritized buffer is being used.
 #
-# Let us see how we can solve this with TensorDict. We saw that the `TensorDictReplayBuffer` returns data augmented with storage indices. This class also ensures that the priority signal is automatically parsed to the prioritized sampler if present.
+# Let us see how we can improve this with TensorDict. We saw that the
+# :class:`torchrl.data.TensorDictReplayBuffer` returns data augmented with
+# their relative storage indices. One feature we did not mention is that
+# this class also ensures that the priority
+# signal is automatically parsed to the prioritized sampler if present during
+# extension.
 #
 # The combination of these features simplifies things in several ways:
-# - When extending the buffer, the priority signal will automatically be parsed if present and the priority will accurately be assigned;
-# - The indices will be stored in the samples, making it easy to update the priority after the loss computation.
+# - When extending the buffer, the priority signal will automatically be
+#   parsed if present and the priority will accurately be assigned;
+# - The indices will be stored in the sampled tensordicts, making it easy to
+#   update the priority after the loss computation.
+# - When computing the loss, the priority signal will be registered in the
+#   tensordict passed to the loss module, making it possible to update the
+#   weights without effort:
 #
-# The following code illustrates these concepts:
-
-# In[20]:
+#      >>> data = replay_buffer.sample()
+#      >>> loss_val = loss_module(data)
+#      >>> replay_buffer.update_tensordict_priority(data)
+#
+# The following code illustrates these concepts. We build a replay buffer with
+# a prioritized sampler, and indicate in the constructor the entry where
+# the priority signal should be fetched:
 
 
 rb = TensorDictReplayBuffer(
@@ -426,37 +466,51 @@ rb = TensorDictReplayBuffer(
     batch_size=1024,
 )
 
+######################################################################
+# Let us choose a priority signal that is proportional to the storage index:
+#
 data["td_error"] = torch.arange(data.numel())
 
 rb.extend(data)
 
 sample = rb.sample()
+
+######################################################################
 # higher indices should occur more frequently:
 from matplotlib import pyplot as plt
 
 plt.hist(sample["index"].numpy())
 
 
-# In[21]:
-
-
-# once we have worked with our sample, we update the priority key using the `update_tensordict_priority` method.
-# For the sake of showing how this works, let us assign a very low probability to the sampled items
+######################################################################
+# Once we have worked with our sample, we update the priority key using
+# the :meth:`torchrl.data.TensorDictReplayBuffer.update_tensordict_priority`
+# method.
+# For the sake of showing how this works, let us revert the priority of the
+# sampled items:
+#
 sample = rb.sample()
 sample["td_error"] = (data.numel() - sample["index"]).exp()
 rb.update_tensordict_priority(sample)
 
-# higher indices should occur less frequently:
+######################################################################
+# Now, higher indices should occur less frequently:
 sample = rb.sample()
 from matplotlib import pyplot as plt
 
 plt.hist(sample["index"].numpy())
 
 
-# ## Using transforms
+######################################################################
+# Using transforms
+# ----------------
 #
-# The data stored in a replay buffer may not be ready to be presented to a loss module.
-# In some cases, the data produced by a collector can be too heavy to be saved as-is. Examples of this include converting images from uint8 to floating point tensors, or concatenating successive frames when using decision transformers.
+# The data stored in a replay buffer may not be ready to be presented to a
+# loss module.
+# In some cases, the data produced by a collector can be too heavy to be
+# saved as-is. Examples of this include converting images from uint8 to
+# floating point tensors, or concatenating successive frames when using
+# decision transformers.
 #
 # Data can be processed in and out of a buffer just by appending the appropriate transform to it.
 # Here are a few examples:
