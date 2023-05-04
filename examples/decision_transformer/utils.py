@@ -25,7 +25,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import DTActor, ProbabilisticActor, TanhNormal
-from torchrl.objectives import SoftUpdate, TD3Loss
+from torchrl.objectives import OnlineDTLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
 
@@ -259,22 +259,21 @@ def make_decision_transformer_model(cfg):
 
 
 # ====================================================================
-# Decision Transformer Loss
+# Online Decision Transformer Loss
 # ---------
 
 
 def make_loss(loss_cfg, actor_network):
-    loss = TD3Loss(
+    loss = OnlineDTLoss(
         actor_network,
         gamma=loss_cfg.gamma,
         loss_function=loss_cfg.loss_function,
     )
-    target_net_updater = SoftUpdate(loss, 1 - loss_cfg.tau)
-    target_net_updater.init_()
-    return loss, target_net_updater
+    return loss
 
 
 def make_dt_optimizer(optim_cfg, actor_network):
+    # Should be Lambda Optimizer
     optimizer = torch.optim.Adam(
         actor_network.parameters(),
         lr=optim_cfg.lr,
@@ -289,7 +288,7 @@ def make_dt_optimizer(optim_cfg, actor_network):
 
 
 def make_logger(logger_cfg):
-    exp_name = generate_exp_name("TD3", logger_cfg.exp_name)
+    exp_name = generate_exp_name("OnlineDecisionTransformer", logger_cfg.exp_name)
     logger_cfg.exp_name = exp_name
-    logger = get_logger(logger_cfg.backend, logger_name="td3", experiment_name=exp_name)
+    logger = get_logger(logger_cfg.backend, logger_name="oDT", experiment_name=exp_name)
     return logger
