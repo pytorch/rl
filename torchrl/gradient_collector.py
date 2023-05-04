@@ -1,25 +1,8 @@
-import logging
-import warnings
-from torch.utils.data import IterableDataset
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union, Optional
-from torch.optim import Optimizer, Adam
-
 
 import torch
-import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
-from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import (
-    DataCollectorBase,
-    DEFAULT_EXPLORATION_TYPE,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
-from torchrl.objectives import LossModule
-from torchrl.collectors.utils import split_trajectories
-from torchrl.envs import EnvBase, EnvCreator
 
 
 class GradientCollector:
@@ -36,12 +19,11 @@ class GradientCollector:
     """
     def __init__(
         self,
-        policy: Callable[[TensorDict], TensorDict],
-        collector: DataCollectorBase,  # TODO: can we get away passing the instantiated class ?
-        objective: LossModule,  # TODO: can we get away passing the instantiated class ?
-        replay_buffer: ReplayBuffer,  # TODO: can we get away passing the instantiated class ?
-        optimizer: Optimizer = Adam,  # TODO: can we get away passing the instantiated class ?
-        critic: Callable[[TensorDict], TensorDict] = None,
+        configuration: Dict,
+        make_actor_critic: Callable,
+        make_collector: Callable,
+        make_objective: Callable,
+        make_buffer: Callable,
         updates_per_batch: int = 1,
         device: torch.device = "cpu",
     ):
@@ -51,38 +33,25 @@ class GradientCollector:
 
         # Get Actor Critic instance
         # Could be instantiated passing class + params if necessary
-        self.policy = policy  # TODO: do I really need the policy if we can get the params from objective ?
-        self.policy_params = TensorDict(dict(self.policy.named_parameters()), [])
-        self.critic = critic  # TODO: do I really need the critic if we can get the params from objective ?
-        self.critic_params = TensorDict(dict(self.critic.named_parameters()), [])
+        self.policy, self.critic = make_actor_critic(configuration)
+        self.policy.to(self.device)
+        self.critic.to(self.device)
 
         # Get loss instance
         # Could be instantiated passing class + params if necessary
-        self.objective = objective
-        self.objective_params = TensorDict(dict(self.objective.named_parameters()), [])
+        self.objective = make_objective(configuration.loss, actor_network=self.policy, value_network=self.critic)
+        self.params = TensorDict(dict(self.objective.named_parameters()), [])
 
         # Get collector instance.
         # Could be instantiated passing class + params if necessary.
-        self.collector = collector
+        self.collector = make_collector(configuration, policy=self.policy)
 
         # Get storage instance.
         # Could be instantiated passing class + params if necessary
-        self.replay_buffer = replay_buffer
+        self.replay_buffer = make_buffer(configuration)
 
-        # Get storage instance.
-        # Could be instantiated passing class + params if necessary
-        self.optimizer = optimizer
-
-        # Check if policy parameters are being tracked by optimizer
-        for name, param in policy.named_parameters():
-            if optimizer.state.get(name) is None:
-                warnings.warn(f"{name} is NOT being tracked by the optimizer")
-
-        # Check if critic parameters are being tracked by optimizer
-        if self.critic is not None:
-            for name, param in critic.named_parameters():
-                if optimizer.state.get(name) is None:
-                    warnings.warn(f"{name} is NOT being tracked by the optimizer")
+        # Get grads
+        self.grads = self.params.apply(lambda x: x.grad)
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -100,24 +69,9 @@ class GradientCollector:
 
     def update_policy_weights_(
             self,
-            policy_weights: Optional[TensorDictBase] = None,
-            critic_weights: Optional[TensorDictBase] = None,
-            objective_weights: Optional[TensorDictBase] = None,
+            weights: Optional[TensorDictBase] = None,
     ) -> None:
-
-        # TODO: is this the right way to do it ?
-        # Update policy and critic
-        self.objective_params.apply(lambda x: x.data).update_(objective_weights)
-        self.policy_params.apply(lambda x: x.data).update_(policy_weights)
-        self.critic_params.apply(lambda x: x.data).update_(critic_weights)
-
-        for name, param in self.objective.named_parameters():
-            param.data = objective_weights.get(name)
-        for name, param in self.policy.named_parameters():
-            param.data = policy_weights.get(name)
-        for name, param in self.critic.named_parameters():
-            param.data = critic_weights.get(name)
-
+        self.params.apply_(lambda x, y: setattr(x, 'data', y), weights)
         self.collector.update_policy_weights_()
 
     def shutdown(self):
@@ -144,22 +98,16 @@ class GradientCollector:
                 loss = self.objective(mini_batch)
                 loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
 
+                # Zero gradients
+                self.grads.zero_()
+
                 # Backprop loss
-                self.optimizer.zero_grad()
                 loss_sum.backward()
 
-                # Get gradients as a Tensordict
-                objective_params = TensorDict(dict(self.objective.named_parameters()), [])
-                objective_grads = objective_params.apply(lambda x: x.grad)
-                actor_params = TensorDict(dict(self.policy.named_parameters()), [])
-                actor_grads = actor_params.apply(lambda x: x.grad)
-                critic_params = TensorDict(dict(self.critic.named_parameters()), [])
-                critic_grads = critic_params.apply(lambda x: x.grad)
-
-                yield (objective_grads, actor_grads, critic_grads)
+                yield self.grads
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
-        self.collector.set_seed(seed, static_seed)
+        return self.collector.set_seed(seed, static_seed)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
