@@ -4374,7 +4374,9 @@ class TestUnsqueezeTransform(TransformBase):
             GymEnv(HALFCHEETAH_VERSIONED),
             # the order is inverted
             Compose(
-                UnsqueezeTransform(-1, in_keys_inv=["action_t"], out_keys_inv=["action"]),
+                UnsqueezeTransform(
+                    -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
+                ),
                 SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
             ),
         )
