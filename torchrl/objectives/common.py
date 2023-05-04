@@ -18,7 +18,7 @@ from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl._utils import RL_WARNINGS
-from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
@@ -56,7 +56,7 @@ class LossModule(nn.Module):
         The value estimator can be changed using the :meth:`~.make_value_estimator` method.
 
     By default, the forward method is always decorated with a
-    :class:`torchrl.envs.ExplorationType.MODE`
+    gh :class:`torchrl.envs.ExplorationType.MODE`
     """
 
     default_value_estimator: ValueEstimators = None
