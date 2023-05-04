@@ -15,9 +15,9 @@ conda activate ./env
 apt-get update
 apt-get install -y git wget freeglut3 freeglut3-dev
 
-sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+add-apt-repository ppa:ubuntu-toolchain-r/test
 apt-get update
-sudo apt-get install gcc-4.9
+apt-get install gcc-4.9
 apt-get install --only-upgrade libstdc++6
 
 # find libstdc
