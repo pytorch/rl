@@ -244,7 +244,6 @@ def _make_multithreaded_env(
             break
         else:
             obs_key = None
-        print("obs key is ", obs_key)
         env_multithread = TransformedEnv(
             env_multithread,
             get_transform_out(env_name, transformed_in=False, obs_key=obs_key)(),
