@@ -112,13 +112,14 @@ fi
 
 # https://github.com/lhelontra/tensorflow-on-arm/issues/13#issuecomment-489296444
 apt-get update
-apt-get install libssl-dev -y
-cd /lib/x86_64-linux-gnu
-ln -s libssl.so.1.0.0 libssl.so.10
-#ln -s libcrypto.so.1.0.0 libcrypto.so.10
-cd $this_dir
-conda install -c psi4 gcc-5 -y
-apt-get install --only-upgrade libstdc++6 -y
+apt-get upgrade libstdc++6
+#apt-get install libssl-dev -y
+#cd /lib/x86_64-linux-gnu
+#ln -s libssl.so.1.0.0 libssl.so.10
+##ln -s libcrypto.so.1.0.0 libcrypto.so.10
+#cd $this_dir
+#conda install -c psi4 gcc-5 -y
+#apt-get install --only-upgrade libstdc++6 -y
 
 python -c """
 import wandb
