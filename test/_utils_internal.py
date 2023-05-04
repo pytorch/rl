@@ -260,7 +260,7 @@ def get_transform_out(env_name, transformed_in, obs_key=None):
 
         def t_out():
             return (
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                Compose(*[ToTensorImage(in_keys=[obs_key]), RewardClipping(0, 0.1)])
                 if not transformed_in
                 else Compose(*[ObservationNorm(in_keys=[obs_key], loc=0, scale=1)])
             )
