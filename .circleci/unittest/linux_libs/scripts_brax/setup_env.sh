@@ -5,7 +5,7 @@
 #
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
-set -e
+set -euxo pipefail
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
