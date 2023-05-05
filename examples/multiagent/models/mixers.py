@@ -50,7 +50,6 @@ class Mixer(nn.Module):
         else:
             output = self.mix(chosen_action_value, state)
 
-
         if output.shape[-1] != 1:
             raise ValueError(
                 f"Mixer network expected output with last dimension 1,"
@@ -126,9 +125,7 @@ class QMixer(Mixer):
         """
         bs = chosen_action_value.shape[:-2]
         state = state.view(-1, self.state_dim)
-        chosen_action_value = chosen_action_value.view(
-            -1, 1, self.n_agents
-        )
+        chosen_action_value = chosen_action_value.view(-1, 1, self.n_agents)
         # First layer
         w1 = torch.abs(self.hyper_w_1(state))
         b1 = self.hyper_b_1(state)

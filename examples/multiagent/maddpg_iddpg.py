@@ -8,7 +8,10 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import (
+    RandomSampler,
+    SamplerWithoutReplacement,
+)
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -132,7 +135,7 @@ if __name__ == "__main__":
         return_log_prob=False,
     )
     policy = AdditiveGaussianWrapper(
-        policy, annealing_num_steps=int(total_frames * (1 / 2)), sigma_end=0.
+        policy, annealing_num_steps=int(total_frames * (1 / 2)), sigma_end=0.0
     )
 
     # Critic
