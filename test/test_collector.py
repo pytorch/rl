@@ -212,6 +212,7 @@ def test_output_device_consistency(
             device, policy_device, storing_device, d.device.type
         )
         break
+    assert d.names[-1] == "time"
 
     collector.shutdown()
 
@@ -231,6 +232,7 @@ def test_output_device_consistency(
             device, policy_device, storing_device, d.device.type
         )
         break
+    assert d.names[-1] == "time"
 
     ccollector.shutdown()
 
@@ -273,6 +275,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2 = d
         else:
             break
+    assert d.names[-1] == "time"
     with pytest.raises(AssertionError):
         assert_allclose_td(b1, b2)
     collector.shutdown()
@@ -292,6 +295,7 @@ def test_concurrent_collector_consistency(num_env, env_name, seed=40):
             b2c = d
         else:
             break
+    assert d.names[-1] == "time"
     with pytest.raises(AssertionError):
         assert_allclose_td(b1c, b2c)
 
@@ -508,6 +512,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         assert b.numel() == -(-frames_per_batch // num_env) * num_env
         if i == 5:
             break
+    assert b.names[-1] == "time"
     ccollector.shutdown()
 
     ccollector = MultiSyncDataCollector(
@@ -525,6 +530,7 @@ def test_collector_batch_size(num_env, env_name, seed=100):
         )
         if i == 5:
             break
+    assert b.names[-1] == "time"
     ccollector.shutdown()
 
 

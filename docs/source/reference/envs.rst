@@ -63,6 +63,9 @@ With these, the following methods are implemented:
   a maximum number of steps (``max_steps=N``) and using a policy (``policy=model``).
   The policy should be coded using a :class:`tensordict.nn.TensorDictModule`
   (or any other :class:`tensordict.TensorDict`-compatible module).
+  The resulting :class:`tensordict.TensorDict` instance will be marked with
+  a trailing ``"time"`` named dimension that can be used by other modules
+  to treat this batched dimension as it should.
 
 The following figure summarizes how a rollout is executed in torchrl.
 

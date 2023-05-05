@@ -181,7 +181,6 @@ class DQNLoss(LossModule):
         td_copy = tensordict.clone()
         if td_copy.device != tensordict.device:
             raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
-        assert hasattr(self.value_network, "_is_stateless")
         self.value_network(
             td_copy,
             params=self.value_network_params,
