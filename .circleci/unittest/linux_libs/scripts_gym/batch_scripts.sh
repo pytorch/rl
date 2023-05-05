@@ -141,6 +141,7 @@ do
   else
     pip install gymnasium[atari]
   fi
+  pip install mo-gymnasium
 
   $DIR/run_test.sh
 

@@ -481,6 +481,8 @@ the following function will return ``1`` when queried:
     dm_control.DMControlWrapper
     gym.GymEnv
     gym.GymWrapper
+    gym.MOGymEnv
+    gym.MOGymWrapper
     gym.set_gym_backend
     gym.gym_backend
     habitat.HabitatEnv
