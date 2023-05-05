@@ -680,4 +680,12 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # Conclusion
 # ----------
 #
+# We have seen how a replay buffer can be used in TorchRL, from its simplest
+# usage to more advanced ones where the data need to be transformed or stored
+# in particular ways.
+# You should now be able to:
+#
+# - Create a Replay Buffer, customize its storage, sampler and transforms;
+# - Choose the best storage type for your problem (list, memory or disk-based);
+# - Minimize the memory footprint of your buffer.
 #
