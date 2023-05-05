@@ -8,7 +8,7 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import RandomSampler
+from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -42,12 +42,12 @@ if __name__ == "__main__":
     log = True
 
     # Sampling
-    frames_per_batch = 10_000  # Frames sampled each sampling iteration
-    max_steps = 200
+    frames_per_batch = 60_000  # Frames sampled each sampling iteration
+    max_steps = 100
     vmas_envs = frames_per_batch // max_steps
-    n_iters = 1000  # Number of sampling/training iterations
+    n_iters = 500  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch * 50  # 500_000 frames
+    memory_size = frames_per_batch
 
     scenario_name = "balance"
     env_config = {
@@ -68,13 +68,13 @@ if __name__ == "__main__":
         "vmas_device": vmas_device,
         # Training
         "num_epochs": 45,  # optimization steps per batch of data collected
-        "minibatch_size": 10_000,  # size of minibatches used in each epoch
-        "lr": 5e-4,
+        "minibatch_size": 4096,  # size of minibatches used in each epoch
+        "lr": 5e-5,
         "max_grad_norm": 40.0,
         "training_device": training_device,
         # Evaluation
         "evaluation_interval": 20,
-        "evaluation_episodes": 5,
+        "evaluation_episodes": 200,
     }
 
     model_config = {
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         return_log_prob=False,
     )
     policy = AdditiveGaussianWrapper(
-        policy, annealing_num_steps=int(total_frames * (2 / 3))
+        policy, annealing_num_steps=int(total_frames * (1 / 2)), sigma_end=0.
     )
 
     # Critic
@@ -159,13 +159,15 @@ if __name__ == "__main__":
     collector = SyncDataCollector(
         env,
         policy,
+        device=vmas_device,
+        storing_device=training_device,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
     )
 
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(memory_size, device=training_device),
-        sampler=RandomSampler(),
+        sampler=SamplerWithoutReplacement(),
         batch_size=config["minibatch_size"],
         collate_fn=lambda x: x,  # Make it not clone when sampling
     )
@@ -209,23 +211,25 @@ if __name__ == "__main__":
         training_tds = []
         training_start = time.time()
         for _ in range(config["num_epochs"]):
-            subdata = replay_buffer.sample()
-            loss_vals = loss_module(subdata)
-            training_tds.append(loss_vals.detach())
+            for _ in range(frames_per_batch // config["minibatch_size"]):
+                subdata = replay_buffer.sample()
+                loss_vals = loss_module(subdata)
+                training_tds.append(loss_vals.detach())
 
-            loss_value = loss_vals["loss_actor"] + loss_vals["loss_value"]
+                loss_value = loss_vals["loss_actor"] + loss_vals["loss_value"]
 
-            loss_value.backward()
+                loss_value.backward()
 
-            total_norm = torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), config["max_grad_norm"]
-            )
-            training_tds[-1]["grad_norm"] = total_norm.mean()
+                total_norm = torch.nn.utils.clip_grad_norm_(
+                    loss_module.parameters(), config["max_grad_norm"]
+                )
+                training_tds[-1]["grad_norm"] = total_norm.mean()
 
-            optim.step()
-            optim.zero_grad()
+                optim.step()
+                optim.zero_grad()
 
         policy.step(frames=current_frames)
+        collector.update_policy_weights_()
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")

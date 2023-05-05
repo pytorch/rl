@@ -12,6 +12,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
@@ -38,10 +39,11 @@ if __name__ == "__main__":
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
-    max_steps = 200
+    max_steps = 100
     vmas_envs = frames_per_batch // max_steps
     n_iters = 500  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
+    memory_size = frames_per_batch
 
     scenario_name = "balance"
     env_config = {
@@ -62,6 +64,7 @@ if __name__ == "__main__":
         "vmas_envs": vmas_envs,
         "n_iters": n_iters,
         "total_frames": total_frames,
+        "memory_size": memory_size,
         "vmas_device": vmas_device,
         # Training
         "num_epochs": 45,  # optimization steps per batch of data collected
@@ -154,12 +157,14 @@ if __name__ == "__main__":
     collector = SyncDataCollector(
         env,
         policy,
+        device=vmas_device,
+        storing_device=training_device,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
     )
 
     replay_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(frames_per_batch, device=training_device),
+        storage=LazyTensorStorage(memory_size, device=training_device),
         sampler=SamplerWithoutReplacement(),
         batch_size=config["minibatch_size"],
         collate_fn=lambda x: x,  # Make it not clone when sampling
@@ -240,6 +245,8 @@ if __name__ == "__main__":
 
                 optim.step()
                 optim.zero_grad()
+
+        collector.update_policy_weights_()
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")

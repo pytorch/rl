@@ -11,7 +11,7 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import RandomSampler
+from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -40,12 +40,12 @@ if __name__ == "__main__":
     log = True
 
     # Sampling
-    frames_per_batch = 10_000  # Frames sampled each sampling iteration
-    max_steps = 200
+    frames_per_batch = 60_000  # Frames sampled each sampling iteration
+    max_steps = 100
     vmas_envs = frames_per_batch // max_steps
     n_iters = 500  # Number of sampling/training iterations
     total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch * 100  # 1_000_000 frames
+    memory_size = frames_per_batch
 
     scenario_name = "balance"
     env_config = {
@@ -54,9 +54,7 @@ if __name__ == "__main__":
 
     config = {
         # QMIX
-        "mixer_type": "qmix",
-        # DQN
-        "tau": 0.001,  # Decay factor for the target network
+        "mixer_type": "vdn",
         # RL
         "gamma": 0.9,
         "seed": seed,
@@ -69,14 +67,14 @@ if __name__ == "__main__":
         "memory_size": memory_size,
         "vmas_device": vmas_device,
         # Training
-        "num_epochs": 10,  # optimization steps per batch of data collected
-        "minibatch_size": 50_000,  # size of minibatches used in each epoch
-        "lr": 5e-4,
+        "num_epochs": 45,  # optimization steps per batch of data collected
+        "minibatch_size": 4096,  # size of minibatches used in each epoch
+        "lr": 5e-5,
         "max_grad_norm": 40.0,
         "training_device": training_device,
         # Evaluation
         "evaluation_interval": 20,
-        "evaluation_episodes": 5,
+        "evaluation_episodes": 200,
     }
 
     model_config = {
@@ -125,7 +123,7 @@ if __name__ == "__main__":
     )
 
     qnet = EGreedyWrapper(
-        qnet, eps_init=0.2, eps_end=0, annealing_num_steps=int(total_frames * (1/2))
+        qnet, eps_init=0.3, eps_end=0, annealing_num_steps=int(total_frames * (1/2))
     )
 
     if config["mixer_type"] == "qmix":
@@ -159,19 +157,20 @@ if __name__ == "__main__":
     collector = SyncDataCollector(
         env,
         qnet,
+        device=vmas_device,
+        storing_device=training_device,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
     )
 
     replay_buffer = ReplayBuffer(
         storage=LazyTensorStorage(memory_size, device=training_device),
-        sampler=RandomSampler(),
+        sampler=SamplerWithoutReplacement(),
         batch_size=config["minibatch_size"],
         collate_fn=lambda x: x,  # Make it not clone when sampling
     )
 
-    loss_module = QMixLoss(qnet, mixer, delay_value=True)
-    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
+    loss_module = QMixLoss(qnet, mixer)
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
@@ -213,25 +212,25 @@ if __name__ == "__main__":
         training_tds = []
         training_start = time.time()
         for _ in range(config["num_epochs"]):
-            subdata = replay_buffer.sample()
-            loss_vals = loss_module(subdata)
-            training_tds.append(loss_vals.detach())
+            for _ in range(frames_per_batch // config["minibatch_size"]):
+                subdata = replay_buffer.sample()
+                loss_vals = loss_module(subdata)
+                training_tds.append(loss_vals.detach())
 
-            loss_value = loss_vals["loss"]
+                loss_value = loss_vals["loss"]
 
-            loss_value.backward()
+                loss_value.backward()
 
-            total_norm = torch.nn.utils.clip_grad_norm_(
-                loss_module.parameters(), config["max_grad_norm"]
-            )
-            training_tds[-1]["grad_norm"] = total_norm.mean()
+                total_norm = torch.nn.utils.clip_grad_norm_(
+                    loss_module.parameters(), config["max_grad_norm"]
+                )
+                training_tds[-1]["grad_norm"] = total_norm.mean()
 
-            optim.step()
-            optim.zero_grad()
-
-            target_net_updater.step()
+                optim.step()
+                optim.zero_grad()
 
         qnet.step(frames=current_frames)  # Update exploration annealing
+        collector.update_policy_weights_()
 
         training_time = time.time() - training_start
         print(f"Training took: {training_time}")
