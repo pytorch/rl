@@ -464,6 +464,12 @@ class SyncDataCollector(DataCollectorBase):
             is_shared=False)
         >>> del collector
 
+    The collector delivers batches of data that are marked with a ``"time"``
+    dimension.
+
+    Examples:
+        >>> assert data.names[-1] == "time"
+
     """
 
     def __init__(
@@ -665,6 +671,7 @@ class SyncDataCollector(DataCollectorBase):
                 device=self.storing_device,
             ),
         )
+        self._tensordict_out.refine_names(..., "time")
 
         if split_trajs is None:
             split_trajs = False

@@ -14,6 +14,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.nn import dispatch
+from tensordict.nn.common import _seq_of_nested_key_check
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
@@ -148,6 +149,7 @@ class Transform(nn.Module):
         if out_keys_inv is None:
             out_keys_inv = copy(self.in_keys_inv)
         self.out_keys_inv = out_keys_inv
+        self._missing_tolerance = False
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
 
@@ -184,12 +186,15 @@ class Transform(nn.Module):
 
         """
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            is_tuple = isinstance(in_key, tuple)
-            if in_key in tensordict.keys(include_nested=is_tuple):
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
                     observation,
+                )
+            elif not self.missing_tolerance:
+                raise KeyError(
+                    f"{self}: '{in_key}' not found in tensordict {tensordict}"
                 )
         return tensordict
 
@@ -197,12 +202,14 @@ class Transform(nn.Module):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(isinstance(in_key, tuple)):
+            if in_key in tensordict.keys(include_nested=True):
                 observation = self._apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
                     observation,
                 )
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -234,12 +241,15 @@ class Transform(nn.Module):
         # # exposed to the user: we'd like that the input keys remain unchanged
         # # in the originating script if they're being transformed.
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys(include_nested=isinstance(in_key, tuple)):
+            if in_key in tensordict.keys(include_nested=True):
                 item = self._inv_apply_transform(tensordict.get(in_key))
                 tensordict.set(
                     out_key,
                     item,
                 )
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+
         return tensordict
 
     @dispatch(source="in_keys_inv", dest="out_keys_inv")
@@ -387,6 +397,13 @@ class Transform(nn.Module):
 
     def empty_cache(self):
         self.__dict__["_parent"] = None
+
+    def set_missing_tolerance(self, mode=False):
+        self._missing_tolerance = mode
+
+    @property
+    def missing_tolerance(self):
+        return self._missing_tolerance
 
 
 class TransformedEnv(EnvBase):
@@ -584,7 +601,11 @@ but got an object of type {type(transform)}."""
             tensordict = tensordict.clone(recurse=False)
         out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
         out_tensordict = self.transform.reset(out_tensordict)
+
+        mt_mode = self.transform.missing_tolerance
+        self.set_missing_tolerance(True)
         out_tensordict = self.transform._call(out_tensordict)
+        self.set_missing_tolerance(mt_mode)
         return out_tensordict
 
     def state_dict(self, *args, **kwargs) -> OrderedDict:
@@ -709,6 +730,10 @@ but got an object of type {type(transform)}."""
         # we may delete a TransformedEnv that contains an env contained by another
         # transformed env and that we don't want to close
         pass
+
+    def set_missing_tolerance(self, mode=False):
+        """Indicates if an KeyError should be raised whenever an in_key is missing from the input tensordict."""
+        self.transform.set_missing_tolerance(mode)
 
 
 class ObservationTransform(Transform):
@@ -876,6 +901,11 @@ class Compose(Transform):
         for t in self.transforms:
             transforms.append(t.clone())
         return Compose(*transforms)
+
+    def set_missing_tolerance(self, mode=False):
+        for t in self.transforms:
+            t.set_missing_tolerance(mode)
+        super().set_missing_tolerance(mode)
 
 
 class ToTensorImage(ObservationTransform):
@@ -1052,12 +1082,13 @@ class TargetReturn(Transform):
 
     def _call(self, tensordict: TensorDict) -> TensorDict:
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            is_tuple = isinstance(in_key, tuple)
-            if in_key in tensordict.keys(include_nested=is_tuple):
+            if in_key in tensordict.keys(include_nested=True):
                 target_return = self._apply_transform(
                     tensordict.get(in_key), tensordict.get(out_key)
                 )
                 tensordict.set(out_key, target_return)
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1421,7 +1452,7 @@ class UnsqueezeTransform(Transform):
         out_keys_inv: Optional[Sequence[str]] = None,
     ):
         if in_keys is None:
-            in_keys = IMAGE_KEYS  # default
+            in_keys = []  # default
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -1836,8 +1867,10 @@ class CatFrames(ObservationTransform):
     feature. Proposed in "Playing Atari with Deep Reinforcement Learning" (
     https://arxiv.org/pdf/1312.5602.pdf).
 
-    CatFrames is a stateful class and it can be reset to its native state by
-    calling the `reset()` method.
+    When used within a transformed environment,
+    :class:`CatFrames` is a stateful class, and it can be reset to its native state by
+    calling the :meth:`~.reset` method. This method accepts tensordicts with a
+    ``"_reset"`` entry that indicates which buffer to reset.
 
     Args:
         N (int): number of observation to concatenate.
@@ -1848,6 +1881,63 @@ class CatFrames(ObservationTransform):
             to be concatenated. Defaults to ["pixels"].
         out_keys (list of int, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
+        padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
+            Defaults to ``"same"``, ie. the first value is uesd for padding.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> env = TransformedEnv(GymEnv('Pendulum-v1'),
+        ...     Compose(
+        ...         UnsqueezeTransform(-1, in_keys=["observation"]),
+        ...         CatFrames(N=4, dim=-1, in_keys=["observation"]),
+        ...     )
+        ... )
+        >>> print(env.rollout(3))
+
+    The :class:`CatFrames` transform can also be used offline to reproduce the
+    effect of the online frame concatenation at a different scale (or for the
+    purpose of limiting the memory consumption). The followin example
+    gives the complete picture, together with the usage of a :class:`torchrl.data.ReplayBuffer`:
+
+    Examples:
+        >>> from torchrl.envs import UnsqueezeTransform, CatFrames
+        >>> from torchrl.collectors import SyncDataCollector, RandomPolicy
+        >>> # Create a transformed environment with CatFrames: notice the usage of UnsqueezeTransform to create an extra dimension
+        >>> env = TransformedEnv(
+        ...     GymEnv("CartPole-v1", from_pixels=True),
+        ...     Compose(
+        ...         ToTensorImage(in_keys=["pixels"], out_keys=["pixels_trsf"]),
+        ...         Resize(in_keys=["pixels_trsf"], w=64, h=64),
+        ...         GrayScale(in_keys=["pixels_trsf"]),
+        ...         UnsqueezeTransform(-4, in_keys=["pixels_trsf"]),
+        ...         CatFrames(dim=-4, N=4, in_keys=["pixels_trsf"]),
+        ...     )
+        ... )
+        >>> # we design a collector
+        >>> collector = SyncDataCollector(
+        ...     env,
+        ...     RandomPolicy(env.action_spec),
+        ...     frames_per_batch=10,
+        ...     total_frames=1000,
+        ... )
+        >>> for data in collector:
+        ...     print(data)
+        ...     break
+        >>> # now let's create a transform for the replay buffer. We don't need to unsqueeze the data here.
+        >>> # however, we need to point to both the pixel entry at the root and at the next levels:
+        >>> t = Compose(
+        ...         ToTensorImage(in_keys=["pixels", ("next", "pixels")], out_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+        ...         Resize(in_keys=["pixels_trsf", ("next", "pixels_trsf")], w=64, h=64),
+        ...         GrayScale(in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+        ...         CatFrames(dim=-4, N=4, in_keys=["pixels_trsf", ("next", "pixels_trsf")]),
+        ... )
+        >>> from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
+        >>> rb = TensorDictReplayBuffer(storage=LazyMemmapStorage(1000), transform=t, batch_size=16)
+        >>> data_exclude = data.exclude("pixels_trsf", ("next", "pixels_trsf"))
+        >>> rb.add(data_exclude)
+        >>> s = rb.sample(1) # the buffer has only one element
+        >>> # let's check that our sample is the same as the batch collected during inference
+        >>> assert (data.exclude("collector")==s.squeeze(0).exclude("index", "collector")).all()
 
     """
 
@@ -1856,6 +1946,7 @@ class CatFrames(ObservationTransform):
         "dim must be > 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
+    ACCEPTED_PADDING = {"same", "zeros"}
 
     def __init__(
         self,
@@ -1863,6 +1954,7 @@ class CatFrames(ObservationTransform):
         dim: int,
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
+        padding="same",
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -1871,6 +1963,9 @@ class CatFrames(ObservationTransform):
         if dim > 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
+        if padding not in self.ACCEPTED_PADDING:
+            raise ValueError(f"padding must be one of {self.ACCEPTED_PADDING}")
+        self.padding = padding
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
             setattr(
@@ -1939,9 +2034,15 @@ class CatFrames(ObservationTransform):
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
-                buffer[_reset] = buffer[_reset].copy_(
-                    data[_reset].repeat(shape).clone()
-                )
+                if self.padding == "same":
+                    buffer[_reset] = buffer[_reset].copy_(
+                        data[_reset].repeat(shape).clone()
+                    )
+                elif self.padding == "zeros":
+                    buffer[_reset] = 0
+                else:
+                    # make linter happy. An exception has already been raised
+                    raise NotImplementedError
             buffer.copy_(torch.roll(buffer, shifts=-d, dims=self.dim))
             # add new obs
             idx = self.dim
@@ -1970,14 +2071,76 @@ class CatFrames(ObservationTransform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError(
-            "CatFrames cannot be called independently, only its step and reset methods "
-            "are functional. The reason for this is that it is hard to consider using "
-            "CatFrames with non-sequential data, such as those collected by a replay buffer "
-            "or a dataset. If you need CatFrames to work on a batch of sequential data "
-            "(ie as LSTM would work over a whole sequence of data), file an issue on "
-            "TorchRL requesting that feature."
+        # it is assumed that the last dimension of the tensordict is the time dimension
+        if not tensordict.ndim or (
+            tensordict.names[-1] is not None and tensordict.names[-1] != "time"
+        ):
+            raise ValueError(
+                "The last dimension of the tensordict must be marked as 'time'."
+            )
+        # first sort the in_keys with strings and non-strings
+        in_keys = list(
+            zip(
+                (in_key, out_key)
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+                if isinstance(in_key, str) or len(in_key) == 1
+            )
         )
+        in_keys += list(
+            zip(
+                (in_key, out_key)
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+                if not isinstance(in_key, str) and not len(in_key) == 1
+            )
+        )
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            # check if we have an obs in "next" that has already been processed.
+            # If so, we must add an offset
+            data = tensordict.get(in_key)
+            if isinstance(in_key, tuple) and in_key[0] == "next":
+
+                # let's get the out_key we have already processed
+                prev_out_key = dict(zip(self.in_keys, self.out_keys))[in_key[1]]
+                prev_val = tensordict.get(prev_out_key)
+                # the first item is located along `dim+1` at the last index of the
+                # first time index
+                idx = (
+                    [slice(None)] * (tensordict.ndim - 1)
+                    + [0]
+                    + [..., -1]
+                    + [slice(None)] * (abs(self.dim) - 1)
+                )
+                first_val = prev_val[tuple(idx)].unsqueeze(tensordict.ndim - 1)
+                data0 = [first_val] * (self.N - 1)
+                if self.padding == "zeros":
+                    data0 = [torch.zeros_like(elt) for elt in data0[:-1]] + data0[-1:]
+                elif self.padding == "same":
+                    pass
+                else:
+                    # make linter happy. An exception has already been raised
+                    raise NotImplementedError
+            elif self.padding == "same":
+                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
+                data0 = [data[tuple(idx)].unsqueeze(tensordict.ndim - 1)] * (self.N - 1)
+            elif self.padding == "zeros":
+                idx = [slice(None)] * (tensordict.ndim - 1) + [0]
+                data0 = [
+                    torch.zeros_like(data[tuple(idx)]).unsqueeze(tensordict.ndim - 1)
+                ] * (self.N - 1)
+            else:
+                # make linter happy. An exception has already been raised
+                raise NotImplementedError
+
+            data = torch.cat(data0 + [data], tensordict.ndim - 1)
+
+            data = data.unfold(tensordict.ndim - 1, self.N, 1)
+            data = data.permute(
+                *range(0, data.ndim + self.dim),
+                -1,
+                *range(data.ndim + self.dim, data.ndim - 1),
+            )
+            tensordict.set(out_key, data)
+        return tensordict
 
     def __repr__(self) -> str:
         return (
@@ -3101,8 +3264,8 @@ class RewardSum(Transform):
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
-            in_keys = [("next", "reward")]
-        if out_keys is None and in_keys == [("next", "reward")]:
+            in_keys = ["reward"]
+        if out_keys is None and in_keys == ["reward"]:
             out_keys = ["episode_reward"]
         elif out_keys is None:
             raise RuntimeError(
@@ -3129,7 +3292,7 @@ class RewardSum(Transform):
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
-                elif in_key == ("next", "reward"):
+                elif in_key in ("reward", ("reward",)):
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict[out_key] = self.parent.reward_spec.zero()
@@ -3144,18 +3307,21 @@ class RewardSum(Transform):
                             f"observation_spec with keys "
                             f"{list(self.parent.observation_spec.keys(True))}. "
                         ) from err
-
         return tensordict
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
+        next_tensordict = tensordict.get("next")
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(isinstance(in_key, tuple)):
-                reward = tensordict.get(in_key)
-                if out_key not in tensordict.keys():
-                    tensordict.set(("next", out_key), torch.zeros_like(reward))
-                tensordict["next", out_key] = tensordict[out_key] + reward
+            if in_key in next_tensordict.keys(include_nested=True):
+                reward = next_tensordict.get(in_key)
+                if out_key not in tensordict.keys(True):
+                    tensordict.set(out_key, torch.zeros_like(reward))
+                next_tensordict.set(out_key, tensordict.get(out_key) + reward)
+            elif not self.missing_tolerance:
+                raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
+        tensordict.set("next", next_tensordict)
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -3180,7 +3346,7 @@ class RewardSum(Transform):
 
         else:
             # If reward_spec is not a CompositeSpec, the only in_key should be ´reward´
-            if set(self.in_keys) != {("next", "reward")}:
+            if set(self.in_keys) != {"reward"}:
                 raise KeyError(
                     "reward_spec is not a CompositeSpec class, in_keys should only include ´reward´"
                 )
@@ -3334,8 +3500,12 @@ class ExcludeTransform(Transform):
 
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
-        if not all(isinstance(item, str) for item in excluded_keys):
-            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        try:
+            _seq_of_nested_key_check(excluded_keys)
+        except ValueError:
+            raise ValueError(
+                "excluded keys must be a list or tuple of strings or tuples of strings."
+            )
         self.excluded_keys = excluded_keys
         if "reward" in excluded_keys:
             raise RuntimeError("'reward' cannot be excluded from the keys.")
@@ -3376,8 +3546,12 @@ class SelectTransform(Transform):
 
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
-        if not all(isinstance(item, str) for item in selected_keys):
-            raise ValueError("excluded_keys must be a list or tuple of strings.")
+        try:
+            _seq_of_nested_key_check(selected_keys)
+        except ValueError:
+            raise ValueError(
+                "selected keys must be a list or tuple of strings or tuples of strings."
+            )
         self.selected_keys = selected_keys
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:

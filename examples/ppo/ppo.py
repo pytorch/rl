@@ -72,10 +72,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     r0 = None
     l0 = None
+    frame_skip = cfg.env.frame_skip
+    mini_batch_size = cfg.loss.mini_batch_size
+    ppo_epochs = cfg.loss.ppo_epochs
     for data in collector:
 
         frames_in_batch = data.numel()
-        collected_frames += frames_in_batch * cfg.env.frame_skip
+        collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
         data_view = data.reshape(-1)
 
@@ -93,8 +96,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "reward_training", episode_rewards.mean().item(), collected_frames
             )
 
-        for _ in range(cfg.loss.ppo_epochs):
-            for _ in range(frames_in_batch // cfg.loss.mini_batch_size):
+        for _ in range(ppo_epochs):
+            for _ in range(frames_in_batch // mini_batch_size):
 
                 # Get a data batch
                 batch = data_buffer.sample().to(model_device)

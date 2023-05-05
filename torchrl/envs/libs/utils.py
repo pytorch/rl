@@ -64,7 +64,10 @@ class GymPixelObservationWrapper(ObservationWrapper):
             render_kwargs.setdefault(key, {})
 
             render_mode = render_kwargs[key].pop("mode", "rgb_array")
-            assert render_mode == "rgb_array", render_mode
+            if render_mode != "rgb_array":
+                raise ValueError(
+                    f"Expected render_mode to be 'rgb_array', git {render_mode}"
+                )
             render_kwargs[key]["mode"] = "rgb_array"
 
         wrapped_observation_space = env.observation_space

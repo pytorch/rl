@@ -10,17 +10,32 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+
+from tensordict import is_tensorclass
+from tensordict.tensordict import (
+    is_tensor_collection,
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import expand_as_right
 
+from torchrl._utils import accept_remote_rref_udf_invocation
+
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    Sampler,
+)
+from torchrl.data.replay_buffers.storages import (
+    _get_default_collate,
+    ListStorage,
+    Storage,
+)
+from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
+from torchrl.data.replay_buffers.writers import RoundRobinWriter, Writer
+
 from torchrl.data.utils import DEVICE_TYPING
-
-from ..._utils import accept_remote_rref_udf_invocation
-
-from .samplers import PrioritizedSampler, RandomSampler, Sampler
-from .storages import _get_default_collate, ListStorage, Storage
-from .utils import _to_numpy, _to_torch, INT_CLASSES
-from .writers import RoundRobinWriter, Writer
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -82,9 +97,7 @@ def pin_memory_output(fun) -> Callable:
 class ReplayBuffer:
     """A generic, composable replay buffer class.
 
-    All arguments are keyword-only arguments.
-
-    Args:
+    Keyword Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
@@ -131,9 +144,9 @@ class ReplayBuffer:
         ...     storage=ListStorage(max_size=1000),
         ...     batch_size=5,
         ... )
-        >>> # populate the replay buffer
+        >>> # populate the replay buffer and get the item indices
         >>> data = range(10)
-        >>> rb.extend(data)
+        >>> indices = rb.extend(data)
         >>> # sample will return as many elements as specified in the constructor
         >>> sample = rb.sample()
         >>> print(sample)
@@ -151,6 +164,17 @@ class ReplayBuffer:
         1 tensor([9, 8, 6, 6, 8])
         2 tensor([4, 3, 6, 9, 1])
         3 tensor([4, 4, 1, 9, 9])
+
+    Replay buffers accept *any* kind of data. Not all storage types
+    will work, as some expect numerical data only, but the default
+    :class:`torchrl.data.ListStorage` will:
+
+    Examples:
+        >>> torch.manual_seed(0)
+        >>> buffer = ReplayBuffer(storage=ListStorage(100), collate_fn=lambda x: x)
+        >>> indices = buffer.extend(["a", 1, None])
+        >>> buffer.sample(3)
+        [None, 'a', None]
     """
 
     def __init__(
@@ -174,7 +198,9 @@ class ReplayBuffer:
         self._collate_fn = (
             collate_fn
             if collate_fn is not None
-            else _get_default_collate(self._storage)
+            else _get_default_collate(
+                self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer)
+            )
         )
         self._pin_memory = pin_memory
 
@@ -237,7 +263,7 @@ class ReplayBuffer:
 
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
             data = self._transform(data)
@@ -282,9 +308,9 @@ class ReplayBuffer:
                 buffer.
 
         Returns:
-            Indices of the data aded to the replay buffer.
+            Indices of the data added to the replay buffer.
         """
-        if self._transform is not None and isinstance(data, TensorDictBase):
+        if self._transform is not None and is_tensor_collection(data):
             data = self._transform.inv(data)
         elif self._transform is not None and len(self._transform):
             # Accepts transforms that act on "data" key
@@ -312,10 +338,15 @@ class ReplayBuffer:
             data = self._collate_fn(data)
         if self._transform is not None and len(self._transform):
             is_td = True
-            if not isinstance(data, TensorDictBase):
+            if not is_tensor_collection(data):
                 data = TensorDict({"data": data}, [])
                 is_td = False
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             data = self._transform(data)
+            if is_locked:
+                data.lock_()
             if not is_td:
                 data = data["data"]
 
@@ -530,9 +561,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 class TensorDictReplayBuffer(ReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.ReplayBuffer` class.
 
-    All arguments are keyword-only arguments.
-
-    Args:
+    Keyword Args:
         storage (Storage, optional): the storage to be used. If none is provided
             a default :class:`~torchrl.data.replay_buffers.ListStorage` with
             ``max_size`` of ``1_000`` will be created.
@@ -635,15 +664,15 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
 
     def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
+
         super().__init__(**kw)
         self.priority_key = priority_key
 
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
+        if "_data" in tensordict.keys():
+            tensordict = tensordict.get("_data")
         if self.priority_key not in tensordict.keys():
             return self._sampler.default_priority
-        if tensordict.batch_dims:
-            tensordict = tensordict.clone(recurse=False)
-            tensordict.batch_size = []
         try:
             priority = tensordict.get(self.priority_key)
             if priority.numel() > 1:
@@ -659,16 +688,32 @@ class TensorDictReplayBuffer(ReplayBuffer):
         return priority
 
     def add(self, data: TensorDictBase) -> int:
-        index = super().add(data)
-        data.set("index", index)
+        if is_tensor_collection(data):
+            data_add = TensorDict(
+                {
+                    "_data": data,
+                },
+                batch_size=[],
+            )
+            if data.batch_size:
+                data_add["_batch_size"] = torch.tensor(data.batch_size)
 
-        priority = self._get_priority(data)
-        if priority:
-            self.update_priority(index, priority)
+        else:
+            data_add = data
+        index = super().add(data_add)
+        if is_tensor_collection(data_add):
+            data_add.set("index", index)
+
+        # priority = self._get_priority(data)
+        # if priority:
+        self.update_tensordict_priority(data_add)
         return index
 
     def extend(self, tensordicts: Union[List, TensorDictBase]) -> torch.Tensor:
-        if isinstance(tensordicts, TensorDictBase):
+        if is_tensor_collection(tensordicts):
+            tensordicts = TensorDict(
+                {"_data": tensordicts}, batch_size=tensordicts.batch_size[:1]
+            )
             if tensordicts.batch_dims > 1:
                 # we want the tensordict to have one dimension only. The batch size
                 # of the sampled tensordicts can be changed thereafter
@@ -684,7 +729,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 shape = torch.tensor(tensordicts.batch_size[1:]).expand(
                     tensordicts.batch_size[0], tensordicts.batch_dims - 1
                 )
-                tensordicts.batch_size = tensordicts.batch_size[:1]
                 tensordicts.set("_batch_size", shape)
             tensordicts.set(
                 "index",
@@ -693,7 +737,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 ),
             )
 
-        if not isinstance(tensordicts, TensorDictBase):
+        if not is_tensor_collection(tensordicts):
             stacked_td = torch.stack(tensordicts, 0)
         else:
             stacked_td = tensordicts
@@ -710,11 +754,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def update_tensordict_priority(self, data: TensorDictBase) -> None:
         if not isinstance(self._sampler, PrioritizedSampler):
             return
-        priority = torch.tensor(
-            [self._get_priority(td) for td in data],
-            dtype=torch.float,
-            device=data.device,
-        )
+        if data.ndim:
+            priority = torch.tensor(
+                [self._get_priority(td) for td in data],
+                dtype=torch.float,
+                device=data.device,
+            )
+        else:
+            priority = self._get_priority(data)
         # if the index shape does not match the priority shape, we have expanded it.
         # we just take the first value
         index = data.get("index")
@@ -753,9 +800,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
 
         data, info = super().sample(batch_size, return_info=True)
-        if include_info in (True, None):
+        if not is_tensorclass(data) and include_info in (True, None):
+            is_locked = data.is_locked
+            if is_locked:
+                data.unlock_()
             for k, v in info.items():
                 data.set(k, expand_as_right(_to_torch(v, data.device), data))
+            if is_locked:
+                data.lock_()
         if return_info:
             return data, info
         return data
@@ -764,14 +816,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
 class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
     """TensorDict-specific wrapper around the :class:`~torchrl.data.PrioritizedReplayBuffer` class.
 
-    All arguments are keyword-only arguments.
-
     This class returns tensordicts with a new key ``"index"`` that represents
     the index of each element in the replay buffer. It also provides the
     :meth:`~.update_tensordict_priority` method that only requires for the
     tensordict to be passed to it with its new priority value.
 
-    Args:
+    Keyword Args:
         alpha (float): exponent α determines how much prioritization is used,
             with α = 0 corresponding to the uniform case.
         beta (float): importance sampling negative exponent.
