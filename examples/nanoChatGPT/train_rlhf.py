@@ -7,7 +7,8 @@ from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from shared import setup
-from tensordict.nn import set_skip_existing
+from tensordict.nn import set_skip_existing, TensorDictModuleBase
+from torch import vmap
 
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
@@ -27,7 +28,27 @@ def main():
 
     # ######## INIT TRAINING FUNCTIONS ########
     # Advantage
-    adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True)
+    class VmapCritic(TensorDictModuleBase):
+        def __init__(self, critic):
+            super().__init__()
+            self.in_keys = critic.in_keys
+            self.out_keys = critic.out_keys
+            self.module = critic
+            
+        def forward(self, tensordict):
+            ndim = tensordict.ndim
+            training = self.module.training
+            self.module.eval()
+            td = vmap(self.module, (ndim-1,))(tensordict)
+            self.module.train(training)
+            # vmap sends this dim to the beginning so we need to send it back where it belongs
+            td = td.permute(*range(1, ndim), 0)
+            return tensordict.update(td)
+    
+    vmap_critic = VmapCritic(critic)
+
+    adv_fn = GAE(value_network=vmap_critic, gamma=0.99, lmbda=0.95, average_gae=True)
+    
     # FIXME: why not using the scheduler?
     # Loss
     loss_fn = ClipPPOLoss(actor, critic, gamma=0.99)
@@ -43,21 +64,22 @@ def main():
 
     # ######## TRAINING LOOP ########
 
-    def get_action(td):
-        critic(td)
-        actor(td)
-        td["sample_log_prob"] = td["sample_log_prob"].detach()
-        return td
+    # def get_action(td):
+    #     critic(td)
+    #     actor(td)
+    #     td["sample_log_prob"] = td["sample_log_prob"].detach()
+    #     return td
 
     for i in range(config["max_iters"]):
-        td = env.rollout(
-            config["episode_length"], policy=get_action, return_contiguous=False
-        )
-
-        # TODO: add replay buffer?
-        with set_skip_existing(True):
+        with torch.no_grad():
+            td = env.rollout(
+                config["episode_length"], policy=actor, return_contiguous=True
+            )
             adv_fn(td)
-            loss_vals = loss_fn(td)
+        
+        # TODO: add replay buffer?
+        # with set_skip_existing(True):
+        loss_vals = loss_fn(td.view(-1))
 
         loss_val = sum(
             value for key, value in loss_vals.items() if key.startswith("loss")
