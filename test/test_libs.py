@@ -217,6 +217,7 @@ class TestGym:
             import gym_super_mario_bros as mario_gym
         except ImportError as err:
             import gym
+
             # with 0.26 we must have installed gym_super_mario_bros
             # Since we capture the skips as errors, we raise a skip in this case
             # Otherwise, we just return
