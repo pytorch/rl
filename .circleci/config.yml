@@ -1055,19 +1055,19 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-          keys:
-            - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#      - restore_cache:
+#          keys:
+#            - env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
       - run:
           name: Setup
           command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
-      - save_cache:
-          key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
+#      - save_cache:
+#          key: env-v2-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#
+#          paths:
+#            - conda
+#            - env
       - run:
           name: Install torchrl
           command: .circleci/unittest/windows_optdepts/scripts/install.sh
@@ -1094,19 +1094,19 @@ jobs:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-          keys:
-            - env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#      - restore_cache:
+#          keys:
+#            - env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
 
       - run:
           name: Setup
           command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
-      - save_cache:
-          key: env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
+#      - save_cache:
+#          key: env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+#
+#          paths:
+#            - conda
+#            - env
       - run:
           name: Install CUDA
           command: packaging/windows/internal/cuda_install.bat
@@ -1200,9 +1200,9 @@ workflows:
 
       - unittest_windows_optdepts_cpu:
           cu_version: cpu
-          name: unittest_windows_optdepts_cpu_py3.8
-          python_version: '3.8'
+          name: unittest_windows_optdepts_cpu_py3.9
+          python_version: '3.9'
       - unittest_windows_optdepts_gpu:
           cu_version: cu116
-          name: unittest_windows_optdepts_gpu_py3.8
-          python_version: '3.8'
+          name: unittest_windows_optdepts_gpu_py3.9
+          python_version: '3.9'
