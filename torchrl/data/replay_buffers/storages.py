@@ -276,7 +276,7 @@ class LazyTensorStorage(Storage):
         out = self._storage[index]
         if is_tensor_collection(out):
             out = _reset_batch_size(out)
-        return out
+        return out.unlock_()
 
     def __len__(self):
         return self._len
