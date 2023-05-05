@@ -8,9 +8,7 @@ The helper functions are coded in the utils.py associated with this script.
 """
 
 import hydra
-import torch
 import tqdm
-from torchrl.envs.utils import set_exploration_mode
 
 from utils import (
     # get_stats,
@@ -20,7 +18,7 @@ from utils import (
     make_loss,
     make_offline_replay_buffer,
     # make_parallel_env,
-    make_test_env,
+    # make_test_env,
 )
 
 
@@ -29,20 +27,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 
     # state_dict = get_stats(cfg.env)
-    evaluation_env = make_test_env(cfg.env)
+    # evaluation_env = make_test_env(cfg.env)
     # logger = make_logger(cfg.logger)
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
 
     actor = make_decision_transformer_model(cfg)
     policy = actor.to(model_device)
 
-    loss, target_net_updater = make_loss(cfg.loss, policy)
+    loss = make_loss(cfg.loss, policy)
     optim = make_dt_optimizer(cfg.optim, policy)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
-    r0 = None
-    l0 = None
+    # r0 = None
+    # l0 = None
 
     for i in range(cfg.optim.gradient_steps):
         pbar.update(i)
@@ -58,19 +56,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
         optim.zero_grad()
         loss_val.backward()
         optim.step()
-        target_net_updater.step()
 
-        # evaluation
-        if i % cfg.env.evaluation_interval == 0:
-            with set_exploration_mode("random"), torch.no_grad():
-                eval_td = evaluation_env.rollout(
-                    max_steps=1000, policy=policy, auto_cast_to_device=True
-                )
+        # # evaluation
+        # if i % cfg.env.evaluation_interval == 0:
+        #     with set_exploration_mode("random"), torch.no_grad():
+        #         eval_td = evaluation_env.rollout(
+        #             max_steps=1000, policy=policy, auto_cast_to_device=True
+        #         )
 
-        if r0 is None:
-            r0 = eval_td["next", "reward"].sum(1).mean().item()
-        if l0 is None:
-            l0 = loss_val.item()
+        # if r0 is None:
+        #     r0 = eval_td["next", "reward"].sum(1).mean().item()
+        # if l0 is None:
+        #     l0 = loss_val.item()
 
         # for key, value in loss_vals.items():
         #     logger.log_scalar(key, value.item(), i)

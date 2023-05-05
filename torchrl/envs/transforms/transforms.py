@@ -1103,10 +1103,20 @@ class TargetReturn(Transform):
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
         if self.mode == "reduce":
-            target_return = target_return[:, -1] - reward
+            if reward.ndim == 1 and target_return.ndim == 2:
+                # if target is stacked
+                target_return = target_return[-1] - reward
+            else:
+                # reward.ndim == 2 and target_return.ndim == 2:
+                target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
-            return target_return[:, -1]
+            if reward.ndim == 1 and target_return.ndim == 2:
+                # if target is stacked
+                target_return = target_return[-1] - reward
+            else:
+                # reward.ndim == target_return.ndim
+                target_return = target_return - reward
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
 

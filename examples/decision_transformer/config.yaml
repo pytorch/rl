@@ -1,6 +1,6 @@
 # Task and env
 env:
-  env_name: Pendulum-v1
+  env_name: Hopper-v2
   env_task: ""
   env_library: gym
   record_video: 0
@@ -36,6 +36,7 @@ replay_buffer:
   dataset: hopper-medium-v2
   batch_size: 256
   prb: 0
+  stacked_frames: 20
   buffer_prefetch: 64
   capacity: 1_000_000
 
@@ -48,6 +49,7 @@ optim:
   lr_scheduler: ""
   optim_steps_per_batch: 1000
   policy_update_delay: 2
+  gradient_steps: 1000
 
 # Policy and model
 model:
@@ -57,6 +59,6 @@ model:
 
 # loss
 loss: 
-  loss_function: smooth_l1
-  gamma: 0.99
-  tau: 0.05
+  alpha_init: 1.0
+  min_alpha: 0.1
+  max_alpha: 10.0

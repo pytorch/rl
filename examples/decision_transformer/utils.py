@@ -16,7 +16,6 @@ from torchrl.envs import (
     ObservationNorm,
     ParallelEnv,
     Reward2GoTransform,
-    StepCounter,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
@@ -29,16 +28,6 @@ from torchrl.objectives import OnlineDTLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
 
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 # ====================================================================
 # Environment utils
@@ -74,11 +63,6 @@ def make_transformed_env(base_env, env_cfg):
 def make_transformed_env_states(base_env, env_cfg):
     transformed_env = TransformedEnv(base_env)
 
-    transformed_env.append_transform(StepCounter())
-    # Only needed if ordering True -> Default is False
-    # transformed_env.append_transform(
-    #     RenameTransform(["step_count"], ["timesteps"], create_copy=True)
-    # )
     transformed_env.append_transform(
         TargetReturn(
             200 * 0.01, out_keys=["return_to_go"]
@@ -102,11 +86,10 @@ def make_transformed_env_states(base_env, env_cfg):
     transformed_env.append_transform(
         CatFrames(in_keys=["return_to_go"], N=env_cfg.stacked_frames, dim=-2)
     )
-    # Only needed if ordering True -> Default is False
-    # transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["timesteps"]))
-    # transformed_env.append_transform(
-    #     CatFrames(in_keys=["timesteps"], N=env_cfg.stacked_frames, dim=-2)
-    # )
+
+    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["return_to_go"], allow_positive_dim=True))
+    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["observation"], allow_positive_dim=True))
+    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["action"], allow_positive_dim=True))
 
     return transformed_env
 
@@ -179,12 +162,17 @@ def make_replay_buffer(rb_cfg):
 
 def make_offline_replay_buffer(rb_cfg):
     r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    cat_r2g = CatFrames(in_keys=["return_to_go"], N=rb_cfg.stacked_frames, dim=-2)
+    cat_obs = CatFrames(in_keys=["observation"], N=rb_cfg.stacked_frames, dim=-2)
+    cat_actions = CatFrames(in_keys=["action"], N=rb_cfg.stacked_frames, dim=-2)
+    exclude_next_obs = ExcludeTransform("next_observations")
+    transforms = Compose(r2g, cat_r2g, cat_obs, cat_actions, exclude_next_obs)
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
-        transform=r2g,
+        transform=transforms,
     )
     # data.append_transform(
     #     Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
@@ -213,11 +201,11 @@ def make_decision_transformer_model(cfg):
     env_cfg = cfg.env
     # model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    # we must initialize the observation norm transform
-    init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
 
     action_spec = proof_environment.action_spec
-
+    for key, value in proof_environment.observation_spec.items():
+        if key == "observation":
+            state_dim = value.shape[-1]
     in_keys = [
         "observation",
         "action",
@@ -225,7 +213,7 @@ def make_decision_transformer_model(cfg):
         # "timesteps",
     ]  # return_to_go, timesteps
 
-    actor_net = DTActor(action_dim=1)
+    actor_net = DTActor(state_dim=state_dim, action_dim=action_spec.shape[-1])
 
     dist_class = TanhNormal
     dist_kwargs = {
@@ -245,13 +233,14 @@ def make_decision_transformer_model(cfg):
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
         default_interaction_mode="random",
-        cache_dist=True,
-        return_log_prob=False,
+        cache_dist=False,
+        return_log_prob=True,
     )
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_mode("random"):
-        td = proof_environment.rollout(max_steps=1000)
+        td = proof_environment.rollout(max_steps=100)
+        td["action"] = td["next", "action"]
         print(td)
         actor(td)
 
@@ -266,8 +255,9 @@ def make_decision_transformer_model(cfg):
 def make_loss(loss_cfg, actor_network):
     loss = OnlineDTLoss(
         actor_network,
-        gamma=loss_cfg.gamma,
-        loss_function=loss_cfg.loss_function,
+        loss_cfg.alpha_init,
+        loss_cfg.min_alpha,
+        loss_cfg.max_alpha,
     )
     return loss
 

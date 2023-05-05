@@ -1167,6 +1167,7 @@ class DTActor(nn.Module):
 
     def __init__(
         self,
+        state_dim: int,
         action_dim: int,
         mlp_net_kwargs: Optional[dict] = None,
         device: Optional[DEVICE_TYPING] = None,
@@ -1180,7 +1181,7 @@ class DTActor(nn.Module):
             "bias_last_layer": True,
         }
         self.transformer = DecisionTransformer(
-            state_dim=3,
+            state_dim=state_dim,
             action_dim=action_dim,
             hidden_size=512,
             max_ep_len=1000,
@@ -1199,12 +1200,13 @@ class DTActor(nn.Module):
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
-        timesteps: torch.Tensor,
-        mask_context: bool = True,
     ) -> torch.Tensor:
-        hidden_state = self.transformer(
-            observation, action, return_to_go, timesteps, mask_context
-        )
+
+        if observation.ndim == 2:
+            observation = observation.unsqueeze(0).float()
+            action = action.unsqueeze(0)
+            return_to_go = return_to_go.unsqueeze(0)
+        hidden_state = self.transformer(observation, action, return_to_go)  # timesteps
         out = self.mlp(hidden_state)[:, -1]
         mu, log_std = out.chunk(2, -1)
         log_std = torch.tanh(log_std)

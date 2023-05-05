@@ -6,6 +6,7 @@
 from .a2c import A2CLoss
 from .common import LossModule
 from .ddpg import DDPGLoss
+from .decision_transformer import OnlineDTLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from .iql import IQLLoss

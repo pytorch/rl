@@ -9,7 +9,6 @@ import numpy as np
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-
 from torchrl.modules import ProbabilisticActor
 
 from .common import LossModule
@@ -102,33 +101,20 @@ class OnlineDTLoss(LossModule):
             return (
                 loss,
                 -log_likelihood,
-                entropy,
+                entrop y,
             )
         dist.log_prob(x).sum(axis=2)
         """
-        shape = None
-        if tensordict.ndimension() > 1:
-            shape = tensordict.shape
-            tensordict_reshape = tensordict.reshape(-1)
-        else:
-            tensordict_reshape = tensordict
-
-        # device = self.device
-        # td_device = tensordict_reshape.to(device)
-
         out_td = self.actor_network(tensordict)
 
-        target_actions = tensordict["action"]
+        target_actions = tensordict["target_actions"]
 
-        # log_prob = out_td["log_prob"]
-        action_dist = out_td["distribution"]
-        loss_log_likelihood = action_dist.log_prob(target_actions).sum(axis=2)
-        entropy = action_dist.entropy().mean()
+        loss_log_likelihood = out_td["action_log_prob"](target_actions).sum(axis=2)
+        entropy = 0  # action_dist.entropy().mean()
         loss = -(loss_log_likelihood + self.target_entropy.detach() * entropy)
 
         loss_alpha = self.log_alpha.exp() * (entropy - self.target_entropy).detach()
-        if shape:
-            tensordict.update(tensordict_reshape.view(shape))
+
         out = {
             "loss": loss.mean(),
             "loss_log_likelihood": loss_log_likelihood.mean(),

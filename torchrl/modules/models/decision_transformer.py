@@ -44,29 +44,26 @@ class DecisionTransformer(nn.Module):
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
-        timesteps: torch.Tensor,
-        mask_context: bool = True,
     ):
         batch_size, seq_length = observation.shape[0], observation.shape[1]
 
-        if mask_context:
-            (
-                observation,
-                action,
-                return_to_go,
-                timesteps,
-                seq_length,
-            ) = self.mask_context(observation, action, return_to_go, timesteps)
+        # if mask_context:
+        #     (   observation,
+        #         action,
+        #         return_to_go,
+        #         # timesteps,
+        #         seq_length,
+        #     ) = self.mask_context(observation, action, return_to_go)# timesteps
 
         # embed each modality with a different head
         state_embeddings = self.embed_state(observation)
         action_embeddings = self.embed_action(action)
         returns_embeddings = self.embed_return(return_to_go)
 
-        if self.ordering:
-            order_embeddings = self.embed_ordering(timesteps)
-        else:
-            order_embeddings = 0.0
+        # if self.ordering:
+        #     order_embeddings = self.embed_ordering(timesteps)
+        # else:
+        order_embeddings = 0.0
 
         state_embeddings = state_embeddings + order_embeddings
         action_embeddings = action_embeddings + order_embeddings
@@ -100,7 +97,7 @@ class DecisionTransformer(nn.Module):
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
-        timesteps: torch.Tensor,
+        # timesteps: torch.Tensor,
     ):
         """Mask the context of the input sequences."""
         observation[:, : -self.inference_context, :] = 0
@@ -109,5 +106,5 @@ class DecisionTransformer(nn.Module):
             [action[:, 1:], torch.zeros(action.shape[0], 1, self.action_dim)], dim=-2
         )
         return_to_go[:, : -self.inference_context, :] = 0
-        timesteps[:, : -self.inference_context] = 0
-        return observation, action, return_to_go, timesteps, self.train_context
+        # timesteps[:, : -self.inference_context] = 0
+        return observation, action, return_to_go, self.train_context  # timesteps
