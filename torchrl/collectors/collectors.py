@@ -464,6 +464,12 @@ class SyncDataCollector(DataCollectorBase):
             is_shared=False)
         >>> del collector
 
+    The collector delivers batches of data that are marked with a ``"time"``
+    dimension.
+
+    Examples:
+        >>> assert data.names[-1] == "time"
+
     """
 
     def __init__(
