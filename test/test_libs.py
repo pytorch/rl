@@ -102,8 +102,8 @@ RTOL = 1e-1
 ATOL = 1e-1
 
 
+@pytest.mark.skipif(not _has_gym, reason="no gym library found")
 class TestGym:
-    @pytest.mark.skipif(not _has_gym, reason="no gym library found")
     @pytest.mark.parametrize(
         "env_name",
         [
@@ -179,7 +179,6 @@ class TestGym:
         assert final_seed0 == final_seed2
         assert_allclose_td(tdrollout[0], rollout2, rtol=RTOL, atol=ATOL)
 
-    @pytest.mark.skipif(not _has_gym, reason="no gym library found")
     @pytest.mark.parametrize(
         "env_name",
         [
@@ -255,6 +254,37 @@ class TestGym:
         check_env_specs(env)
         env = SerialEnv(2, make_env)
         check_env_specs(env)
+
+    def test_info_reader(self):
+        try:
+            import gym_super_mario_bros as mario_gym
+        except ImportError as err:
+            try:
+                import gym
+
+                # with 0.26 we must have installed gym_super_mario_bros
+                # Since we capture the skips as errors, we raise a skip in this case
+                # Otherwise, we just return
+                if (
+                    version.parse("0.26.0")
+                    <= version.parse(gym.__version__)
+                    < version.parse("0.27.0")
+                ):
+                    raise pytest.skip(f"no super mario bros: error=\n{err}")
+            except ImportError:
+                pass
+            return
+
+        env = mario_gym.make("SuperMarioBros-v0", apply_api_compatibility=True)
+        env = GymWrapper(env)
+
+        def info_reader(info, tensordict):
+            assert isinstance(info, dict)  # failed before bugfix
+
+        env.info_dict_reader = info_reader
+        env.reset()
+        env.rand_step()
+        env.rollout(3)
 
 
 @implement_for("gym", None, "0.26")
