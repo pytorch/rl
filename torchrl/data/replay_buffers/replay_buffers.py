@@ -673,9 +673,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
             tensordict = tensordict.get("_data")
         if self.priority_key not in tensordict.keys():
             return self._sampler.default_priority
-        # if tensordict.batch_dims:
-        #     tensordict = tensordict.clone(recurse=False)
-        #     tensordict.batch_size = []
         try:
             priority = tensordict.get(self.priority_key)
             if priority.numel() > 1:

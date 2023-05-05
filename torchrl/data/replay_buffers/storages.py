@@ -466,17 +466,6 @@ def _collate_list_tensordict(x):
     return out
 
 
-# def _collate_list_tensors(*x):
-#     def _stack_if_tensors(data):
-#         print("data", data)
-#         try:
-#             return torch.stack(data, 0)
-#         except TypeError:
-#             return data
-#
-#     return tuple(_stack_if_tensors(_x) for _x in zip(*x))
-
-
 def _collate_contiguous(x):
     if is_tensor_collection(x):
         return _reset_batch_size(x)

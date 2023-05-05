@@ -318,7 +318,8 @@ class BraxEnv(BraxWrapper):
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
         requires_grad = kwargs.pop("requires_grad", False)
-        assert not kwargs
+        if kwargs:
+            raise ValueError("kwargs not supported.")
         self.wrapper_frame_skip = 1
         env = self.lib.envs.get_environment(env_name, **kwargs)
         return super()._build_env(
