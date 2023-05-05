@@ -1200,9 +1200,9 @@ workflows:
 
       - unittest_windows_optdepts_cpu:
           cu_version: cpu
-          name: unittest_windows_optdepts_cpu_py3.8
-          python_version: '3.8'
+          name: unittest_windows_optdepts_cpu_py3.9
+          python_version: '3.9'
       - unittest_windows_optdepts_gpu:
           cu_version: cu116
-          name: unittest_windows_optdepts_gpu_py3.8
-          python_version: '3.8'
+          name: unittest_windows_optdepts_gpu_py3.9
+          python_version: '3.9'
