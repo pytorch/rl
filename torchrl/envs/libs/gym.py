@@ -698,6 +698,8 @@ class MOGymWrapper(GymWrapper):
     git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
     libname = "mo-gymnasium"
 
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
 
 class MOGymEnv(GymEnv):
     """FARAMA MO-Gymnasium environment wrapper.

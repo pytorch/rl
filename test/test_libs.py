@@ -45,6 +45,7 @@ from torchrl.envs.libs.gym import (
     GymEnv,
     GymWrapper,
     MOGymEnv,
+    MOGymWrapper,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
@@ -224,7 +225,8 @@ class TestGym:
             [True, False],
         ],
     )
-    def test_mo(self, frame_skip, from_pixels, pixels_only):
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_mo(self, frame_skip, from_pixels, pixels_only, wrapper):
         if importlib.util.find_spec("gymnasium") is not None and not _has_mo:
             raise pytest.skip("mo-gym not found")
         else:
@@ -232,12 +234,22 @@ class TestGym:
             return
 
         def make_env():
-            return MOGymEnv(
-                "minecart-v0",
-                frame_skip=frame_skip,
-                from_pixels=from_pixels,
-                pixels_only=pixels_only,
-            )
+            import mo_gymnasium
+
+            if wrapper:
+                return MOGymWrapper(
+                    mo_gymnasium.make("minecart-v0"),
+                    frame_skip=frame_skip,
+                    from_pixels=from_pixels,
+                    pixels_only=pixels_only,
+                )
+            else:
+                return MOGymEnv(
+                    "minecart-v0",
+                    frame_skip=frame_skip,
+                    from_pixels=from_pixels,
+                    pixels_only=pixels_only,
+                )
 
         env = make_env()
         check_env_specs(env)
