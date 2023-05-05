@@ -63,3 +63,9 @@ source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
 pip3 install -e .
+
+# smoke test
+python -c """
+from torchrl.data import ReplayBuffer
+print('successfully imported torchrl')
+"""
