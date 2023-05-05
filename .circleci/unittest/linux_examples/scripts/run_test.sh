@@ -29,6 +29,17 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 20
 
 # With batched environments
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
+  env.num_envs=1 \
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  collector.collector_device=cuda:0 \
+  optim.device=cuda:0 \
+  loss.mini_batch_size=10 \
+  loss.ppo_epochs=1 \
+  logger.backend= \
+  logger.log_interval=4 \
+  optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   total_frames=48 \
   init_random_frames=10 \
@@ -86,17 +97,6 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  env.num_envs=1 \
-  collector.total_frames=48 \
-  collector.frames_per_batch=16 \
-  collector.collector_device=cuda:0 \
-  optim.device=cuda:0 \
-  loss.mini_batch_size=10 \
-  loss.ppo_epochs=1 \
-  logger.backend= \
-  logger.log_interval=4 \
-  optim.lr_scheduler=False
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
   total_frames=200 \
   init_random_frames=10 \

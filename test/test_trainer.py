@@ -22,6 +22,7 @@ try:
 except ImportError:
     _has_tb = False
 
+from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
@@ -836,7 +837,7 @@ class TestSubSampler:
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
-        args.env_name = "ALE/Pong-v5"
+        args.env_name = PONG_VERSIONED
         args.env_task = ""
         args.grayscale = True
         args.env_library = "gym"
@@ -894,7 +895,7 @@ class TestRecorder:
                     },
                 )
                 ea.Reload()
-                img = ea.Images("tmp_ALE/Pong-v5_video")
+                img = ea.Images(f"tmp_{PONG_VERSIONED}_video")
                 try:
                     assert len(img) == N // args.record_interval
                     break
