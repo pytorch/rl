@@ -68,7 +68,7 @@ print('successfully imported tensordict')
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-pip3 install -e .
+python3 setup.py develop
 
 whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside
