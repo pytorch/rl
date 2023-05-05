@@ -95,6 +95,7 @@ do
   echo "Testing gym version: ${GYM_VERSION}"
   pip3 install 'gym[accept-rom-license]'==$GYM_VERSION
   pip3 install 'gym[atari]'==$GYM_VERSION
+  pip3 install gym-super-mario-bros
   $DIR/run_test.sh
 
   # delete the conda copy
