@@ -1,16 +1,21 @@
+# Do not merge into main
+
+import itertools
 import timeit
-import pytest
 from functools import wraps
 
+import numpy as np
+import pytest
+
 import torch
+
+from tensordict import MemmapTensor, TensorDictBase
 
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
     vec_generalized_advantage_estimate,
 )
 from torchrl.objectives.value.utils import _custom_conv1d
-
-from tensordict import MemmapTensor, TensorDictBase
 
 
 # dones = torch.zeros(100, dtype=torch.bool).bernoulli_(0.1)
@@ -172,8 +177,17 @@ def _transpose_time(fun):
 
     return transposed_fun
 
+
 @_transpose_time
-def fast_gae(reward: torch.Tensor, state_value: torch.Tensor, next_state_value: torch.Tensor, done: torch.Tensor, gamma: float, lmbda:float, time_dim: int=-2):
+def fast_gae(
+    reward: torch.Tensor,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    done: torch.Tensor,
+    gamma: float,
+    lmbda: float,
+    time_dim: int = -2,
+):
     """Generalized Advantage estimate
 
     Args:
@@ -219,34 +233,27 @@ def fast_gae(reward: torch.Tensor, state_value: torch.Tensor, next_state_value: 
     next_state_value = next_state_value.transpose(-1, -2)
     advantage = advantage.transpose(-1, -2)
 
-
     value_target = advantage + state_value
     return advantage, value_target
 
 
-# wip test _get_num_per_traj(done)
-
-#done = torch.zeros(2, 5, 1, dtype=torch.bool)
-#print(f"{done.shape = }")
-#print(f"{done = } {_get_num_per_traj(done) = }")
-
 torch.manual_seed(44)
-N = (2, )
+N = (2,)
 T = 5
 F = (2, 2)
-time_dim=-3
+time_dim = -3
 
 done = torch.zeros(*N, T, *F, dtype=torch.bool).bernoulli_(0.1)
 reward, state_value, next_state_value = [torch.ones(*N, T, *F) for _ in range(3)]
 
-#state_value, next_state_value, reward = [torch.as_tensor([[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]]) for _ in range(3)]
-#done = torch.as_tensor([[[False, False], [False, False], [True, False], [False, False], [False, False]]])
+# state_value, next_state_value, reward = [torch.as_tensor([[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [1.0, 1.0]]]) for _ in range(3)]
+# done = torch.as_tensor([[[False, False], [False, False], [True, False], [False, False], [False, False]]])
 gamma = 0.99
 lmbda = 0.95
 
-#print(f"{reward = }")
-#print(f"{state_value = }")
-#print(f"{next_state_value = }")
+# print(f"{reward = }")
+# print(f"{state_value = }")
+# print(f"{next_state_value = }")
 
 v1 = fast_gae(reward, state_value, next_state_value, done, gamma, lmbda, time_dim=-3)
 
@@ -259,7 +266,13 @@ v2 = vec_generalized_advantage_estimate(
     done=done,
     time_dim=-1
 )
+<<<<<<< HEAD
+=======
+# print(f"{v1[0] = }")
+# print(f"{v2[0] = }")
+>>>>>>> 33a87da0 (Measure performance difference)
 
+<<<<<<< HEAD
 print(v1[0] / v2[0])
 print(v1[1] / v2[1])
 
@@ -278,24 +291,41 @@ print(
         number=1_000,
     )
 )
+=======
+assert torch.allclose(v1[0], v2[0])
+assert torch.allclose(v1[1], v2[1])
 
-print(
-    timeit.timeit(
-        "fast_gae(reward, state_value, next_state_value, done, gamma, lmbda)",
-        globals={
-            "fast_gae": fast_gae,
-            "reward": reward,
-            "state_value": state_value,
-            "next_state_value": next_state_value,
-            "done": done,
-            "gamma": gamma,
-            "lmbda": lmbda,
-            "time_dim": time_dim,
-        },
-        number=1_000,
-    )
+v3 = generalized_advantage_estimate(
+    gamma=gamma,
+    lmbda=lmbda,
+    state_value=state_value,
+    next_state_value=next_state_value,
+    reward=reward,
+    done=done,
+    time_dim=time_dim,
 )
 
+assert torch.allclose(v2[0], v3[0])
+assert torch.allclose(v2[1], v3[1])
+
+
+def get_available_devices():
+    devices = [torch.device("cpu")]
+    n_cuda = torch.cuda.device_count()
+    if n_cuda > 0:
+        for i in range(n_cuda):
+            devices += [torch.device(f"cuda:{i}")]
+    return devices
+
+
+Ns = [4, 8, 16, 32, 64, 128, 256]
+Ts = [32, 64, 128, 256, 512, 1024]
+Fs = [1, 4, 8]
+devices = get_available_devices()
+>>>>>>> 6c53214f (Code to measure performancec difference)
+
+
+<<<<<<< HEAD
 print(
     timeit.timeit(
         """generalized_advantage_estimate(gamma=gamma,
@@ -316,6 +346,7 @@ print(
 )
 
 
+<<<<<<< HEAD
 print(
     timeit.timeit(
         """vec_generalized_advantage_estimate(gamma=gamma,
@@ -337,5 +368,115 @@ print(
             "time_dim": time_dim
         },
         number=1_000,
+=======
+time_dim=-2
+=======
+time_dim = -2
+>>>>>>> 33a87da0 (Measure performance difference)
+
+
+print("#N,T,F,Device,TimeSimpleFastGAE,TimeFastGAE,TimeGAE,TimeVecGAE")
+for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
+    torch.manual_seed(44)
+
+    repeats = 1_000
+
+    done = torch.zeros(N, T, F, dtype=torch.bool).bernoulli_(0.2)
+    reward, state_value, next_state_value = [torch.ones(N, T, F) for _ in range(3)]
+
+    if F == 1:
+        time_simple_fast_gae = timeit.timeit(
+            "gae(reward, state_value, next_state_value, done, gamma, lmbda)",
+            globals={
+                "gae": gae,
+                "reward": reward[..., 0],
+                "state_value": state_value[..., 0],
+                "next_state_value": next_state_value[..., 0],
+                "done": done[..., 0],
+                "gamma": gamma,
+                "lmbda": lmbda,
+            },
+            number=repeats,
+        )
+    else:
+        time_simple_fast_gae = np.nan
+
+    time_fast_gae = timeit.timeit(
+        "fast_gae(reward, state_value, next_state_value, done, gamma, lmbda)",
+        globals={
+            "fast_gae": fast_gae,
+            "reward": reward,
+            "state_value": state_value,
+            "next_state_value": next_state_value,
+            "done": done,
+            "gamma": gamma,
+            "lmbda": lmbda,
+            "time_dim": time_dim,
+        },
+        number=1_000,
     )
-)
+
+    time_gae = timeit.timeit(
+        """generalized_advantage_estimate(gamma=gamma,
+        lmbda=lmbda,
+        state_value=state_value,
+        next_state_value=next_state_value,
+        reward=reward,
+        done=done,
+        time_dim=time_dim
+    )""",
+<<<<<<< HEAD
+            globals={
+                "generalized_advantage_estimate": generalized_advantage_estimate,
+                "reward": reward,
+                "state_value": state_value,
+                "next_state_value": next_state_value,
+                "done": done,
+                "gamma": gamma,
+                "lmbda": lmbda,
+                "time_dim": time_dim
+            },
+            number=repeats,
+>>>>>>> 6c53214f (Code to measure performancec difference)
+=======
+        globals={
+            "generalized_advantage_estimate": generalized_advantage_estimate,
+            "reward": reward,
+            "state_value": state_value,
+            "next_state_value": next_state_value,
+            "done": done,
+            "gamma": gamma,
+            "lmbda": lmbda,
+            "time_dim": time_dim,
+        },
+        number=repeats,
+>>>>>>> 33a87da0 (Measure performance difference)
+    )
+
+    time_vec_gae = timeit.timeit(
+        """vec_generalized_advantage_estimate(gamma=gamma,
+        lmbda=lmbda,
+        state_value=state_value,
+        next_state_value=next_state_value,
+        reward=reward,
+        done=done,
+        time_dim=time_dim
+    )""",
+        globals={
+            "vec_generalized_advantage_estimate": vec_generalized_advantage_estimate,
+            "reward": reward,
+            "state_value": state_value,
+            "next_state_value": next_state_value,
+            "done": done,
+            "gamma": gamma,
+            "lmbda": lmbda,
+            "time_dim": time_dim,
+        },
+        number=repeats,
+    )
+
+    print(
+        f"{N},{T},{F},{device},{time_simple_fast_gae},{time_fast_gae},{time_gae},{time_vec_gae}"
+    )
+
+    break

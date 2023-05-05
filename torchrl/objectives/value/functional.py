@@ -23,7 +23,11 @@ __all__ = [
     "vec_td_lambda_advantage_estimate",
 ]
 
-from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor, _fast_gae
+from torchrl.objectives.value.utils import (
+    _custom_conv1d,
+    _fast_gae,
+    _make_gammas_tensor,
+)
 
 
 def _transpose_time(fun):
@@ -152,22 +156,20 @@ def vec_generalized_advantage_estimate(
 
     value = gamma * lmbda
 
-    #print(f"{value = }")
-
     if isinstance(value, torch.Tensor):
         # create tensor while ensuring that gradients are passed
         gammalmbdas = not_done * value
     else:
         # when gamma and lmbda are scalars, use fast_gae implementation
-        return _fast_gae(
-            reward=reward,
-            state_value=state_value,
-            next_state_value=next_state_value,
-            done=done,
-            gamma=gamma,
-            lmbda=lmbda
-        )
-        #gammalmbdas = torch.full_like(not_done, value) * not_done
+        # return _fast_gae(
+        #    reward=reward,
+        #    state_value=state_value,
+        #    next_state_value=next_state_value,
+        #    done=done,
+        #    gamma=gamma,
+        #    lmbda=lmbda
+        # )
+        gammalmbdas = torch.full_like(not_done, value) * not_done
 
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
