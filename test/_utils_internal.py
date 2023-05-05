@@ -156,21 +156,27 @@ def _make_envs(
             return GymEnv(env_name, frame_skip=frame_skip, device=device)
 
     else:
-        if env_name == "ALE/Pong-v5":
+        if env_name == PONG_VERSIONED:
 
             def create_env_fn():
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
                 return TransformedEnv(
-                    GymEnv(env_name, frame_skip=frame_skip, device=device),
-                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
+                    base_env,
+                    Compose(*[ToTensorImage(in_keys=in_keys), RewardClipping(0, 0.1)]),
                 )
 
         else:
 
             def create_env_fn():
+
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
+
                 return TransformedEnv(
-                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    base_env,
                     Compose(
-                        ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                        ObservationNorm(in_keys=in_keys, loc=0.5, scale=1.1),
                         RewardClipping(0, 0.1),
                     ),
                 )
@@ -229,7 +235,7 @@ def _make_multithreaded_env(
 
     torch.manual_seed(0)
     multithreaded_kwargs = (
-        {"frame_skip": frame_skip} if env_name == "ALE/Pong-v5" else {}
+        {"frame_skip": frame_skip} if env_name == PONG_VERSIONED else {}
     )
     env_multithread = MultiThreadedEnv(
         N,
@@ -253,7 +259,7 @@ def _make_multithreaded_env(
 
 def get_transform_out(env_name, transformed_in, obs_key=None):
 
-    if env_name == "ALE/Pong-v5":
+    if env_name == PONG_VERSIONED:
         if obs_key is None:
             obs_key = "pixels"
 
@@ -264,7 +270,7 @@ def get_transform_out(env_name, transformed_in, obs_key=None):
                 else Compose(*[ObservationNorm(in_keys=[obs_key], loc=0, scale=1)])
             )
 
-    elif env_name == "CheetahRun-v1":
+    elif env_name == HALFCHEETAH_VERSIONED:
         if obs_key is None:
             obs_key = ("observation", "velocity")
 
