@@ -216,17 +216,20 @@ class TestGym:
         try:
             import gym_super_mario_bros as mario_gym
         except ImportError as err:
-            import gym
+            try:
+                import gym
 
-            # with 0.26 we must have installed gym_super_mario_bros
-            # Since we capture the skips as errors, we raise a skip in this case
-            # Otherwise, we just return
-            if (
-                version.parse("0.26.0")
-                <= version.parse(gym.__version__)
-                < version.parse("0.27.0")
-            ):
-                raise pytest.skip("no super mario bros")
+                # with 0.26 we must have installed gym_super_mario_bros
+                # Since we capture the skips as errors, we raise a skip in this case
+                # Otherwise, we just return
+                if (
+                    version.parse("0.26.0")
+                    <= version.parse(gym.__version__)
+                    < version.parse("0.27.0")
+                ):
+                    raise pytest.skip(f"no super mario bros: error=\n{err}")
+            except ImportError:
+                pass
             return
 
         env = mario_gym.make("SuperMarioBros-v0", apply_api_compatibility=True)
