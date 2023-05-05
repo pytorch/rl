@@ -20,14 +20,22 @@ from tensordict.tensordict import (
 )
 from tensordict.utils import expand_as_right
 
-from torchrl.data.utils import DEVICE_TYPING
-
 from torchrl._utils import accept_remote_rref_udf_invocation
 
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler, Sampler
-from torchrl.data.replay_buffers.storages import _get_default_collate, ListStorage, Storage
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    Sampler,
+)
+from torchrl.data.replay_buffers.storages import (
+    _get_default_collate,
+    ListStorage,
+    Storage,
+)
 from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
 from torchrl.data.replay_buffers.writers import RoundRobinWriter, Writer
+
+from torchrl.data.utils import DEVICE_TYPING
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
@@ -190,7 +198,9 @@ class ReplayBuffer:
         self._collate_fn = (
             collate_fn
             if collate_fn is not None
-            else _get_default_collate(self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer))
+            else _get_default_collate(
+                self._storage, _is_tensordict=isinstance(self, TensorDictReplayBuffer)
+            )
         )
         self._pin_memory = pin_memory
 
@@ -683,8 +693,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def add(self, data: TensorDictBase) -> int:
         if is_tensor_collection(data):
             data_add = TensorDict(
-                {"_data": data,
-                 },
+                {
+                    "_data": data,
+                },
                 batch_size=[],
             )
             if data.batch_size:

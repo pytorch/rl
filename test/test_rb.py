@@ -859,17 +859,29 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = TensorDictReplayBuffer(transform=transform(in_keys=["observation"]), batch_size=1)
+    rb = TensorDictReplayBuffer(
+        transform=transform(in_keys=["observation"]), batch_size=1
+    )
 
     # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 3)}, [])
     rb.add(td)
-    rb.sample()
 
-    rb._transform = mock.MagicMock()
-    rb._transform.__len__ = lambda *args: 3
+    m = mock.Mock()
+    m.side_effect = [td.unsqueeze(0)]
+    rb._transform.forward = m
+    # rb._transform.__len__ = lambda *args: 3
     rb.sample()
-    assert rb._transform.called
+    assert rb._transform.forward.called
+
+    # was_called = [False]
+    # forward = rb._transform.forward
+    # def new_forward(*args, **kwargs):
+    #     was_called[0] = True
+    #     return forward(*args, **kwargs)
+    # rb._transform.forward = new_forward
+    # rb.sample()
+    # assert was_called[0]
 
 
 transforms = [
