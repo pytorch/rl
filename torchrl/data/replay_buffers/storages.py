@@ -477,6 +477,6 @@ def _get_default_collate(storage, _is_tensordict=False):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
-            return torch.utils.data.default_collate
+            return torch.utils.data._utils.collate.default_collate
     elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
         return _collate_contiguous
