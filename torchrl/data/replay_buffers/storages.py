@@ -435,9 +435,9 @@ def _reset_batch_size(x):
 
     """
     shape = x.pop("_batch_size", None)
+    data = x.pop("_data", None)
     if shape is not None:
         # we need to reset the batch-size
-        data = x.pop("_data")
         if isinstance(shape, MemmapTensor):
             shape = shape.as_tensor()
         locked = data.is_locked
@@ -454,7 +454,6 @@ def _reset_batch_size(x):
         if locked:
             data.lock_()
         return data
-    data = x.pop("_data", None)
     if data is not None:
         return data
     return x
@@ -462,13 +461,20 @@ def _reset_batch_size(x):
 
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
-    if isinstance(out, TensorDictBase):
-        return _reset_batch_size(out.to_tensordict())
+    if is_tensor_collection(out):
+        return _reset_batch_size(out)
     return out
 
 
-def _collate_list_tensors(*x):
-    return tuple(torch.stack(_x, 0) for _x in zip(*x))
+# def _collate_list_tensors(*x):
+#     def _stack_if_tensors(data):
+#         print("data", data)
+#         try:
+#             return torch.stack(data, 0)
+#         except TypeError:
+#             return data
+#
+#     return tuple(_stack_if_tensors(_x) for _x in zip(*x))
 
 
 def _collate_contiguous(x):
@@ -477,11 +483,11 @@ def _collate_contiguous(x):
     return x.clone()
 
 
-def _get_default_collate(storage, _is_tensordict=True):
+def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
-            return _collate_list_tensors
+            return torch.utils.data.default_collate
     elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
         return _collate_contiguous
