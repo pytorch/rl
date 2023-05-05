@@ -384,50 +384,77 @@ class TestCatFrames(TransformBase):
         ).all()
         assert cloned is not env.transform
 
-    def test_transform_model(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_model(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+            padding=padding,
+        )
+        envbase = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            envbase,
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        torch.manual_seed(10)
+        env.set_seed(10)
+        td = env.rollout(10)
+        torch.manual_seed(10)
+        envbase.set_seed(10)
+        tdbase = envbase.rollout(10)
 
-        model = nn.Sequential(cat_frames, nn.Identity())
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            model(td)
+        model = nn.Sequential(cat_frames2, nn.Identity())
+        model(tdbase)
+        assert (td == tdbase).all()
 
-    def test_transform_rb(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_rb(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+            padding=padding,
+        )
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        td = env.rollout(10)
+
         rb = ReplayBuffer(storage=LazyTensorStorage(20))
-        rb.append_transform(cat_frames)
-        rb.extend(td)
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            _ = rb.sample(10)
+        rb.append_transform(cat_frames2)
+        rb.add(td.exclude(*out_keys, ("next", out_keys[0])))
+        tdsample = rb.sample(1).squeeze(0).exclude("index")
+        for key in td.keys(True, True):
+            assert (tdsample[key] == td[key]).all(), key
+        assert (tdsample["out_" + key1] == td["out_" + key1]).all()
+        assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
 
     def test_catframes_transform_observation_spec(self):
         N = 4
@@ -2823,6 +2850,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2838,6 +2866,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2852,6 +2881,7 @@ class TestObservationNorm(TransformBase):
             SerialEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
@@ -2864,6 +2894,7 @@ class TestObservationNorm(TransformBase):
             ParallelEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
@@ -4341,11 +4372,12 @@ class TestUnsqueezeTransform(TransformBase):
     def test_transform_inverse(self):
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED),
+            # the order is inverted
             Compose(
-                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
                 UnsqueezeTransform(
                     -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
                 ),
+                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
             ),
         )
         td = env.rollout(3)
@@ -4452,8 +4484,8 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
             UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
+            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
         )
 
     def test_single_trans_env_check(self):
@@ -6210,7 +6242,8 @@ class TestTransforms:
             dim=-3,
         )
         t2 = FiniteTensorDictCheck()
-        compose = Compose(t1, t2)
+        t3 = StepCounter()
+        compose = Compose(t1, t2, t3)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
@@ -6221,10 +6254,15 @@ class TestTransforms:
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
+        if not batch:
+            with pytest.raises(
+                ValueError, match="The last dimension of the tensordict"
+            ):
+                compose(td.clone(False))
         with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
+            NotImplementedError, match="StepCounter cannot be called independently"
         ):
-            compose(td.clone(False))
+            compose[1:](td.clone(False))
         compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
@@ -6232,7 +6270,8 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = BoundedTensorSpec(0, 255, (nchannels, 16, 16))
-            observation_spec = compose.transform_observation_spec(observation_spec)
+            # StepCounter does not want non composite specs
+            observation_spec = compose[:2].transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
@@ -6466,7 +6505,7 @@ def test_batch_locked_transformed(device):
     env = TransformedEnv(
         MockBatchedLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6490,7 +6529,7 @@ def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6510,7 +6549,7 @@ def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )

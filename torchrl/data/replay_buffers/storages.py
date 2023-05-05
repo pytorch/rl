@@ -454,6 +454,9 @@ def _reset_batch_size(x):
         if locked:
             data.lock_()
         return data
+    data = x.pop("_data", None)
+    if data is not None:
+        return data
     return x
 
 
@@ -469,8 +472,8 @@ def _collate_list_tensors(*x):
 
 
 def _collate_contiguous(x):
-    if isinstance(x, TensorDictBase):
-        return _reset_batch_size(x).to_tensordict()
+    if is_tensor_collection(x):
+        return _reset_batch_size(x)
     return x.clone()
 
 
