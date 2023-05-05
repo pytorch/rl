@@ -40,6 +40,8 @@ _has_gym = importlib.util.find_spec("gym") is not None
 if not _has_gym:
     _has_gym = importlib.util.find_spec("gymnasium") is not None
 
+_has_mo = importlib.util.find_spec("mo_gymnasium") is not None
+
 
 class set_gym_backend(_DecoratorContextManager):
     """Sets the gym-backend to a certain value.
@@ -106,7 +108,8 @@ class set_gym_backend(_DecoratorContextManager):
                 found_setter = True
         if not found_setter:
             raise ImportError(
-                f"could not set anything related to gym backed {self.backend.__name__} with version={self.backend.__version__}."
+                f"could not set anything related to gym backend "
+                f"{self.backend.__name__} with version={self.backend.__version__}."
             )
 
     def __enter__(self):
@@ -171,14 +174,6 @@ def gym_backend(submodule=None):
             return submodule
     return DEFAULT_GYM
 
-
-    _has_mo = True
-    MO_ERR = None
-    try:
-        import mo_gymnasium as mo_gym
-    except ModuleNotFoundError as err:
-        _has_mo = False
-        MO_ERR = err
 
 __all__ = ["GymWrapper", "GymEnv"]
 
@@ -721,6 +716,13 @@ class MOGymEnv(GymEnv):
     @property
     def lib(self) -> ModuleType:
         if _has_mo:
+            import mo_gymnasium as mo_gym
+
             return mo_gym
         else:
-            raise ImportError("MO-gymnasium not found, check installation") from MO_ERR
+            try:
+                import mo_gymnasium  # noqa: F401
+            except ImportError as err:
+                raise ImportError("MO-gymnasium not found, check installation") from err
+
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
