@@ -738,7 +738,7 @@ class TestEnvPool:
 
         # Check that results are different if seed is different
         # Skip Pong, since there different actions can lead to the same result
-        if env_name != "ALE/Pong-v5":
+        if env_name != PONG_VERSIONED:
             env.set_seed(
                 seed=seed + 10,
             )
