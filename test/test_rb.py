@@ -840,14 +840,10 @@ transforms = [
 def test_smoke_replay_buffer_transform(transform):
     rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
 
+    # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
     rb.add(td)
-    if not isinstance(rb._transform[0], (CatFrames,)):
-        rb.sample()
-    else:
-        with pytest.raises(NotImplementedError):
-            rb.sample()
-        return
+    rb.sample()
 
     rb._transform = mock.MagicMock()
     rb._transform.__len__ = lambda *args: 3
@@ -856,7 +852,7 @@ def test_smoke_replay_buffer_transform(transform):
 
 
 transforms = [
-    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=1),
+    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=3),
     FiniteTensorDictCheck,
     gSDENoise,
     PinMemoryTransform,
@@ -865,13 +861,15 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
-    if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
+    if transform == PinMemoryTransform and not torch.cuda.is_available():
         raise pytest.skip("No CUDA device detected, skipping PinMemory")
     rb = ReplayBuffer(
         collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
     )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    action = torch.zeros(3)
+    action[..., 0] = 1
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": action}, [])
     rb.add(td)
     rb.sample()
 

@@ -119,6 +119,9 @@ jobs:
       - name: Install test dependencies
         run: |
           python3 -mpip install numpy pytest --no-cache-dir
+      - name: Install tensordict
+        run: |
+          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
@@ -324,6 +327,9 @@ jobs:
         shell: bash
         run: |
           python3 -mpip install numpy pytest --no-cache-dir
+      - name: Install tensordict
+        run: |
+          python3 -mpip install git+https://github.com/pytorch-labs/tensordict.git
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
