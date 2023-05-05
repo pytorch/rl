@@ -274,6 +274,8 @@ class LazyTensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         out = self._storage[index]
+        if is_tensor_collection(out):
+            out = _reset_batch_size(out)
         return out
 
     def __len__(self):
@@ -466,21 +468,8 @@ def _collate_list_tensordict(x):
     return out
 
 
-# def _collate_list_tensors(*x):
-#     def _stack_if_tensors(data):
-#         print("data", data)
-#         try:
-#             return torch.stack(data, 0)
-#         except TypeError:
-#             return data
-#
-#     return tuple(_stack_if_tensors(_x) for _x in zip(*x))
-
-
 def _collate_contiguous(x):
-    if is_tensor_collection(x):
-        return _reset_batch_size(x)
-    return x.clone()
+    return x
 
 
 def _get_default_collate(storage, _is_tensordict=False):
