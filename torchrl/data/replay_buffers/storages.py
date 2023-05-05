@@ -11,9 +11,10 @@ from copy import copy
 from typing import Any, Dict, Sequence, Union
 
 import torch
+from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor
-from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
+from tensordict.utils import expand_right
 
 from torchrl._utils import _CKPT_BACKEND, VERBOSE
 from torchrl.data.replay_buffers.utils import INT_CLASSES
@@ -273,7 +274,9 @@ class LazyTensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         out = self._storage[index]
-        return out
+        if is_tensor_collection(out):
+            out = _reset_batch_size(out)
+        return out.unlock_()
 
     def __len__(self):
         return self._len
@@ -423,28 +426,57 @@ def _mem_map_tensor_as_tensor(mem_map_tensor: MemmapTensor) -> torch.Tensor:
         return mem_map_tensor._tensor
 
 
+def _reset_batch_size(x):
+    """Resets the batch size of a tensordict.
+
+    In some cases we save the original shape of the tensordict as a tensor (or memmap tensor).
+
+    This function will read that tensor, extract its items and reset the shape
+    of the tensordict to it. If items have an incompatible shape (e.g. "index")
+    they will be expanded to the right to match it.
+
+    """
+    shape = x.pop("_batch_size", None)
+    data = x.pop("_data", None)
+    if shape is not None:
+        # we need to reset the batch-size
+        if isinstance(shape, MemmapTensor):
+            shape = shape.as_tensor()
+        locked = data.is_locked
+        if locked:
+            data.unlock_()
+        shape = [s.item() for s in shape[0]]
+        shape = torch.Size([x.shape[0], *shape])
+        # we may need to update some values in the data
+        for key, value in x.items():
+            if value.ndim >= len(shape):
+                continue
+            value = expand_right(value, shape)
+            data.set(key, value)
+        if locked:
+            data.lock_()
+        return data
+    if data is not None:
+        return data
+    return x
+
+
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
-    if isinstance(out, TensorDictBase):
-        return out.to_tensordict()
+    if is_tensor_collection(out):
+        return _reset_batch_size(out)
     return out
 
 
-def _collate_list_tensors(*x):
-    return tuple(torch.stack(_x, 0) for _x in zip(*x))
-
-
 def _collate_contiguous(x):
-    if isinstance(x, TensorDictBase):
-        return x.to_tensordict()
-    return x.clone()
+    return x
 
 
-def _get_default_collate(storage, _is_tensordict=True):
+def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
-            return _collate_list_tensors
+            return torch.utils.data._utils.collate.default_collate
     elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
         return _collate_contiguous

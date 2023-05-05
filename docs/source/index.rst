@@ -38,8 +38,6 @@ Basics
 
    tutorials/coding_ppo
    tutorials/pendulum
-   tutorials/tensordict_tutorial
-   tutorials/tensordict_module
    tutorials/torchrl_demo
 
 Intermediate
@@ -48,8 +46,10 @@ Intermediate
 .. toctree::
    :maxdepth: 1
 
-   tutorials/torch_envs
+   tutorials/torchrl_envs
    tutorials/pretrained_models
+   tutorials/dqn_with_rnn
+   tutorials/rb_tutorial
 
 Advanced
 --------

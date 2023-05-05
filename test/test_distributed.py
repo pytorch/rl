@@ -13,6 +13,16 @@ import sys
 import time
 
 import pytest
+
+try:
+    import ray
+
+    _has_ray = True
+    RAY_ERR = None
+except ModuleNotFoundError as err:
+    _has_ray = False
+    RAY_ERR = err
+
 import torch
 
 from mocking_classes import ContinuousActionVecMockEnv, CountingEnv
@@ -27,8 +37,10 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.distributed import (
     DistributedDataCollector,
     DistributedSyncDataCollector,
+    RayCollector,
     RPCDataCollector,
 )
+from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 
 TIMEOUT = 200
 
@@ -88,6 +100,7 @@ class DistributedCollectorBase:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
+        assert data.names[-1] == "time"
         collector.shutdown()
         assert total == 1000
         queue.put("passed")
@@ -413,6 +426,136 @@ class TestSyncCollector(DistributedCollectorBase):
             if proc.is_alive():
                 proc.terminate()
             queue.close()
+
+
+@pytest.mark.skipif(not _has_ray, reason=f"Ray not found (error: {RAY_ERR})")
+class TestRayCollector(DistributedCollectorBase):
+    """A testing distributed data collector class that runs tests without using a Queue,
+    to avoid potential deadlocks when combining Ray and multiprocessing.
+    """
+
+    @classmethod
+    def distributed_class(cls) -> type:
+        return RayCollector
+
+    @classmethod
+    def distributed_kwargs(cls) -> dict:
+        ray.shutdown()  # make sure ray is not running
+        ray_init_config = DEFAULT_RAY_INIT_CONFIG
+        ray_init_config["runtime_env"] = {
+            "working_dir": os.path.dirname(__file__),
+            "env_vars": {"PYTHONPATH": os.path.dirname(__file__)},
+            "pip": ["ray"],
+        }  # for ray workers
+        remote_configs = {
+            "num_cpus": 1,
+            "num_gpus": 0.0,
+            "memory": 1024**2,
+        }
+        return {"ray_init_config": ray_init_config, "remote_configs": remote_configs}
+
+    @classmethod
+    def _start_worker(cls):
+        pass
+
+    @pytest.mark.parametrize("sync", [False, True])
+    def test_distributed_collector_sync(self, sync, frames_per_batch=200):
+        frames_per_batch = 50
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = self.distributed_class()(
+            [env] * 2,
+            policy,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
+            sync=sync,
+            **self.distributed_kwargs(),
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
+
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            MultiSyncDataCollector,
+            MultiaSyncDataCollector,
+            SyncDataCollector,
+        ],
+    )
+    def test_distributed_collector_class(self, collector_class):
+        frames_per_batch = 50
+        env = ContinuousActionVecMockEnv()
+        policy = RandomPolicy(env.action_spec)
+        collector = self.distributed_class()(
+            [env] * 2,
+            policy,
+            collector_class=collector_class,
+            total_frames=200,
+            frames_per_batch=frames_per_batch,
+            **self.distributed_kwargs(),
+        )
+        total = 0
+        for data in collector:
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+        collector.shutdown()
+        assert total == 200
+
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            SyncDataCollector,
+            MultiSyncDataCollector,
+            MultiaSyncDataCollector,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "sync",
+        [
+            False,
+            True,
+        ],
+    )
+    def test_distributed_collector_updatepolicy(self, collector_class, sync):
+        frames_per_batch = 50
+        total_frames = 300
+        env = CountingEnv()
+        policy = CountingPolicy()
+        if collector_class is MultiaSyncDataCollector:
+            # otherwise we may collect data from a collector that has not yet been
+            # updated
+            n_collectors = 1
+        else:
+            n_collectors = 2
+        collector = self.distributed_class()(
+            [env] * n_collectors,
+            policy,
+            collector_class=collector_class,
+            total_frames=total_frames,
+            frames_per_batch=frames_per_batch,
+            sync=sync,
+            **self.distributed_kwargs(),
+        )
+        total = 0
+        first_batch = None
+        last_batch = None
+        for i, data in enumerate(collector):
+            total += data.numel()
+            assert data.numel() == frames_per_batch
+            if i == 0:
+                first_batch = data
+                policy.weight.data += 1
+                collector.update_policy_weights_()
+            elif total == total_frames - frames_per_batch:
+                last_batch = data
+        assert (first_batch["action"] == 1).all(), first_batch["action"]
+        assert (last_batch["action"] == 2).all(), last_batch["action"]
+        collector.shutdown()
+        assert total == total_frames
 
 
 if __name__ == "__main__":

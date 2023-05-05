@@ -9,7 +9,7 @@ The goal is to be able to swap environments in an experiment with little or no e
 even if these environments are simulated using different libraries.
 TorchRL offers some out-of-the-box environment wrappers under :obj:`torchrl.envs.libs`,
 which we hope can be easily imitated for other libraries.
-The parent class :class:`torchrl.envs.EnvBase` is a :class:`torch.nn.Module` subclass that implements
+The parent class :class:`~torchrl.envs.EnvBase` is a :class:`torch.nn.Module` subclass that implements
 some typical environment methods using :class:`tensordict.TensorDict` as a data organiser. This allows this
 class to be generic and to handle an arbitrary number of input and outputs, as well as
 nested or batched data structures.
@@ -26,18 +26,18 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.input_spec`: a :class:`torchrl.data.CompositeSpec` object containing
+- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"action"` and others).
-- :obj:`env.output_spec`: a :class:`torchrl.data.CompositeSpec` object containing
+- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the output keys (:obj:`"observation"`, :obj:`"reward"` and :obj:`"done"`).
-- :obj:`env.observation_spec`: a :class:`torchrl.data.CompositeSpec` object
+- :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the observation key-spec pairs.
   This is a pointer to ``env.output_spec["observation"]``.
-- :obj:`env.action_spec`: a :class:`torchrl.data.TensorSpec` object
+- :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
   representing the action spec. This is a pointer to ``env.input_spec["action"]``.
-- :obj:`env.reward_spec`: a :class:`torchrl.data.TensorSpec` object representing
+- :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the reward spec. This is a pointer to ``env.output_spec["reward"]``.
-- :obj:`env.done_spec`: a :class:`torchrl.data.TensorSpec` object representing
+- :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the done-flag spec. This is a pointer to ``env.output_spec["done"]``.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
@@ -63,6 +63,9 @@ With these, the following methods are implemented:
   a maximum number of steps (``max_steps=N``) and using a policy (``policy=model``).
   The policy should be coded using a :class:`tensordict.nn.TensorDictModule`
   (or any other :class:`tensordict.TensorDict`-compatible module).
+  The resulting :class:`tensordict.TensorDict` instance will be marked with
+  a trailing ``"time"`` named dimension that can be used by other modules
+  to treat this batched dimension as it should.
 
 The following figure summarizes how a rollout is executed in torchrl.
 
@@ -100,7 +103,7 @@ function.
 .. note::
 
   In some contexts, it can be useful to mark the first step of a trajectory.
-  TorchRL provides such functionality through the :class:`torchrl.envs.InitTracker`
+  TorchRL provides such functionality through the :class:`~torchrl.envs.InitTracker`
   transform.
 
 
@@ -114,7 +117,6 @@ provides more information on how to design a custom environment from scratch.
     EnvBase
     GymLikeEnv
     EnvMetaData
-    Specs
 
 Vectorized envs
 ---------------
@@ -132,7 +134,7 @@ Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its
 
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
-Check the :func:`torchrl.envs.utils.check_env_specs` method for a sanity check.
+Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
 
 .. code-block::
    :caption: Parallel environment
@@ -238,7 +240,7 @@ It is now apparent that this can bring a significant speedup depending on the ki
 operations that is to be computed.
 
 A great advantage of environment wrappers is that one can consult the environment up to that wrapper.
-The same can be achieved with TorchRL transformed environments: the :doc:`parent` attribute will
+The same can be achieved with TorchRL transformed environments: the ``parent`` attribute will
 return a new :class:`TransformedEnv` with all the transforms up to the transform of interest.
 Re-using the example above:
 
@@ -249,15 +251,15 @@ Re-using the example above:
 
 
 Transformed environment can be used with vectorized environments.
-Since each transform uses a :doc:`"in_keys"`/:doc:`"out_keys"` set of keyword argument, it is
+Since each transform uses a ``"in_keys"``/``"out_keys"`` set of keyword argument, it is
 also easy to root the transform graph to each component of the observation data (e.g.
 pixels or states etc).
 
-Transforms also have an :doc:`inv` method that is called before
+Transforms also have an ``inv`` method that is called before
 the action is applied in reverse order over the composed transform chain:
 this allows to apply transforms to data in the environment before the action is taken
 in the environment. The keys to be included in this inverse transform are passed through the
-:doc:`"in_keys_inv"` keyword argument:
+``"in_keys_inv"`` keyword argument:
 
 .. code-block::
    :caption: Inverse transform
@@ -337,9 +339,11 @@ to be able to create this other composition:
     RewardClipping
     RewardScaling
     RewardSum
+    Reward2GoTransform
     SelectTransform
     SqueezeTransform
     StepCounter
+    TargetReturn
     TensorDictPrimer
     TimeMaxPool
     ToTensorImage
@@ -373,9 +377,12 @@ Helpers
 
     step_mdp
     get_available_libraries
-    set_exploration_mode
-    exploration_mode
+    set_exploration_mode #deprecated
+    set_exploration_type
+    exploration_mode #deprecated
+    exploration_type
     check_env_specs
+    make_composite_from_td
 
 Domain-specific
 ---------------
@@ -391,7 +398,78 @@ Domain-specific
 
 Libraries
 ---------
+
 .. currentmodule:: torchrl.envs.libs
+
+TorchRL's mission is to make the training of control and decision algorithm as
+easy as it gets, irrespective of the simulator being used (if any).
+Multiple wrappers are available for DMControl, Habitat, Jumanji and, naturally,
+for Gym.
+
+This last library has a special status in the RL community as being the mostly
+used framework for coding simulators. Its successful API has been foundational
+and inspired many other frameworks, among which TorchRL.
+However, Gym has gone through multiple design changes and it is sometimes hard
+to accommodate these as an external adoption library: users usually have their
+"preferred" version of the library. Moreover, gym is now being maintained
+by another group under the "gymnasium" name, which does not facilitate code
+compatibility. In practice, we must consider that users may have a version of
+gym *and* gymnasium installed in the same virtual environment, and we must
+allow both to work concomittantly.
+Fortunately, TorchRL provides a solution for this problem: a special decorator
+:class:`~.gym.set_gym_backend` allows to control which library will be used
+in the relevant functions:
+
+    >>> from torchrl.envs.libs.gym import GymEnv, set_gym_backend, gym_backend
+    >>> import gymnasium, gym
+    >>> with set_gym_backend(gymnasium):
+    ...     print(gym_backend())
+    ...     env1 = GymEnv("Pendulum-v1")
+    <module 'gymnasium' from '/path/to/venv/python3.9/site-packages/gymnasium/__init__.py'>
+    >>> with set_gym_backend(gym):
+    ...     print(gym_backend())
+    ...     env2 = GymEnv("Pendulum-v1")
+    <module 'gym' from '/path/to/venv/python3.9/site-packages/gym/__init__.py'>
+    >>> print(env1._env.env.env)
+    <gymnasium.envs.classic_control.pendulum.PendulumEnv at 0x15147e190>
+    >>> print(env2._env.env.env)
+    <gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0>
+
+We can see that the two libraries modify the value returned by :func:`~.gym.gym_backend()`
+which can be further used to indicate which library needs to be used for
+the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
+we can use it to tell to a specific function what gym backend needs to be used
+during its execution.
+The :func:`torchrl.envs.libs.gym.gym_backend` function allows you to gather
+the current gym backend or any of its modules:
+
+        >>> import mo_gymnasium
+        >>> with set_gym_backend("gym"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gym.wrappers' from '/path/to/venv/python3.9/site-packages/gym/wrappers/__init__.py'>
+        >>> with set_gym_backend("gymnasium"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        <module 'gymnasium.wrappers' from '/path/to/venv/python3.9/site-packages/gymnasium/wrappers/__init__.py'>
+
+Another tool that comes in handy with gym and other external dependencies is
+the :class:`torchrl._utils.implement_for` class. Decorating a function
+with ``@implement_for`` will tell torchrl that, depending on the version
+indicated, a specific behaviour is to be expected. This allows us to easily
+support multiple versions of gym without requiring any effort from the user side.
+For example, considering that our virtual environment has the v0.26.2 installed,
+the following function will return ``1`` when queried:
+
+    >>> from torchrl._utils import implement_for
+    >>> @implement_for("gym", None, "0.26.0")
+    ... def fun():
+    ...     return 0
+    >>> @implement_for("gym", "0.26.0", None)
+    ... def fun():
+    ...     return 1
+    >>> fun()
+    1
 
 .. autosummary::
     :toctree: generated/
@@ -405,6 +483,8 @@ Libraries
     gym.GymWrapper
     gym.MOGymEnv
     gym.MOGymWrapper
+    gym.set_gym_backend
+    gym.gym_backend
     habitat.HabitatEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper

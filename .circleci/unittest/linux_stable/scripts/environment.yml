@@ -22,8 +22,10 @@ dependencies:
     - scipy
     - hydra-core
     - tensorboard
+    - imageio==2.26.0
     - wandb
     - dm_control
     - mlflow
     - av
     - coverage
+    - ray

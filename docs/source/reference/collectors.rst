@@ -54,7 +54,7 @@ Besides those compute parameters, users may choose to configure the following pa
 - reset_at_each_iter: if :obj:`True`, the environment(s) will be reset after each batch collection
 - split_trajs: if :obj:`True`, the trajectories will be split and delivered in a padded tensordict
   along with a :obj:`"mask"` key that will point to a boolean mask representing the valid values.
-- exploration_mode: the exploration strategy to be used with the policy.
+- exploration_type: the exploration strategy to be used with the policy.
 - reset_when_done: whether environments should be reset when reaching a done state.
 
 
@@ -88,7 +88,7 @@ node or across multiple nodes.
 
 .. note::
   *Choosing the sub-collector*: All distributed collectors support the various single machine collectors.
-  One may wonder why using a :class:`MultiSyncDataCollector` or a :class:`torchrl.envs.ParallelEnv`
+  One may wonder why using a :class:`MultiSyncDataCollector` or a :class:`~torchrl.envs.ParallelEnv`
   instead. In general, multiprocessed collectors have a lower IO footprint than
   parallel environments which need to communicate at each step. Yet, the model specs
   play a role in the opposite direction, since using parallel environments will
@@ -116,6 +116,7 @@ node or across multiple nodes.
     RPCDataCollector
     DistributedSyncDataCollector
     submitit_delayed_launcher
+    RayCollector
 
 
 Helper functions

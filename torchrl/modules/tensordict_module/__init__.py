@@ -9,8 +9,12 @@ from .actors import (
     ActorCriticWrapper,
     ActorValueOperator,
     DistributionalQValueActor,
+    DistributionalQValueHook,
+    DistributionalQValueModule,
     ProbabilisticActor,
     QValueActor,
+    QValueHook,
+    QValueModule,
     ValueOperator,
 )
 from .common import SafeModule
@@ -23,5 +27,6 @@ from .probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
+from .rnn import LSTMModule
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

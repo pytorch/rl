@@ -37,7 +37,7 @@ from torchrl.envs.transforms.transforms import (
     FlattenObservation,
     TransformedEnv,
 )
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.common import _has_functorch
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.helpers.envs import (
@@ -145,9 +145,10 @@ def test_dqn_maker(
 
         expected_keys = [
             "done",
-            "reward",
             "action",
             "action_value",
+            "step_count",
+            "is_init",
         ]
         if from_pixels:
             expected_keys += [
@@ -172,9 +173,9 @@ def test_dqn_maker(
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [("from_pixels=True", "catframes=4"), ()])
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 def test_ddpg_maker(device, from_pixels, gsde, exploration):
-    if not gsde and exploration != "random":
+    if not gsde and exploration != ExplorationType.RANDOM:
         pytest.skip("no need to test this setting")
     device = torch.device("cpu")
     flags = list(from_pixels + gsde)
@@ -208,13 +209,19 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
         proof_environment = env_maker()
         actor, value = make_ddpg_actor(proof_environment, device=device, cfg=cfg)
         td = proof_environment.reset().to(device)
-        with set_exploration_mode(exploration):
+        with set_exploration_type(exploration):
             if UNSQUEEZE_SINGLETON and not td.ndimension():
                 # Linear and conv used to break for non-batched data
                 actor(td.unsqueeze(0))
             else:
                 actor(td)
-        expected_keys = ["done", "action", "param", "reward"]
+        expected_keys = [
+            "done",
+            "action",
+            "param",
+            "step_count",
+            "is_init",
+        ]
         if from_pixels:
             expected_keys += [
                 "pixels",
@@ -235,7 +242,7 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 
         if cfg.gSDE:
             tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
-            if exploration == "random":
+            if exploration == ExplorationType.RANDOM:
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)
             else:
@@ -263,12 +270,12 @@ def test_ddpg_maker(device, from_pixels, gsde, exploration):
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 @pytest.mark.parametrize("action_space", ["discrete", "continuous"])
 def test_ppo_maker(
     device, from_pixels, shared_mapping, gsde, exploration, action_space
 ):
-    if not gsde and exploration != "random":
+    if not gsde and exploration != ExplorationType.RANDOM:
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
     config_fields = [
@@ -339,11 +346,12 @@ def test_ppo_maker(
         actor = actor_value.get_policy_operator()
         expected_keys = [
             "done",
-            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
+            "step_count",
+            "is_init",
         ]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
@@ -356,7 +364,7 @@ def test_ppo_maker(
 
         td = proof_environment.reset().to(device)
         td_clone = td.clone()
-        with set_exploration_mode(exploration):
+        with set_exploration_type(exploration):
             if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
                 # Linear and conv used to break for non-batched data
                 actor(td_clone.unsqueeze(0))
@@ -377,7 +385,7 @@ def test_ppo_maker(
                     actor.module[0].module[-1].module.transform(td_clone.get("loc"))
                 )
 
-            if exploration == "random":
+            if exploration == ExplorationType.RANDOM:
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td_clone.get("action"), tsf_loc)
             else:
@@ -386,10 +394,11 @@ def test_ppo_maker(
         value = actor_value.get_value_operator()
         expected_keys = [
             "done",
-            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if shared_mapping:
             expected_keys += ["hidden"]
@@ -417,12 +426,12 @@ def test_ppo_maker(
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("shared_mapping", [(), ("shared_mapping=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 @pytest.mark.parametrize("action_space", ["discrete", "continuous"])
 def test_a2c_maker(
     device, from_pixels, shared_mapping, gsde, exploration, action_space
 ):
-    if not gsde and exploration != "random":
+    if not gsde and exploration != ExplorationType.RANDOM:
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + shared_mapping + gsde)
     config_fields = [
@@ -495,11 +504,12 @@ def test_a2c_maker(
         actor = actor_value.get_policy_operator()
         expected_keys = [
             "done",
-            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "sample_log_prob",
+            "step_count",
+            "is_init",
         ]
         if action_space == "continuous":
             expected_keys += ["loc", "scale"]
@@ -512,7 +522,7 @@ def test_a2c_maker(
 
         td = proof_environment.reset().to(device)
         td_clone = td.clone()
-        with set_exploration_mode(exploration):
+        with set_exploration_type(exploration):
             if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
                 # Linear and conv used to break for non-batched data
                 actor(td_clone.unsqueeze(0))
@@ -533,7 +543,7 @@ def test_a2c_maker(
                     actor.module[0].module[-1].module.transform(td_clone.get("loc"))
                 )
 
-            if exploration == "random":
+            if exploration == ExplorationType.RANDOM:
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td_clone.get("action"), tsf_loc)
             else:
@@ -542,10 +552,11 @@ def test_a2c_maker(
         value = actor_value.get_value_operator()
         expected_keys = [
             "done",
-            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if shared_mapping:
             expected_keys += ["hidden"]
@@ -575,9 +586,9 @@ def test_a2c_maker(
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("from_pixels", [()])
 @pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
-    if not gsde and exploration != "random":
+    if not gsde and exploration != ExplorationType.RANDOM:
         pytest.skip("no need to test this setting")
     flags = list(gsde + tanh_loc + from_pixels)
     if gsde and from_pixels:
@@ -623,7 +634,7 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
         actor, qvalue, value = model
         td = proof_environment.reset().to(device)
         td_clone = td.clone()
-        with set_exploration_mode(exploration):
+        with set_exploration_type(exploration):
             if UNSQUEEZE_SINGLETON and not td_clone.ndimension():
                 # Linear and conv used to break for non-batched data
                 actor(td_clone.unsqueeze(0))
@@ -632,19 +643,20 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
         expected_keys = [
             "done",
-            "reward",
             "pixels" if len(from_pixels) else "observation_vector",
             "pixels_orig" if len(from_pixels) else "observation_orig",
             "action",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
 
         if cfg.gSDE:
             tsf_loc = actor.module[0].module[-1].module.transform(td_clone.get("loc"))
-            if exploration == "random":
+            if exploration == ExplorationType.RANDOM:
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td_clone.get("action"), tsf_loc)
             else:
@@ -664,13 +676,14 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 
         expected_keys = [
             "done",
-            "reward",
             "observation_vector",
             "observation_orig",
             "action",
             "state_action_value",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -688,10 +701,11 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
             value(td)
         expected_keys = [
             "done",
-            "reward",
             "observation_vector",
             "observation_orig",
             "state_value",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -711,9 +725,9 @@ def test_sac_make(device, gsde, tanh_loc, from_pixels, exploration):
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 def test_redq_make(device, from_pixels, gsde, exploration):
-    if not gsde and exploration != "random":
+    if not gsde and exploration != ExplorationType.RANDOM:
         pytest.skip("no need to test this setting")
     flags = list(from_pixels + gsde)
     if gsde and from_pixels:
@@ -754,15 +768,16 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         )
         actor, qvalue = model
         td = proof_environment.reset().to(device)
-        with set_exploration_mode(exploration):
+        with set_exploration_type(exploration):
             actor(td)
         expected_keys = [
             "done",
-            "reward",
             "action",
             "sample_log_prob",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -783,7 +798,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
 
         if cfg.gSDE:
             tsf_loc = actor.module[0].module[-1].module.transform(td.get("loc"))
-            if exploration == "random":
+            if exploration == ExplorationType.RANDOM:
                 with pytest.raises(AssertionError):
                     torch.testing.assert_close(td.get("action"), tsf_loc)
             else:
@@ -792,12 +807,13 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         qvalue(td)
         expected_keys = [
             "done",
-            "reward",
             "action",
             "sample_log_prob",
             "state_action_value",
             "loc",
             "scale",
+            "step_count",
+            "is_init",
         ]
         if len(gsde):
             expected_keys += ["_eps_gSDE"]
@@ -828,7 +844,7 @@ to see torch < 1.11 supported for dreamer, please submit an issue.""",
 )
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
-@pytest.mark.parametrize("exploration", ["random", "mode"])
+@pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
     transformed_env_constructor = dreamer_constructor_fixture
     flags = ["from_pixels=True", "catframes=1"]
@@ -866,7 +882,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
-            "reward",
             ("next", "done"),
             ("next", "reward"),
             ("next", "belief"),
@@ -891,7 +906,6 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
-            "reward",
             ("next", "done"),
             ("next", "reward"),
             ("next", "belief"),

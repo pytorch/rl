@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import abc
+import math
 import warnings
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import wraps
@@ -30,6 +32,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import _getitem_batch_size
 
 from torchrl._utils import get_binary_env_var
 
@@ -37,9 +40,30 @@ DEVICE_TYPING = Union[torch.device, str, int]
 
 INDEX_TYPING = Union[int, torch.Tensor, np.ndarray, slice, List]
 
+SHAPE_INDEX_TYPING = Union[
+    int,
+    range,
+    List[int],
+    np.ndarray,
+    slice,
+    None,
+    torch.Tensor,
+    type(...),
+    Tuple[
+        int,
+        range,
+        List[int],
+        np.ndarray,
+        slice,
+        None,
+        torch.Tensor,
+        type(...),
+        Tuple[Any],
+    ],
+]
+
 # By default, we do not check that an obs is in the domain. THis should be done when validating the env beforehand
 _CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
-
 
 _DEFAULT_SHAPE = torch.Size((1,))
 
@@ -56,6 +80,214 @@ def _default_dtype_and_device(
         device = torch.device("cpu")
     device = torch.device(device)
     return dtype, device
+
+
+def _validate_idx(shape: list[int], idx: int, axis: int = 0):
+    """Raise an IndexError if idx is out of bounds for shape[axis].
+
+    Args:
+        shape (list[int]): Input shape
+        idx (int): Index, may be negative
+        axis (int): Shape axis to check
+    """
+    if idx >= shape[axis] or idx < 0 and -idx > shape[axis]:
+        raise IndexError(
+            f"index {idx} is out of bounds for axis {axis} with size {shape[axis]}"
+        )
+
+
+def _validate_iterable(
+    idx: Iterable[Any], expected_type: type, iterable_classname: str
+):
+    """Raise an IndexError if the iterable contains a type different from the expected type or Iterable.
+
+    Args:
+        idx (Iterable[Any]): Iterable, may contain nested iterables
+        expected_type (type): Required item type in the Iterable (e.g. int)
+        iterable_classname (str): Iterable type as a string (e.g. 'List'). Logging purpose only.
+    """
+    for item in idx:
+        if isinstance(item, Iterable):
+            _validate_iterable(item, expected_type, iterable_classname)
+        else:
+            if not isinstance(item, expected_type):
+                raise IndexError(
+                    f"{iterable_classname} indexing expects {expected_type} indices"
+                )
+
+
+def _slice_indexing(shape: list[int], idx: slice) -> List[int]:
+    """Given an input shape and a slice index, returns the new indexed shape.
+
+    Args:
+        shape (list[int]): Input shape
+        idx (slice): Index
+    Returns:
+        Indexed shape
+    Examples:
+        >>> _slice_indexing([3, 4], slice(None, 2))
+        [2, 4]
+        >>> list(torch.rand(3, 4)[:2].shape)
+        [2, 4]
+    """
+    if idx.step == 0:
+        raise ValueError("slice step cannot be zero")
+    # Slicing an empty shape returns the shape
+    if len(shape) == 0:
+        return shape
+
+    if idx.start is None:
+        start = 0
+    else:
+        start = idx.start if idx.start >= 0 else max(shape[0] + idx.start, 0)
+
+    if idx.stop is None:
+        stop = shape[0]
+    else:
+        stop = idx.stop if idx.stop >= 0 else max(shape[0] + idx.stop, 0)
+
+    step = 1 if idx.step is None else idx.step
+    if step > 0:
+        if start >= stop:
+            n_items = 0
+        else:
+            stop = min(stop, shape[0])
+            n_items = math.ceil((stop - start) / step)
+    else:
+        if start <= stop:
+            n_items = 0
+        else:
+            start = min(start, shape[0] - 1)
+            n_items = math.ceil((stop - start) / step)
+    return [n_items] + shape[1:]
+
+
+def _shape_indexing(
+    shape: Union[list[int], torch.Size, tuple[int]], idx: SHAPE_INDEX_TYPING
+) -> List[int]:
+    """Given an input shape and an index, returns the size of the resulting indexed spec.
+
+    This function includes indexing checks and may raise IndexErrors.
+
+    Args:
+        shape (list[int], torch.Size, tuple[int): Input shape
+        idx (SHAPE_INDEX_TYPING): Index
+    Returns:
+        Shape of the resulting spec
+    Examples:
+        >>> idx = (2, ..., None)
+        >>> DiscreteTensorSpec(2, shape=(3, 4))[idx].shape
+        torch.Size([4, 1])
+        >>> _shape_indexing([3, 4], idx)
+        torch.Size([4, 1])
+    """
+    if not isinstance(shape, list):
+        shape = list(shape)
+
+    if idx is Ellipsis or (
+        isinstance(idx, slice) and (idx.step is idx.start is idx.stop is None)
+    ):
+        return shape
+
+    if idx is None:
+        return [1] + shape
+
+    if len(shape) == 0 and (
+        isinstance(idx, int)
+        or isinstance(idx, range)
+        or isinstance(idx, list)
+        and len(idx) > 0
+    ):
+        raise IndexError(
+            f"cannot use integer indices on 0-dimensional shape. `{idx}` received"
+        )
+
+    if isinstance(idx, int):
+        _validate_idx(shape, idx)
+        return shape[1:]
+
+    if isinstance(idx, range):
+        if len(idx) > 0 and (idx.start >= shape[0] or idx.stop > shape[0]):
+            raise IndexError(f"index out of bounds for axis 0 with size {shape[0]}")
+        return [len(idx)] + shape[1:]
+
+    if isinstance(idx, slice):
+        return _slice_indexing(shape, idx)
+
+    if isinstance(idx, tuple):
+        # Supports int, None, slice and ellipsis indices
+        # Index on the current shape dimension
+        shape_idx = 0
+        none_dims = 0
+        ellipsis = False
+        prev_is_list = False
+        shape_len = len(shape)
+        for item_idx, item in enumerate(idx):
+            if item is None:
+                shape = shape[:shape_idx] + [1] + shape[shape_idx:]
+                shape_idx += 1
+                none_dims += 1
+            elif isinstance(item, int):
+                _validate_idx(shape, item, shape_idx)
+                del shape[shape_idx]
+            elif isinstance(item, slice):
+                shape[shape_idx] = _slice_indexing([shape[shape_idx]], item)[0]
+                shape_idx += 1
+            elif item is Ellipsis:
+                if ellipsis:
+                    raise IndexError("an index can only have a single ellipsis (`...`)")
+                # Move to the end of the shape, subtracted by the number of future indices impacting the dimensions (i.e. all except None and ...)
+                shape_idx = len(shape) - len(
+                    [i for i in idx[item_idx + 1 :] if not (i is None or i is Ellipsis)]
+                )
+                ellipsis = True
+            elif any(
+                isinstance(item, _type)
+                for _type in [list, tuple, range, np.ndarray, torch.Tensor]
+            ):
+                while isinstance(idx, tuple) and len(idx) == 1:
+                    idx = idx[0]
+
+                # Nested tuples are handled as a list. Numpy behavior
+                if isinstance(item, tuple):
+                    item = list(item)
+
+                if prev_is_list and isinstance(item, list):
+                    del shape[shape_idx]
+                    continue
+
+                if isinstance(item, list):
+                    prev_is_list = True
+
+                if shape_idx >= len(shape):
+                    raise IndexError("Raise IndexError: too many indices for array")
+
+                res = _shape_indexing([shape[shape_idx]], item)
+                shape = shape[:shape_idx] + res + shape[shape_idx + 1 :]
+                shape_idx += len(res)
+            else:
+                raise IndexError(
+                    f"tuple indexing only supports integers, ranges, slices (`:`), ellipsis (`...`), new axis (`None`), tuples, list, tensor and ndarray indices. {str(type(idx))} received"
+                )
+
+        if len(idx) - none_dims - int(ellipsis) > shape_len:
+            raise IndexError(
+                f"shape is {shape_len}-dimensional, but {len(idx) - none_dims - int(ellipsis)} dimensions were indexed"
+            )
+        return shape
+
+    if isinstance(idx, list):
+        # int indexing only
+        _validate_iterable(idx, int, "list")
+        for item in np.array(idx).reshape(-1):
+            _validate_idx(shape, item, 0)
+        return list(np.array(idx).shape) + shape[1:]
+
+    if isinstance(idx, np.ndarray) or isinstance(idx, torch.Tensor):
+        # Out of bounds check
+        for item in idx.reshape(-1):
+            _validate_idx(shape, item)
+        return list(_getitem_batch_size(shape, idx))
 
 
 class invertible_dict(dict):
@@ -743,6 +975,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         >>> print(chosen_action_value)
         tensor([ 3.,  7., 11.])
 
+    The last dimension of the shape (variable domain) cannot be indexed.
+
     Args:
         n (int): number of possible outcomes.
         shape (torch.Size, optional): total shape of the sampled tensors.
@@ -821,12 +1055,12 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
@@ -921,6 +1155,20 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         index = index.nonzero().squeeze()
         index = index.expand((*tensor_to_index.shape[:-1], index.shape[-1]))
         return tensor_to_index.gather(-1, index)
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec corresponding to the variable domain cannot be indexed.
+        """
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
+        return self.__class__(
+            n=self.space.n,
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
+        )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         # idx = val.sum(-1) != 1
@@ -1065,12 +1313,12 @@ class BoundedTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             minimum=self.space.minimum.expand(shape).clone(),
@@ -1196,6 +1444,22 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        raise NotImplementedError(
+            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+        )
+
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
+        # Expand is required as pytorch.tensor indexing
+        return self.__class__(
+            minimum=self.space.minimum[idx].clone().expand(indexed_shape),
+            maximum=self.space.maximum[idx].clone().expand(indexed_shape),
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -1260,14 +1524,19 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
+        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
 @dataclass(repr=False)
@@ -1347,19 +1616,26 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(shape=shape, device=self.device, dtype=self.dtype)
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
+        return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
 @dataclass(repr=False)
 class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     """A concatenation of one-hot discrete tensor spec.
+
+    The last dimension of the shape (domain of the tensor elements) cannot be indexed.
 
     Args:
         nvec (iterable of integers): cardinality of each of the elements of
@@ -1537,12 +1813,12 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             nvec=nvecs, shape=shape, device=self.device, dtype=self.dtype
@@ -1571,6 +1847,19 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec corresponding to the domain of the tensor elements is non-indexable.
+        """
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
+        return self.__class__(
+            nvec=self.nvec,
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 class DiscreteTensorSpec(TensorSpec):
     """A discrete tensor spec.
@@ -1578,6 +1867,7 @@ class DiscreteTensorSpec(TensorSpec):
     An alternative to OneHotTensorSpec for categorical variables in TorchRL. Instead of
     using multiplication, categorical variables perform indexing which can speed up
     computation and reduce memory cost for large categorical variables.
+    The last dimension of the spec (length n of the binary vector) cannot be indexed
 
     Example:
         >>> batch, size = 3, 4
@@ -1636,6 +1926,16 @@ class DiscreteTensorSpec(TensorSpec):
     def is_in(self, val: torch.Tensor) -> bool:
         return (0 <= val).all() and (val < self.space.n).all()
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
+        return self.__class__(
+            n=self.space.n,
+            shape=indexed_shape,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
     def __eq__(self, other):
         return (
             type(self) == type(other)
@@ -1676,12 +1976,12 @@ class DiscreteTensorSpec(TensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
@@ -1762,12 +2062,12 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
@@ -1808,6 +2108,19 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             dtype=self.dtype,
         )
 
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index.
+
+        The last dimension of the spec (length n of the binary vector) cannot be indexed.
+        """
+        indexed_shape = _shape_indexing(self.shape[:-1], idx)
+        return self.__class__(
+            n=self.shape[-1],
+            shape=torch.Size(indexed_shape + [self.shape[-1]]),
+            device=self.device,
+            dtype=self.dtype,
+        )
+
 
 @dataclass(repr=False)
 class MultiDiscreteTensorSpec(DiscreteTensorSpec):
@@ -1817,7 +2130,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         nvec (iterable of integers or torch.Tensor): cardinality of each of the elements of
             the tensor. Can have several axes.
         shape (torch.Size, optional): total shape of the sampled tensors.
-            If provided, the last dimension must match nvec.shape[-1].
+            If provided, the last m dimensions must match nvec.shape.
         device (str, int or torch.device, optional): device of
             the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
@@ -1854,6 +2167,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                     f"The last value of the shape must match nvec.shape[-1] for transform of type {self.__class__}. "
                     f"Got nvec.shape[-1]={sum(nvec)} and shape={shape}."
                 )
+
         self.nvec = self.nvec.expand(shape)
 
         space = BoxList.from_nvec(self.nvec)
@@ -1981,12 +2295,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape = shape[0]
         if any(val < 0 for val in shape):
             raise ValueError(
-                f"{self.__class__.__name__}.extend does not support negative shapes."
+                f"{self.__class__.__name__}.expand does not support negative shapes."
             )
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
@@ -2020,6 +2334,19 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         nvec = self.nvec.unsqueeze(dim)
         return self.__class__(
             nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
+        )
+
+    def __getitem__(self, idx: SHAPE_INDEX_TYPING):
+        """Indexes the current TensorSpec based on the provided index."""
+        raise NotImplementedError(
+            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+        )
+
+        return self.__class__(
+            nvec=self.nvec[idx].clone(),
+            shape=None,
+            device=self.device,
+            dtype=self.dtype,
         )
 
 
@@ -2204,15 +2531,53 @@ class CompositeSpec(TensorSpec):
         device = torch.device(device)
         self.to(device)
 
-    def __getitem__(self, item):
-        if isinstance(item, tuple) and len(item) > 1:
-            return self[item[0]][item[1:]]
-        elif isinstance(item, tuple):
-            return self[item[0]]
+    def __getitem__(self, idx):
+        """Indexes the current CompositeSpec based on the provided index."""
+        if (
+            isinstance(idx, str)
+            or isinstance(idx, tuple)
+            and all(isinstance(item, str) for item in idx)
+        ):
+            if isinstance(idx, tuple) and len(idx) > 1:
+                return self[idx[0]][idx[1:]]
+            elif isinstance(idx, tuple):
+                return self[idx[0]]
 
-        if item in {"shape", "device", "dtype", "space"}:
-            raise AttributeError(f"CompositeSpec has no key {item}")
-        return self._specs[item]
+            if idx in {"shape", "device", "dtype", "space"}:
+                raise AttributeError(f"CompositeSpec has no key {idx}")
+            return self._specs[idx]
+
+        indexed_shape = _shape_indexing(self.shape, idx)
+        indexed_specs = {}
+        for k, v in self._specs.items():
+            _idx = idx
+            if isinstance(idx, tuple):
+                protected_dims = 0
+                if any(
+                    isinstance(v, spec_class)
+                    for spec_class in [
+                        BinaryDiscreteTensorSpec,
+                        MultiDiscreteTensorSpec,
+                        OneHotDiscreteTensorSpec,
+                    ]
+                ):
+                    protected_dims = 1
+                # TensorSpecs dims which are not part of the composite shape cannot be indexed
+                _idx = idx + (slice(None),) * (
+                    len(v.shape) - len(self.shape) - protected_dims
+                )
+            indexed_specs[k] = v[_idx]
+
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
+
+        return self.__class__(
+            indexed_specs,
+            shape=indexed_shape,
+            device=device,
+        )
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
@@ -2257,13 +2622,26 @@ class CompositeSpec(TensorSpec):
             yield k
 
     def __delitem__(self, key: str) -> None:
+        if isinstance(key, tuple) and len(key) > 1:
+            del self._specs[key[0]][key[1:]]
+            return
+        elif isinstance(key, tuple):
+            del self._specs[key[0]]
+            return
+        elif not isinstance(key, str):
+            raise TypeError(
+                f"Got key of type {type(key)} when a string or a tuple of strings was expected."
+            )
+
+        if key in {"shape", "device", "dtype", "space"}:
+            raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
 
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
         else:
-            out = TensorDict({}, [], _run_checks=False)
+            out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
@@ -2437,7 +2815,10 @@ class CompositeSpec(TensorSpec):
         except RuntimeError:
             device = self._device
         return self.__class__(
-            {key: item.clone() for key, item in self.items()},
+            {
+                key: item.clone() if item is not None else None
+                for key, item in self.items()
+            },
             device=device,
             shape=self.shape,
         )
@@ -2498,11 +2879,11 @@ class CompositeSpec(TensorSpec):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):
             shape = shape[0]
         if any(val < 0 for val in shape):
-            raise ValueError("CompositeSpec.extend does not support negative shapes.")
+            raise ValueError("CompositeSpec.expand does not support negative shapes.")
         if any(s1 != s2 and s2 != 1 for s1, s2 in zip(shape[-self.ndim :], self.shape)):
             raise ValueError(
-                f"The last {self.ndim} of the extended shape must match the"
-                f"shape of the CompositeSpec in CompositeSpec.extend."
+                f"The last {self.ndim} of the expanded shape {shape} must match the"
+                f"shape of the {self.__class__.__name__} spec in expand()."
             )
         try:
             device = self.device

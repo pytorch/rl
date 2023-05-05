@@ -13,7 +13,7 @@ from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
-from torchrl.envs.utils import exploration_mode
+from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 
@@ -352,7 +352,7 @@ class gSDEModule(nn.Module):
 
     def forward(self, mu, state, _eps_gSDE):
         sigma = self.sigma.clamp_max(self.scale_max)
-        _err_explo = f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
+        _err_explo = f"gSDE behaviour for exploration mode {exploration_type()} is not defined. Choose from 'random' or 'mode'."
 
         if state.shape[:-1] != mu.shape[:-1]:
             _err_msg = f"mu and state are expected to have matching batch size, got shapes {mu.shape} and {state.shape}"
@@ -363,12 +363,12 @@ class gSDEModule(nn.Module):
             _err_msg = f"noise and state are expected to have matching batch size, got shapes {_eps_gSDE.shape} and {state.shape}"
             raise RuntimeError(_err_msg)
 
-        if _eps_gSDE is None and exploration_mode() == "mode":
+        if _eps_gSDE is None and exploration_type() == ExplorationType.MODE:
             # noise is irrelevant in with no exploration
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif (_eps_gSDE is None and exploration_mode() == "random") or (
+        elif (_eps_gSDE is None and exploration_type() == ExplorationType.RANDOM) or (
             _eps_gSDE is not None
             and _eps_gSDE.numel() == prod(state.shape[:-1])
             and (_eps_gSDE == 0).all()
@@ -382,9 +382,9 @@ class gSDEModule(nn.Module):
         gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
 
-        if exploration_mode() in ("random",):
+        if exploration_type() in (ExplorationType.RANDOM,):
             action = mu + eps
-        elif exploration_mode() in ("mode",):
+        elif exploration_type() in (ExplorationType.MODE,):
             action = mu
         else:
             raise RuntimeError(_err_explo)

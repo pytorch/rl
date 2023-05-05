@@ -8,7 +8,7 @@ import torch
 
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs import EnvBase
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import classproperty
 
 IMPORT_ERR = None
@@ -53,14 +53,13 @@ class HabitatEnv(GymEnv):
     """
 
     @_wrap_import_error
-    def __init__(self, env_name, disable_env_checker=None, **kwargs):
+    @set_gym_backend("gym")
+    def __init__(self, env_name, **kwargs):
         device_num = torch.device(kwargs.pop("device", 0)).index
         kwargs["override_options"] = [
             f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}",
         ]
-        super().__init__(
-            env_name=env_name, disable_env_checker=disable_env_checker, **kwargs
-        )
+        super().__init__(env_name=env_name, **kwargs)
 
     @classproperty
     def available_envs(cls):

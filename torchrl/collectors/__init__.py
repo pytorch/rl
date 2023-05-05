@@ -8,5 +8,6 @@ from .collectors import (
     DataCollectorBase,
     MultiaSyncDataCollector,
     MultiSyncDataCollector,
+    RandomPolicy,
     SyncDataCollector,
 )

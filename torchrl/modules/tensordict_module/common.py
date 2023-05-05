@@ -71,7 +71,14 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
         for _spec, _key in zip(values, keys):
             if _spec is None:
                 continue
-            if not _spec.is_in(tensordict_out.get(_key)):
+            item = tensordict_out.get(_key, None)
+            if item is None:
+                # this will happen when an exploration (e.g. OU) writes a key only
+                # during exploration, but is missing otherwise.
+                # it's fine since what we want here it to make sure that a key
+                # is within bounds if it is present
+                continue
+            if not _spec.is_in(item):
                 try:
                     tensordict_out.set_(
                         _key,
@@ -95,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output
@@ -173,7 +180,7 @@ class SafeModule(TensorDictModule):
     One can use a vmap operator to call the functional module. In this case the tensordict is expanded to match the
     batch size (i.e. the tensordict isn't modified in-place anymore):
         >>> # Model ensemble using vmap
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params_repeat = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
@@ -199,7 +206,9 @@ class SafeModule(TensorDictModule):
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
+        self.register_spec(safe=safe, spec=spec)
 
+    def register_spec(self, safe, spec):
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -352,6 +361,7 @@ def ensure_tensordict_compatible(
     out_keys: Optional[Iterable[str]] = None,
     safe: bool = False,
     wrapper_type: Optional[Type] = TensorDictModule,
+    **kwargs,
 ):
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
@@ -386,7 +396,6 @@ def ensure_tensordict_compatible(
         )
 
     # TODO: Check whether out_keys match (at least in number) if they are provided.
-    kwargs = {}
     if in_keys is not None:
         kwargs["in_keys"] = in_keys
     if out_keys is not None:

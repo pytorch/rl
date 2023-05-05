@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Optional, Tuple
 
 import torch
-from tensordict import MemmapTensor
+from tensordict import MemmapTensor, TensorDictBase
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -43,11 +43,11 @@ def _transpose_time(fun):
         if time_dim != -2:
             args = [transpose_tensor(arg) for arg in args]
             kwargs = {k: transpose_tensor(item) for k, item in kwargs.items()}
-            out = fun(*args, **kwargs)
+            out = fun(*args, time_dim=-2, **kwargs)
             if isinstance(out, torch.Tensor):
                 return transpose_tensor(out)
             return tuple(transpose_tensor(_out) for _out in out)
-        return fun(*args, **kwargs)
+        return fun(*args, time_dim=time_dim, **kwargs)
 
     return transposed_fun
 
@@ -82,8 +82,7 @@ def generalized_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -140,8 +139,7 @@ def vec_generalized_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -198,14 +196,12 @@ def vec_generalized_advantage_estimate(
 # -----
 
 
-@_transpose_time
 def td0_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) advantage estimate of a trajectory.
 
@@ -217,23 +213,20 @@ def td0_advantage_estimate(
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    not_done = 1 - done.to(next_state_value.dtype)
-    advantage = reward + gamma * not_done * next_state_value - state_value
+    returns = td0_return_estimate(gamma, next_state_value, reward, done)
+    advantage = returns - state_value
     return advantage
 
 
-@_transpose_time
 def td0_return_estimate(
     gamma: float,
     next_state_value: torch.Tensor,
@@ -251,7 +244,9 @@ def td0_return_estimate(
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         done (Tensor): boolean flag for end of episode.
-        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -308,8 +303,7 @@ def td1_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -351,7 +345,6 @@ def td1_return_estimate(
     return returns
 
 
-@_transpose_time
 def td1_advantage_estimate(
     gamma: float,
     state_value: torch.Tensor,
@@ -393,8 +386,7 @@ def td1_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -403,7 +395,9 @@ def td1_advantage_estimate(
         )
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
-    returns = td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+    returns = td1_return_estimate(
+        gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+    )
     advantage = returns - state_value
     return advantage
 
@@ -448,8 +442,7 @@ def vec_td1_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     return vec_td_lambda_return_estimate(
@@ -459,10 +452,10 @@ def vec_td1_return_estimate(
         done=done,
         rolling_gamma=rolling_gamma,
         lmbda=1,
+        time_dim=time_dim,
     )
 
 
-@_transpose_time
 def vec_td1_advantage_estimate(
     gamma,
     state_value,
@@ -504,8 +497,7 @@ def vec_td1_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -513,7 +505,9 @@ def vec_td1_advantage_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
     return (
-        vec_td1_return_estimate(gamma, next_state_value, reward, done, rolling_gamma)
+        vec_td1_return_estimate(
+            gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+        )
         - state_value
     )
 
@@ -565,8 +559,7 @@ def td_lambda_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -622,7 +615,6 @@ def td_lambda_return_estimate(
     return returns
 
 
-@_transpose_time
 def td_lambda_advantage_estimate(
     gamma: float,
     lmbda: float,
@@ -666,8 +658,7 @@ def td_lambda_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -677,7 +668,7 @@ def td_lambda_advantage_estimate(
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
-        gamma, lmbda, next_state_value, reward, done, rolling_gamma
+        gamma, lmbda, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
     )
     advantage = returns - state_value
     return advantage
@@ -728,8 +719,7 @@ def vec_td_lambda_return_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
@@ -841,7 +831,6 @@ def vec_td_lambda_return_estimate(
         return (v1 + v2 + v3).view(*batch, lastdim, T).transpose(-2, -1)
 
 
-@_transpose_time
 def vec_td_lambda_advantage_estimate(
     gamma,
     lmbda,
@@ -885,8 +874,7 @@ def vec_td_lambda_advantage_estimate(
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
-    ``[*Batch x TimeSteps x F]``, with ``F`` features (for single agent,
-    single task, single objective F=1).
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
@@ -895,7 +883,255 @@ def vec_td_lambda_advantage_estimate(
         )
     return (
         vec_td_lambda_return_estimate(
-            gamma, lmbda, next_state_value, reward, done, rolling_gamma
+            gamma,
+            lmbda,
+            next_state_value,
+            reward,
+            done,
+            rolling_gamma,
+            time_dim=time_dim,
         )
         - state_value
     )
+
+
+########################################################################
+# Reward to go
+# ------------
+
+
+def _flatten_batch(tensor):
+    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+
+    Args:
+        tensor (torch.Tensor): a tensor of shape [B, T]
+    """
+    return tensor.flatten(0, 1)
+
+
+def _get_num_per_traj(dones_and_truncated):
+    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+
+    Args:
+        dones_and_truncated (torch.Tensor): A done or truncated mark of shape [B, T]
+
+    Returns:
+        A list of integers representing the number of steps in each trajectories
+    """
+    dones_and_truncated = dones_and_truncated.clone()
+    dones_and_truncated[..., -1] = 1
+    dones_and_truncated = _flatten_batch(dones_and_truncated)
+    num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
+    num_per_traj[1:] -= num_per_traj[:-1].clone()
+    return num_per_traj
+
+
+def _get_num_per_traj_init(is_init):
+    """Like _get_num_per_traj, but with is_init signal."""
+    done = torch.zeros_like(is_init)
+    done[..., :-1][is_init[..., 1:]] = 1
+    return _get_num_per_traj(done)
+
+
+def _split_and_pad_sequence(tensor, splits):
+    """Given a tensor of size [B, T, *other] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
+
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> print(splits)
+        tensor([3, 2, 2, 3, 5, 5])
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> print(td)
+        TensorDict(
+            fields={
+                is_init: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+                obs: Tensor(shape=torch.Size([6, 5, 3]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([6, 5]),
+            device=None,
+            is_shared=False)
+        >>> print(td["obs"])
+        tensor([[[ 0,  0,  0],
+                 [ 1,  1,  1],
+                 [ 2,  2,  2],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 3,  3,  3],
+                 [ 4,  4,  4],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 5,  5,  5],
+                 [ 6,  6,  6],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 7,  7,  7],
+                 [ 8,  8,  8],
+                 [ 9,  9,  9],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[10, 10, 10],
+                 [11, 11, 11],
+                 [12, 12, 12],
+                 [13, 13, 13],
+                 [14, 14, 14]],
+        <BLANKLINE>
+                [[15, 15, 15],
+                 [16, 16, 16],
+                 [17, 17, 17],
+                 [18, 18, 18],
+                 [19, 19, 19]]])
+
+    """
+    tensor = _flatten_batch(tensor)
+    max_val = max(splits)
+    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
+    mask.scatter_(
+        index=max_val - torch.tensor(splits, device=tensor.device).unsqueeze(-1),
+        dim=1,
+        value=1,
+    )
+    mask = mask.cumsum(-1).flip(-1).bool()
+
+    def _fill_tensor(tensor):
+        empty_tensor = torch.zeros(
+            len(splits),
+            max_val,
+            *tensor.shape[1:],
+            dtype=tensor.dtype,
+            device=tensor.device,
+        )
+        empty_tensor[mask] = tensor
+        return empty_tensor
+
+    if isinstance(tensor, TensorDictBase):
+        tensor = tensor.apply(_fill_tensor, batch_size=[len(splits), max_val])
+    else:
+        tensor = _fill_tensor(tensor)
+    return tensor
+
+
+def _inv_pad_sequence(tensor, splits):
+    """Inverses a pad_sequence operation.
+
+    Examples:
+        >>> rewards = torch.randn(100, 20)
+        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
+        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
+        >>> assert (reconstructed==rewards).all()
+
+
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
+
+    """
+    offset = torch.ones_like(splits) * tensor.shape[-1]
+    offset[0] = 0
+    offset = offset.cumsum(0)
+    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=offset.device)
+
+    ones = offset + splits
+    ones = ones[ones < tensor.numel()]
+    # while ones[-1] == tensor.numel():
+    #     ones = ones[:-1]
+    z[ones] = 1
+    z_idx = z[offset[1:]]
+    z[offset[1:]] = torch.bitwise_xor(
+        z_idx, torch.ones_like(z_idx)
+    )  # make sure that the longest is accounted for
+    idx = z.cumsum(0) % 2 == 0
+    return tensor.reshape(-1)[idx]
+
+
+@_transpose_time
+def reward2go(
+    reward,
+    done,
+    gamma,
+    time_dim: int = -2,
+):
+    """Compute the discounted cumulative sum of rewards given multiple trajectories and the episode ends.
+
+    Args:
+        reward (torch.Tensor): A tensor containing the rewards
+            received at each time step over multiple trajectories.
+        done (torch.Tensor): A tensor with done (or truncated) states.
+        gamma (float, optional): The discount factor to use for computing the
+            discounted cumulative sum of rewards. Defaults to 1.0.
+        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+    Returns:
+        torch.Tensor: A tensor of shape [B, T] containing the discounted cumulative
+            sum of rewards (reward-to-go) at each time step.
+
+    Examples:
+        >>> reward = torch.ones(1, 10)
+        >>> done = torch.zeros(1, 10, dtype=torch.bool)
+        >>> done[:, [3, 7]] = True
+        >>> reward2go(reward, done, 0.99, time_dim=-1)
+        tensor([[3.9404],
+                [2.9701],
+                [1.9900],
+                [1.0000],
+                [3.9404],
+                [2.9701],
+                [1.9900],
+                [1.0000],
+                [1.9900],
+                [1.0000]])
+
+    """
+    shape = reward.shape
+    if shape != done.shape:
+        raise ValueError(
+            f"reward and done must share the same shape, got {reward.shape} and {done.shape}"
+        )
+    # place time at dim -1
+    reward = reward.transpose(-2, -1)
+    done = done.transpose(-2, -1)
+    # flatten if needed
+    if reward.ndim > 2:
+        reward = reward.flatten(0, -2)
+        done = done.flatten(0, -2)
+
+    num_per_traj = _get_num_per_traj(done)
+    td0_flat = _split_and_pad_sequence(reward, num_per_traj)
+    gammas = torch.ones_like(td0_flat[0])
+    gammas[1:] = gamma
+    gammas[1:] = gammas[1:].cumprod(0)
+    gammas = gammas.unsqueeze(-1)
+    cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
+    cumsum = _inv_pad_sequence(cumsum, num_per_traj)
+    cumsum = cumsum.view_as(reward)
+    if cumsum.shape != shape:
+        cumsum = cumsum.view(shape)
+    return cumsum

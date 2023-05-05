@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import itertools
+import warnings
 from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -17,6 +17,8 @@ from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
+from torchrl._utils import RL_WARNINGS
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
@@ -47,19 +49,29 @@ class LossModule(nn.Module):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
-    :cvar defaylt_value_type: The default value type of the class.
+    :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
         pointer. This class attribute indicates which value estimator will be
         used if none other is specified.
         The value estimator can be changed using the :meth:`~.make_value_estimator` method.
+
+    By default, the forward method is always decorated with a
+    gh :class:`torchrl.envs.ExplorationType.MODE`
     """
 
     default_value_estimator: ValueEstimators = None
+    SEP = "_sep_"
+
+    def __new__(cls, *args, **kwargs):
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        return super().__new__(cls)
 
     def __init__(self):
         super().__init__()
         self._param_maps = {}
         self._value_estimator = None
+        self._has_update_associated = False
+        self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -88,18 +100,70 @@ class LossModule(nn.Module):
         compare_against: Optional[List[Parameter]] = None,
         funs_to_decorate=None,
     ) -> None:
-        """Converts a module to functional to be used in the loss."""
+        """Converts a module to functional to be used in the loss.
+
+        Args:
+            module (TensorDictModule or compatible): a stateful tensordict module.
+                This module will be made functional, yet still stateful, meaning
+                that it will be callable with the following alternative signatures:
+
+                >>> module(tensordict)
+                >>> module(tensordict, params=params)
+
+                ``params`` is a :class:`tensordict.TensorDict` instance with parameters
+                stuctured as the output of :func:`tensordict.nn.make_functional`
+                is.
+            module_name (str): name where the module will be found.
+                The parameters of the module will be found under ``loss_module.<module_name>_params``
+                whereas the module will be found under ``loss_module.<module_name>``.
+            expand_dim (int, optional): if provided, the parameters of the module
+                will be expanded ``N`` times, where ``N = expand_dim`` along the
+                first dimension. This option is to be used whenever a target
+                network with more than one configuration is to be used.
+
+                .. note::
+                  If a ``compare_against`` list of values is provided, the
+                  resulting parameters will simply be a detached expansion
+                  of the original parameters. If ``compare_against`` is not
+                  provided, the value of the parameters will be resampled uniformly
+                  between the minimum and maximum value of the parameter content.
+
+             create_target_params (bool, optional): if ``True``, a detached
+                copy of the parameter will be available to feed a target network
+                under the name ``loss_module.<module_name>_target_params``.
+                If ``False`` (default), this attribute will still be available
+                but it will be a detached instance of the parameters, not a copy.
+                In other words, any modification of the parameter value
+                will directly be reflected in the target parameters.
+            compare_against (iterable of parameters, optional): if provided,
+                this list of parameters will be used as a comparison set for
+                the parameters of the module. If the parameters are expanded
+                (``expand_dim > 0``), the resulting parameters for the module
+                will be a simple expansion of the original parameter. Otherwise,
+                the resulting parameters will be a detached version of the
+                original parameters. If ``None``, the resulting parameters
+                will carry gradients as expected.
+            funs_to_decorate (list of str, optional): if provided, the list of
+                methods of ``module`` to make functional, ie the list of
+                methods that will accept the ``params`` keyword argument.
+
+        """
         if funs_to_decorate is None:
             funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
-        try:
-            buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
-        except StopIteration:
-            buffer_names = ()
+        sep = self.SEP
         params = make_functional(module, funs_to_decorate=funs_to_decorate)
+        # buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
+        buffer_names = []
+        for key, value in params.items(True, True):
+            # we just consider all that is not param as a buffer, but if the module has been made
+            # functional and the params have been replaced this may break
+            if not isinstance(value, nn.Parameter):
+                key = sep.join(key) if not isinstance(key, str) else key
+                buffer_names.append(key)
         functional_module = deepcopy(module)
         repopulate_module(module, params)
 
@@ -118,28 +182,27 @@ class LossModule(nn.Module):
         # separate params and buffers
         params_and_buffers = params_and_buffers.apply(create_buffers)
         for key in params_and_buffers.keys(True):
-            if "_sep_" in key:
+            if sep in key:
                 raise KeyError(
                     f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
                 )
-        params_and_buffers_flat = params_and_buffers.flatten_keys("_sep_")
+        params_and_buffers_flat = params_and_buffers.flatten_keys(sep)
         buffers = params_and_buffers_flat.select(*buffer_names)
         params = params_and_buffers_flat.exclude(*buffer_names)
-
         if expand_dim and not _has_functorch:
             raise ImportError(
                 "expanding params is only possible when functorch is installed,"
                 "as this feature requires calls to the vmap operator."
             )
+        if compare_against is not None:
+            compare_against = set(compare_against)
+        else:
+            compare_against = set()
         if expand_dim:
             # Expands the dims of params and buffers.
             # If the param already exist in the module, we return a simple expansion of the
             # original one. Otherwise, we expand and resample it.
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
-            if compare_against is not None:
-                compare_against = set(compare_against)
-            else:
-                compare_against = set()
 
             def _compare_and_expand(param):
 
@@ -167,8 +230,8 @@ class LossModule(nn.Module):
                 batch_size=[expand_dim, *buffers.shape],
             )
 
-            params_and_buffers.update(params.unflatten_keys("_sep_"))
-            params_and_buffers.update(buffers.unflatten_keys("_sep_"))
+            params_and_buffers.update(params.unflatten_keys(sep))
+            params_and_buffers.update(buffers.unflatten_keys(sep))
             params_and_buffers.batch_size = params.batch_size
 
             # self.params_to_map = params_to_map
@@ -180,25 +243,30 @@ class LossModule(nn.Module):
         # register parameters and buffers
         for key, parameter in params.items():
             if parameter not in prev_set_params:
-                setattr(self, "_sep_".join([module_name, key]), parameter)
+                setattr(self, sep.join([module_name, key]), parameter)
             else:
+                # if the parameter is already present, we register a string pointing
+                # to is instead. If the string ends with a '_detached' suffix, the
+                # value will be detached
                 for _param_name, p in self.named_parameters():
                     if parameter is p:
                         break
                 else:
                     raise RuntimeError("parameter not found")
-                setattr(self, "_sep_".join([module_name, key]), _param_name)
+                if compare_against is not None and p in compare_against:
+                    _param_name = _param_name + "_detached"
+                setattr(self, sep.join([module_name, key]), _param_name)
         prev_set_buffers = set(self.buffers())
         for key, buffer in buffers.items():
             if buffer not in prev_set_buffers:
-                self.register_buffer("_sep_".join([module_name, key]), buffer)
+                self.register_buffer(sep.join([module_name, key]), buffer)
             else:
                 for _buffer_name, b in self.named_buffers():
                     if buffer is b:
                         break
                 else:
                     raise RuntimeError("buffer not found")
-                setattr(self, "_sep_".join([module_name, key]), _buffer_name)
+                setattr(self, sep.join([module_name, key]), _buffer_name)
 
         setattr(self, "_" + param_name, params_and_buffers)
         setattr(
@@ -218,10 +286,10 @@ class LossModule(nn.Module):
                 # find the param name
                 for name, param in self.named_parameters():
                     if param.data.data_ptr() == value.data_ptr() and param is not value:
-                        self._param_maps[name] = "_sep_".join([module_name, *key])
+                        self._param_maps[name] = sep.join([module_name, *key])
                         break
                 else:
-                    raise RuntimeError("did not find matching param.")
+                    raise RuntimeError(f"key {key} did not find matching param.")
 
         name_params_target = "_target_" + module_name
         if create_target_params:
@@ -231,7 +299,7 @@ class LossModule(nn.Module):
             for (key, val) in target_params_items:
                 if not isinstance(key, tuple):
                     key = (key,)
-                name = "_sep_".join([name_params_target, *key])
+                name = sep.join([name_params_target, *key])
                 self.register_buffer(name, Buffer(val))
                 target_params_list.append((name, key))
             setattr(self, name_params_target + "_params", target_params)
@@ -253,10 +321,14 @@ class LossModule(nn.Module):
                 for key in params.keys(True, True):
                     if not isinstance(key, tuple):
                         key = (key,)
-                    value_to_set = getattr(self, "_sep_".join([network_name, *key]))
+                    value_to_set = getattr(self, self.SEP.join([network_name, *key]))
                     if isinstance(value_to_set, str):
-                        value_to_set = getattr(self, value_to_set).detach()
-                    params.set(key, value_to_set)
+                        if value_to_set.endswith("_detached"):
+                            value_to_set = value_to_set[:-9]
+                            value_to_set = getattr(self, value_to_set).detach()
+                        else:
+                            value_to_set = getattr(self, value_to_set)
+                    params._set(key, value_to_set)
                 return params
             else:
                 params = getattr(self, param_name)
@@ -273,14 +345,24 @@ class LossModule(nn.Module):
         if target_name in self.__dict__:
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if not self._has_update_associated and RL_WARNINGS:
+                    warnings.warn(
+                        "No target network updater has been associated "
+                        "with this loss module, but target parameters have been found."
+                        "While this is supported, it is expected that the target network "
+                        "updates will be manually performed. You can deactivate this warning "
+                        "by turning the RL_WARNINGS env variable to False.",
+                        category=UserWarning,
+                    )
                 # get targets and update
                 for key in target_params.keys(True, True):
                     if not isinstance(key, tuple):
                         key = (key,)
                     value_to_set = getattr(
-                        self, "_sep_".join(["_target_" + network_name, *key])
+                        self, self.SEP.join(["_target_" + network_name, *key])
                     )
-                    target_params.set(key, value_to_set)
+                    # _set is faster bc is bypasses the checks
+                    target_params._set(key, value_to_set)
                 return target_params
             else:
                 params = getattr(self, param_name)
@@ -385,28 +467,41 @@ class LossModule(nn.Module):
         """
         self.make_value_estimator(self.default_value_estimator)
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.
 
         If the non-default value function is wanted, it must be built using
         this method.
 
         Args:
-            value_type (ValueEstimators): A :class:`torchrl.objectives.utils.ValueFunctions`
-                enum type indicating the value function to use.
+            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
+                enum type indicating the value function to use. If none is provided,
+                the default stored in the ``default_value_estimator``
+                attribute will be used. The resulting value estimator class
+                will be registered in ``self.value_type``, allowing
+                future refinements.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
-                :func:`torchrl.objectives.utils.default_value_kwargs` will be
+                :func:`~torchrl.objectives.utils.default_value_kwargs` will be
                 used.
 
         Examples:
+            >>> from torchrl.objectives import DQNLoss
             >>> # initialize the DQN loss
-            >>> dqn_loss = DQNLoss(actor)
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> # updating the parameters of the default value estimator
+            >>> dqn_loss.make_value_estimator(gamma=0.9)
             >>> dqn_loss.make_value_estimator(
             ...     ValueEstimators.TD1,
             ...     gamma=0.9)
+            >>> # if we want to change the gamma value
+            >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
 
         """
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."

@@ -16,6 +16,7 @@ from torchrl._utils import VERBOSE
 from torchrl.collectors.collectors import DataCollectorBase
 from torchrl.data import ReplayBuffer
 from torchrl.envs.common import EnvBase
+from torchrl.envs.utils import ExplorationType
 from torchrl.modules import reset_noise
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
@@ -213,7 +214,11 @@ def make_trainer(
         # replay buffer is used 2 or 3 times: to register data, to sample
         # data and to update priorities
         rb_trainer = ReplayBufferTrainer(
-            replay_buffer, cfg.batch_size, memmap=False, device=device
+            replay_buffer,
+            cfg.batch_size,
+            flatten_tensordicts=False,
+            memmap=False,
+            device=device,
         )
 
         trainer.register_op("batch_process", rb_trainer.extend)
@@ -257,7 +262,7 @@ def make_trainer(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
-            recorder=recorder,
+            environment=recorder,
             record_interval=cfg.record_interval,
             log_keys=cfg.recorder_log_keys,
         )
@@ -270,9 +275,9 @@ def make_trainer(
             record_frames=cfg.record_frames,
             frame_skip=cfg.frame_skip,
             policy_exploration=policy_exploration,
-            recorder=recorder,
+            environment=recorder,
             record_interval=cfg.record_interval,
-            exploration_mode="random",
+            exploration_type=ExplorationType.RANDOM,
             suffix="exploration",
             out_keys={("next", "reward"): "r_evaluation_exploration"},
         )

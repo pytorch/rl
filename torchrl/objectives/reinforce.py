@@ -56,8 +56,8 @@ class ReinforceLoss(LossModule):
         >>> losses = reinforce_loss(data)
 
       A custom advantage module can be built using :meth:`~.make_value_estimator`.
-      The default is :class:`torchrl.objectives.value.GAE` with hyperparameters
-      dictated by :func:`torchrl.objectives.utils.default_value_kwargs`.
+      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
+      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
         >>> reinforce_loss = ReinforceLoss(actor, critic)
         >>> reinforce_loss.make_value_estimator(ValueEstimators.TDLambda)
@@ -102,7 +102,7 @@ class ReinforceLoss(LossModule):
                 compare_against=list(actor.parameters()),
             )
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -153,7 +153,10 @@ class ReinforceLoss(LossModule):
             )
         return loss_value
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

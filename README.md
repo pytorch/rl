@@ -1,5 +1,6 @@
 [![pytorch](https://circleci.com/gh/pytorch/rl.svg?style=shield)](https://circleci.com/gh/pytorch/rl)
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg)](https://pytorch.org/rl/)
+[![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch.github.io/rl/dev/bench/)
 [![codecov](https://codecov.io/gh/pytorch/rl/branch/main/graph/badge.svg?token=HcpK1ILV6r)](https://codecov.io/gh/pytorch/rl)
 [![Twitter Follow](https://img.shields.io/twitter/follow/torchrl1?style=social)](https://twitter.com/torchrl1)
 [![Python 3.7, 3.8](https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9%20%7C%203.10-blue.svg)](https://www.python.org/downloads/)
@@ -439,9 +440,9 @@ And it is `functorch` and `torch.compile` compatible!
 
   ```python
   policy_explore = EGreedyWrapper(policy)
-  with set_exploration_mode("random"):
+  with set_exploration_type(ExplorationType.RANDOM):
       tensordict = policy_explore(tensordict)  # will use eps-greedy
-  with set_exploration_mode("mode"):
+  with set_exploration_type(ExplorationType.MODE):
       tensordict = policy_explore(tensordict)  # will not use eps-greedy
   ```
   </details>
@@ -489,7 +490,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
-- [A2C](examples/a2c/a2c.py)
+- [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)

@@ -14,7 +14,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import Tensor
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import (
     default_value_kwargs,
     distance_loss,
@@ -26,7 +26,10 @@ from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     FUNCTORCH_ERR = ""
     _has_functorch = True
@@ -159,7 +162,7 @@ class REDQLoss_deprecated(LossModule):
         self.gSDE = gSDE
 
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     @property
@@ -195,7 +198,7 @@ class REDQLoss_deprecated(LossModule):
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             self.actor_network(
                 tensordict_clone,
                 params=self.actor_network_params,
@@ -230,7 +233,7 @@ class REDQLoss_deprecated(LossModule):
             )  # next_observation ->
             # observation
             # select pseudo-action
-            with set_exploration_mode("random"):
+            with set_exploration_type(ExplorationType.RANDOM):
                 self.actor_network(
                     next_td,
                     params=self.target_actor_network_params,
@@ -281,7 +284,10 @@ class REDQLoss_deprecated(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

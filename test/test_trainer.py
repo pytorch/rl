@@ -22,6 +22,7 @@ try:
 except ImportError:
     _has_tb = False
 
+from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
     LazyMemmapStorage,
@@ -89,11 +90,10 @@ _mocking_optim = MockingOptim()
 
 def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
-        MockingCollector(),
-        *[
-            None,
-        ]
-        * 2,
+        collector=MockingCollector(),
+        total_frames=None,
+        frame_skip=None,
+        optim_steps_per_batch=None,
         loss_module=MockingLossModule(),
         optimizer=optimizer,
         save_trainer_file=file,
@@ -289,7 +289,7 @@ class TestRB:
         trainer._process_batch_hook(td)
         td_out = trainer._process_optim_batch_hook(td)
         if prioritized:
-            td_out.set(replay_buffer.priority_key, torch.rand(N))
+            td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
         trainer._post_loss_hook(td_out)
 
         trainer2 = mocking_trainer()
@@ -424,7 +424,7 @@ class TestRB:
             # sample from rb
             td_out = trainer._process_optim_batch_hook(td)
             if prioritized:
-                td_out.set(replay_buffer.priority_key, torch.rand(N))
+                td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
             trainer.save_trainer(True)
 
@@ -837,7 +837,7 @@ class TestSubSampler:
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
-        args.env_name = "ALE/Pong-v5"
+        args.env_name = PONG_VERSIONED
         args.env_task = ""
         args.grayscale = True
         args.env_library = "gym"
@@ -853,7 +853,7 @@ class TestRecorder:
         args.record_interval = 2
         args.catframes = 4
         args.image_size = 84
-        args.collector_devices = ["cpu"]
+        args.collector_device = ["cpu"]
         args.categorical_action_encoding = False
         return args
 
@@ -862,7 +862,7 @@ class TestRecorder:
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -874,7 +874,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             trainer = mocking_trainer()
@@ -895,7 +895,7 @@ class TestRecorder:
                     },
                 )
                 ea.Reload()
-                img = ea.Images("tmp_ALE/Pong-v5_video")
+                img = ea.Images(f"tmp_{PONG_VERSIONED}_video")
                 try:
                     assert len(img) == N // args.record_interval
                     break
@@ -936,7 +936,7 @@ class TestRecorder:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -948,7 +948,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             recorder.register(trainer)
