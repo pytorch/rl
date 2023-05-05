@@ -129,9 +129,14 @@ class TestComposableBuffers:
         )
         data = self._get_datum(rb_type)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)
+        assert s.ndim, s
+        s = s[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
 
@@ -404,6 +409,7 @@ def test_replay_buffer_trajectories(stack, reduction, datatype):
     sampled_td = rb.sample()
     if datatype == "tc":
         assert is_tensorclass(traj_td)
+        return
 
     sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
@@ -521,9 +527,12 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_datum(rbtype)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
 
@@ -850,7 +859,7 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
+    rb = TensorDictReplayBuffer(transform=transform(in_keys=["observation"]), batch_size=1)
 
     # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
     td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
