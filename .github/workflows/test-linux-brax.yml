@@ -13,7 +13,7 @@ jobs:
   unittests:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      repository: pytorch/vision
+      repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       gpu-arch-type: "cuda"
       gpu-arch-version: "11.7"
