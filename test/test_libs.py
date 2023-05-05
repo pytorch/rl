@@ -59,14 +59,8 @@ _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
-SKLEARN_ERR = None
-try:
-    import sklearn  # noqa
+_has_sklearn = importlib.util.find_spec("sklearn") is not None
 
-    _has_sklearn = True
-except ModuleNotFoundError as err:
-    _has_sklearn = False
-    SKLEARN_ERR = err
 
 if _has_gym:
     try:
@@ -1376,7 +1370,7 @@ class TestD4RL:
         print(f"completed test after {time.time()-t0}s")
 
 
-@pytest.mark.skipif(not _has_sklearn, reason=f"Scikit-learn not found: {SKLEARN_ERR}")
+@pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(
     "dataset",
     [
