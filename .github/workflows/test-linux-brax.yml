@@ -21,8 +21,8 @@ jobs:
       script: |
         set -euo pipefail
 
-        export PYTHON_VERSION = "3.8"
-        export CU_VERSION = "${{ inputs.gpu-arch-version }}"
+        export PYTHON_VERSION="3.8"
+        export CU_VERSION="${{ inputs.gpu-arch-version }}"
 
         ./.circleci/unittest/linux_libs/scripts_brax/setup_env.sh
         ./.circleci/unittest/linux_libs/scripts_brax/install.sh
