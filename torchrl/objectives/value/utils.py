@@ -5,6 +5,8 @@
 
 import torch
 
+from tensordict import MemmapTensor, TensorDictBase
+
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
     """Computes a conv1d filter over a value.
@@ -185,8 +187,10 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     return gammas
 
 
+## TODO duplicated in functional.py
 def _flatten_batch(tensor):
-    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+    """
+    Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
         tensor (torch.Tensor): a tensor of shape [*B, T]
@@ -196,6 +200,7 @@ def _flatten_batch(tensor):
     return tensor.flatten(0, -1)
 
 
+## TODO duplicated in functional.py
 def _get_num_per_traj(dones_and_truncated):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
@@ -209,29 +214,167 @@ def _get_num_per_traj(dones_and_truncated):
     dones_and_truncated = dones_and_truncated.clone()
     dones_and_truncated[..., -1] = 1
     dones_and_truncated = _flatten_batch(dones_and_truncated)
-    # traj_ids = dones_and_truncated.cumsum(0)
     num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
     num_per_traj[1:] -= num_per_traj[:-1].clone()
     return num_per_traj
 
 
-def _split_and_pad_sequence(tensor, splits):
-    """
-    Given a tensor of size [*B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]
+## TODO duplicated in functional.py
+# def _split_and_pad_sequence(tensor, splits):
+#    """
+#    Given a tensor of size [*B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]
+#
+#    [r00, r01, r02, r03, r10, r11] -> [[r00, r01, r02, r03], [r10, r11, 0, 0]]
+#    """
+#    tensor = _flatten_batch(tensor)
+#    max_val = max(splits)
+#    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
+#    mask.scatter_(index=max_val - splits.unsqueeze(-1), dim=1, value=1)
+#    mask = mask.cumsum(-1).flip(-1).bool()
+#    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
+#    empty_tensor[mask] = tensor
+#    return empty_tensor
 
-    [r00, r01, r02, r03, r10, r11] -> [[r00, r01, r02, r03], [r10, r11, 0, 0]]
+
+def _split_and_pad_sequence(tensor, splits):
+    """Given a tensor of size [B, T, *other] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
+
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> print(splits)
+        tensor([3, 2, 2, 3, 5, 5])
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> print(td)
+        TensorDict(
+            fields={
+                is_init: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+                obs: Tensor(shape=torch.Size([6, 5, 3]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([6, 5]),
+            device=None,
+            is_shared=False)
+        >>> print(td["obs"])
+        tensor([[[ 0,  0,  0],
+                 [ 1,  1,  1],
+                 [ 2,  2,  2],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 3,  3,  3],
+                 [ 4,  4,  4],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 5,  5,  5],
+                 [ 6,  6,  6],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[ 7,  7,  7],
+                 [ 8,  8,  8],
+                 [ 9,  9,  9],
+                 [ 0,  0,  0],
+                 [ 0,  0,  0]],
+        <BLANKLINE>
+                [[10, 10, 10],
+                 [11, 11, 11],
+                 [12, 12, 12],
+                 [13, 13, 13],
+                 [14, 14, 14]],
+        <BLANKLINE>
+                [[15, 15, 15],
+                 [16, 16, 16],
+                 [17, 17, 17],
+                 [18, 18, 18],
+                 [19, 19, 19]]])
+
     """
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
-    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
-    mask.scatter_(index=max_val - splits.unsqueeze(-1), dim=1, value=1)
+    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
+    mask.scatter_(
+        index=max_val - splits.unsqueeze(-1),
+        dim=1,
+        value=1,
+    )
     mask = mask.cumsum(-1).flip(-1).bool()
-    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
-    empty_tensor[mask] = tensor
-    return empty_tensor
+
+    def _fill_tensor(tensor):
+        empty_tensor = torch.zeros(
+            len(splits),
+            max_val,
+            *tensor.shape[1:],
+            dtype=tensor.dtype,
+            device=tensor.device,
+        )
+        empty_tensor[mask] = tensor
+        return empty_tensor
+
+    if isinstance(tensor, TensorDictBase):
+        tensor = tensor.apply(_fill_tensor, batch_size=[len(splits), max_val])
+    else:
+        tensor = _fill_tensor(tensor)
+    return tensor
 
 
-# get rewards
+# def _inv_pad_sequence(tensor, splits):
+#    """Inverses a pad_sequence operation.
+#
+#    Examples:
+#        >>> rewards = torch.randn(100, 20)
+#        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
+#        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+#        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
+#        >>> assert (reconstructed==rewards).all()
+#
+#
+#    Compatible with tensordict inputs.
+#
+#    Examples:
+#        >>> from tensordict import TensorDict
+#        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+#        >>> is_init[:, 0] = True
+#        >>> is_init[0, 3] = True
+#        >>> is_init[1, 2] = True
+#        >>> tensordict = TensorDict({
+#        ...     "is_init": is_init,
+#        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+#        ... }, [4, 5])
+#        >>> splits = _get_num_per_traj_init(is_init)
+#        >>> td = _split_and_pad_sequence(tensordict, splits)
+#        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
+#
+#    """
+#    offset = torch.ones_like(splits) * tensor.shape[-1]
+#    offset[0] = 0
+#    offset = offset.cumsum(0)
+#    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=offset.device)
+#
+#    ones = offset + splits
+#    ones = ones[ones < tensor.numel()]
+#    # while ones[-1] == tensor.numel():
+#    #     ones = ones[:-1]
+#    z[ones] = 1
+#    z_idx = z[offset[1:]]
+#    z[offset[1:]] = torch.bitwise_xor(
+#        z_idx, torch.ones_like(z_idx)
+#    )  # make sure that the longest is accounted for
+#    idx = z.cumsum(0) % 2 == 0
+#    return tensor.reshape(-1)[idx]
+
+
 def _inv_pad_sequence(tensor, splits):
     """
     Examples:
@@ -256,56 +399,3 @@ def _inv_pad_sequence(tensor, splits):
     )  # make sure that the longest is accounted for
     idx = z.cumsum(0) % 2 == 0
     return tensor.view(-1)[idx]
-
-
-def _fast_gae(reward: torch.Tensor, state_value: torch.Tensor, next_state_value: torch.Tensor, done: torch.Tensor, gamma: float, lmbda:float):
-    """Fast vectorized Generalized Advantage Estimate 
-
-    TODO: description; time_dim must be -2; will be called by vec_generalized_advantage_estimate
-
-    Args:
-        reward (torch.Tensor): a [*B, T, F] tensor containing rewards
-        state_value (torch.Tensor): a [*B, T, F] tensor containing state values (value function)
-        next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
-        done (torch.Tensor): a [B, T] boolean tensor containing the done states
-        gamma (scalar): the gamma decay (trajectory discount)
-        lmbda (scalar): the lambda decay (exponential mean discount)
-
-    """
-
-    # TODO: will be called from vec_generalized_advantage_estimate
-    # which will transpose input such that time dimesion is penultimate
-    # -> put time dimension last and revert afterwards
-    # rework such that fast_gae work with time dimension penultimate nativley
-    # or refactor vec_generalized_advantage_estimate so that it does not transpose
-    # time dimension before calling fast_gae
-    done = done.transpose(-2, -1)
-    reward = reward.transpose(-2, -1)
-    state_value = state_value.transpose(-2, -1)
-    next_state_value = next_state_value.transpose(-2, -1)
-
-    gammalmbda = gamma * lmbda
-    not_done = 1 - done.int()
-    td0 = reward + not_done * gamma * next_state_value - state_value
-
-    num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence(td0, num_per_traj)
-
-    gammalmbdas = torch.ones_like(td0_flat[0])
-    gammalmbdas[1:] = gammalmbda
-    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-    gammalmbdas = gammalmbdas.unsqueeze(-1)
-
-    advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
-    advantage = advantage.squeeze(1)
-    advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
-
-    done = done.transpose(-1, -2)
-    reward = reward.transpose(-1, -2)
-    state_value = state_value.transpose(-1, -2)
-    next_state_value = next_state_value.transpose(-1, -2)
-    advantage = advantage.transpose(-1, -2)
-
-
-    value_target = advantage + state_value
-    return advantage, value_target

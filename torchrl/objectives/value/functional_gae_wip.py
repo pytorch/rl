@@ -293,7 +293,7 @@ def get_available_devices():
 
 Ns = [4, 8, 16, 32, 64, 128, 256]
 Ts = [32, 64, 128, 256, 512, 1024]
-Fs = [1, 4, 8]
+Fs = [1, 2, 4]
 devices = get_available_devices()
 
 
@@ -302,9 +302,14 @@ time_dim = -2
 
 print("#N,T,F,Device,TimeSimpleFastGAE,TimeFastGAE,TimeGAE,TimeVecGAE")
 for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
+
+    # avoid too large INPUT
+    if F * N * T > 1_000_000:
+        continue
+
     torch.manual_seed(44)
 
-    repeats = 1_000
+    repeats = 500
 
     done = torch.zeros(N, T, F, dtype=torch.bool).bernoulli_(0.2)
     reward, state_value, next_state_value = [torch.ones(N, T, F) for _ in range(3)]
@@ -338,7 +343,7 @@ for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
             "lmbda": lmbda,
             "time_dim": time_dim,
         },
-        number=1_000,
+        number=repeats,
     )
 
     time_gae = timeit.timeit(
@@ -388,5 +393,3 @@ for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
     print(
         f"{N},{T},{F},{device},{time_simple_fast_gae},{time_fast_gae},{time_gae},{time_vec_gae}"
     )
-
-    break
