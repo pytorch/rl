@@ -119,7 +119,6 @@ def make_env_transforms(
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-            "action",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
     env.append_transform(
