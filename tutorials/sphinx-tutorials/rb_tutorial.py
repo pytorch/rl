@@ -491,7 +491,7 @@ plt.hist(sample["index"].numpy())
 # sampled items:
 #
 sample = rb.sample()
-sample["td_error"] = (data.numel() - sample["index"])
+sample["td_error"] = data.numel() - sample["index"]
 rb.update_tensordict_priority(sample)
 
 ######################################################################
