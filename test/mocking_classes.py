@@ -879,13 +879,13 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
                     4,
                 )
             ),
-            action=UnboundedContinuousTensorSpec(
+            shape=self.batch_size,
+        )
+        self.action_spec = UnboundedContinuousTensorSpec(
                 (
                     *self.batch_size,
                     1,
                 )
-            ),
-            shape=self.batch_size,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(
             (
@@ -954,14 +954,9 @@ class CountingEnv(EnvBase):
             ),
             device=self.device,
         )
-        self.input_spec = CompositeSpec(
-            action=BinaryDiscreteTensorSpec(
+        self.action_spec = BinaryDiscreteTensorSpec(
                 n=1, shape=[*self.batch_size, 1], device=self.device
-            ),
-            shape=self.batch_size,
-            device=self.device,
-        )
-
+            )
         self.register_buffer(
             "count",
             torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int),
@@ -1086,10 +1081,7 @@ class CountingBatchedEnv(EnvBase):
                 1,
             ),
         )
-        self.input_spec = CompositeSpec(
-            action=BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1]),
-            shape=self.batch_size,
-        )
+        self.action_spec = BinaryDiscreteTensorSpec(n=1, shape=[*self.batch_size, 1])
 
         self.count = torch.zeros(
             (*self.batch_size, 1), device=self.device, dtype=torch.int

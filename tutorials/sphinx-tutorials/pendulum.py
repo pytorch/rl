@@ -356,22 +356,8 @@ def _reset(self, tensordict):
 # contains the specs of the information that the step function reads (including
 # ``action_spec``), and ``output_spec`` which encodes the specs that the
 # step outputs (``observation_spec``, ``reward_spec`` and ``done_spec``).
-# Given this organisation, the following queries will return the same results:
-#
-#   .. code-block::
-#
-#     >>> # observation
-#     >>> obs_spec = env.observation_spec
-#     >>> obs_spec = env.output_spec["observation"]
-#     >>> # reward
-#     >>> reward_spec = env.reward_spec
-#     >>> reward_spec = env.output_spec["reward"]
-#     >>> # done
-#     >>> done_spec = env.done_spec
-#     >>> done_spec = env.output_spec["done"]
-#     >>> # action
-#     >>> action_spec = env.action_spec
-#     >>> action_spec = env.input_spec["action"]
+# The specs are organised in a non-trivial way within output_spec and
+# input_spec and neither of these should be directly modified.
 #
 # In other words, the ``observation_spec`` and related properties are
 # convenient shortcuts to the content of the output and input spec containers.

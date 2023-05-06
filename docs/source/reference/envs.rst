@@ -28,17 +28,19 @@ Each env will have the following attributes:
   compute the operations.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"action"` and others).
+  It should not be modified directly.
 - :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the output keys (:obj:`"observation"`, :obj:`"reward"` and :obj:`"done"`).
+  It should not be modified directly.
 - :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the observation key-spec pairs.
   This is a pointer to ``env.output_spec["observation"]``.
 - :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
-  representing the action spec. This is a pointer to ``env.input_spec["action"]``.
+  representing the action spec.
 - :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the reward spec. This is a pointer to ``env.output_spec["reward"]``.
+  the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the done-flag spec. This is a pointer to ``env.output_spec["done"]``.
+  the done-flag spec.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have

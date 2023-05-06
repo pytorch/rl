@@ -1923,7 +1923,7 @@ class TestExcludeTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,
@@ -2087,7 +2087,7 @@ class TestSelectTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,

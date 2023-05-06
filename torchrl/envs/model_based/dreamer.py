@@ -50,7 +50,7 @@ class DreamerEnv(ModelBasedEnvBase):
         self.input_spec = CompositeSpec(
             state=self.observation_spec["state"],
             belief=self.observation_spec["belief"],
-            action=self.action_spec.to(self.device),
+            _action_spec=self.input_spec["_action_spec"].to(self.device),
             shape=env.batch_size,
         )
 

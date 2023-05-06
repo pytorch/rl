@@ -122,8 +122,7 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self.input_spec = CompositeSpec(
-            action=BoundedTensorSpec(
+        self.action_spec = BoundedTensorSpec(
                 minimum=-1,
                 maximum=1,
                 shape=(
@@ -131,9 +130,7 @@ class BraxWrapper(_EnvWrapper):
                     env.action_size,
                 ),
                 device=self.device,
-            ),
-            shape=self.batch_size,
-        )
+            )
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
                 *self.batch_size,

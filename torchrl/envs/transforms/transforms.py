@@ -547,7 +547,7 @@ but got an object of type {type(transform)}."""
     @property
     def action_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
-        return self.input_spec["action"]
+        return self.input_spec[("_action_spec", *self.action_key)]
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -2571,11 +2571,16 @@ class DiscreteActionProjection(Transform):
 
     def transform_input_spec(self, input_spec: CompositeSpec):
         input_spec = input_spec.clone()
-        input_spec["action"] = OneHotDiscreteTensorSpec(
+        for key in input_spec["_action_spec"].keys(True, True):
+            if not isinstance(key, tuple):
+                key = (key,)
+            key = ("_action_spec", *key)
+            break
+        input_spec[key] = OneHotDiscreteTensorSpec(
             self.max_actions,
-            shape=(*input_spec["action"].shape[:-1], self.max_actions),
+            shape=(*input_spec[key].shape[:-1], self.max_actions),
             device=input_spec.device,
-            dtype=input_spec["action"].dtype,
+            dtype=input_spec[key].dtype,
         )
         return input_spec
 

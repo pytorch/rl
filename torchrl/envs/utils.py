@@ -329,6 +329,14 @@ def _check_isin(key, value, obs_spec, input_spec):
         for _key, _value in value.items():
             _check_isin(_key, _value, obs_spec, input_spec)
         return
+    elif key in input_spec["_action_spec"].keys(True):
+        if not input_spec["_action_spec"][key].is_in(value):
+            raise AssertionError(
+                f"action_spec.is_in failed for key {key}. "
+                f"Got action_spec={input_spec['_action_spec'][key]} and real={value}."
+            )
+        return
+
     elif key in input_spec.keys(True):
         if not input_spec[key].is_in(value):
             raise AssertionError(

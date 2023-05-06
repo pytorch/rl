@@ -1089,7 +1089,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _make_specs(
         self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
     ) -> None:  # noqa: F821
-        self.input_spec = self._get_input_spec()
+        self.action_spec = self._get_action_spec()
         self.output_spec = self._get_output_spec()
 
     def _init_env(self) -> Optional[int]:
@@ -1117,7 +1117,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out = self._transform_step_output(step_output)
         return tensordict_out.select().set("next", tensordict_out)
 
-    def _get_input_spec(self) -> TensorSpec:
+    def _get_action_spec(self) -> TensorSpec:
         # local import to avoid importing gym in the script
         from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
@@ -1131,10 +1131,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             categorical_action_encoding=True,
         )
         action_spec = self._add_shape_to_spec(action_spec)
-        return CompositeSpec(
-            action=action_spec,
-            shape=(self.num_workers,),
-        )
+        return action_spec
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(

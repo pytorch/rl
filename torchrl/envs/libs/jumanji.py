@@ -179,12 +179,12 @@ class JumanjiWrapper(GymLikeEnv):
         state_spec = _extract_spec(state_dict)
         return state_spec
 
-    def _make_input_spec(self, env) -> TensorSpec:
-        return CompositeSpec(
-            action=_jumanji_to_torchrl_spec_transform(
+    def _make_action_spec(self, env) -> TensorSpec:
+        action_spec = _jumanji_to_torchrl_spec_transform(
                 env.action_spec(), device=self.device
-            ),
-        ).expand(self.batch_size)
+            )
+        action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
+        return action_spec
 
     def _make_observation_spec(self, env) -> TensorSpec:
         spec = env.observation_spec()
@@ -209,7 +209,7 @@ class JumanjiWrapper(GymLikeEnv):
     def _make_specs(self, env: "jumanji.env.Environment") -> None:  # noqa: F821
 
         # extract spec from jumanji definition
-        self.input_spec = self._make_input_spec(env)
+        self.action_spec = self._make_action_spec(env)
         self.observation_spec = self._make_observation_spec(env)
         self.reward_spec = self._make_reward_spec(env)
 

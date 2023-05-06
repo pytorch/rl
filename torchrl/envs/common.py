@@ -356,19 +356,58 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
         self.__dict__["_output_spec"] = value.to(self.device)
 
+    @property
+    def action_key(self):
+        """The action key of an environment.
+
+        By default, non-nested keys are stored in the 'action' key.
+
+        If the action is in a nested tensordict, this property will return its
+        location.
+        """
+        try:
+            return self.__dict__["_action_key"]
+        except KeyError:
+            keys = self.input_spec["_action_spec"].keys(True, True)
+            for key in keys:
+                # the first key is the reward
+                if not isinstance(key, tuple):
+                    key = (key,)
+                self.__dict__["_action_key"] = key
+                break
+            else:
+                raise ValueError("Could not find action spec")
+            return key
+
     # Action spec: action specs belong to input_spec
     @property
     def action_spec(self) -> TensorSpec:
-        return self.input_spec["action"]
+        return self.input_spec[("_action_spec", *self.action_key)]
 
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
+        try:
+            delattr(self, "_action_key")
+        except AttributeError:
+            pass
+
+        if isinstance(value, CompositeSpec):
+            for _ in value.values(True, True):  # noqa: B007
+                break
+            else:
+                raise RuntimeError(
+                    "An empty CompositeSpec was passed for the action spec. "
+                    "This is currently not permitted."
+                )
+        else:
+            value = CompositeSpec(action=value, shape=self.batch_size)
+
         if self._input_spec is None:
             self.input_spec = CompositeSpec(
-                action=value, shape=self.batch_size, device=self.device
+                _action_spec=value, shape=self.batch_size, device=self.device
             )
         else:
-            self.input_spec["action"] = value.to(self.device)
+            self.input_spec["_action_spec"] = value.to(self.device)
 
     @property
     def reward_key(self):
@@ -382,7 +421,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         try:
             return self.__dict__["_reward_key"]
         except KeyError:
-            keys = self.output_spec["reward"].keys(True, True)
+            keys = self.output_spec["_reward_spec"].keys(True, True)
             for key in keys:
                 # the first key is the reward
                 if not isinstance(key, tuple):
@@ -397,13 +436,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @property
     def reward_spec(self) -> TensorSpec:
         try:
-            return self.output_spec[("reward", *self.reward_key)]
+            return self.output_spec[("_reward_spec", *self.reward_key)]
         except KeyError:
             # populate the "reward" entry
-            self.output_spec["reward"] = UnboundedContinuousTensorSpec(
+            self.output_spec["_reward_spec"] = UnboundedContinuousTensorSpec(
                 shape=(*self.batch_size, 1), device=self.device
             )
-            return self.output_spec[("reward", *self.reward_key)]
+            return self.output_spec[("_reward_spec", *self.reward_key)]
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
@@ -435,7 +474,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " with a null number of dimensions. Try using a multidimensional"
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
-        self.output_spec["reward"] = value.to(self.device)
+        self.output_spec["_reward_spec"] = value.to(self.device)
 
     @property
     def done_key(self):
@@ -449,7 +488,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         try:
             return self.__dict__["_done_key"]
         except KeyError:
-            keys = self.output_spec["done"].keys(True, True)
+            keys = self.output_spec["_done_spec"].keys(True, True)
             for key in keys:
                 # the first key is the done
                 if not isinstance(key, tuple):
@@ -464,13 +503,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @property
     def done_spec(self) -> TensorSpec:
         try:
-            out = self.output_spec[("done", *self.done_key)]
+            out = self.output_spec[("_done_spec", *self.done_key)]
         except KeyError:
             # populate the "done" entry
             self.done_spec = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
-            out = self.output_spec[("done", *self.done_key)]
+            out = self.output_spec[("_done_spec", *self.done_key)]
         return out
 
     @done_spec.setter
@@ -503,7 +542,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 " with a null number of dimensions. Try using a multidimensional"
                 " spec instead, for instance with a singleton dimension at the tail)."
             )
-        self.output_spec["done"] = value.to(self.device)
+        self.output_spec["_done_spec"] = value.to(self.device)
 
     # observation spec: observation specs belong to output_spec
     @property
@@ -1070,15 +1109,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         observation_spec = self.observation_spec
         fake_obs = observation_spec.zero()
         fake_input = input_spec.zero()
+        # a little bit of magic with the action
+        fake_input = fake_input.exclude("_action_spec").update(fake_input.get("_action_spec"))
+
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.clone().update(fake_obs)
 
         # make sure that reward spec is instantiated
-        reward_spec = self.output_spec["reward"]
+        reward_spec = self.output_spec["_reward_spec"]
         # make sure that done spec is instantiated
         _ = self.done_spec
-        done_spec = self.output_spec["done"]
+        done_spec = self.output_spec["_done_spec"]
         fake_reward = reward_spec.zero()
         fake_done = done_spec.zero()
 
