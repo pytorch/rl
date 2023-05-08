@@ -35,6 +35,11 @@ except ImportError as err:
     _has_brax = False
     IMPORT_ERR = str(err)
 
+print("DO I HAVE BRAX")
+print(_has_brax)
+print("IMPORT ERROR: ")
+print(IMPORT_ERROR)
+
 
 def _get_envs():
     if not _has_brax:
