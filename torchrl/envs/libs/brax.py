@@ -31,14 +31,18 @@ try:
 
     _has_brax = True
     IMPORT_ERR = ""
+    print("DO I HAVE BRAX")
+    print(_has_brax)
+    print("IMPORT ERROR: ")
+    print(IMPORT_ERROR)
 except ImportError as err:
     _has_brax = False
     IMPORT_ERR = str(err)
+    print("DO I HAVE BRAX")
+    print(_has_brax)
+    print("IMPORT ERROR: ")
+    print(IMPORT_ERROR)
 
-print("DO I HAVE BRAX")
-print(_has_brax)
-print("IMPORT ERROR: ")
-print(IMPORT_ERROR)
 
 
 def _get_envs():
