@@ -1,0 +1,28 @@
+name: Tests on Linux GPU (Stable)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+jobs:
+  unittests:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: "cuda"
+      gpu-arch-version: "11.6"
+      timeout: 120
+      script: |
+        set -euo pipefail
+        export PYTHON_VERSION="3.8"
+        export CU_VERSION="${{ inputs.gpu-arch-version }}"
+        ./.circleci/unittest/linux_stable/scripts/setup_env.sh
+        ./.circleci/unittest/linux_stable/scripts/install.sh
+        ./.circleci/unittest/linux_stable/scripts/run_test.sh
+        ./.circleci/unittest/linux_stable/scripts/post_process.sh
