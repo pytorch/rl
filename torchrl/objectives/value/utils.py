@@ -187,7 +187,6 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
     return gammas
 
 
-## TODO duplicated in functional.py
 def _flatten_batch(tensor):
     """
     Because we mark the end of each batch with a truncated signal, we can concatenate them.
@@ -200,7 +199,6 @@ def _flatten_batch(tensor):
     return tensor.flatten(0, -1)
 
 
-## TODO duplicated in functional.py
 def _get_num_per_traj(dones_and_truncated):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
@@ -217,23 +215,6 @@ def _get_num_per_traj(dones_and_truncated):
     num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
     num_per_traj[1:] -= num_per_traj[:-1].clone()
     return num_per_traj
-
-
-## TODO duplicated in functional.py
-# def _split_and_pad_sequence(tensor, splits):
-#    """
-#    Given a tensor of size [*B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]
-#
-#    [r00, r01, r02, r03, r10, r11] -> [[r00, r01, r02, r03], [r10, r11, 0, 0]]
-#    """
-#    tensor = _flatten_batch(tensor)
-#    max_val = max(splits)
-#    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
-#    mask.scatter_(index=max_val - splits.unsqueeze(-1), dim=1, value=1)
-#    mask = mask.cumsum(-1).flip(-1).bool()
-#    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
-#    empty_tensor[mask] = tensor
-#    return empty_tensor
 
 
 def _split_and_pad_sequence(tensor, splits):
@@ -329,52 +310,6 @@ def _split_and_pad_sequence(tensor, splits):
     return tensor
 
 
-# def _inv_pad_sequence(tensor, splits):
-#    """Inverses a pad_sequence operation.
-#
-#    Examples:
-#        >>> rewards = torch.randn(100, 20)
-#        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
-#        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
-#        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
-#        >>> assert (reconstructed==rewards).all()
-#
-#
-#    Compatible with tensordict inputs.
-#
-#    Examples:
-#        >>> from tensordict import TensorDict
-#        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
-#        >>> is_init[:, 0] = True
-#        >>> is_init[0, 3] = True
-#        >>> is_init[1, 2] = True
-#        >>> tensordict = TensorDict({
-#        ...     "is_init": is_init,
-#        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
-#        ... }, [4, 5])
-#        >>> splits = _get_num_per_traj_init(is_init)
-#        >>> td = _split_and_pad_sequence(tensordict, splits)
-#        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
-#
-#    """
-#    offset = torch.ones_like(splits) * tensor.shape[-1]
-#    offset[0] = 0
-#    offset = offset.cumsum(0)
-#    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=offset.device)
-#
-#    ones = offset + splits
-#    ones = ones[ones < tensor.numel()]
-#    # while ones[-1] == tensor.numel():
-#    #     ones = ones[:-1]
-#    z[ones] = 1
-#    z_idx = z[offset[1:]]
-#    z[offset[1:]] = torch.bitwise_xor(
-#        z_idx, torch.ones_like(z_idx)
-#    )  # make sure that the longest is accounted for
-#    idx = z.cumsum(0) % 2 == 0
-#    return tensor.reshape(-1)[idx]
-
-
 def _inv_pad_sequence(tensor, splits):
     """
     Examples:
@@ -388,7 +323,7 @@ def _inv_pad_sequence(tensor, splits):
     offset = torch.ones_like(splits) * tensor.shape[-1]
     offset[0] = 0
     offset = offset.cumsum(0)
-    z = torch.zeros(tensor.numel(), dtype=torch.bool)
+    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=tensor.device)
 
     ones = offset + splits
     while ones[-1] == len(z):

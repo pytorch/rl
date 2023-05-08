@@ -230,7 +230,6 @@ def vec_generalized_advantage_estimate(
             gamma=gamma,
             lmbda=lmbda,
         )
-        # gammalmbdas = torch.full_like(not_done, value) * not_done
 
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)

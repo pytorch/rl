@@ -2,6 +2,7 @@
 
 import itertools
 import timeit
+import sys
 from functools import wraps
 
 import numpy as np
@@ -63,17 +64,17 @@ def _get_num_per_traj(dones_and_truncated):
     return num_per_traj
 
 
+#def _split_and_pad_sequence(tensor, splits):
+#    """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]"""
+#    tensor = _flatten_batch(tensor)
+#    if isinstance(splits, torch.Tensor):
+#        splits = splits.tolist()
+#    tensor_split = tensor.split(splits, 0)
+#    tensor_pad = torch.nn.utils.rnn.pad_sequence(tensor_split, True)
+#    return tensor_pad
+
+
 def _split_and_pad_sequence(tensor, splits):
-    """Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]"""
-    tensor = _flatten_batch(tensor)
-    if isinstance(splits, torch.Tensor):
-        splits = splits.tolist()
-    tensor_split = tensor.split(splits, 0)
-    tensor_pad = torch.nn.utils.rnn.pad_sequence(tensor_split, True)
-    return tensor_pad
-
-
-def _split_and_pad_sequence2(tensor, splits):
     """
     Given a tensor of size [B, T] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax]
 
@@ -81,10 +82,10 @@ def _split_and_pad_sequence2(tensor, splits):
     """
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
-    mask = torch.zeros(len(splits), max_val, dtype=torch.bool)
+    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
     mask.scatter_(index=max_val - splits.unsqueeze(-1), dim=1, value=1)
     mask = mask.cumsum(-1).flip(-1).bool()
-    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype)
+    empty_tensor = torch.zeros(len(splits), max_val, dtype=tensor.dtype, device=tensor.device)
     empty_tensor[mask] = tensor
     return empty_tensor
 
@@ -103,7 +104,7 @@ def _inv_pad_sequence(tensor, splits):
     offset = torch.ones_like(splits) * tensor.shape[-1]
     offset[0] = 0
     offset = offset.cumsum(0)
-    z = torch.zeros(tensor.numel(), dtype=torch.bool)
+    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=tensor.device)
 
     ones = offset + splits
     while ones[-1] == len(z):
@@ -133,7 +134,7 @@ def gae(reward, state_value, next_state_value, done, gamma, lmbda, time_dim=-1):
     td0 = reward + not_done * gamma * next_state_value - state_value
 
     num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence2(td0, num_per_traj)
+    td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
     gammalmbdas = torch.ones_like(td0_flat[0])
     gammalmbdas[1:] = gammalmbda
@@ -212,7 +213,7 @@ def fast_gae(
     td0 = reward + not_done * gamma * next_state_value - state_value
 
     num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence2(td0, num_per_traj)
+    td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
     gammalmbdas = torch.ones_like(td0_flat[0])
     gammalmbdas[1:] = gammalmbda
@@ -291,27 +292,26 @@ def get_available_devices():
     return devices
 
 
-Ns = [4, 8, 16, 32, 64, 128, 256]
-Ts = [32, 64, 128, 256, 512, 1024]
-Fs = [1, 2, 4]
+Ns = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+Ts = [32, 64, 128, 256, 512, 1024, 2048]
+Fs = [1, 2, 4, 8]
+traces_per_batch = [0.1, 0.2, 0.5]
 devices = get_available_devices()
-
 
 time_dim = -2
 
-
-print("#N,T,F,Device,TimeSimpleFastGAE,TimeFastGAE,TimeGAE,TimeVecGAE")
-for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
+print("N,T,F,Device,RelTracesPerBatch,TimeSimpleFastGAE,TimeFastGAE,TimeGAE,TimeVecGAE")
+for N, T, F, device, tbs in itertools.product(Ns, Ts, Fs, devices, traces_per_batch):
 
     # avoid too large INPUT
-    if F * N * T > 1_000_000:
+    if F * N * T > 1024 * 1024 * 2:
         continue
 
     torch.manual_seed(44)
 
     repeats = 500
 
-    done = torch.zeros(N, T, F, dtype=torch.bool).bernoulli_(0.2)
+    done = torch.zeros(N, T, F, dtype=torch.bool).bernoulli_(tbs)
     reward, state_value, next_state_value = [torch.ones(N, T, F) for _ in range(3)]
 
     if F == 1:
@@ -391,5 +391,7 @@ for N, T, F, device in itertools.product(Ns, Ts, Fs, devices):
     )
 
     print(
-        f"{N},{T},{F},{device},{time_simple_fast_gae},{time_fast_gae},{time_gae},{time_vec_gae}"
+        f"{N},{T},{F},{device},{tbs},{time_simple_fast_gae},{time_fast_gae},{time_gae},{time_vec_gae}"
     )
+
+    sys.stdout.flush()
