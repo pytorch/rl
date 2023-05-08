@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Optional, Tuple, Union
 
 import torch
-from tensordict import MemmapTensor, TensorDictBase
+from tensordict import MemmapTensor
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -128,9 +128,10 @@ def _fast_vec_gae(
     gamma: float,
     lmbda: float,
 ):
-    """Fast vectorized Generalized Advantage Estimate
+    """Fast vectorized Generalized Advantage Estimate when gamma and lmbda are scalars.
 
-    TODO: description; time_dim must be -2; will be called by vec_generalized_advantage_estimate
+    In contrast to `vec_generalized_advantage_estimate` this function does not need
+    to allocate a big tensor of the form [B, T, T].
 
     Args:
         reward (torch.Tensor): a [*B, T, F] tensor containing rewards
@@ -140,14 +141,11 @@ def _fast_vec_gae(
         gamma (scalar): the gamma decay (trajectory discount)
         lmbda (scalar): the lambda decay (exponential mean discount)
 
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
     """
-
-    # TODO: will be called from vec_generalized_advantage_estimate
-    # which will transpose input such that time dimesion is penultimate
-    # -> put time dimension last and revert afterwards
-    # rework such that fast_gae work with time dimension penultimate nativley
-    # or refactor vec_generalized_advantage_estimate so that it does not transpose
-    # time dimension before calling fast_gae
+    # _gen_num_per_traj and _split_and_pad_sequence need
+    # time dimension at last position
     done = done.transpose(-2, -1)
     reward = reward.transpose(-2, -1)
     state_value = state_value.transpose(-2, -1)

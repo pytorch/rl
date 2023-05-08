@@ -5,7 +5,7 @@
 
 import torch
 
-from tensordict import MemmapTensor, TensorDictBase
+from tensordict import TensorDictBase
 
 
 def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
@@ -188,14 +188,12 @@ def _make_gammas_tensor(gamma: torch.Tensor, T: int, rolling_gamma: bool):
 
 
 def _flatten_batch(tensor):
-    """
-    Because we mark the end of each batch with a truncated signal, we can concatenate them.
+    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
     Args:
         tensor (torch.Tensor): a tensor of shape [*B, T]
 
     """
-
     return tensor.flatten(0, -1)
 
 
@@ -311,14 +309,23 @@ def _split_and_pad_sequence(tensor, splits):
 
 
 def _inv_pad_sequence(tensor, splits):
-    """
-    Examples:
-        >>> rewards = torch.randn(100, 20)
-        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
-        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
-        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
-        >>> assert (reconstructed==rewards).all()
+    """Inverse a pad_sequence operation.
 
+    Compatible with tensordict inputs.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
+        >>> is_init[:, 0] = True
+        >>> is_init[0, 3] = True
+        >>> is_init[1, 2] = True
+        >>> tensordict = TensorDict({
+        ...     "is_init": is_init,
+        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
+        ... }, [4, 5])
+        >>> splits = _get_num_per_traj_init(is_init)
+        >>> td = _split_and_pad_sequence(tensordict, splits)
+        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
     """
     offset = torch.ones_like(splits) * tensor.shape[-1]
     offset[0] = 0
