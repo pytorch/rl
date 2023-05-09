@@ -246,14 +246,39 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
-        if "_input_spec" not in self.__dir__():
-            self.__dict__["_input_spec"] = None
-        if "_output_spec" not in self.__dir__():
-            self.__dict__["_output_spec"] = None
         if batch_size is not None:
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = torch.Size(batch_size)
+        if "_input_spec" not in self.__dir__():
+            self.__dict__["_input_spec"] = CompositeSpec(
+                _state_spec=None,
+                _action_spec=None,
+                shape=self.batch_size,
+            )
+        if "_output_spec" not in self.__dir__():
+            self.__dict__["_output_spec"] = CompositeSpec(
+                _observation_spec=None,
+                _done_spec=None,
+                _reward_spec=None,
+                shape=self.batch_size,
+            )
+        if self._input_spec is not None:
+            self._input_spec.lock_(recurse=True)
+            if set(self._input_spec.keys()) != {"_action_spec", "_state_spec"}:
+                raise ValueError(
+                    f"input_spec can only contain '_action_spec' and '_state_spec' entries. Got {self.__dict__['_input_spec'].keys()}"
+                )
+        if self._output_spec is not None:
+            self._output_spec.lock_(recurse=True)
+            if set(self._output_spec.keys()) != {
+                "_observation_spec",
+                "_reward_spec",
+                "_done_spec",
+            }:
+                raise ValueError(
+                    f"input_spec can only contain '_observation_spec', '_reward_spec' and '_done_spec' entries. Got {self.__dict__['_output_spec'].keys()}"
+                )
         self._run_type_checks = run_type_checks
 
     @classmethod
@@ -324,16 +349,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
-        if value is None:
-            self.__dict__["_output_spec"] = None
-            return
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an input_spec must be Composite.")
-        if value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError(
-                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-            )
-        self.__dict__["_input_spec"] = value.to(self.device)
+        raise RuntimeError("input_spec is protected.")
 
     @property
     def output_spec(self) -> TensorSpec:
@@ -345,16 +361,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @output_spec.setter
     def output_spec(self, value: TensorSpec) -> None:
-        if value is None:
-            self.__dict__["_output_spec"] = None
-            return
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an output_spec must be Composite.")
-        elif value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError(
-                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-            )
-        self.__dict__["_output_spec"] = value.to(self.device)
+        raise RuntimeError("output_spec is protected.")
 
     @property
     def action_key(self):
@@ -387,27 +394,31 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         try:
-            delattr(self, "_action_key")
-        except AttributeError:
-            pass
+            self.input_spec.unlock_()
+            try:
+                delattr(self, "_action_key")
+            except AttributeError:
+                pass
 
-        if isinstance(value, CompositeSpec):
-            for _ in value.values(True, True):  # noqa: B007
-                break
+            if isinstance(value, CompositeSpec):
+                for _ in value.values(True, True):  # noqa: B007
+                    break
+                else:
+                    raise RuntimeError(
+                        "An empty CompositeSpec was passed for the action spec. "
+                        "This is currently not permitted."
+                    )
             else:
-                raise RuntimeError(
-                    "An empty CompositeSpec was passed for the action spec. "
-                    "This is currently not permitted."
-                )
-        else:
-            value = CompositeSpec(action=value, shape=self.batch_size)
+                value = CompositeSpec(action=value, shape=self.batch_size)
 
-        if self._input_spec is None:
-            self.input_spec = CompositeSpec(
-                _action_spec=value, shape=self.batch_size, device=self.device
-            )
-        else:
-            self.input_spec["_action_spec"] = value.to(self.device)
+            if self._input_spec is None:
+                self.input_spec = CompositeSpec(
+                    _action_spec=value, shape=self.batch_size, device=self.device
+                )
+            else:
+                self.input_spec["_action_spec"] = value.to(self.device)
+        finally:
+            self.input_spec.lock_()
 
     @property
     def reward_key(self):
@@ -435,6 +446,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Reward spec: reward specs belong to output_spec
     @property
     def reward_spec(self) -> TensorSpec:
+        self.output_spec.unlock_()
         try:
             return self.output_spec[("_reward_spec", *self.reward_key)]
         except KeyError:
@@ -447,34 +459,41 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
         try:
-            delattr(self, "_reward_key")
-        except AttributeError:
-            pass
-        if not hasattr(value, "shape"):
-            raise TypeError(
-                f"reward_spec of type {type(value)} do not have a shape " f"attribute."
-            )
-        if value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError("The value of spec.shape must match the env batch size.")
-        if isinstance(value, CompositeSpec):
-            for nestedval in value.values(True, True):  # noqa: B007
-                break
-            else:
-                raise RuntimeError(
-                    "An empty CompositeSpec was passed for the reward spec. "
-                    "This is currently not permitted."
+            self.output_spec.unlock_()
+            try:
+                delattr(self, "_reward_key")
+            except AttributeError:
+                pass
+            if not hasattr(value, "shape"):
+                raise TypeError(
+                    f"reward_spec of type {type(value)} do not have a shape "
+                    f"attribute."
                 )
-        else:
-            nestedval = value
-            value = CompositeSpec(reward=value, shape=self.batch_size)
-        if len(nestedval.shape) == 0:
-            raise RuntimeError(
-                "the reward_spec shape cannot be empty (this error"
-                " usually comes from trying to set a reward_spec"
-                " with a null number of dimensions. Try using a multidimensional"
-                " spec instead, for instance with a singleton dimension at the tail)."
-            )
-        self.output_spec["_reward_spec"] = value.to(self.device)
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    "The value of spec.shape must match the env batch size."
+                )
+            if isinstance(value, CompositeSpec):
+                for nestedval in value.values(True, True):  # noqa: B007
+                    break
+                else:
+                    raise RuntimeError(
+                        "An empty CompositeSpec was passed for the reward spec. "
+                        "This is currently not permitted."
+                    )
+            else:
+                nestedval = value
+                value = CompositeSpec(reward=value, shape=self.batch_size)
+            if len(nestedval.shape) == 0:
+                raise RuntimeError(
+                    "the reward_spec shape cannot be empty (this error"
+                    " usually comes from trying to set a reward_spec"
+                    " with a null number of dimensions. Try using a multidimensional"
+                    " spec instead, for instance with a singleton dimension at the tail)."
+                )
+            self.output_spec["_reward_spec"] = value.to(self.device)
+        finally:
+            self.output_spec.lock_()
 
     @property
     def done_key(self):
@@ -485,6 +504,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
+        self.output_spec.unlock_()
         try:
             return self.__dict__["_done_key"]
         except KeyError:
@@ -504,64 +524,103 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def done_spec(self) -> TensorSpec:
         try:
             out = self.output_spec[("_done_spec", *self.done_key)]
-        except KeyError:
+        except (KeyError, AttributeError):
             # populate the "done" entry
-            self.done_spec = DiscreteTensorSpec(
+            self.done_spec = out = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
-            out = self.output_spec[("_done_spec", *self.done_key)]
         return out
 
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
         try:
-            delattr(self, "_done_key")
-        except AttributeError:
-            pass
-        if not hasattr(value, "shape"):
-            raise TypeError(
-                f"done_spec of type {type(value)} do not have a shape " f"attribute."
-            )
-        if value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError("The value of spec.shape must match the env batch size.")
-        if isinstance(value, CompositeSpec):
-            for nestedval in value.values(True, True):  # noqa: B007
-                break
-            else:
-                raise RuntimeError(
-                    "An empty CompositeSpec was passed for the done spec. "
-                    "This is currently not permitted."
+            self.output_spec.unlock_()
+            try:
+                delattr(self, "_done_key")
+            except AttributeError:
+                pass
+            if not hasattr(value, "shape"):
+                raise TypeError(
+                    f"done_spec of type {type(value)} do not have a shape "
+                    f"attribute."
                 )
-        else:
-            nestedval = value
-            value = CompositeSpec(done=value, shape=self.batch_size)
-        if len(nestedval.shape) == 0:
-            raise RuntimeError(
-                "the done_spec shape cannot be empty (this error"
-                " usually comes from trying to set a done_spec"
-                " with a null number of dimensions. Try using a multidimensional"
-                " spec instead, for instance with a singleton dimension at the tail)."
-            )
-        self.output_spec["_done_spec"] = value.to(self.device)
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    "The value of spec.shape must match the env batch size."
+                )
+            if isinstance(value, CompositeSpec):
+                for nestedval in value.values(True, True):  # noqa: B007
+                    break
+                else:
+                    raise RuntimeError(
+                        "An empty CompositeSpec was passed for the done spec. "
+                        "This is currently not permitted."
+                    )
+            else:
+                nestedval = value
+                value = CompositeSpec(done=value, shape=self.batch_size)
+            if len(nestedval.shape) == 0:
+                raise RuntimeError(
+                    "the done_spec shape cannot be empty (this error"
+                    " usually comes from trying to set a done_spec"
+                    " with a null number of dimensions. Try using a multidimensional"
+                    " spec instead, for instance with a singleton dimension at the tail)."
+                )
+            self.output_spec["_done_spec"] = value.to(self.device)
+        finally:
+            self.output_spec.lock_()
 
     # observation spec: observation specs belong to output_spec
     @property
     def observation_spec(self) -> TensorSpec:
-        return self.output_spec["observation"]
+        observation_spec = self.output_spec["_observation_spec"]
+        if observation_spec is None:
+            observation_spec = CompositeSpec(shape=self.batch_size)
+        return observation_spec
 
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec):
-            raise TypeError("The type of an observation_spec must be Composite.")
-        elif value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError(
-                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-            )
-        if value.shape[: len(self.batch_size)] != self.batch_size:
-            raise ValueError(
-                f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-            )
-        self.output_spec["observation"] = value.to(self.device)
+        try:
+            self.output_spec.unlock_()
+            if not isinstance(value, CompositeSpec):
+                raise TypeError("The type of an observation_spec must be Composite.")
+            elif value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                )
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                )
+            self.output_spec["_observation_spec"] = value.to(self.device)
+        finally:
+            self.output_spec.lock_()
+
+    # state spec: state specs belong to input_spec
+    @property
+    def state_spec(self) -> TensorSpec:
+        state_spec = self.input_spec["_state_spec"]
+        if state_spec is None:
+            state_spec = CompositeSpec(shape=self.batch_size)
+        return state_spec
+
+    @state_spec.setter
+    def state_spec(self, value: TensorSpec) -> None:
+        try:
+            self.input_spec.unlock_()
+            if not isinstance(value, CompositeSpec):
+                raise TypeError("The type of an state_spec must be Composite.")
+            elif value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                )
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                )
+            self.input_spec["_state_spec"] = value.to(self.device)
+        finally:
+            self.input_spec.lock_()
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -1105,22 +1164,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def fake_tensordict(self) -> TensorDictBase:
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
-        input_spec = self.input_spec
+        state_spec = self.state_spec
         observation_spec = self.observation_spec
+        action_spec = self.input_spec["_action_spec"]
+        _ = self.reward_spec
+        reward_spec = self.output_spec["_reward_spec"]
+        _ = self.done_spec
+        done_spec = self.output_spec["_done_spec"]
+
         fake_obs = observation_spec.zero()
-        fake_input = input_spec.zero()
-        # a little bit of magic with the action
-        fake_input = fake_input.exclude("_action_spec").update(fake_input.get("_action_spec"))
+        fake_input = state_spec.zero()
+        fake_input = fake_input.update(action_spec.zero())
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.clone().update(fake_obs)
 
-        # make sure that reward spec is instantiated
-        reward_spec = self.output_spec["_reward_spec"]
-        # make sure that done spec is instantiated
-        _ = self.done_spec
-        done_spec = self.output_spec["_done_spec"]
         fake_reward = reward_spec.zero()
         fake_done = done_spec.zero()
 

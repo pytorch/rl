@@ -181,8 +181,8 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _make_action_spec(self, env) -> TensorSpec:
         action_spec = _jumanji_to_torchrl_spec_transform(
-                env.action_spec(), device=self.device
-            )
+            env.action_spec(), device=self.device
+        )
         action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
         return action_spec
 

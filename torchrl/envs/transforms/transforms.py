@@ -270,13 +270,13 @@ class Transform(nn.Module):
 
         """
         output_spec = output_spec.clone()
-        output_spec["observation"] = self.transform_observation_spec(
-            output_spec["observation"]
+        output_spec["_observation_spec"] = self.transform_observation_spec(
+            output_spec["_observation_spec"]
         )
-        if "reward" in output_spec.keys():
-            output_spec["reward"] = self.transform_reward_spec(output_spec["reward"])
-        if "done" in output_spec.keys():
-            output_spec["done"] = self.transform_done_spec(output_spec["done"])
+        if "_reward_spec" in output_spec.keys():
+            output_spec["_reward_spec"] = self.transform_reward_spec(output_spec["_reward_spec"])
+        if "_done_spec" in output_spec.keys():
+            output_spec["_done_spec"] = self.transform_done_spec(output_spec["_done_spec"])
         return output_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -537,7 +537,9 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self._output_spec is None or not self.cache_specs:
             output_spec = self.base_env.output_spec.clone()
+            output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
+            output_spec.lock_()
             if self.cache_specs:
                 self.__dict__["_output_spec"] = output_spec
         else:
@@ -553,9 +555,12 @@ but got an object of type {type(transform)}."""
     def input_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
         if self._input_spec is None or not self.cache_specs:
+            input_spec = self.base_env.input_spec.clone()
+            input_spec.unlock_()
             input_spec = self.transform.transform_input_spec(
-                self.base_env.input_spec.clone()
+                input_spec
             )
+            input_spec.lock_()
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
         else:
@@ -565,17 +570,22 @@ but got an object of type {type(transform)}."""
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-        return self.output_spec[("reward", *self.reward_key)]
+        return self.output_spec[("_reward_spec", *self.reward_key)]
 
     @property
     def observation_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        return self.output_spec["observation"]
+        return self.output_spec["_observation_spec"]
+
+    @property
+    def state_spec(self) -> TensorSpec:
+        """State spec of the transformed environment."""
+        return self.input_spec["_state_spec"]
 
     @property
     def done_spec(self) -> TensorSpec:
         """Done spec of the transformed environment."""
-        return self.output_spec[("done", *self.done_key)]
+        return self.output_spec[("_done_spec", *self.done_key)]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -3993,25 +4003,25 @@ class RenameTransform(Transform):
                     break
             else:
                 raise RuntimeError("Expected one key to be 'done'")
-            output_spec["observation"][out_key] = output_spec["done"].clone()
+            output_spec["_observation_spec"][out_key] = output_spec["_done_spec"].clone()
         if "reward" in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
                 if self.in_keys[i] == "reward":
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")
-            output_spec["observation"][out_key] = output_spec["reward"].clone()
+            output_spec["_observation_spec"][out_key] = output_spec["_reward_spec"].clone()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in ("reward", "done"):
                 continue
             if out_key in ("done", "reward"):
-                output_spec[out_key] = output_spec["observation"][in_key].clone()
+                output_spec[out_key] = output_spec["_observation_spec"][in_key].clone()
             else:
-                output_spec["observation"][out_key] = output_spec["observation"][
+                output_spec["_observation_spec"][out_key] = output_spec["_observation_spec"][
                     in_key
                 ].clone()
             if not self.create_copy:
-                del output_spec["observation"][in_key]
+                del output_spec["_observation_spec"][in_key]
         return output_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:

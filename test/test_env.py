@@ -6,6 +6,7 @@
 import argparse
 import os.path
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 import pytest
@@ -22,13 +23,20 @@ from _utils_internal import (
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    ContinuousActionConvMockEnv,
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     CountingEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
+    DiscreteActionVecPolicy,
     DummyModelBasedEnvBase,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
+    NestedRewardEnv,
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -241,11 +249,9 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
 
 
 class TestModelBasedEnvBase:
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_mb_rollout(self, device, seed=0):
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        world_model = WorldModelWrapper(
+    @staticmethod
+    def world_model():
+        return WorldModelWrapper(
             SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
@@ -257,6 +263,12 @@ class TestModelBasedEnvBase:
                 out_keys=["reward"],
             ),
         )
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_mb_rollout(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = self.world_model
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
@@ -1317,6 +1329,34 @@ class TestNestedSpecs:
         assert ("next", *env.reward_key) in next_state.keys(True)
 
         check_env_specs(env)
+
+
+@pytest.mark.parametrize(
+    "envclass",
+    [
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        partial(
+            DummyModelBasedEnvBase, world_model=TestModelBasedEnvBase.world_model()
+        ),
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        NestedRewardEnv,
+    ],
+)
+def test_mocking_envs(envclass):
+    env = envclass()
+    env.set_seed(100)
+    reset = env.reset()
+    _ = env.rand_step(reset)
+    check_env_specs(env, seed=100)
 
 
 if __name__ == "__main__":
