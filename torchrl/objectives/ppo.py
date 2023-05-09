@@ -42,11 +42,15 @@ class PPOLoss(LossModule):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
+
+    Keyword Args:
         advantage_key (str, optional): the input tensordict key where the advantage is
             expected to be written.
             Defaults to ``"advantage"``.
         value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -120,6 +124,7 @@ class PPOLoss(LossModule):
         *,
         advantage_key: str = "advantage",
         value_target_key: str = "value_target",
+        value_key: str = "state_value",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
@@ -142,6 +147,7 @@ class PPOLoss(LossModule):
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
+        self.value_key = value_key
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -193,15 +199,6 @@ class PPOLoss(LossModule):
             tensordict = tensordict.detach()
         try:
             target_return = tensordict.get(self.value_target_key)
-            state_value = self.critic(
-                tensordict,
-                params=self.critic_params,
-            ).get("state_value")
-            loss_value = distance_loss(
-                target_return,
-                state_value,
-                loss_function=self.loss_critic_type,
-            )
         except KeyError:
             raise KeyError(
                 f"the key {self.value_target_key} was not found in the input tensordict. "
@@ -210,6 +207,25 @@ class PPOLoss(LossModule):
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
                 f"can be used for the value loss."
             )
+
+        state_value_td = self.critic(
+            tensordict,
+            params=self.critic_params,
+        )
+
+        try:
+            state_value = state_value_td.get(self.value_key)
+        except KeyError:
+            raise KeyError(
+                f"the key {self.value_key} was not found in the input tensordict. "
+                f"Make sure that the value_key passed to PPO is accurate."
+            )
+
+        loss_value = distance_loss(
+            target_return,
+            state_value,
+            loss_function=self.loss_critic_type,
+        )
         return self.critic_coef * loss_value
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -277,10 +293,14 @@ class ClipPPOLoss(PPOLoss):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
+
+    Keyword Args:
         advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
             Defaults to ``"advantage"``.
         value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
@@ -353,6 +373,7 @@ class ClipPPOLoss(PPOLoss):
         critic: TensorDictModule,
         *,
         advantage_key: str = "advantage",
+        value_key: str = "state_value",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -369,6 +390,7 @@ class ClipPPOLoss(PPOLoss):
             critic,
             advantage_key=advantage_key,
             entropy_bonus=entropy_bonus,
+            value_key=value_key,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
             critic_coef=critic_coef,
@@ -447,10 +469,14 @@ class KLPENPPOLoss(PPOLoss):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
+
+    Keyword Args:
         advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
             Defaults to ``"advantage"``.
         value_target_key (str, optional): the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
         dtarg (scalar, optional): target KL divergence. Defaults to ``0.01``.
         samples_mc_kl (int, optional): number of samples used to compute the KL divergence
             if no analytical formula can be found. Defaults to ``1``.
@@ -532,6 +558,7 @@ class KLPENPPOLoss(PPOLoss):
         *,
         advantage_key="advantage",
         dtarg: float = 0.01,
+        value_key: str = "state_value",
         beta: float = 1.0,
         increment: float = 2,
         decrement: float = 0.5,
@@ -558,6 +585,7 @@ class KLPENPPOLoss(PPOLoss):
             normalize_advantage=normalize_advantage,
             gamma=gamma,
             separate_losses=separate_losses,
+            value_key=value_key,
             **kwargs,
         )
 

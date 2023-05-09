@@ -40,6 +40,8 @@ _has_gym = importlib.util.find_spec("gym") is not None
 if not _has_gym:
     _has_gym = importlib.util.find_spec("gymnasium") is not None
 
+_has_mo = importlib.util.find_spec("mo_gymnasium") is not None
+
 
 class set_gym_backend(_DecoratorContextManager):
     """Sets the gym-backend to a certain value.
@@ -106,7 +108,8 @@ class set_gym_backend(_DecoratorContextManager):
                 found_setter = True
         if not found_setter:
             raise ImportError(
-                f"could not set anything related to gym backed {self.backend.__name__} with version={self.backend.__version__}."
+                f"could not set anything related to gym backend "
+                f"{self.backend.__name__} with version={self.backend.__version__}."
             )
 
     def __enter__(self):
@@ -527,10 +530,17 @@ class GymWrapper(GymLikeEnv):
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        self.reward_spec = UnboundedContinuousTensorSpec(
-            shape=[1],
-            device=self.device,
-        )
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            self.reward_spec = _gym_to_torchrl_spec_transform(
+                env.reward_space,
+                device=self.device,
+                categorical_action_encoding=self._categorical_action_encoding,
+            )
+        else:
+            self.reward_spec = UnboundedContinuousTensorSpec(
+                shape=[1],
+                device=self.device,
+            )
 
     def _init_env(self):
         self.reset()
@@ -671,3 +681,50 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
+
+
+class MOGymWrapper(GymWrapper):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> import mo_gymnasium as mo_gym
+        >>> env = MOGymWrapper(mo_gym.make('minecart-v0'), frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+
+class MOGymEnv(GymEnv):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> env = MOGymEnv(env_name="minecart-v0", frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+    @property
+    def lib(self) -> ModuleType:
+        if _has_mo:
+            import mo_gymnasium as mo_gym
+
+            return mo_gym
+        else:
+            try:
+                import mo_gymnasium  # noqa: F401
+            except ImportError as err:
+                raise ImportError("MO-gymnasium not found, check installation") from err
+
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)

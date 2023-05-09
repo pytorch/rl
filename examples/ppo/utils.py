@@ -108,13 +108,7 @@ def make_transformed_env_pixels(base_env, env_cfg):
         double_to_float_list += [
             "reward",
         ]
-        double_to_float_list += [
-            "action",
-        ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
     env.append_transform(
         DoubleToFloat(
             in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
@@ -152,9 +146,6 @@ def make_transformed_env_states(base_env, env_cfg):
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-        ]
-        double_to_float_list += [
-            "action",
         ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
         double_to_float_list += ["observation_vector"]

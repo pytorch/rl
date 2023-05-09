@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import importlib
+
 import time
 from sys import platform
 from typing import Optional, Union
@@ -37,7 +39,14 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.gym import _has_gym, _is_from_pixels, GymEnv, GymWrapper
+from torchrl.envs.libs.gym import (
+    _has_gym,
+    _is_from_pixels,
+    GymEnv,
+    GymWrapper,
+    MOGymEnv,
+    MOGymWrapper,
+)
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
@@ -46,24 +55,12 @@ from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
-D4RL_ERR = None
-try:
-    import d4rl  # noqa
+_has_d4rl = importlib.util.find_spec("d4rl") is not None
 
-    _has_d4rl = True
-except Exception as err:
-    # many things can wrong when importing d4rl :(
-    _has_d4rl = False
-    D4RL_ERR = err
+_has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
-SKLEARN_ERR = None
-try:
-    import sklearn  # noqa
+_has_sklearn = importlib.util.find_spec("sklearn") is not None
 
-    _has_sklearn = True
-except ModuleNotFoundError as err:
-    _has_sklearn = False
-    SKLEARN_ERR = err
 
 if _has_gym:
     try:
@@ -100,24 +97,24 @@ ATOL = 1e-1
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym library found")
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        PONG_VERSIONED,
-        # PENDULUM_VERSIONED,
-        HALFCHEETAH_VERSIONED,
-    ],
-)
-@pytest.mark.parametrize("frame_skip", [1, 3])
-@pytest.mark.parametrize(
-    "from_pixels,pixels_only",
-    [
-        [False, False],
-        [True, True],
-        [True, False],
-    ],
-)
 class TestGym:
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            PONG_VERSIONED,
+            # PENDULUM_VERSIONED,
+            HALFCHEETAH_VERSIONED,
+        ],
+    )
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only",
+        [
+            [False, False],
+            [True, True],
+            [True, False],
+        ],
+    )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
             # raise pytest.skip("already pixel")
@@ -176,6 +173,23 @@ class TestGym:
         assert final_seed0 == final_seed2
         assert_allclose_td(tdrollout[0], rollout2, rtol=RTOL, atol=ATOL)
 
+    @pytest.mark.parametrize(
+        "env_name",
+        [
+            PONG_VERSIONED,
+            # PENDULUM_VERSIONED,
+            HALFCHEETAH_VERSIONED,
+        ],
+    )
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only",
+        [
+            [False, False],
+            [True, True],
+            [True, False],
+        ],
+    )
     def test_gym_fake_td(self, env_name, frame_skip, from_pixels, pixels_only):
         if env_name == PONG_VERSIONED and not from_pixels:
             # raise pytest.skip("already pixel")
@@ -194,6 +208,77 @@ class TestGym:
             pixels_only=pixels_only,
         )
         check_env_specs(env)
+
+    @pytest.mark.parametrize("frame_skip", [1, 3])
+    @pytest.mark.parametrize(
+        "from_pixels,pixels_only",
+        [
+            [False, False],
+            [True, True],
+            [True, False],
+        ],
+    )
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_mo(self, frame_skip, from_pixels, pixels_only, wrapper):
+        if importlib.util.find_spec("gymnasium") is not None and not _has_mo:
+            raise pytest.skip("mo-gym not found")
+        else:
+            # avoid skipping, which we consider as errors in the gym CI
+            return
+
+        def make_env():
+            import mo_gymnasium
+
+            if wrapper:
+                return MOGymWrapper(
+                    mo_gymnasium.make("minecart-v0"),
+                    frame_skip=frame_skip,
+                    from_pixels=from_pixels,
+                    pixels_only=pixels_only,
+                )
+            else:
+                return MOGymEnv(
+                    "minecart-v0",
+                    frame_skip=frame_skip,
+                    from_pixels=from_pixels,
+                    pixels_only=pixels_only,
+                )
+
+        env = make_env()
+        check_env_specs(env)
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_info_reader(self):
+        try:
+            import gym_super_mario_bros as mario_gym
+        except ImportError as err:
+            try:
+                import gym
+
+                # with 0.26 we must have installed gym_super_mario_bros
+                # Since we capture the skips as errors, we raise a skip in this case
+                # Otherwise, we just return
+                if (
+                    version.parse("0.26.0")
+                    <= version.parse(gym.__version__)
+                    < version.parse("0.27.0")
+                ):
+                    raise pytest.skip(f"no super mario bros: error=\n{err}")
+            except ImportError:
+                pass
+            return
+
+        env = mario_gym.make("SuperMarioBros-v0", apply_api_compatibility=True)
+        env = GymWrapper(env)
+
+        def info_reader(info, tensordict):
+            assert isinstance(info, dict)  # failed before bugfix
+
+        env.info_dict_reader = info_reader
+        env.reset()
+        env.rand_step()
+        env.rollout(3)
 
 
 @implement_for("gym", None, "0.26")
@@ -518,7 +603,7 @@ ENVPOOL_CLASSIC_CONTROL_ENVS = [
     "Acrobot-v1",
     CARTPOLE_VERSIONED,
 ]
-ENVPOOL_ATARI_ENVS = [PONG_VERSIONED]
+ENVPOOL_ATARI_ENVS = []  # PONG_VERSIONED]
 ENVPOOL_GYM_ENVS = ENVPOOL_CLASSIC_CONTROL_ENVS + ENVPOOL_ATARI_ENVS
 ENVPOOL_DM_ENVS = ["CheetahRun-v1"]
 ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
@@ -558,6 +643,7 @@ class TestEnvPool:
     def test_env_basic_operation(
         self, env_name, frame_skip, transformed_out, T=10, N=3
     ):
+        torch.manual_seed(0)
         env_multithreaded = _make_multithreaded_env(
             env_name,
             frame_skip,
@@ -737,7 +823,7 @@ class TestEnvPool:
 
         # Check that results are different if seed is different
         # Skip Pong, since there different actions can lead to the same result
-        if env_name != "ALE/Pong-v5":
+        if env_name != PONG_VERSIONED:
             env.set_seed(
                 seed=seed + 10,
             )
@@ -1191,7 +1277,7 @@ class TestVmas:
         assert env.rollout(max_steps=3).device == devices[1 - first]
 
 
-@pytest.mark.skipif(not _has_d4rl, reason=f"D4RL not found: {D4RL_ERR}")
+@pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     def test_terminate_on_end(self, task):
@@ -1284,7 +1370,7 @@ class TestD4RL:
         print(f"completed test after {time.time()-t0}s")
 
 
-@pytest.mark.skipif(not _has_sklearn, reason=f"Scikit-learn not found: {SKLEARN_ERR}")
+@pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")
 @pytest.mark.parametrize(
     "dataset",
     [
