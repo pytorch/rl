@@ -20,8 +20,7 @@ init_env_steps: 10000
 record_interval: 10
 record_frames: 10000
 async_collection: 1
-#collector_devices: [cuda:1,cuda:1,cuda:1,cuda:1]
-collector_devices: [cpu] # ,cpu,cpu,cpu]
+collector_device: cuda:0
 env_per_collector: 1
 num_workers: 1
 

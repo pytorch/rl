@@ -75,15 +75,15 @@ class SafeSequential(TensorDictSequential, SafeModule):
         >>> # The module spec aggregates all the input specs:
         >>> print(td_module.spec)
         CompositeSpec(
-            hidden: NdUnboundedContinuousTensorSpec(
+            hidden: UnboundedContinuousTensorSpec(
                 shape=torch.Size([4]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
             loc: None,
             scale: None,
-            output: NdUnboundedContinuousTensorSpec(
+            output: UnboundedContinuousTensorSpec(
                 shape=torch.Size([8]), space=None, device=cpu, dtype=torch.float32, domain=continuous))
 
     In the vmap case:
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params = params.expand(4, *params.shape)
         >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)

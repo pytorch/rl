@@ -2,11 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
+from tensordict.nn import dispatch, TensorDictModuleBase
 from torch import nn
 from torch.nn import functional as F
 
@@ -292,7 +293,7 @@ class ConvNet(nn.Sequential):
             default:  SquashDims;
         aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
         squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
-            default: True.
+            default: False.
         device (Optional[DEVICE_TYPING]): device to create the module on.
 
     Examples:
@@ -637,12 +638,17 @@ class DuelingCnnDQNet(nn.Module):
         return value + advantage - advantage.mean(dim=-1, keepdim=True)
 
 
-class DistributionalDQNnet(nn.Module):
+class DistributionalDQNnet(TensorDictModuleBase):
     """Distributional Deep Q-Network.
 
     Args:
-        DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
+        DQNet (nn.Module): (deprecated) Q-Network with output length equal
+            to the number of atoms:
             output.shape = [*batch, atoms, actions].
+        in_keys (list of str or tuples of str): input keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+        out_keys (list of str or tuples of str): output keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
 
     """
 
@@ -652,21 +658,38 @@ class DistributionalDQNnet(nn.Module):
         "instead."
     )
 
-    def __init__(self, DQNet: nn.Module):
+    def __init__(self, DQNet: nn.Module = None, in_keys=None, out_keys=None):
         super().__init__()
-        if not (
-            not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1
-        ):
-            raise RuntimeError(self._wrong_out_feature_dims_error)
-        self.dqn = DQNet
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        q_values = self.dqn(x)
-        if q_values.ndimension() < 2:
-            raise RuntimeError(
-                self._wrong_out_feature_dims_error.format(q_values.shape)
+        if DQNet is not None:
+            warnings.warn(
+                f"Passing a network to {type(self)} is going to be deprecated.",
+                category=DeprecationWarning,
             )
-        return F.log_softmax(q_values, dim=-2)
+            if not (
+                not isinstance(DQNet.out_features, Number)
+                and len(DQNet.out_features) > 1
+            ):
+                raise RuntimeError(self._wrong_out_feature_dims_error)
+        self.dqn = DQNet
+        if in_keys is None:
+            in_keys = ["action_value"]
+        if out_keys is None:
+            out_keys = ["action_value"]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    @dispatch(auto_batch_size=False)
+    def forward(self, tensordict):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            q_values = tensordict.get(in_key)
+            if self.dqn is not None:
+                q_values = self.dqn(q_values)
+            if q_values.ndimension() < 2:
+                raise RuntimeError(
+                    self._wrong_out_feature_dims_error.format(q_values.shape)
+                )
+            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
+        return tensordict
 
 
 def ddpg_init_last_layer(
@@ -1026,6 +1049,10 @@ class LSTMNet(nn.Module):
         mlp_kwargs: Dict,
         device: Optional[DEVICE_TYPING] = None,
     ) -> None:
+        warnings.warn(
+            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed soon.",
+            category=DeprecationWarning,
+        )
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(device=device, **mlp_kwargs)

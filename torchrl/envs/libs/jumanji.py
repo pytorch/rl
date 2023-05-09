@@ -342,7 +342,8 @@ class JumanjiEnv(JumanjiWrapper):
             ) from IMPORT_ERR
         from_pixels = kwargs.pop("from_pixels", False)
         pixels_only = kwargs.pop("pixels_only", True)
-        assert not kwargs
+        if kwargs:
+            raise ValueError(f"Extra kwargs are not supported by {type(self)}.")
         self.wrapper_frame_skip = 1
         env = self.lib.make(env_name, **kwargs)
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)

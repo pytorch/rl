@@ -10,7 +10,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
-from torchrl.envs.utils import set_exploration_mode, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -175,10 +175,10 @@ class DreamerActorLoss(LossModule):
         self.imagination_horizon = imagination_horizon
         self.discount_loss = discount_loss
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
         if lmbda is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
@@ -186,7 +186,9 @@ class DreamerActorLoss(LossModule):
             tensordict = tensordict.select("state", "belief")
             tensordict = tensordict.reshape(-1)
 
-        with hold_out_net(self.model_based_env), set_exploration_mode("random"):
+        with hold_out_net(self.model_based_env), set_exploration_type(
+            ExplorationType.RANDOM
+        ):
             tensordict = self.model_based_env.reset(tensordict.clone(recurse=False))
             fake_data = self.model_based_env.rollout(
                 max_steps=self.imagination_horizon,
@@ -230,7 +232,10 @@ class DreamerActorLoss(LossModule):
         )
         return self.value_estimator.value_estimate(input_tensordict)
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))

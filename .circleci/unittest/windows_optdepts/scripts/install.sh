@@ -59,7 +59,22 @@ fi
 # install tensordict
 pip3 install git+https://github.com/pytorch-labs/tensordict
 
+# smoke test
+python -c """
+from tensordict import TensorDict
+print('successfully imported tensordict')
+"""
+
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-pip3 install -e .
+python setup.py develop
+
+whatsinside=$(ls -rtlh ./torchrl)
+echo $whatsinside
+
+# smoke test
+python -c """
+from torchrl.data import ReplayBuffer
+print('successfully imported torchrl')
+"""

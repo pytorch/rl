@@ -11,19 +11,20 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
 from torchrl.modules import ProbabilisticActor
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from ..envs.utils import set_exploration_mode
-from .common import LossModule
-from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
     err = ""
@@ -112,7 +113,7 @@ class IQLLoss(LossModule):
         self.priority_key = priority_key
         self.loss_function = loss_function
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
     @property
@@ -167,11 +168,10 @@ class IQLLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL loss
-        with set_exploration_mode("mode"):
-            dist = self.actor_network.get_dist(
-                tensordict,
-                params=self.actor_network_params,
-            )
+        dist = self.actor_network.get_dist(
+            tensordict,
+            params=self.actor_network_params,
+        )
 
         log_prob = dist.log_prob(tensordict["action"])
 
@@ -243,7 +243,10 @@ class IQLLoss(LossModule):
         )
         return loss_qval, td_error.detach().max(0)[0]
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = self.value_network
 
         value_key = "state_value"
