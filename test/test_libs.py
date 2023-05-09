@@ -1409,11 +1409,15 @@ class TestOpenML:
             continue
         assert len(data) // 2048 in (i, i - 1)
 
+
 class TestRoboHive:
-    @pytest.mark.parametrize("envname", ["FK1_RelaxFixed-v4", "visual_FK1_RelaxFixed-v4"])
+    @pytest.mark.parametrize(
+        "envname", ["FK1_RelaxFixed-v4", "visual_FK1_RelaxFixed-v4"]
+    )
     def test_robohive(self, envname):
         env = RoboHiveEnv(envname)
         check_env_specs(env)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

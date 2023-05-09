@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from tensordict.tensordict import make_tensordict
+from torchrl._utils import implement_for
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import make_composite_from_td
@@ -24,6 +25,14 @@ if _has_robohive:
 
 
 class RoboHiveEnv(GymEnv):
+    """A wrapper for RoboHive gym environments.
+
+    RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.
+
+    Github: https://github.com/vikashplus/robohive/
+
+    RoboHive requires gym 0.13
+    """
     env_list = []
 
     @classmethod
@@ -35,6 +44,11 @@ class RoboHiveEnv(GymEnv):
         cls.env_list += register_kitchen_envs()
         cls.env_list += register_hand_envs()
 
+    @implement_for("gym", "0.14", None) # make sure gym 0.13 is installed, otherwise raise an exception
+    def _build_env(self, *args, **kwargs):
+        raise NotImplementedError("Your gym version is too recent, RoboHiveEnv is only compatible with gym 0.13.")
+
+    @implement_for("gym", "0.13", "0.14") # make sure gym 0.13 is installed, otherwise raise an exception
     def _build_env(
         self,
         env_name: str,
@@ -392,6 +406,5 @@ if _has_robohive:
                     f"Could not register {new_env_name}, the following error was raised: {err}"
                 )
         return env_names
-
 
     RoboHiveEnv.register_envs()
