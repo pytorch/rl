@@ -162,7 +162,6 @@ class RoboHiveEnv(GymEnv):
     def read_obs(self, observation):
         # the info is missing from the reset
         observations = self.env.obs_dict
-        visual = self.env.get_exteroception()
         try:
             del observations["t"]
         except KeyError:
@@ -170,7 +169,9 @@ class RoboHiveEnv(GymEnv):
         # recover vec
         obsvec = []
         pixel_list = []
-        observations.update(visual)
+        if self.from_pixels:
+            visual = self.env.get_exteroception()
+            observations.update(visual)
         for key in observations:
             if key.startswith("rgb"):
                 pix = observations[key]
