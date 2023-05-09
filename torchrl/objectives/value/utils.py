@@ -321,6 +321,9 @@ def _inv_pad_sequence(tensor, splits):
         >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
         >>> assert (reconstructed==rewards).all()
     """
+    if splits.numel() == 1:
+        return tensor
+
     splits = splits.expand(tensor.shape[::-1]).T
     decay = splits - torch.arange(0, tensor.shape[-1], device=tensor.device)
     idx = (decay >= 1).view(-1)
