@@ -179,12 +179,11 @@ def _fast_vec_gae(
 
 def _to_scalar_if_unique(tensor: Union[float, torch.Tensor]):
     """Return a single scalar if tensor consists of a single unique element, else the source tensor is returned."""
-
     if isinstance(tensor, torch.Tensor):
         tensor_unique = tensor.unique()
         if tensor_unique.numel() == 1:
             return tensor_unique.item()
-    
+
     return tensor
 
 
