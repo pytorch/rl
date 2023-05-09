@@ -1,5 +1,5 @@
 # training
-episode_length: 5
+episode_length: 50
 # IO:
 out_dir: out
 out_dir_reward: out_reward # used if restoring multihead
@@ -12,7 +12,7 @@ init_reward_from: resume
 # data:
 dataset: shakespeare # 'openwebtext', 'shakespeare', 'openai_summarize_tldr'
 gradient_accumulation_steps: 10 # used to simulate larger batch sizes
-batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 1024
 # model:
 n_layer: 2
@@ -22,7 +22,7 @@ dropout: 0.2 # for pretraining 0 is good, for finetuning try 0.1+
 bias: False # do we use bias inside LayerNorm and Linear layers?
 optimizer: # adamw
 learning_rate: 1.0e-3 # max learning rate
-max_iters: 300 # total number of training iterations
+max_iters: 1000 # total number of training iterations
 weight_decay: 1.0e-2
 beta1: 0.9
 beta2: 0.95
@@ -37,3 +37,5 @@ dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto impl
 compile: True # use PyTorch 2.0 to compile the model to be faster
 # verbose
 verbose: False
+ppo_batch_size: 2
+num_epochs: 10
