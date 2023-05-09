@@ -285,3 +285,4 @@ if __name__ == "__main__":
         if log:
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
+    wandb.finish()
