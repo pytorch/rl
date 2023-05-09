@@ -146,10 +146,11 @@ def _fast_vec_gae(
     """
     # _gen_num_per_traj and _split_and_pad_sequence need
     # time dimension at last position
-    done = done.transpose(-2, -1)
-    reward = reward.transpose(-2, -1)
-    state_value = state_value.transpose(-2, -1)
-    next_state_value = next_state_value.transpose(-2, -1)
+    if reward.ndim > 2:
+        done = done.transpose(-2, -1)
+        reward = reward.transpose(-2, -1)
+        state_value = state_value.transpose(-2, -1)
+        next_state_value = next_state_value.transpose(-2, -1)
 
     gammalmbda = gamma * lmbda
     not_done = 1 - done.int()
@@ -167,14 +168,24 @@ def _fast_vec_gae(
     advantage = advantage.squeeze(1)
     advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
 
-    done = done.transpose(-1, -2)
-    reward = reward.transpose(-1, -2)
-    state_value = state_value.transpose(-1, -2)
-    next_state_value = next_state_value.transpose(-1, -2)
-    advantage = advantage.transpose(-1, -2)
-
     value_target = advantage + state_value
+
+    if reward.ndim > 2:
+        advantage = advantage.transpose(-1, -2)
+        value_target = value_target.transpose(-1, -2)
+
     return advantage, value_target
+
+
+def _to_scalar_if_unique(tensor: Union[float, torch.Tensor]):
+    """Return a single scalar if tensor consists of a single unique element, else the source tensor is returned."""
+
+    if isinstance(tensor, torch.Tensor):
+        tensor_unique = tensor.unique()
+        if tensor_unique.numel() == 1:
+            return tensor_unique.item()
+    
+    return tensor
 
 
 @_transpose_time
@@ -212,6 +223,9 @@ def vec_generalized_advantage_estimate(
     dtype = state_value.dtype
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
+
+    gamma = _to_scalar_if_unique(gamma)
+    lmbda = _to_scalar_if_unique(lmbda)
 
     value = gamma * lmbda
 

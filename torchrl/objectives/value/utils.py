@@ -308,36 +308,45 @@ def _split_and_pad_sequence(tensor, splits):
     return tensor
 
 
+#def _inv_pad_sequence(tensor, splits):
+#    """Inverse a pad_sequence operation.
+#
+#    Examples:
+#        >>> rewards = torch.randn(100, 20)
+#        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
+#        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+#        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
+#        >>> assert (reconstructed==rewards).all()
+#    """
+#    if splits.numel() == 1:
+#        return tensor
+#
+#    offset = torch.ones_like(splits) * tensor.shape[-1]
+#    offset[0] = 0
+#    offset = offset.cumsum(0)
+#    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=tensor.device)
+#
+#    ones = offset + splits
+#    while ones[-1] == len(z):
+#        ones = ones[:-1]
+#    z[ones] = 1
+#    z[offset[1:]] = torch.bitwise_xor(
+#        z[offset[1:]], torch.ones_like(z[offset[1:]])
+#    )  # make sure that the longest is accounted for
+#    idx = z.cumsum(0) % 2 == 0
+#    return tensor.view(-1)[idx]
+
 def _inv_pad_sequence(tensor, splits):
-    """Inverse a pad_sequence operation.
-
-    Compatible with tensordict inputs.
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
-        >>> is_init[:, 0] = True
-        >>> is_init[0, 3] = True
-        >>> is_init[1, 2] = True
-        >>> tensordict = TensorDict({
-        ...     "is_init": is_init,
-        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
-        ... }, [4, 5])
-        >>> splits = _get_num_per_traj_init(is_init)
-        >>> td = _split_and_pad_sequence(tensordict, splits)
-        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
     """
-    offset = torch.ones_like(splits) * tensor.shape[-1]
-    offset[0] = 0
-    offset = offset.cumsum(0)
-    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=tensor.device)
+    Examples:
+        >>> rewards = torch.randn(100, 20)
+        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
+        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
+        >>> assert (reconstructed==rewards).all()
 
-    ones = offset + splits
-    while ones[-1] == len(z):
-        ones = ones[:-1]
-    z[ones] = 1
-    z[offset[1:]] = torch.bitwise_xor(
-        z[offset[1:]], torch.ones_like(z[offset[1:]])
-    )  # make sure that the longest is accounted for
-    idx = z.cumsum(0) % 2 == 0
+    """
+    splits = splits.expand(tensor.shape[::-1]).T
+    decay = splits - torch.arange(0, tensor.shape[-1], device=tensor.device)
+    idx = (decay >= 1).view(-1)
     return tensor.view(-1)[idx]

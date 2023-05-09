@@ -4076,7 +4076,7 @@ class TestValues:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
     @pytest.mark.parametrize("lmbda", [0.99, 0.5, 0.1])
-    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("N", [(1, ), (3,), (7, 3)])
     @pytest.mark.parametrize("T", [200, 5, 3])
     @pytest.mark.parametrize("dtype", [torch.float, torch.double])
     @pytest.mark.parametrize("has_done", [True, False])
