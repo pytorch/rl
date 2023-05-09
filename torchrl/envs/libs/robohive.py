@@ -404,8 +404,8 @@ if _has_robohive:
         env_names = copy(env_list)
 
         visual_keys = [
-            "rgb:vil_camera:224x224:2d",
-            "rgb:fixed:224x224:2d",
+            "rgb:left_cam:224x224:2d",
+            "rgb:right_cam:224x224:2d",
         ]
         # Hand Manipulation Suite ======================================================================
         for env in env_list:
@@ -414,9 +414,9 @@ if _has_robohive:
                 register_env_variant(
                     env,
                     variants={
-                        "obs_keys": [
-                            "hand_jnt",
-                        ],
+                        # "obs_keys": [
+                        #     "hand_jnt",
+                        # ],
                         "visual_keys": visual_keys,
                     },
                     variant_id=new_env_name,
