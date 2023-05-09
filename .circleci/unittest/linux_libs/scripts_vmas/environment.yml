@@ -19,6 +19,7 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-error-for-skips
     - expecttest
     - pyyaml
     - scipy

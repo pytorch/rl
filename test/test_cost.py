@@ -4,9 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import warnings
 from copy import deepcopy
 
 from packaging import version as pack_version
+from tensordict.nn import InteractionType
 
 _has_functorch = True
 try:
@@ -23,7 +25,7 @@ import pytest
 import torch
 from _utils_internal import dtype_fixture, get_available_devices  # noqa
 from mocking_classes import ContinuousActionConvMockEnv
-from tensordict.nn import get_functional, TensorDictModule
+from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -144,10 +146,10 @@ class TestDQN:
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
             action_spec = DiscreteTensorSpec(action_dim)
-        elif action_spec_type == "nd_bounded":
-            action_spec = BoundedTensorSpec(
-                -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
-            )
+        # elif action_spec_type == "nd_bounded":
+        #     action_spec = BoundedTensorSpec(
+        #         -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        #     )
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
@@ -161,6 +163,7 @@ class TestDQN:
                 chosen_action_value=None,
                 shape=[],
             ),
+            action_space=action_spec_type,
             module=module,
         ).to(device)
         return actor
@@ -177,8 +180,12 @@ class TestDQN:
         is_nn_module=False,
     ):
         # Actor
+        var_nums = None
         if action_spec_type == "mult_one_hot":
-            action_spec = MultiOneHotDiscreteTensorSpec([atoms] * action_dim)
+            action_spec = MultiOneHotDiscreteTensorSpec(
+                [action_dim // 2, action_dim // 2]
+            )
+            var_nums = action_spec.nvec
         elif action_spec_type == "one_hot":
             action_spec = OneHotDiscreteTensorSpec(action_dim)
         elif action_spec_type == "categorical":
@@ -200,9 +207,8 @@ class TestDQN:
             ),
             module=module,
             support=support,
-            action_space="categorical"
-            if isinstance(action_spec, DiscreteTensorSpec)
-            else "one_hot",
+            action_space=action_spec_type,
+            var_nums=var_nums,
         )
         return actor
 
@@ -229,7 +235,7 @@ class TestDQN:
 
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
-            action = torch.argmax(action, -1, keepdim=True)
+            action = torch.argmax(action, -1, keepdim=False)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
@@ -273,13 +279,16 @@ class TestDQN:
             action_value = torch.randn(batch, T, action_dim, device=device)
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
 
-        if action_spec_type == "categorical":
-            action_value = torch.max(action_value, -1, keepdim=True)[0]
-            action = torch.argmax(action, -1, keepdim=True)
         # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
+        if action_spec_type == "categorical":
+            action_value = torch.max(action_value, -1, keepdim=True)[0]
+            action = torch.argmax(action, -1, keepdim=False)
+            action = action.masked_fill_(~mask, 0.0)
+        else:
+            action = action.masked_fill_(~mask.unsqueeze(-1), 0.0)
         td = TensorDict(
             batch_size=(batch, T),
             source={
@@ -290,7 +299,7 @@ class TestDQN:
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
-                "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "action": action,
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
         )
@@ -298,9 +307,7 @@ class TestDQN:
 
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    )
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_dqn(self, delay_value, device, action_spec_type, td_est):
         torch.manual_seed(self.seed)
@@ -343,9 +350,7 @@ class TestDQN:
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "action_spec_type", ("nd_bounded", "one_hot", "categorical")
-    )
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
     def test_dqn_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(
@@ -438,7 +443,7 @@ class TestDQN:
             assert_allclose_td(target_value, target_value2)
         else:
             for key, val in target_value.flatten_keys(",").items():
-                if key in ("support",):
+                if "support" in key:
                     continue
                 assert not (val == target_value2[tuple(key.split(","))]).any(), key
 
@@ -1959,7 +1964,6 @@ class TestREDQ:
 
         if delay_qvalue:
             target_updater = SoftUpdate(loss_fn)
-            target_updater.init_()
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -2235,6 +2239,33 @@ class TestPPO:
         )
         return actor.to(device), value.to(device)
 
+    def _create_mock_actor_value_shared(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        base_layer = nn.Linear(obs_dim, 5)
+        common = TensorDictModule(
+            base_layer, in_keys=["observation"], out_keys=["hidden"]
+        )
+        net = nn.Sequential(nn.Linear(5, 2 * action_dim), NormalParamExtractor())
+        module = SafeModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
+        actor_head = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        module = nn.Linear(5, 1)
+        value_head = ValueOperator(
+            module=module,
+            in_keys=["hidden"],
+        )
+        model = ActorValueOperator(common, actor_head, value_head).to(device)
+        return model, model.get_policy_operator(), model.get_value_operator()
+
     def _create_mock_distributional_actor(
         self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
     ):
@@ -2443,6 +2474,76 @@ class TestPPO:
                 assert "critic" in name
         actor.zero_grad()
         assert counter == 4
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize(
+        "advantage",
+        (
+            "gae",
+            "td",
+            "td_lambda",
+        ),
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("separate_losses", [True, False])
+    def test_ppo_shared_seq(self, loss_class, device, advantage, separate_losses):
+        """Tests PPO with shared module with and without passing twice across the common module."""
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_ppo(device=device)
+
+        model, actor, value = self._create_mock_actor_value_shared(device=device)
+        value2 = value[-1]  # prune the common module
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+            )
+        elif advantage == "td":
+            advantage = TD1Estimator(
+                gamma=0.9,
+                value_network=value,
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimator(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+            )
+        else:
+            raise NotImplementedError
+        loss_fn = loss_class(
+            actor,
+            value,
+            loss_critic_type="l2",
+            separate_losses=separate_losses,
+            entropy_coef=0.0,
+        )
+
+        loss_fn2 = loss_class(
+            actor,
+            value2,
+            loss_critic_type="l2",
+            separate_losses=separate_losses,
+            entropy_coef=0.0,
+        )
+
+        if advantage is not None:
+            advantage(td)
+        loss = loss_fn(td).exclude("entropy")
+        sum(val for key, val in loss.items() if key.startswith("loss_")).backward()
+        grad = TensorDict(dict(model.named_parameters()), []).apply(
+            lambda x: x.grad.clone()
+        )
+        loss2 = loss_fn2(td).exclude("entropy")
+        model.zero_grad()
+        sum(val for key, val in loss2.items() if key.startswith("loss_")).backward()
+        grad2 = TensorDict(dict(model.named_parameters()), []).apply(
+            lambda x: x.grad.clone()
+        )
+        assert_allclose_td(loss, loss2)
+        assert_allclose_td(grad, grad2)
+        model.zero_grad()
 
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
@@ -3015,7 +3116,7 @@ class TestDreamer:
             SafeProbabilisticModule(
                 in_keys=["loc", "scale"],
                 out_keys="action",
-                default_interaction_mode="random",
+                default_interaction_type=InteractionType.RANDOM,
                 distribution_class=TanhNormal,
             ),
         )
@@ -3627,7 +3728,6 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         )
     elif mode == "soft":
         upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
-    upd.init_()
     for _, _v in upd._targets.items(True, True):
         if _v.dtype is not torch.int64:
             _v.copy_(torch.randn_like(_v))
@@ -4883,6 +4983,62 @@ class TestAdv:
         td = module(td.clone(False))
         assert td["advantage"].is_leaf
 
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimator, {}],
+            [TDLambdaEstimator, {"lmbda": 0.95}],
+        ],
+    )
+    @pytest.mark.parametrize("has_value_net", [True, False])
+    @pytest.mark.parametrize("skip_existing", [True, False, None])
+    def test_skip_existing(
+        self,
+        adv,
+        kwargs,
+        has_value_net,
+        skip_existing,
+    ):
+        if has_value_net:
+            value_net = TensorDictModule(
+                lambda x: torch.zeros(*x.shape[:-1], 1),
+                in_keys=["obs"],
+                out_keys=["state_value"],
+            )
+        else:
+            value_net = None
+
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            differentiable=True,
+            skip_existing=skip_existing,
+            **kwargs,
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(1, 10, 3),
+                "state_value": torch.ones(1, 10, 1),
+                "next": {
+                    "obs": torch.randn(1, 10, 3),
+                    "state_value": torch.ones(1, 10, 1),
+                    "reward": torch.randn(1, 10, 1, requires_grad=True),
+                    "done": torch.zeros(1, 10, 1, dtype=torch.bool),
+                },
+            },
+            [1, 10],
+        )
+        td = module(td.clone(False))
+        if has_value_net and not skip_existing:
+            exp_val = 0
+        elif has_value_net and skip_existing:
+            exp_val = 1
+        elif not has_value_net:
+            exp_val = 1
+        assert (td["state_value"] == exp_val).all()
+        # assert (td["next", "state_value"] == exp_val).all()
+
 
 class TestBase:
     @pytest.mark.parametrize("expand_dim", [None, 2])
@@ -4929,6 +5085,18 @@ class TestBase:
 
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
+
+
+@pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])
+def test_updater_warning(updater):
+    with warnings.catch_warnings():
+        dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
+    with pytest.warns(UserWarning):
+        dqn.target_value_network_params
+    with warnings.catch_warnings():
+        updater(dqn)
+    with warnings.catch_warnings():
+        dqn.target_value_network_params
 
 
 if __name__ == "__main__":

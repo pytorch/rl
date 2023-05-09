@@ -13,21 +13,24 @@ from tensordict.nn import make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
+from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-
-from ..envs.utils import set_exploration_mode, step_mdp
-from .common import LossModule
-from .value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
-    from functorch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
     err = ""
@@ -188,10 +191,13 @@ class SACLoss(LossModule):
             )
             make_functional(self.actor_critic)
         if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING)
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
@@ -281,7 +287,7 @@ class SACLoss(LossModule):
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         # KL lossa
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
@@ -318,7 +324,7 @@ class SACLoss(LossModule):
             torch.Size([]),
             _run_checks=False,
         )
-        with set_exploration_mode("mode"):
+        with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
             ).squeeze(-1)
@@ -366,7 +372,7 @@ class SACLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
-            with set_exploration_mode("random"):
+            with set_exploration_type(ExplorationType.RANDOM):
                 dist = self.actor_network.get_dist(tensordict, params=actor_params)
                 tensordict.set("action", dist.rsample())
                 log_prob = dist.log_prob(tensordict.get("action"))
@@ -592,7 +598,7 @@ class DiscreteSACLoss(LossModule):
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         tensordict_actor = tensordict_actor.contiguous()
 
-        with set_exploration_mode("random"):
+        with set_exploration_type(ExplorationType.RANDOM):
             # vmap doesn't support sampling, so we take it out from the vmap
             td_params = vmap(self.actor_network.get_dist_params)(
                 tensordict_actor,
@@ -733,7 +739,10 @@ class DiscreteSACLoss(LossModule):
             alpha_loss = torch.zeros_like(log_pi)
         return alpha_loss
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         value_net = None
         value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))

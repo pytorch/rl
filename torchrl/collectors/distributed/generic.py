@@ -20,7 +20,7 @@ from torchrl._utils import VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
-    DEFAULT_EXPLORATION_MODE,
+    DEFAULT_EXPLORATION_TYPE,
     MultiSyncDataCollector,
     SyncDataCollector,
 )
@@ -32,6 +32,7 @@ from torchrl.collectors.distributed.default_configs import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
 try:
@@ -288,7 +289,7 @@ class DistributedDataCollector(DataCollectorBase):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
-        exploration_mode (str, optional): interaction mode to be used when
+        exploration_type (str, optional): interaction mode to be used when
             collecting data. Must be one of ``"random"``, ``"mode"`` or
             ``"mean"``.
             Defaults to ``"random"``
@@ -369,7 +370,8 @@ class DistributedDataCollector(DataCollectorBase):
         reset_at_each_iter=False,
         postproc=None,
         split_trajs=False,
-        exploration_mode=DEFAULT_EXPLORATION_MODE,
+        exploration_type=DEFAULT_EXPLORATION_TYPE,
+        exploration_mode=None,
         reset_when_done=True,
         collector_class=SyncDataCollector,
         collector_kwargs=None,
@@ -383,6 +385,10 @@ class DistributedDataCollector(DataCollectorBase):
         launcher="submitit",
         tcp_port=None,
     ):
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
+
         if collector_class == "async":
             collector_class = MultiaSyncDataCollector
         elif collector_class == "sync":
@@ -454,7 +460,7 @@ class DistributedDataCollector(DataCollectorBase):
                     "torchrl's repo."
                 )
             collector_kwarg["reset_at_each_iter"] = reset_at_each_iter
-            collector_kwarg["exploration_mode"] = exploration_mode
+            collector_kwarg["exploration_type"] = exploration_type
             collector_kwarg["reset_when_done"] = reset_when_done
 
         if postproc is not None and hasattr(postproc, "to"):

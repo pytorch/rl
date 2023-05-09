@@ -3,12 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import abc
+import functools
 import warnings
 from functools import wraps
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
-from tensordict.nn import dispatch, is_functional, TensorDictModule
+from tensordict.nn import (
+    dispatch,
+    is_functional,
+    set_skip_existing,
+    TensorDictModule,
+    TensorDictModuleBase,
+)
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 
@@ -16,6 +23,7 @@ from torchrl.envs.utils import step_mdp
 
 from torchrl.objectives.utils import hold_out_net
 from torchrl.objectives.value.functional import (
+    generalized_advantage_estimate,
     td0_return_estimate,
     td_lambda_return_estimate,
     vec_generalized_advantage_estimate,
@@ -33,7 +41,18 @@ def _self_set_grad_enabled(fun):
     return new_fun
 
 
-class ValueEstimatorBase(nn.Module):
+def _self_set_skip_existing(fun):
+    @functools.wraps(fun)
+    def new_func(self, *args, **kwargs):
+        if self.skip_existing is not None:
+            with set_skip_existing(self.skip_existing):
+                return fun(self, *args, **kwargs)
+        return fun(self, *args, **kwargs)
+
+    return new_func
+
+
+class ValueEstimatorBase(TensorDictModuleBase):
     """An abstract parent class for value function modules.
 
     Its :meth:`ValueFunctionBase.forward` method will compute the value (given
@@ -47,12 +66,6 @@ class ValueEstimatorBase(nn.Module):
 
     value_network: Union[TensorDictModule, Callable]
     value_key: Union[Tuple[str], str]
-    DIFF_DEPREC_MSG = (
-        "differentiable=False will soon be deprecated and all value computations will be made"
-        "differentiable. "
-        "Consider using differentiable=True and "
-        "decorate your function with `torch.no_grad()` or pass detached functional parameters."
-    )
 
     @abc.abstractmethod
     def forward(
@@ -82,6 +95,45 @@ class ValueEstimatorBase(nn.Module):
         """
         raise NotImplementedError
 
+    def __init__(
+        self,
+        *,
+        value_network: TensorDictModule,
+        differentiable: bool = False,
+        advantage_key: Union[str, Tuple] = "advantage",
+        value_target_key: Union[str, Tuple] = "value_target",
+        value_key: Union[str, Tuple] = "state_value",
+        skip_existing: Optional[bool] = None,
+    ):
+        super().__init__()
+        self.differentiable = differentiable
+        self.skip_existing = skip_existing
+        self.value_network = value_network
+        self.value_key = value_key
+        if (
+            hasattr(value_network, "out_keys")
+            and value_key not in value_network.out_keys
+        ):
+            raise KeyError(
+                f"value key '{value_key}' not found in value network out_keys."
+            )
+
+        self.advantage_key = advantage_key
+        self.value_target_key = value_target_key
+
+        try:
+            self.in_keys = (
+                value_network.in_keys
+                + [("next", "reward"), ("next", "done")]
+                + [("next", in_key) for in_key in value_network.in_keys]
+            )
+        except AttributeError:
+            # value network does not have an `in_keys` attribute
+            self.in_keys = []
+            pass
+
+        self.out_keys = [self.advantage_key, self.value_target_key]
+
     def value_estimate(
         self,
         tensordict,
@@ -109,6 +161,8 @@ class ValueEstimatorBase(nn.Module):
     def is_functional(self):
         if isinstance(self.value_network, nn.Module):
             return is_functional(self.value_network)
+        elif self.value_network is None:
+            return None
         else:
             raise RuntimeError("Cannot determine if value network is functional.")
 
@@ -124,7 +178,7 @@ class TD0Estimator(ValueEstimatorBase):
 
     AKA bootstrapped temporal difference or 1-step return.
 
-    Args:
+    Keyword Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve
             the value estimates.
@@ -144,6 +198,10 @@ class TD0Estimator(ValueEstimatorBase):
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
 
     """
 
@@ -157,43 +215,24 @@ class TD0Estimator(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
+        skip_existing: Optional[bool] = None,
     ):
-        super().__init__()
+        super().__init__(
+            value_network=value_network,
+            differentiable=differentiable,
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+            skip_existing=skip_existing,
+        )
         try:
             device = next(value_network.parameters()).device
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.value_network = value_network
-
         self.average_rewards = average_rewards
-        self.differentiable = differentiable
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
-        self.value_key = value_key
-        if (
-            hasattr(value_network, "out_keys")
-            and value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{value_key}' not found in value network out_keys."
-            )
 
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
-
-        try:
-            self.in_keys = (
-                value_network.in_keys
-                + [("next", "reward"), ("next", "done")]
-                + [("next", in_key) for in_key in value_network.in_keys]
-            )
-        except AttributeError:
-            # value network does not have an `in_keys` attribute
-            pass
-
-        self.out_keys = [self.advantage_key, self.value_target_key]
-
+    @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
     def forward(
@@ -297,7 +336,7 @@ class TD0Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
@@ -314,7 +353,7 @@ class TD0Estimator(ValueEstimatorBase):
 class TD1Estimator(ValueEstimatorBase):
     r""":math:`\infty`-Temporal Difference (TD(1)) estimate of advantage function.
 
-    Args:
+    Keyword Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
@@ -333,6 +372,10 @@ class TD1Estimator(ValueEstimatorBase):
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
 
     """
 
@@ -346,42 +389,24 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
+        skip_existing: Optional[bool] = None,
     ):
-        super().__init__()
+        super().__init__(
+            value_network=value_network,
+            differentiable=differentiable,
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+            skip_existing=skip_existing,
+        )
         try:
             device = next(value_network.parameters()).device
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.value_network = value_network
-
         self.average_rewards = average_rewards
-        self.differentiable = differentiable
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
-        self.value_key = value_key
-        if (
-            hasattr(value_network, "out_keys")
-            and value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{value_key}' not found in value network out_keys."
-            )
 
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
-
-        try:
-            self.in_keys = (
-                value_network.in_keys
-                + [("next", "reward"), ("next", "done")]
-                + [("next", in_key) for in_key in value_network.in_keys]
-            )
-        except AttributeError:
-            # value network does not have an `in_keys` attribute
-            pass
-        self.out_keys = [self.advantage_key, self.value_target_key]
-
+    @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
     def forward(
@@ -454,9 +479,10 @@ class TD1Estimator(ValueEstimatorBase):
             )
         if params is not None:
             kwargs["params"] = params.detach()
-        with hold_out_net(self.value_network):
-            self.value_network(tensordict, **kwargs)
-            value = tensordict.get(self.value_key)
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                self.value_network(tensordict, **kwargs)
+        value = tensordict.get(self.value_key)
 
         if params is not None and target_params is None:
             target_params = params.detach()
@@ -485,7 +511,7 @@ class TD1Estimator(ValueEstimatorBase):
                 ("next", "reward"), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
@@ -524,6 +550,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
 
     """
 
@@ -539,44 +569,26 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
+        skip_existing: Optional[bool] = None,
     ):
-        super().__init__()
+        super().__init__(
+            value_network=value_network,
+            differentiable=differentiable,
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+            skip_existing=skip_existing,
+        )
         try:
             device = next(value_network.parameters()).device
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
-        self.value_network = value_network
+        self.average_rewards = average_rewards
         self.vectorized = vectorized
 
-        self.average_rewards = average_rewards
-        self.differentiable = differentiable
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
-        self.value_key = value_key
-        if (
-            hasattr(value_network, "out_keys")
-            and value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{value_key}' not found in value network out_keys."
-            )
-
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
-
-        try:
-            self.in_keys = (
-                value_network.in_keys
-                + [("next", "reward"), ("next", "done")]
-                + [("next", in_key) for in_key in value_network.in_keys]
-            )
-        except AttributeError:
-            # value network does not have an `in_keys` attribute
-            pass
-        self.out_keys = [self.advantage_key, self.value_target_key]
-
+    @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
     def forward(
@@ -650,9 +662,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
             )
         if params is not None:
             kwargs["params"] = params
-        with hold_out_net(self.value_network):
-            self.value_network(tensordict, **kwargs)
-            value = tensordict.get(self.value_key)
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                self.value_network(tensordict, **kwargs)
+        value = tensordict.get(self.value_key)
         if params is not None and target_params is None:
             target_params = params.detach()
         value_target = self.value_estimate(tensordict, target_params=target_params)
@@ -683,7 +696,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             )  # we must update the rewards if they are used later in the code
 
         step_td = step_mdp(tensordict)
-        if self.value_key not in step_td.keys():
+        if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
@@ -722,12 +735,18 @@ class GAE(ValueEstimatorBase):
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
 
+        vectorized (bool, optional): whether to use the vectorized version of the
+            lambda return. Default is `True`.
         advantage_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): the key of the advantage entry.
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
+        skip_existing (bool, optional): if ``True``, the value network will skip
+            modules which outputs are already present in the tensordict.
+            Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
+            is not affected.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -735,6 +754,11 @@ class GAE(ValueEstimatorBase):
     an additional and differentiable :obj:`"value_error"` entry will be returned,
     which simple represents the difference between the return and the value network
     output (i.e. an additional distance loss should be applied to that signed value).
+
+    .. note::
+      As other advantage functions do, if the ``value_key`` is already present
+      in the input tensordict, the GAE module will ignore the calls to the value
+      network (if any) and use the provided value instead.
 
     """
 
@@ -746,46 +770,30 @@ class GAE(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_gae: bool = False,
         differentiable: bool = False,
+        vectorized: bool = True,
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
+        skip_existing: Optional[bool] = None,
     ):
-        super().__init__()
+        super().__init__(
+            value_network=value_network,
+            differentiable=differentiable,
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+            skip_existing=skip_existing,
+        )
         try:
             device = next(value_network.parameters()).device
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
-        self.value_network = value_network
-        self.value_key = value_key
-        if (
-            hasattr(value_network, "out_keys")
-            and value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{value_key}' not found in value network out_keys."
-            )
-
         self.average_gae = average_gae
-        self.differentiable = differentiable
-        if not differentiable:
-            warnings.warn(self.DIFF_DEPREC_MSG)
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
+        self.vectorized = vectorized
 
-        try:
-            self.in_keys = (
-                value_network.in_keys
-                + [("next", "reward"), ("next", "done")]
-                + [("next", in_key) for in_key in value_network.in_keys]
-            )
-        except AttributeError:
-            # value network does not have an `in_keys` attribute
-            pass
-
-        self.out_keys = [self.advantage_key, self.value_target_key]
-
+    @_self_set_skip_existing
     @_self_set_grad_enabled
     @dispatch
     def forward(
@@ -869,10 +877,12 @@ class GAE(ValueEstimatorBase):
             )
         if params is not None:
             kwargs["params"] = params
-        with hold_out_net(self.value_network):
-            # we may still need to pass gradient, but we don't want to assign grads to
-            # value net params
-            self.value_network(tensordict, **kwargs)
+
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                # we may still need to pass gradient, but we don't want to assign grads to
+                # value net params
+                self.value_network(tensordict, **kwargs)
 
         value = tensordict.get(self.value_key)
 
@@ -882,15 +892,33 @@ class GAE(ValueEstimatorBase):
             kwargs["params"] = target_params
         elif "params" in kwargs:
             kwargs["params"] = kwargs["params"].detach()
-        with hold_out_net(self.value_network):
-            # we may still need to pass gradient, but we don't want to assign grads to
-            # value net params
-            self.value_network(step_td, **kwargs)
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                # we may still need to pass gradient, but we don't want to assign grads to
+                # value net params
+                self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
-        adv, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
-        )
+        if self.vectorized:
+            adv, value_target = vec_generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                value,
+                next_value,
+                reward,
+                done,
+                time_dim=tensordict.ndim - 1,
+            )
+        else:
+            adv, value_target = generalized_advantage_estimate(
+                gamma,
+                lmbda,
+                value,
+                next_value,
+                reward,
+                done,
+                time_dim=tensordict.ndim - 1,
+            )
 
         if self.average_gae:
             loc = adv.mean()
@@ -928,10 +956,11 @@ class GAE(ValueEstimatorBase):
             )
         if params is not None:
             kwargs["params"] = params
-        with hold_out_net(self.value_network):
-            # we may still need to pass gradient, but we don't want to assign grads to
-            # value net params
-            self.value_network(tensordict, **kwargs)
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                # we may still need to pass gradient, but we don't want to assign grads to
+                # value net params
+                self.value_network(tensordict, **kwargs)
 
         value = tensordict.get(self.value_key)
 
@@ -941,10 +970,11 @@ class GAE(ValueEstimatorBase):
             kwargs["params"] = target_params
         elif "params" in kwargs:
             kwargs["params"] = kwargs["params"].detach()
-        with hold_out_net(self.value_network):
-            # we may still need to pass gradient, but we don't want to assign grads to
-            # value net params
-            self.value_network(step_td, **kwargs)
+        if self.value_network is not None:
+            with hold_out_net(self.value_network):
+                # we may still need to pass gradient, but we don't want to assign grads to
+                # value net params
+                self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.value_key)
         done = tensordict.get(("next", "done"))
         _, value_target = vec_generalized_advantage_estimate(
