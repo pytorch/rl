@@ -65,10 +65,13 @@ class RoboHiveEnv(GymEnv):
                 **kwargs,
             )
             self.wrapper_frame_skip = 1
-            from_pixels = bool(len(env.visual_keys))
+            if env.visual_keys:
+                from_pixels = bool(len(env.visual_keys))
+            else:
+                from_pixels = False
         except TypeError as err:
             if "unexpected keyword argument 'frameskip" not in str(err):
-                raise TypeError(err)
+                raise err
             kwargs.pop("framek_skip")
             env = self.lib.make(
                 env_name, return_dict=True, device_id=render_device, **kwargs
@@ -389,3 +392,6 @@ if _has_robohive:
                     f"Could not register {new_env_name}, the following error was raised: {err}"
                 )
         return env_names
+
+
+    RoboHiveEnv.register_envs()
