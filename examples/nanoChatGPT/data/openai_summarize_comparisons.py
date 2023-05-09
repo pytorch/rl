@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from datasets import load_dataset
-from tensordict import tensorclass, MemmapTensor
+from tensordict import MemmapTensor, tensorclass
 from tqdm import tqdm
 
 from .utils import create_infinite_dataloader

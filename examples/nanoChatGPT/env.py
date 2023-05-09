@@ -8,11 +8,7 @@ from models.reward import init_reward_model
 from models.transformer import DEFAULT_VOCAB_SIZE
 from tensordict.tensordict import TensorDict
 
-from torchrl.data import (
-    BoundedTensorSpec,
-    CompositeSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import step_mdp
 from utils import load_and_update_config
