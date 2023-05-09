@@ -310,12 +310,12 @@ if _has_robohive:
     def register_franka_envs():
         print("RLHive:> Registering Franka Envs")
         env_list = [
-            "franka_slide_random-v3",
-            "franka_slide_close-v3",
-            "franka_slide_open-v3",
-            "franka_micro_random-v3",
-            "franka_micro_close-v3",
-            "franka_micro_open-v3",
+            # "franka_slide_random-v3",
+            # "franka_slide_close-v3",
+            # "franka_slide_open-v3",
+            # "franka_micro_random-v3",
+            # "franka_micro_close-v3",
+            # "franka_micro_open-v3",
         ]
         env_names = copy(env_list)
 
@@ -364,9 +364,6 @@ if _has_robohive:
                 register_env_variant(
                     env,
                     variants={
-                        "obs_keys": [
-                            "hand_jnt",
-                        ],
                         "visual_keys": visual_obs_keys,
                     },
                     variant_id=new_env_name,

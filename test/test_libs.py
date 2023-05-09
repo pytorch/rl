@@ -1416,6 +1416,7 @@ class TestRoboHive:
     )
     def test_robohive(self, envname):
         env = RoboHiveEnv(envname)
+        print("env", envname, "has rollout\n", env.rollout(3))
         check_env_specs(env)
 
 
