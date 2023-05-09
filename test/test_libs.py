@@ -1412,7 +1412,7 @@ class TestOpenML:
 
 class TestRoboHive:
     @pytest.mark.parametrize(
-        "envname", ["FK1_RelaxFixed-v4", "visual_FK1_RelaxFixed-v4"]
+        "envname", RoboHiveEnv.env_list
     )
     def test_robohive(self, envname):
         env = RoboHiveEnv(envname)

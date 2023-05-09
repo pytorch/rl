@@ -380,7 +380,29 @@ if _has_robohive:
     @set_directory(CURR_DIR)
     def register_myo_envs():
         print("RLHive:> Registering Myo Envs")
-        env_list = ["motorFingerReachFixed-v0"]
+        env_list = [
+            "motorFingerReachFixed-v0",
+            "myoFingerPoseFixed-v0",
+            "myoFingerPoseRandom-v0",
+            "myoFingerReachFixed-v0",
+            "myoFingerReachRandom-v0",
+            "ElbowPose1D1MRandom-v0",
+            "myoElbowPose1D6MRandom-v0",
+            "myoHandPoseFixed-v0",
+            "myoHandPoseRandom-v0",
+            "myoHandReachFixed-v0",
+            "myoHandReachRandom-v0",
+            "myoHandKeyTurnFixed-v0",
+            "myoHandKeyTurnRandom-v0",
+            "myoHandObjHoldFixed-v0",
+            "myoHandObjHoldRandom-v0",
+            "myoHandPenTwirlFixed-v0",
+            "myoHandPenTwirlRandom-v0",
+            "myoChallengeDieReorientP1-v0",
+            "myoChallengeDieReorientP2-v0",
+            "myoChallengeBaodingP1-v1",
+            "myoChallengeBaodingP2-v1",
+        ]
         env_names = copy(env_list)
 
         visual_keys = [
