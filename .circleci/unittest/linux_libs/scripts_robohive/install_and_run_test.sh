@@ -81,7 +81,8 @@ print('device count', devcount)
 """
 
 echo $MUJOCO_GL
+echo $sim_backend
 
-MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
+sim_backend=MUJOCO MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 -k "robohive" --error-for-skips
 coverage combine
 coverage xml -i
