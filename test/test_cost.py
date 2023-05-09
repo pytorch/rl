@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import timeit
 import warnings
 from copy import deepcopy
 
@@ -97,6 +98,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value.advantages import GAE, TD1Estimator, TDLambdaEstimator
 from torchrl.objectives.value.functional import (
+    _fast_vec_gae,
     generalized_advantage_estimate,
     td0_advantage_estimate,
     td1_advantage_estimate,
@@ -4265,6 +4267,66 @@ class TestValues:
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+    def test_runtime_fast_gae():
+        """Tests that the runtime performance of different GAE calculations.
+
+        If gamma and lmbda are scalars the _fast_vec_gae version should be faster than `vec_generalized_advantage_estimate."""
+        torch.manual_seed(0)
+
+        B = 32
+        T = 512
+        D = 1
+        gamma = 0.95
+        lmbda = 0.95
+
+        device = "cuda:0" if torch.cuda.device_count() else "cpu"
+        state_value = torch.randn(B, T, D, device=device)
+        next_state_value = torch.randn(B, T, D, device=device)
+        reward = torch.randn(B, T, D, device=device)
+        done = torch.zeros(B, T, D, dtype=torch.bool, device=device).bernoulli_(0.1)
+        time_dim = -2
+        number = 500
+
+        globals = {
+            "vec_generalized_advantage_estimate": vec_generalized_advantage_estimate,
+            "_fast_vec_gae": _fast_vec_gae,
+            "reward": reward,
+            "state_value": state_value,
+            "next_state_value": next_state_value,
+            "done": done,
+            "gamma": gamma,
+            "lmbda": lmbda,
+            "time_dim": time_dim,
+        }
+
+        time_fast_gae = timeit.timeit(
+            """generalized_advantage_estimate(
+                gamma=gamma,
+                lmbda=lmbda,
+                state_value=state_value,
+                next_state_value=next_state_value,
+                reward=reward,
+                done=done,
+                time_dim=time_dim)""",
+            globals=globals,
+            number=number,
+        )
+
+        time_vec_gae = timeit.timeit(
+            """vec_generalized_advantage_estimate(
+                gamma=gamma,
+                lmbda=lmbda,
+                state_value=state_value,
+                next_state_value=next_state_value,
+                reward=reward,
+                done=done,
+                time_dim=time_dim)""",
+            globals=globals,
+            number=number,
+        )
+
+        assert time_fast_gae < time_vec_gae
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
