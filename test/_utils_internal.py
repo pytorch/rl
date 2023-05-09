@@ -16,6 +16,8 @@ from functools import wraps
 import pytest
 import torch
 import torch.cuda
+
+from tensordict import tensorclass
 from torchrl._utils import implement_for, seed_generator
 
 from torchrl.envs import ObservationNorm
@@ -156,21 +158,27 @@ def _make_envs(
             return GymEnv(env_name, frame_skip=frame_skip, device=device)
 
     else:
-        if env_name == "ALE/Pong-v5":
+        if env_name == PONG_VERSIONED:
 
             def create_env_fn():
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
                 return TransformedEnv(
-                    GymEnv(env_name, frame_skip=frame_skip, device=device),
-                    Compose(*[ToTensorImage(), RewardClipping(0, 0.1)]),
+                    base_env,
+                    Compose(*[ToTensorImage(in_keys=in_keys), RewardClipping(0, 0.1)]),
                 )
 
         else:
 
             def create_env_fn():
+
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
+
                 return TransformedEnv(
-                    GymEnv(env_name, frame_skip=frame_skip, device=device),
+                    base_env,
                     Compose(
-                        ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                        ObservationNorm(in_keys=in_keys, loc=0.5, scale=1.1),
                         RewardClipping(0, 0.1),
                     ),
                 )
@@ -179,8 +187,14 @@ def _make_envs(
     env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
     env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
 
+    for key in env0.observation_spec.keys(True, True):
+        obs_key = key
+        break
+    else:
+        obs_key = None
+
     if transformed_out:
-        t_out = get_transform_out(env_name, transformed_in)
+        t_out = get_transform_out(env_name, transformed_in, obs_key=obs_key)
 
         env0 = TransformedEnv(
             env0,
@@ -223,7 +237,7 @@ def _make_multithreaded_env(
 
     torch.manual_seed(0)
     multithreaded_kwargs = (
-        {"frame_skip": frame_skip} if env_name == "ALE/Pong-v5" else {}
+        {"frame_skip": frame_skip} if env_name == PONG_VERSIONED else {}
     )
     env_multithread = MultiThreadedEnv(
         N,
@@ -233,46 +247,65 @@ def _make_multithreaded_env(
     )
 
     if transformed_out:
+        for key in env_multithread.observation_spec.keys(True, True):
+            obs_key = key
+            break
+        else:
+            obs_key = None
         env_multithread = TransformedEnv(
             env_multithread,
-            get_transform_out(env_name, transformed_in=False)(),
+            get_transform_out(env_name, transformed_in=False, obs_key=obs_key)(),
         )
     return env_multithread
 
 
-def get_transform_out(env_name, transformed_in):
+def get_transform_out(env_name, transformed_in, obs_key=None):
 
-    if env_name == "ALE/Pong-v5":
+    if env_name == PONG_VERSIONED:
+        if obs_key is None:
+            obs_key = "pixels"
 
         def t_out():
             return (
-                Compose(*[ToTensorImage(), RewardClipping(0, 0.1)])
+                Compose(*[ToTensorImage(in_keys=[obs_key]), RewardClipping(0, 0.1)])
                 if not transformed_in
-                else Compose(*[ObservationNorm(in_keys=["pixels"], loc=0, scale=1)])
+                else Compose(*[ObservationNorm(in_keys=[obs_key], loc=0, scale=1)])
             )
 
-    elif env_name == "CheetahRun-v1":
+    elif env_name == HALFCHEETAH_VERSIONED:
+        if obs_key is None:
+            obs_key = ("observation", "velocity")
 
         def t_out():
             return Compose(
-                ObservationNorm(
-                    in_keys=[("observation", "velocity")], loc=0.5, scale=1.1
-                ),
+                ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
                 RewardClipping(0, 0.1),
             )
 
     else:
+        if obs_key is None:
+            obs_key = "observation"
 
         def t_out():
             return (
                 Compose(
-                    ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
+                    ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
                     RewardClipping(0, 0.1),
                 )
                 if not transformed_in
-                else Compose(
-                    ObservationNorm(in_keys=["observation"], loc=1.0, scale=1.0)
-                )
+                else Compose(ObservationNorm(in_keys=[obs_key], loc=1.0, scale=1.0))
             )
 
     return t_out
+
+
+def make_tc(td):
+    """Makes a tensorclass from a tensordict instance."""
+
+    class MyClass:
+        pass
+
+    MyClass.__annotations__ = {}
+    for key in td.keys():
+        MyClass.__annotations__[key] = torch.Tensor
+    return tensorclass(MyClass)

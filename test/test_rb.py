@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_available_devices, make_tc
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -129,9 +129,14 @@ class TestComposableBuffers:
         )
         data = self._get_datum(rb_type)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)
+        assert s.ndim, s
+        s = s[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
 
@@ -373,14 +378,22 @@ def test_prototype_prb(priority_key, contiguous, device):
 
 
 @pytest.mark.parametrize("stack", [False, True])
+@pytest.mark.parametrize("datatype", ["tc", "tb"])
 @pytest.mark.parametrize("reduction", ["min", "max", "median", "mean"])
-def test_replay_buffer_trajectories(stack, reduction):
+def test_replay_buffer_trajectories(stack, reduction, datatype):
     traj_td = TensorDict(
         {"obs": torch.randn(3, 4, 5), "actions": torch.randn(3, 4, 2)},
         batch_size=[3, 4],
     )
+    if datatype == "tc":
+        c = make_tc(traj_td)
+        traj_td = c(**traj_td, batch_size=traj_td.batch_size)
+        assert is_tensorclass(traj_td)
+    elif datatype != "tb":
+        raise NotImplementedError
+
     if stack:
-        traj_td = torch.stack([td.to_tensordict() for td in traj_td], 0)
+        traj_td = torch.stack(list(traj_td), 0)
 
     rb = TensorDictReplayBuffer(
         sampler=samplers.PrioritizedSampler(
@@ -394,6 +407,10 @@ def test_replay_buffer_trajectories(stack, reduction):
     )
     rb.extend(traj_td)
     sampled_td = rb.sample()
+    if datatype == "tc":
+        assert is_tensorclass(traj_td)
+        return
+
     sampled_td.set("td_error", torch.rand(sampled_td.shape))
     rb.update_tensordict_priority(sampled_td)
     sampled_td = rb.sample(include_info=True)
@@ -510,9 +527,12 @@ class TestBuffers:
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
         data = self._get_datum(rbtype)
         rb.add(data)
-        s = rb._storage[0]
+        s = rb.sample(1)[0]
         if isinstance(s, TensorDictBase):
-            assert (s == data.select(*s.keys())).all()
+            s = s.select(*data.keys(True), strict=False)
+            data = data.select(*s.keys(True), strict=False)
+            assert (s == data).all()
+            assert list(s.keys(True, True))
         else:
             assert (s == data).all()
 
@@ -649,6 +669,7 @@ def test_prb(priority_key, contiguous, device):
         },
         batch_size=[3],
     ).to(device)
+
     rb.extend(td1)
     s = rb.sample()
     assert s.batch_size == torch.Size([5])
@@ -838,25 +859,33 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform(transform):
-    rb = ReplayBuffer(transform=transform(in_keys="observation"), batch_size=1)
+    rb = TensorDictReplayBuffer(
+        transform=transform(in_keys=["observation"]), batch_size=1
+    )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    # td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": torch.randn(3)}, [])
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 3)}, [])
     rb.add(td)
-    if not isinstance(rb._transform[0], (CatFrames,)):
-        rb.sample()
-    else:
-        with pytest.raises(NotImplementedError):
-            rb.sample()
-        return
 
-    rb._transform = mock.MagicMock()
-    rb._transform.__len__ = lambda *args: 3
+    m = mock.Mock()
+    m.side_effect = [td.unsqueeze(0)]
+    rb._transform.forward = m
+    # rb._transform.__len__ = lambda *args: 3
     rb.sample()
-    assert rb._transform.called
+    assert rb._transform.forward.called
+
+    # was_called = [False]
+    # forward = rb._transform.forward
+    # def new_forward(*args, **kwargs):
+    #     was_called[0] = True
+    #     return forward(*args, **kwargs)
+    # rb._transform.forward = new_forward
+    # rb.sample()
+    # assert was_called[0]
 
 
 transforms = [
-    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=1),
+    partial(DiscreteActionProjection, num_actions_effective=1, max_actions=3),
     FiniteTensorDictCheck,
     gSDENoise,
     PinMemoryTransform,
@@ -865,13 +894,15 @@ transforms = [
 
 @pytest.mark.parametrize("transform", transforms)
 def test_smoke_replay_buffer_transform_no_inkeys(transform):
-    if PinMemoryTransform is PinMemoryTransform and not torch.cuda.is_available():
+    if transform == PinMemoryTransform and not torch.cuda.is_available():
         raise pytest.skip("No CUDA device detected, skipping PinMemory")
     rb = ReplayBuffer(
         collate_fn=lambda x: torch.stack(x, 0), transform=transform(), batch_size=1
     )
 
-    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1)}, [])
+    action = torch.zeros(3)
+    action[..., 0] = 1
+    td = TensorDict({"observation": torch.randn(3, 3, 3, 16, 1), "action": action}, [])
     rb.add(td)
     rb.sample()
 

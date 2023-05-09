@@ -156,12 +156,14 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.set_seed(seed)
     env.reset()
     rollout1 = env.rollout(max_steps=100)
+    assert rollout1.names[-1] == "time"
 
     torch.manual_seed(seed)
     np.random.seed(seed)
     env.set_seed(seed)
     env.reset()
     rollout2 = env.rollout(max_steps=100)
+    assert rollout2.names[-1] == "time"
 
     assert_allclose_td(rollout1, rollout2)
 
@@ -231,6 +233,7 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
         env = SerialEnv(3, envs)
     env.set_seed(100)
     out = env.rollout(100, break_when_any_done=False)
+    assert out.names[-1] == "time"
     assert out.shape == torch.Size([3, 100])
     assert (
         out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])

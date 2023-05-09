@@ -247,7 +247,7 @@ class GymLikeEnv(_EnvWrapper):
         obs, *other = self._output_transform(reset_data)
         info = None
         if len(other) == 1:
-            info = other
+            info = other[0]
 
         tensordict_out = TensorDict(
             source=self.read_obs(obs),

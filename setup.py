@@ -204,7 +204,7 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.0",
+            "tensordict>=0.1.1",
         ],
         extras_require={
             "atari": [
