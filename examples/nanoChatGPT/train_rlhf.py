@@ -99,13 +99,14 @@ def main():
                 loss_val.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+
+        rewards.append(td.get(("next", "reward")).mean().detach().cpu())
+        losses.append(loss_val.detach().cpu())
         print(
-            f"Iteration {i}: {loss_val=}, "
-            f"reward={td.get(('next', 'reward')).mean(): 4.4f}, "
+            f"Iteration {i}: loss={losses[-1]}, "
+            f"reward={rewards[-1]: 4.4f}, "
             f"time elapsed={time.time() - start_time:.2f}"
         )
-        rewards.append(-td.get(("next", "reward")).mean().detach().cpu())
-        losses.append(loss_val.detach().cpu())
 
     import matplotlib.pyplot as plt
 
