@@ -263,7 +263,7 @@ class PPOLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = "state_value"
+        value_key = self.value_key
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp

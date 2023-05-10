@@ -2422,6 +2422,7 @@ class CompositeSpec(TensorSpec):
     @classmethod
     def __new__(cls, *args, **kwargs):
         cls._device = torch.device("cpu")
+        cls._locked = False
         return super().__new__(cls)
 
     @property
@@ -2447,6 +2448,8 @@ class CompositeSpec(TensorSpec):
         return len(self.shape)
 
     def set(self, name, spec):
+        if self.locked:
+            raise RuntimeError("Cannot modify a locked CompositeSpec.")
         if spec is not None:
             shape = spec.shape
             if shape[: self.ndim] != self.shape:
@@ -2944,6 +2947,70 @@ class CompositeSpec(TensorSpec):
             shape=shape,
             device=device,
         )
+
+    def lock_(self, recurse=False):
+        """Locks the CompositeSpec and prevents modification of its content.
+
+        This is only a first-level lock, unless specified otherwise through the
+        ``recurse`` arg.
+
+        Leaf specs can always be modified in place, but they cannot be replaced
+        in their CompositeSpec parent.
+
+        Examples:
+            >>> shape = [3, 4, 5]
+            >>> spec = CompositeSpec(
+            ...         a=CompositeSpec(
+            ...         b=CompositeSpec(shape=shape[:3], device="cpu"), shape=shape[:2]
+            ...     ),
+            ...     shape=shape[:1],
+            ... )
+            >>> spec["a"] = spec["a"].clone()
+            >>> recurse = False
+            >>> spec.lock_(recurse=recurse)
+            >>> try:
+            ...     spec["a"] = spec["a"].clone()
+            ... except RuntimeError:
+            ...     print("failed!")
+            failed!
+            >>> try:
+            ...     spec["a", "b"] = spec["a", "b"].clone()
+            ...     print("succeeded!")
+            ... except RuntimeError:
+            ...     print("failed!")
+            succeeded!
+            >>> recurse = True
+            >>> spec.lock_(recurse=recurse)
+            >>> try:
+            ...     spec["a", "b"] = spec["a", "b"].clone()
+            ...     print("succeeded!")
+            ... except RuntimeError:
+            ...     print("failed!")
+            failed!
+
+        """
+        self._locked = True
+        if recurse:
+            for value in self.values():
+                if isinstance(value, CompositeSpec):
+                    value.lock_(recurse)
+
+    def unlock_(self, recurse=False):
+        """Unlocks the CompositeSpec and allows modification of its content.
+
+        This is only a first-level lock modification, unless specified
+        otherwise through the ``recurse`` arg.
+
+        """
+        self._locked = False
+        if recurse:
+            for value in self.values():
+                if isinstance(value, CompositeSpec):
+                    value.unlock_(recurse)
+
+    @property
+    def locked(self):
+        return self._locked
 
 
 class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
