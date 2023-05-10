@@ -175,12 +175,9 @@ class DMControlWrapper(GymLikeEnv):
         self.reward_spec = reward_spec
         # populate default done spec
         _ = self.done_spec
-        input_spec = CompositeSpec(
-            action=_dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
-            )
+        self.action_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.action_spec(), device=self.device
         )
-        self.input_spec = input_spec
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
