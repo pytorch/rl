@@ -146,11 +146,10 @@ def _fast_vec_gae(
     """
     # _gen_num_per_traj and _split_and_pad_sequence need
     # time dimension at last position
-    if reward.ndim > 2:
-        done = done.transpose(-2, -1)
-        reward = reward.transpose(-2, -1)
-        state_value = state_value.transpose(-2, -1)
-        next_state_value = next_state_value.transpose(-2, -1)
+    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1)
+    state_value = state_value.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1)
 
     gammalmbda = gamma * lmbda
     not_done = 1 - done.int()
@@ -170,9 +169,8 @@ def _fast_vec_gae(
 
     value_target = advantage + state_value
 
-    if reward.ndim > 2:
-        advantage = advantage.transpose(-1, -2)
-        value_target = value_target.transpose(-1, -2)
+    advantage = advantage.transpose(-1, -2)
+    value_target = value_target.transpose(-1, -2)
 
     return advantage, value_target
 
