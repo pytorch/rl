@@ -326,5 +326,5 @@ def _inv_pad_sequence(tensor, splits):
 
     splits = splits.expand(tensor.shape[::-1]).T
     decay = splits - torch.arange(0, tensor.shape[-1], device=tensor.device)
-    idx = (decay >= 1).view(-1)
-    return tensor.view(-1)[idx]
+    idx = (decay >= 1).reshape(-1)
+    return tensor.reshape(-1)[idx]
