@@ -13,13 +13,17 @@ import torch
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv, \
+    set_gym_backend
 from torchrl.envs.utils import make_composite_from_td
 
 _has_robohive = importlib.util.find_spec("robohive") is not None
 
 if _has_robohive:
+    os.environ.setdefault("sim_backend", 'MUJOCO')
     import gym
+    with set_gym_backend("gym"):
+        existing_envs = set(GymEnv.available_envs)
     import robohive.envs.multi_task.substeps1
     from robohive.envs.env_variants import register_env_variant
 
@@ -429,3 +433,6 @@ if _has_robohive:
         return env_names
 
     RoboHiveEnv.register_envs()
+    with set_gym_backend("gym"):
+        existing_envs = set(GymEnv.available_envs) - existing_envs
+    print('envs', existing_envs)
