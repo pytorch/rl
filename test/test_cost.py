@@ -4090,32 +4090,61 @@ class TestValues:
         state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
         next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
 
-        gamma_tensor = torch.ones_like(reward) * gamma
-        lmbda_tensor = torch.ones_like(reward) * lmbda
-
         r1 = vec_generalized_advantage_estimate(
             gamma, lmbda, state_value, next_state_value, reward, done
         )
         r2 = generalized_advantage_estimate(
             gamma, lmbda, state_value, next_state_value, reward, done
         )
-        # gamma as tensor
-        r3 = vec_generalized_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done
-        )
-        # lambda as tensor
-        r4 = vec_generalized_advantage_estimate(
-            gamma, lmbda_tensor, state_value, next_state_value, reward, done
-        )
-        # gamma and lambda as tensor
-        r5 = vec_generalized_advantage_estimate(
-            gamma_tensor, lmbda_tensor, state_value, next_state_value, reward, done
-        )
-
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(r1, r3, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(r1, r4, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(r1, r5, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("N", [(1,), (8,), (7, 3)])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize(
+        "gamma_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    @pytest.mark.parametrize(
+        "lmbda_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    def test_gae_param_as_tensor(
+        self, device, N, dtype, has_done, gamma_tensor, lmbda_tensor
+    ):
+        torch.manual_seed(0)
+
+        gamma = 0.95
+        lmbda = 0.90
+        T = 200
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+
+        if gamma_tensor == "tensor":
+            gamma_vec = torch.full_like(reward, gamma)
+        elif gamma_tensor == "tensor_single_element":
+            gamma_vec = torch.as_tensor([gamma], device=device)
+        else:
+            gamma_vec = gamma
+
+        if lmbda_tensor == "tensor":
+            lmbda_vec = torch.full_like(reward, lmbda)
+        elif gamma_tensor == "tensor_single_element":
+            lmbda_vec = torch.as_tensor([lmbda], device=device)
+        else:
+            lmbda_vec = lmbda
+
+        r1 = vec_generalized_advantage_estimate(
+            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done
+        )
+        r2 = generalized_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])

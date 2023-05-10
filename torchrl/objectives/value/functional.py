@@ -177,16 +177,6 @@ def _fast_vec_gae(
     return advantage, value_target
 
 
-def _to_scalar_if_unique(tensor: Union[float, torch.Tensor]):
-    """Return a single scalar if tensor consists of a single unique element, else the source tensor is returned."""
-    if isinstance(tensor, torch.Tensor):
-        tensor_unique = tensor.unique()
-        if tensor_unique.numel() == 1:
-            return tensor_unique.item()
-
-    return tensor
-
-
 @_transpose_time
 def vec_generalized_advantage_estimate(
     gamma: Union[float, torch.Tensor],
@@ -223,16 +213,13 @@ def vec_generalized_advantage_estimate(
     not_done = 1 - done.to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
 
-    gamma = _to_scalar_if_unique(gamma)
-    lmbda = _to_scalar_if_unique(lmbda)
-
     value = gamma * lmbda
 
-    if isinstance(value, torch.Tensor):
+    if isinstance(value, torch.Tensor) and value.numel() > 1:
         # create tensor while ensuring that gradients are passed
         gammalmbdas = not_done * value
     else:
-        # when gamma and lmbda are scalars, use fast_gae implementation
+        # when gamma and lmbda are scalars, use fast_vec_gae implementation
         return _fast_vec_gae(
             reward=reward,
             state_value=state_value,
@@ -1053,6 +1040,7 @@ def reward2go(
     gammas[1:] = gammas[1:].cumprod(0)
     gammas = gammas.unsqueeze(-1)
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
+    cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
     cumsum = cumsum.view_as(reward)
     if cumsum.shape != shape:
