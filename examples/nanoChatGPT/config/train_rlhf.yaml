@@ -1,9 +1,9 @@
 # training
-episode_length: 50
+episode_length: 25
 # IO:
 out_dir: out
 out_dir_reward: out_reward # used if restoring multihead
-eval_interval: 100
+eval_interval: 10
 log_interval: 10
 eval_iters: 200
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
@@ -12,7 +12,7 @@ init_reward_from: resume
 # data:
 dataset: shakespeare # 'openwebtext', 'shakespeare', 'openai_summarize_tldr'
 gradient_accumulation_steps: 10 # used to simulate larger batch sizes
-batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+batch_size: 40 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 1024
 # model:
 n_layer: 2
@@ -21,8 +21,8 @@ n_embd: 32
 dropout: 0.2 # for pretraining 0 is good, for finetuning try 0.1+
 bias: False # do we use bias inside LayerNorm and Linear layers?
 optimizer: # adamw
-learning_rate: 1.0e-3 # max learning rate
-max_iters: 1000 # total number of training iterations
+learning_rate: 6.0e-4 # max learning rate
+max_iters: 300 # total number of training iterations
 weight_decay: 1.0e-2
 beta1: 0.9
 beta2: 0.95
@@ -30,12 +30,12 @@ grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
 decay_lr: True # whether to decay the learning rate
 warmup_iters: 20 # how many steps to warm up for
 lr_decay_iters: 300 # should be ~= max_iters per Chinchilla
-min_lr: 1.0e-4 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+min_lr: 6.0e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # system:
 device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile: True # use PyTorch 2.0 to compile the model to be faster
 # verbose
 verbose: False
-ppo_batch_size: 2
-num_epochs: 10
+ppo_batch_size: 8
+num_epochs: 6

@@ -18,13 +18,14 @@ HERE = Path(__file__).parent
 
 @torch.no_grad()
 def _step(self, tensordict):
+    self.step_num += 1
     prompt = tensordict["prompt"]
 
     # perform the action
     action = tensordict["action"].squeeze(-1)
 
     # compute the reward
-    if prompt.shape[-1] >= self.config["episode_length"]:
+    if self.step_num >= self.config["episode_length"]:
         reward = self.reward_model(prompt).unsqueeze(-1)
         done = torch.ones_like(reward, dtype=torch.bool)
     else:
@@ -44,6 +45,7 @@ def _step(self, tensordict):
 
 @torch.no_grad()
 def _reset(self, tensordict):
+    self.step_num = 0
     if tensordict is None or tensordict.is_empty():
         # if no tensordict is passed, we generate a single set of hyperparameters
         # Otherwise, we assume that the input tensordict contains all the relevant
@@ -113,6 +115,7 @@ class RLHFEnv(EnvBase):
         self._make_spec()
         if seed is None:
             seed = torch.empty((), dtype=torch.int64).random_().item()
+        self.step_num = 0
         # self.set_seed(seed)
 
     # Helpers: _make_step and gen_params

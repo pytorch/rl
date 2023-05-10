@@ -4,7 +4,7 @@ out_dir_reward: out_reward
 eval_interval: 20
 log_interval: 20
 eval_iters: 20
-always_save_checkpoint: True # if True, always save a checkpoint after each eval
+always_save_checkpoint: False # if True, always save a checkpoint after each eval
 init_from: resume # 'scratch' or 'resume' or 'gpt2*'
 init_reward_from: scratch
 # data
@@ -19,17 +19,17 @@ n_embd: 32
 dropout: 0.1 # for pretraining 0 is good, for finetuning try 0.1+
 bias: False # do we use bias inside LayerNorm and Linear layers?
 # optimizer
-learning_rate: 1.0e-3 # max learning rate
-max_iters: 100 # total number of training iterations
+learning_rate: 1.0e-4 # max learning rate
+max_iters: 10000 # total number of training iterations
 weight_decay: 1.0e-2
 beta1: 0.9
 beta2: 0.95
 grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr: True # whether to decay the learning rate
-warmup_iters: 20 # how many steps to warm up for
-lr_decay_iters: 100 # should be ~= max_iters per Chinchilla
-min_lr: 1.0e-4 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
+warmup_iters: 50 # how many steps to warm up for
+lr_decay_iters: 10000 # should be ~= max_iters per Chinchilla
+min_lr: 1.0e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # system settings
 device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler

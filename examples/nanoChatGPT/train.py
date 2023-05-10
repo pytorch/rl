@@ -110,7 +110,7 @@ def main():
                 best_val_loss = val_loss
                 if iter_num > 0:
                     checkpoint = {
-                        "model": model.module._orig_mod.state_dict(),
+                        "model": model.module._orig_mod.state_dict() if config["compile"] else model.module.state_dict(),
                         "optimizer": optimizer.state_dict(),
                         "model_kwargs": model_kwargs,
                         "iter_num": iter_num,
