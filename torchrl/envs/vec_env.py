@@ -355,19 +355,23 @@ class _BatchedEnv(EnvBase):
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
+                if meta_data.specs["input_spec", "_state_spec"] is not None:
+                    env_input_keys = env_input_keys.union(
+                        meta_data.specs["input_spec", "_state_spec"].keys(True)
+                    )
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec"].keys(True)
+                    meta_data.specs["input_spec", "_action_spec"].keys(True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(True)
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(True)
                 )
             env_output_keys = env_output_keys.union(
                 {("next", "reward"), ("next", "done")}

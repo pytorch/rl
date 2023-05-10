@@ -3100,8 +3100,6 @@ class TestObservationNorm(TransformBase):
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        # assert "observation_inv" in env.input_spec.keys()
-        # "observation_inv" should not appear in the tensordict
         assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)["action_inv"])
         assert torch.allclose((td["observation"] - 1) / 0.5, td["observation_out"])
 

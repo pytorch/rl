@@ -801,11 +801,15 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
         )
 
     def _get_out_obs(self, obs):
-        obs = torch.diag_embed(obs, 0, -2, -1).unsqueeze(-3)
+        obs = torch.diag_embed(obs, 0, -2, -1)
         return obs
 
     def _get_in_obs(self, obs):
-        return obs.diagonal(0, -1, -2).squeeze()
+        obs = obs.diagonal(0, -1, -2)
+        # if any(dim == 1 for dim in obs.shape):
+        #     print("squeezing obs", obs.shape)
+        #     obs = obs.squeeze()
+        return obs
 
 
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):

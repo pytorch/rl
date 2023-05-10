@@ -267,7 +267,7 @@ class TestModelBasedEnvBase:
     def test_mb_rollout(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
-        world_model = self.world_model
+        world_model = self.world_model()
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
@@ -276,7 +276,8 @@ class TestModelBasedEnvBase:
         expected_keys = {
             ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
         }
-        expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
+        expected_keys = expected_keys.union(set(mb_env.input_spec["_action_spec"].keys()))
+        expected_keys = expected_keys.union(set(mb_env.input_spec["_state_spec"].keys()))
         expected_keys = expected_keys.union({"done", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
@@ -1308,8 +1309,8 @@ class TestNestedSpecs:
         reset = env.reset()
         assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
-        assert env.done_spec == env.output_spec[("done", *env.done_key)]
-        assert env.reward_spec == env.output_spec[("reward", *env.reward_key)]
+        assert env.done_spec == env.output_spec[("_done_spec", *env.done_key)]
+        assert env.reward_spec == env.output_spec[("_reward_spec", *env.reward_key)]
         if envclass == "NestedRewardEnv":
             assert env.done_key == ("data", "done")
             assert env.reward_key == ("data", "reward")
