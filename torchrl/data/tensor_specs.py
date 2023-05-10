@@ -1047,7 +1047,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             use_register=self.use_register,
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> OneHotDiscreteTensorSpec:
         return self.__class__(
             n=self.space.n,
             shape=self.shape,
@@ -1441,7 +1441,7 @@ class BoundedTensorSpec(TensorSpec):
             dtype=dest_dtype,
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> BoundedTensorSpec:
         return self.__class__(
             minimum=self.space.minimum.clone(),
             maximum=self.space.maximum.clone(),
@@ -1513,7 +1513,7 @@ class UnboundedContinuousTensorSpec(TensorSpec):
             return self
         return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> UnboundedContinuousTensorSpec:
         return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -1601,7 +1601,7 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
             return self
         return self.__class__(shape=self.shape, device=dest_device, dtype=dest_dtype)
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> UnboundedDiscreteTensorSpec:
         return self.__class__(shape=self.shape, device=self.device, dtype=self.dtype)
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -1708,7 +1708,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             dtype=dest_dtype,
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> MultiOneHotDiscreteTensorSpec:
         return self.__class__(
             nvec=deepcopy(self.nvec),
             shape=self.shape,
@@ -2020,7 +2020,7 @@ class DiscreteTensorSpec(TensorSpec):
             n=self.space.n, shape=self.shape, device=dest_device, dtype=dest_dtype
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> DiscreteTensorSpec:
         return self.__class__(
             n=self.space.n,
             shape=self.shape,
@@ -2106,7 +2106,7 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
             n=self.shape[-1], shape=self.shape, device=dest_device, dtype=dest_dtype
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> BinaryDiscreteTensorSpec:
         return self.__class__(
             n=self.shape[-1],
             shape=self.shape,
@@ -2194,7 +2194,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             n=self.nvec.to(dest), shape=None, device=dest_device, dtype=dest_dtype
         )
 
-    def clone(self) -> CompositeSpec:
+    def clone(self) -> MultiDiscreteTensorSpec:
         return self.__class__(
             nvec=self.nvec.clone(),
             shape=None,
@@ -2516,7 +2516,7 @@ class CompositeSpec(TensorSpec):
                 if item is not None:
                     if self._device is None:
                         self._device = item.device
-                    self[k] = item
+                self[k] = item
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -2901,6 +2901,8 @@ class CompositeSpec(TensorSpec):
         out = CompositeSpec(
             {
                 key: value.expand((*shape, *value.shape[self.ndim :]))
+                if value is not None
+                else None
                 for key, value in tuple(self.items())
             },
             shape=shape,

@@ -31,7 +31,6 @@ from mocking_classes import (
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
-    DiscreteActionVecPolicy,
     DummyModelBasedEnvBase,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,

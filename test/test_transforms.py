@@ -1010,8 +1010,9 @@ class TestR3M(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, r3m)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
             + list(transformed_env.observation_spec.keys())
+            + ["action"]
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
@@ -1769,7 +1770,9 @@ class TestDoubleToFloat(TransformBase):
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            input_spec = CompositeSpec(action=action_spec)
+            input_spec = CompositeSpec(
+                _action_spec=CompositeSpec(action=action_spec), _state_spec=None
+            )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
 
@@ -5864,7 +5867,8 @@ class TestVIP(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, vip)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
+            + ["action"]
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
@@ -6398,10 +6402,11 @@ class TestTransforms:
         _ = env.reward_spec
 
         assert env._input_spec is not None
-        assert "action" in env._input_spec
-        assert env._input_spec["action"] is not None
-        assert env._output_spec["observation"] is not None
-        assert env._output_spec["reward"] is not None
+        assert "_action_spec" in env._input_spec
+        assert env._input_spec["_action_spec"] is not None
+        assert env._output_spec["_observation_spec"] is not None
+        assert env._output_spec["_reward_spec"] is not None
+        assert env._output_spec["_done_spec"] is not None
 
         env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
@@ -6466,38 +6471,14 @@ class TestTransforms:
         _ = copy(env.observation_spec)
         _ = copy(env.reward_spec)
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(-7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(4, "ffff")
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
 
 @pytest.mark.parametrize("device", get_available_devices())

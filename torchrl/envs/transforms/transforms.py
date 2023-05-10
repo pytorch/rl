@@ -89,14 +89,26 @@ def _apply_to_composite_inv(function):
     # tensor is not updated) an out_key that does not match the in_key has
     # no effect on the spec.
     def new_fun(self, input_spec):
-        if isinstance(input_spec, CompositeSpec):
-            d = input_spec._specs
-            for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                if in_key in input_spec.keys(True, True) and in_key == out_key:
-                    d[out_key] = function(self, input_spec[in_key].clone())
-            return CompositeSpec(d, shape=input_spec.shape, device=input_spec.device)
+        action_spec = input_spec["_action_spec"].clone()
+        state_spec = input_spec["_state_spec"]
+        if state_spec is None:
+            state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         else:
-            return function(self, input_spec)
+            state_spec = state_spec.clone()
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key != out_key:
+                # we only change the input spec if the key is the same
+                continue
+            if in_key in action_spec.keys(True, True):
+                action_spec[out_key] = function(self, action_spec[in_key].clone())
+            elif in_key in state_spec.keys(True, True):
+                state_spec[out_key] = function(self, state_spec[in_key].clone())
+        return CompositeSpec(
+            _state_spec=state_spec,
+            _action_spec=action_spec,
+            shape=input_spec.shape,
+            device=input_spec.device,
+        )
 
     return new_fun
 
@@ -274,9 +286,13 @@ class Transform(nn.Module):
             output_spec["_observation_spec"]
         )
         if "_reward_spec" in output_spec.keys():
-            output_spec["_reward_spec"] = self.transform_reward_spec(output_spec["_reward_spec"])
+            output_spec["_reward_spec"] = self.transform_reward_spec(
+                output_spec["_reward_spec"]
+            )
         if "_done_spec" in output_spec.keys():
-            output_spec["_done_spec"] = self.transform_done_spec(output_spec["_done_spec"])
+            output_spec["_done_spec"] = self.transform_done_spec(
+                output_spec["_done_spec"]
+            )
         return output_spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
@@ -557,9 +573,7 @@ but got an object of type {type(transform)}."""
         if self._input_spec is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
             input_spec.unlock_()
-            input_spec = self.transform.transform_input_spec(
-                input_spec
-            )
+            input_spec = self.transform.transform_input_spec(input_spec)
             input_spec.lock_()
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
@@ -575,12 +589,18 @@ but got an object of type {type(transform)}."""
     @property
     def observation_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        return self.output_spec["_observation_spec"]
+        observation_spec = self.output_spec["_observation_spec"]
+        if observation_spec is None:
+            observation_spec = CompositeSpec(device=self.device, shape=self.batch_size)
+        return observation_spec
 
     @property
     def state_spec(self) -> TensorSpec:
         """State spec of the transformed environment."""
-        return self.input_spec["_state_spec"]
+        state_spec = self.input_spec["_state_spec"]
+        if state_spec is None:
+            state_spec = CompositeSpec(device=self.device, shape=self.batch_size)
+        return state_spec
 
     @property
     def done_spec(self) -> TensorSpec:
@@ -2293,12 +2313,20 @@ class DoubleToFloat(Transform):
                 space.maximum = space.maximum.to(torch.float)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        action_spec = input_spec["_action_spec"]
+        state_spec = input_spec["_state_spec"]
         for key in self.in_keys_inv:
-            if input_spec[key].dtype is not torch.double:
+            if key in action_spec.keys(True):
+                _spec = action_spec
+            elif state_spec is not None and key in state_spec.keys(True):
+                _spec = state_spec
+            else:
+                raise KeyError(f"Key {key} not found in state_spec and action_spec.")
+            if _spec[key].dtype is not torch.double:
                 raise TypeError(
                     f"input_spec[{key}].dtype is not double: {input_spec[key].dtype}"
                 )
-            self._transform_spec(input_spec[key])
+            self._transform_spec(_spec[key])
         return input_spec
 
     @_apply_to_composite
@@ -2586,6 +2614,8 @@ class DiscreteActionProjection(Transform):
                 key = (key,)
             key = ("_action_spec", *key)
             break
+        else:
+            raise KeyError("key not found in action_spec.")
         input_spec[key] = OneHotDiscreteTensorSpec(
             self.max_actions,
             shape=(*input_spec[key].shape[:-1], self.max_actions),
@@ -3488,13 +3518,17 @@ class StepCounter(Transform):
             raise ValueError(
                 f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
             )
-        input_spec["step_count"] = UnboundedDiscreteTensorSpec(
+        if input_spec["_state_spec"] is None:
+            input_spec["_state_spec"] = CompositeSpec(
+                shape=input_spec.shape, device=input_spec.device
+            )
+        input_spec["_state_spec", "step_count"] = UnboundedDiscreteTensorSpec(
             shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
-        input_spec["step_count"].space.minimum = (
-            input_spec["step_count"].space.minimum * 0
+        input_spec["_state_spec", "step_count"].space.minimum = (
+            input_spec["_state_spec", "step_count"].space.minimum * 0
         )
         return input_spec
 
@@ -4003,23 +4037,27 @@ class RenameTransform(Transform):
                     break
             else:
                 raise RuntimeError("Expected one key to be 'done'")
-            output_spec["_observation_spec"][out_key] = output_spec["_done_spec"].clone()
+            output_spec["_observation_spec"][out_key] = output_spec[
+                "_done_spec"
+            ].clone()
         if "reward" in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
                 if self.in_keys[i] == "reward":
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")
-            output_spec["_observation_spec"][out_key] = output_spec["_reward_spec"].clone()
+            output_spec["_observation_spec"][out_key] = output_spec[
+                "_reward_spec"
+            ].clone()
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in ("reward", "done"):
                 continue
             if out_key in ("done", "reward"):
                 output_spec[out_key] = output_spec["_observation_spec"][in_key].clone()
             else:
-                output_spec["_observation_spec"][out_key] = output_spec["_observation_spec"][
-                    in_key
-                ].clone()
+                output_spec["_observation_spec"][out_key] = output_spec[
+                    "_observation_spec"
+                ][in_key].clone()
             if not self.create_copy:
                 del output_spec["_observation_spec"][in_key]
         return output_spec
@@ -4028,9 +4066,13 @@ class RenameTransform(Transform):
         # we need to check whether there are special keys
         input_spec = input_spec.clone()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            input_spec[out_key] = input_spec[in_key].clone()
+            in_key = (in_key,) if not isinstance(in_key, tuple) else in_key
+            out_key = (out_key,) if not isinstance(out_key, tuple) else out_key
+            input_spec[("_state_spec", *out_key)] = input_spec[
+                ("_state_spec", *in_key)
+            ].clone()
             if not self.create_copy:
-                del input_spec[in_key]
+                del input_spec[("_state_spec", *in_key)]
         return input_spec
 
 

@@ -46,7 +46,6 @@ from torchrl.envs.libs.gym import (
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
-    set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv

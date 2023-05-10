@@ -146,6 +146,8 @@ class _BatchedEnv(EnvBase):
                 "It can be set through the `to(device)` method."
             )
 
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_output_spec"] = None
         super().__init__(device=None)
         self.is_closed = True
         self._cache_in_keys = None
@@ -336,10 +338,14 @@ class _BatchedEnv(EnvBase):
             shared_tensordict_parent = self._env_tensordict.clone()
 
         if self._single_task:
-            self.env_input_keys = sorted(self.input_spec.keys(True), key=_sort_keys)
+            self.env_input_keys = sorted(
+                list(self.input_spec["_action_spec"].keys(True))
+                + list(self.state_spec.keys(True)),
+                key=_sort_keys,
+            )
             self.env_output_keys = []
             self.env_obs_keys = []
-            for key in self.output_spec["observation"].keys(True):
+            for key in self.output_spec["_observation_spec"].keys(True):
                 if isinstance(key, str):
                     key = (key,)
                 self.env_output_keys.append(("next", *key))
