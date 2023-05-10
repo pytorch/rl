@@ -10,7 +10,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper, EnvBase
-from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.utils import _selective_unsqueeze
 
 IMPORT_ERR = None
@@ -147,6 +147,7 @@ class VmasWrapper(_EnvWrapper):
 
         return env
 
+    @set_gym_backend("gym")
     def _make_specs(
         self, env: "vmas.simulator.environment.environment.Environment"
     ) -> None:

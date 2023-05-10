@@ -334,6 +334,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_size.setter
     def batch_size(self, value: torch.Size) -> None:
         self._batch_size = torch.Size(value)
+        if self.output_spec.shape[: len(value)] != value:
+            self.output_spec.shape = value
+        if self.input_spec.shape[: len(value)] != value:
+            self.input_spec.shape = value
 
     def ndimension(self):
         return len(self.batch_size)

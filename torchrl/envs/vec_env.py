@@ -367,11 +367,15 @@ class _BatchedEnv(EnvBase):
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
+                        True
+                    )
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
+                        True
+                    )
                 )
             env_output_keys = env_output_keys.union(
                 {("next", "reward"), ("next", "done")}
@@ -1099,8 +1103,11 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _make_specs(
         self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
     ) -> None:  # noqa: F821
-        self.action_spec = self._get_action_spec()
-        self.output_spec = self._get_output_spec()
+        from torchrl.envs.libs.gym import set_gym_backend
+
+        with set_gym_backend("gym"):
+            self.action_spec = self._get_action_spec()
+            self.output_spec = self._get_output_spec()
 
     def _init_env(self) -> Optional[int]:
         pass

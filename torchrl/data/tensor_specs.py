@@ -2438,12 +2438,16 @@ class CompositeSpec(TensorSpec):
     @shape.setter
     def shape(self, value: torch.Size):
         for key, spec in self.items():
-            if spec.shape[: self.ndim] != self.shape:
-                raise ValueError(
-                    f"The shape of the spec and the CompositeSpec mismatch during shape resetting: the "
-                    f"{self.ndim} first dimensions should match but got self['{key}'].shape={spec.shape} and "
-                    f"CompositeSpec.shape={self.shape}."
-                )
+            if isinstance(spec, CompositeSpec):
+                if spec.shape[: self.ndim] != self.shape:
+                    spec.shape = value
+            elif spec is not None:
+                if spec.shape[: self.ndim] != self.shape:
+                    raise ValueError(
+                        f"The shape of the spec and the CompositeSpec mismatch during shape resetting: the "
+                        f"{self.ndim} first dimensions should match but got self['{key}'].shape={spec.shape} and "
+                        f"CompositeSpec.shape={self.shape}."
+                    )
         self._shape = torch.Size(value)
 
     @property

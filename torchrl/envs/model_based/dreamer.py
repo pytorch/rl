@@ -47,17 +47,17 @@ class DreamerEnv(ModelBasedEnvBase):
         #         shape=self.belief_shape, device=self.device
         #     ),
         # )
-        self.input_spec = CompositeSpec(
+        self.action_spec = self.action_spec.to(self.device)
+        self.state_spec = CompositeSpec(
             state=self.observation_spec["state"],
             belief=self.observation_spec["belief"],
-            _action_spec=self.input_spec["_action_spec"].to(self.device),
             shape=env.batch_size,
         )
 
     def _reset(self, tensordict=None, **kwargs) -> TensorDict:
         batch_size = tensordict.batch_size if tensordict is not None else []
         device = tensordict.device if tensordict is not None else self.device
-        td = self.input_spec.rand(shape=batch_size).to(device)
+        td = self.state_spec.rand(shape=batch_size).to(device)
         td[("next", "reward")] = self.reward_spec.rand(shape=batch_size).to(device)
         td.update(self.observation_spec.rand(shape=batch_size).to(device))
         return td
