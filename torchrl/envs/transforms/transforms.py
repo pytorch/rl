@@ -490,7 +490,20 @@ class TransformedEnv(EnvBase):
         self.cache_specs = cache_specs
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
-        self.batch_size = self.base_env.batch_size
+
+    @property
+    def batch_size(self) -> torch.Size:
+        try:
+            return self.base_env.batch_size
+        except AttributeError:
+            # during init, the base_env is not yet defined
+            return torch.Size([])
+
+    @batch_size.setter
+    def batch_size(self, value: torch.Size) -> None:
+        raise RuntimeError(
+            "Cannot modify the batch-size of a transformed env. Change the batch size of the base_env instead."
+        )
 
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:

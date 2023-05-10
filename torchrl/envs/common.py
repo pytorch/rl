@@ -324,7 +324,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self._run_type_checks = run_type_checks
 
     @property
-    def batch_size(self) -> TensorSpec:
+    def batch_size(self) -> torch.Size:
         if ("_batch_size" not in self.__dir__()) and (
             "_batch_size" not in self.__class__.__dict__
         ):
@@ -334,9 +334,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_size.setter
     def batch_size(self, value: torch.Size) -> None:
         self._batch_size = torch.Size(value)
-        if self.output_spec.shape[: len(value)] != value:
+        if (
+            hasattr(self, "output_spec")
+            and self.output_spec.shape[: len(value)] != value
+        ):
             self.output_spec.shape = value
-        if self.input_spec.shape[: len(value)] != value:
+        if hasattr(self, "input_spec") and self.input_spec.shape[: len(value)] != value:
             self.input_spec.shape = value
 
     def ndimension(self):
