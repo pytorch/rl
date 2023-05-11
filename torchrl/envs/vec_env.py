@@ -243,9 +243,12 @@ class _BatchedEnv(EnvBase):
             self._batch_size = meta_data.batch_size
 
             input_spec = meta_data.specs["input_spec"]
-            self.input_spec = input_spec
+            self.action_spec = input_spec["_action_spec"].to(self.device)
+            self.state_spec = input_spec["_state_spec_spec"].to(self.device)
             output_spec = meta_data.specs["output_spec"]
-            self.output_spec = output_spec
+            self.observation_spec = output_spec["_observation_spec"].to(self.device)
+            self.reward_spec = output_spec["_reward_spec"].to(self.device)
+            self.done_spec = output_spec["_done_spec"].to(self.device)
 
             self._dummy_env_str = meta_data.env_str
             self._device = meta_data.device
@@ -261,22 +264,23 @@ class _BatchedEnv(EnvBase):
                 _input_spec.update(md.specs["input_spec"])
             input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
             input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
-            self.input_spec = input_spec
+            self.action_spec = input_spec["_action_spec"].to(self.device)
+            self.state_spec = input_spec["_state_spec_spec"].to(self.device)
 
             _output_spec = {}
             for md in meta_data:
                 _output_spec.update(md.specs["output_spec"])
             output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
             output_spec = output_spec.expand(self.num_workers, *output_spec.shape)
-            self.output_spec = output_spec
+            self.observation_spec = output_spec["_observation_spec"].to(self.device)
+            self.reward_spec = output_spec["_reward_spec"].to(self.device)
+            self.done_spec = output_spec["_done_spec"].to(self.device)
 
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
-        self.output_spec = self.output_spec.to(self.device)
-        self.input_spec = self.input_spec.to(self.device)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -308,23 +312,11 @@ class _BatchedEnv(EnvBase):
             self._set_properties()
         return self._input_spec
 
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec) and value is not None:
-            raise TypeError("The type of an input_spec must be Composite.")
-        self.__dict__["_input_spec"] = value
-
     @property
     def output_spec(self) -> TensorSpec:
         if self._output_spec is None:
             self._set_properties()
         return self._output_spec
-
-    @output_spec.setter
-    def output_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec) and value is not None:
-            raise TypeError("The type of an output_spec must be Composite.")
-        self.__dict__["_output_spec"] = value
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
@@ -460,8 +452,8 @@ class _BatchedEnv(EnvBase):
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.input_spec = None
-        self.output_spec = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_output_spec"] = None
 
         self._shutdown_workers()
         self.is_closed = True
@@ -499,8 +491,11 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.input_spec = self.input_spec.to(device)
-            self.output_spec = self.output_spec.to(device)
+            self.state_spec = self.state_spec.to(device)
+            self.action_spec = self.action_spec.to(device)
+            self.observation_spec = self.observation_spec.to(device)
+            self.reward_spec = self.reward_spec.to(device)
+            self.done_spec = self.done_spec.to(device)
         return self
 
 
@@ -1107,7 +1102,10 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
         with set_gym_backend("gym"):
             self.action_spec = self._get_action_spec()
-            self.output_spec = self._get_output_spec()
+            output_spec = self._get_output_spec()
+            self.observation_spec = output_spec["_observation_spec"]
+            self.reward_spec = output_spec["_reward_spec"]
+            self.done_spec = output_spec["_done_spec"]
 
     def _init_env(self) -> Optional[int]:
         pass
@@ -1152,9 +1150,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(
-            observation=self._get_observation_spec(),
-            reward=self._get_reward_spec(),
-            done=self._get_done_spec(),
+            _observation_spec=self._get_observation_spec(),
+            _reward_spec=self._get_reward_spec(),
+            _done_spec=self._get_done_spec(),
             shape=(self.num_workers,),
         )
 
