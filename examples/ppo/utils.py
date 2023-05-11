@@ -352,7 +352,6 @@ def make_ppo_modules_state(proof_environment):
 def make_ppo_modules_pixels(proof_environment):
 
     # Define input shape
-    env_specs = proof_environment.specs
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs

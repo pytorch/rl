@@ -316,7 +316,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.shape = value
             self.input_spec.lock_()
 
-
     @property
     def device(self) -> torch.device:
         device = getattr(self, "_device", None)
@@ -342,13 +341,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
-        input_spec = getattr(self, '_input_spec', None)
+        input_spec = getattr(self, "_input_spec", None)
         if input_spec is None:
             input_spec = CompositeSpec(
                 _state_spec=CompositeSpec(shape=self.batch_size),
                 _action_spec=CompositeSpec(shape=self.batch_size),
                 shape=self.batch_size,
-                device=self.device
+                device=self.device,
             ).lock_()
             self.__dict__["_input_spec"] = input_spec
         return input_spec
@@ -359,14 +358,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def output_spec(self) -> TensorSpec:
-        output_spec = getattr(self, '_output_spec', None)
+        output_spec = getattr(self, "_output_spec", None)
         if output_spec is None:
             output_spec = CompositeSpec(
                 _observation_spec=CompositeSpec(shape=self.batch_size),
                 _reward_spec=CompositeSpec(shape=self.batch_size),
                 _done_spec=CompositeSpec(shape=self.batch_size),
                 shape=self.batch_size,
-                device=self.device
+                device=self.device,
             ).lock_()
             self.__dict__["_output_spec"] = output_spec
         return output_spec
@@ -384,7 +383,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the action is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get('_action_key', None)
+        key = self.__dict__.get("_action_key", None)
         if key is None:
             keys = self.input_spec["_action_spec"].keys(True, True)
             for key in keys:
@@ -440,7 +439,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the reward is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get('_reward_key', None)
+        key = self.__dict__.get("_reward_key", None)
         if key is None:
             keys = self.output_spec["_reward_spec"].keys(True, True)
             for key in keys:
@@ -516,7 +515,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get('_done_key', None)
+        key = self.__dict__.get("_done_key", None)
         if key is None:
             keys = self.output_spec["_done_spec"].keys(True, True)
             for key in keys:

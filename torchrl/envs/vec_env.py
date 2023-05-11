@@ -82,16 +82,22 @@ class _dispatch_caller_serial:
     def __call__(self, *args, **kwargs):
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
 
+
 def lazy_property(prop: property):
+    """Converts a property in a lazy property, that will call _set_properties when queried the first time."""
     return property(fget=lazy(prop.fget), fset=prop.fset)
 
+
 def lazy(fun):
+    """Converts a fun in a lazy fun, that will call _set_properties when queried the first time."""
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
         if not self._properties_set:
             self._set_properties()
         return fun(self, *args, **kwargs)
+
     return new_fun
+
 
 class _BatchedEnv(EnvBase):
     """Batched environments allow the user to query an arbitrary method / attribute of the environment running remotely.
@@ -200,8 +206,8 @@ class _BatchedEnv(EnvBase):
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
-        self.__dict__['_input_spec'] = None
-        self.__dict__['_output_spec'] = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_output_spec"] = None
         # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
         self._properties_set = False
         self._get_metadata(create_env_fn, create_env_kwargs)
@@ -274,7 +280,9 @@ class _BatchedEnv(EnvBase):
             for md in meta_data:
                 _input_spec.update(md.specs["input_spec"])
             input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
-            input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(device)
+            input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(
+                device
+            )
             self.action_spec = input_spec["_action_spec"]
             self.state_spec = input_spec["_state_spec"]
 
@@ -282,7 +290,9 @@ class _BatchedEnv(EnvBase):
             for md in meta_data:
                 _output_spec.update(md.specs["output_spec"])
             output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
-            output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(device)
+            output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(
+                device
+            )
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
@@ -318,7 +328,6 @@ class _BatchedEnv(EnvBase):
     @device.setter
     def device(self, value: DEVICE_TYPING) -> None:
         self.to(value)
-
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
@@ -493,11 +502,8 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.state_spec = self.state_spec.to(device)
-            self.action_spec = self.action_spec.to(device)
-            self.observation_spec = self.observation_spec.to(device)
-            self.reward_spec = self.reward_spec.to(device)
-            self.done_spec = self.done_spec.to(device)
+            self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
+            self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
         return self
 
 
@@ -1052,7 +1058,9 @@ def _run_worker_pipe_shared_mem(
                 else:
                     result = attr
             except Exception as err:
-                raise AttributeError(f"querying {err_msg} resulted in an error.") from err
+                raise AttributeError(
+                    f"querying {err_msg} resulted in an error."
+                ) from err
             if cmd not in ("to"):
                 child_pipe.send(("_".join([cmd, "done"]), result))
             else:
