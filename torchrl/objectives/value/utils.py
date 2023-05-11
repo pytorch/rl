@@ -216,7 +216,7 @@ def _get_num_per_traj(dones_and_truncated):
 
 
 def _split_and_pad_sequence(tensor, splits):
-    """Given a tensor of size [B, T, *other] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
+    """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
     Compatible with tensordict inputs.
 
@@ -282,19 +282,14 @@ def _split_and_pad_sequence(tensor, splits):
     """
     tensor = _flatten_batch(tensor)
     max_val = max(splits)
-    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
-    mask.scatter_(
-        index=max_val - splits.unsqueeze(-1),
-        dim=1,
-        value=1,
-    )
-    mask = mask.cumsum(-1).flip(-1).bool()
+    shape = (len(splits), max_val)
+
+    splits = splits.unsqueeze(1).expand(shape)
+    mask = (splits - torch.arange(0, shape[-1], device=tensor.device)).gt(0)
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
-            len(splits),
-            max_val,
-            *tensor.shape[1:],
+            shape,
             dtype=tensor.dtype,
             device=tensor.device,
         )
@@ -302,7 +297,7 @@ def _split_and_pad_sequence(tensor, splits):
         return empty_tensor
 
     if isinstance(tensor, TensorDictBase):
-        tensor = tensor.apply(_fill_tensor, batch_size=[len(splits), max_val])
+        tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
     else:
         tensor = _fill_tensor(tensor)
     return tensor
@@ -311,13 +306,15 @@ def _split_and_pad_sequence(tensor, splits):
 def _inv_pad_sequence(tensor, splits):
     """Inverse a pad_sequence operation.
 
-    If tensor is of shape [N, T], than splits must be of of shape [N] with all elements
+    If tensor is of shape [B, T], than splits must be of of shape [B] with all elements
     and integer between [1, T].
+    The result will be flattened along the batch dimension(s) and must be reshaped into
+    the original shape (if necessary).
 
     Examples:
         >>> rewards = torch.randn(100, 20)
         >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
-        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
+        >>> padded = _split_and_pad_sequence(rewards, num_per_traj)
         >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
         >>> assert (reconstructed==rewards).all()
     """
