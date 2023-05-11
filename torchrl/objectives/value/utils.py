@@ -288,10 +288,10 @@ def _split_and_pad_sequence(
     max_seq_len = torch.max(splits)
     shape = (len(splits), max_seq_len)
 
-    range = torch.tile(
+    arange = torch.tile(
         torch.arange(max_seq_len, device=tensor.device), (len(splits), 1)
     )
-    mask = range < splits.unsqueeze(1)
+    mask = arange < splits.unsqueeze(1)
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
@@ -330,7 +330,8 @@ def _inv_pad_sequence(
     if splits.numel() == 1:
         return tensor
 
-    splits = splits.expand(tensor.shape[::-1]).T
-    decay = splits - torch.arange(0, tensor.shape[-1], device=tensor.device)
-    idx = (decay >= 1).reshape(-1)
+    arange = torch.tile(
+        torch.arange(tensor.shape[-1], device=tensor.device), (tensor.shape[0], 1)
+    )
+    idx = (arange < splits.unsqueeze(1)).reshape(-1)
     return tensor.reshape(-1)[idx]
