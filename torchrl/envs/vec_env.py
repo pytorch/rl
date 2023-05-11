@@ -507,8 +507,10 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
-            self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
+            if self.__dict__["_input_spec"] is not None:
+                self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
+            if self.__dict__["_output_spec"] is not None:
+                self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
         return self
 
 
