@@ -404,7 +404,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         try:
-            self.input_spec.unlock_()
+            if self._input_spec is not None:
+                self.input_spec.unlock_()
             try:
                 delattr(self, "_action_key")
             except AttributeError:
@@ -419,11 +420,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "This is currently not permitted."
                     )
             else:
-                value = CompositeSpec(action=value, shape=self.batch_size)
+                value = CompositeSpec(
+                    action=value, shape=self.batch_size, device=self.device
+                )
 
             if self._input_spec is None:
                 self.input_spec = CompositeSpec(
-                    _action_spec=value, shape=self.batch_size, device=self.device
+                    _action_spec=value,
+                    _state_spec=CompositeSpec(
+                        shape=self.batch_size, device=self.device
+                    ),
+                    shape=self.batch_size,
+                    device=self.device,
                 )
             else:
                 self.input_spec["_action_spec"] = value.to(self.device)
@@ -463,14 +471,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # Since output_spec is lazily populated with an empty composite spec for
             # reward_spec, the second case is much more likely to occur.
             self.reward_spec = out = UnboundedContinuousTensorSpec(
-                shape=(*self.batch_size, 1), device=self.device
+                shape=(*self.batch_size, 1),
+                device=self.device,
             )
         return out
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
         try:
-            self.output_spec.unlock_()
+            if self._output_spec is not None:
+                self.output_spec.unlock_()
             try:
                 delattr(self, "_reward_key")
             except AttributeError:
@@ -494,7 +504,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     )
             else:
                 nestedval = value
-                value = CompositeSpec(reward=value, shape=self.batch_size)
+                value = CompositeSpec(
+                    reward=value, shape=self.batch_size, device=self.device
+                )
             if len(nestedval.shape) == 0:
                 raise RuntimeError(
                     "the reward_spec shape cannot be empty (this error"
@@ -546,7 +558,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
         try:
-            self.output_spec.unlock_()
+            if self._output_spec is not None:
+                self.output_spec.unlock_()
             try:
                 delattr(self, "_done_key")
             except AttributeError:
@@ -587,7 +600,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def observation_spec(self) -> TensorSpec:
         observation_spec = self.output_spec["_observation_spec"]
         if observation_spec is None:
-            observation_spec = CompositeSpec(shape=self.batch_size)
+            observation_spec = self.output_spec["_observation_spec"] = CompositeSpec(
+                shape=self.batch_size, device=self.device
+            )
         return observation_spec
 
     @observation_spec.setter
