@@ -262,9 +262,10 @@ class _BatchedEnv(EnvBase):
             device = self._device = meta_data.device
 
             input_spec = meta_data.specs["input_spec"].to(device)
+            output_spec = meta_data.specs["output_spec"].to(device)
+
             self.action_spec = input_spec["_action_spec"]
             self.state_spec = input_spec["_state_spec"]
-            output_spec = meta_data.specs["output_spec"].to(device)
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
