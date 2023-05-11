@@ -97,7 +97,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     online_buffer = make_online_replay_buffer(
         offline_buffer, cfg.replay_buffer, cfg.env.reward_scaling
     )
-    # online_buffer = offline_buffer
     collected_frames = 0
 
     pbar = tqdm.tqdm(total=cfg.env.total_online_frames)
