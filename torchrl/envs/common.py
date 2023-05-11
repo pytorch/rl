@@ -242,7 +242,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     ):
         super().__init__()
         if device is not None:
-            self.device = torch.device(device)
+            self.__dict__['_device'] = torch.device(device)
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
