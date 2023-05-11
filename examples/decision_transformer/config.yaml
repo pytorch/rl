@@ -5,30 +5,35 @@ env:
   env_library: gym
   record_video: 0
   stacked_frames: 20
-  n_samples_stats: 1000
+  n_samples_stats: 2000
   frame_skip: 1
   from_pixels: False
-  num_envs: 1
-  reward_scaling:
+  num_train_envs: 1
+  num_eval_envs: 1
+  reward_scaling: 0.001
   noop: 1
   seed: 0
+  eval_target_return: 3600
+  collect_target_return: 7200
+  total_online_frames: 1000000
+
 
 # Collector
 collector:
   async_collection: 1
   frames_per_batch: 1000
   total_frames: 1000000 
-  multi_step: 0
-  init_random_frames: 25000
+  init_random_frames: 0
   collector_devices: cpu # ,cpu,cpu,cpu]
   num_collectors: 1
   max_frames_per_traj: 1000
 
 # logger
 logger:
-  backend: tensorboard
-  exp_name: td3_cheetah_gym
-  log_interval: 10000 # record interval in frames
+  backend: wandb
+  exp_name: oDT-Hopper-medium-v2
+  pretrain_log_interval: 500 # record interval in frames
+  fintune_log_interval: 1
   eval_steps: 1000
 
 # Buffer
@@ -39,26 +44,31 @@ replay_buffer:
   stacked_frames: 20
   buffer_prefetch: 64
   capacity: 1_000_000
+  buffer_scratch_dir: "/tmp/"
+  device: cpu
+  prefetch: 3
 
 # Optimization
 optim:
-  device: cpu
-  lr: 3e-4
-  weight_decay: 0.0
+  device: cuda:0
+  lr: 1.0e-4
+  weight_decay: 5.0e-4
   batch_size: 256
   lr_scheduler: ""
-  optim_steps_per_batch: 1000
-  policy_update_delay: 2
-  gradient_steps: 1000
-
-# Policy and model
-model:
-  ou_exploration: 0
-  noisy: False
-  activation: relu
+  pretrain_gradient_steps: 3000
+  updates_per_episode: 300
+  warmup_steps: 10000
 
 # loss
 loss: 
-  alpha_init: 1.0
-  min_alpha: 0.1
-  max_alpha: 10.0
+  alpha_init: 0.1
+
+transformer:
+  n_embd: 512
+  n_layer: 4
+  n_head: 4
+  n_inner: 2048 # 4*512
+  activation: relu
+  n_positions: 1024
+  resid_pdrop: 0.1
+  attn_pdrop: 0.1

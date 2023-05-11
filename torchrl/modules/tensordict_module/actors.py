@@ -295,7 +295,6 @@ class ValueOperator(TensorDictModule):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
     ) -> None:
-
         if in_keys is None:
             in_keys = ["observation"]
         if out_keys is None:
@@ -1103,7 +1102,6 @@ class DistributionalQValueActor(QValueActor):
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
-
         action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
@@ -1579,3 +1577,103 @@ class ActorCriticWrapper(SafeSequential):
 
     get_policy_head = get_policy_operator
     get_value_head = get_value_operator
+
+
+class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
+    """Inference Action Wrapper for the Decision Transformer.
+
+    A wrapper specifically designed for the Decision Transformer, which will mask the context of the
+    input tensordict to the inferece context. The output will be a TensorDict with be the input TensorDict
+    and the last predicted action of the predicted output sequence.
+
+    Args:
+        policy (TensorDictModule): The policy module that takes in
+            observations and produces an action value
+        inference_context (int): The number of previous actions that will not be masked in the context.
+            For example for an observation input of shape [batch_size, context, obs_dim] with context=20 and inference_context=5, the first 15 entries
+            of the context will be masked.
+        observation_key (str): The key of the observation in the input TensorDict
+        action_key (str): The key of the action in the input TensorDict
+        return_to_go_key (str): The key of the return to go in the input TensorDict
+        spec (Optional[TensorSpec]): The spec of the input TensorDict. If None, it will be inferred from the policy module.
+    """
+
+    def __init__(
+        self,
+        policy: TensorDictModule,
+        *,
+        inference_context: int = 5,
+        observation_key: str = "observation",
+        action_key: str = "action",
+        return_to_go_key: str = "return_to_go",
+        spec: Optional[TensorSpec] = None,
+    ):
+        super().__init__(policy)
+        self.observation_key = observation_key
+        self.action_key = action_key
+        self.return_to_go_key = return_to_go_key
+        self.inference_context = inference_context
+        if spec is not None:
+            if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
+                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+            self._spec = spec
+        elif hasattr(self.td_module, "_spec"):
+            self._spec = self.td_module._spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        elif hasattr(self.td_module, "spec"):
+            self._spec = self.td_module.spec.clone()
+            if action_key not in self._spec.keys():
+                self._spec[action_key] = None
+        else:
+            self._spec = CompositeSpec({key: None for key in policy.out_keys})
+
+    def step(self, frames: int = 1) -> None:
+        pass
+
+    @staticmethod
+    def _check_tensor_dims(reward, obs, action):
+        if not (reward.shape[:-1] == obs.shape[:-1] == action.shape[:-1]):
+            raise ValueError(
+                "Mismatched tensor dimensions. This is not supported yet, file an issue on torchrl"
+            )
+
+    def mask_context(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Mask the context of the input sequences."""
+        observation = tensordict.get(self.observation_key)
+        action = tensordict.get(self.action_key)
+        return_to_go = tensordict.get(self.return_to_go_key)
+        self._check_tensor_dims(return_to_go, observation, action)
+
+        observation[..., : -self.inference_context, :] = 0
+        action[..., : -self.inference_context, :] = 0
+        action = torch.cat(
+            [
+                action[:, 1:],
+                torch.zeros(action.shape[0], 1, action.shape[-1], device=action.device),
+            ],
+            dim=-2,
+        )
+        return_to_go[..., : -self.inference_context, :] = 0
+
+        tensordict.set(self.observation_key, observation)
+        tensordict.set(self.action_key, action)
+        tensordict.set(self.return_to_go_key, return_to_go)
+        return tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Forward pass of the inference wrapper."""
+        unmasked_tensordict = tensordict.clone()
+        # Mask the context of the input sequences
+        tensordict = self.mask_context(tensordict)
+        # forward pass
+        tensordict = self.td_module.forward(tensordict)
+        # get last action prediciton
+        out_action = tensordict.get(self.action_key)[:, -1]
+        tensordict.set(self.action_key, out_action)
+        out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
+        tensordict.set(self.return_to_go_key, out_rtg)
+        tensordict.set(
+            self.observation_key, unmasked_tensordict.get(self.observation_key)
+        )
+        return tensordict

@@ -6,16 +6,18 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.samplers import RandomSampler
 from torchrl.envs import (
     CatFrames,
     Compose,
+    DoubleToFloat,
     EnvCreator,
     ExcludeTransform,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
     Reward2GoTransform,
+    RewardScaling,
+    RewardSum,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
@@ -24,6 +26,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import DTActor, ProbabilisticActor, TanhNormal
+from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 from torchrl.objectives import OnlineDTLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
@@ -34,18 +37,14 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
-def make_base_env(env_cfg, from_pixels=None):
+def make_base_env(env_cfg):
     env_library = LIBS[env_cfg.env_library]
     env_name = env_cfg.env_name
     frame_skip = env_cfg.frame_skip
-    if from_pixels is None:
-        from_pixels = env_cfg.from_pixels
 
     env_kwargs = {
         "env_name": env_name,
         "frame_skip": frame_skip,
-        "from_pixels": from_pixels,  # for rendering
-        "pixels_only": False,
     }
     if env_library is DMControlEnv:
         env_task = env_cfg.env_task
@@ -56,22 +55,37 @@ def make_base_env(env_cfg, from_pixels=None):
     return env
 
 
-def make_transformed_env(base_env, env_cfg):
-    return make_transformed_env_states(base_env, env_cfg)
-
-
-def make_transformed_env_states(base_env, env_cfg):
+def make_transformed_env(base_env, env_cfg, train=False):
     transformed_env = TransformedEnv(base_env)
+    if train:
+        transformed_env.append_transform(
+            TargetReturn(env_cfg.collect_target_return, out_keys=["return_to_go"])
+        )
+    else:
+        transformed_env.append_transform(
+            TargetReturn(env_cfg.eval_target_return, out_keys=["return_to_go"])
+        )
+    transformed_env.append_transform(
+        RewardScaling(
+            loc=0,
+            scale=env_cfg.reward_scaling,
+            in_keys="return_to_go",
+            standard_normal=False,
+        )
+    )
+    transformed_env.append_transform(
+        RewardScaling(
+            loc=0, scale=env_cfg.reward_scaling, in_keys="reward", standard_normal=False
+        )
+    )
+    transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
 
     transformed_env.append_transform(
-        TargetReturn(
-            200 * 0.01, out_keys=["return_to_go"]
-        )  # WATCH OUT FOR THE SCALING!
+        DoubleToFloat(
+            in_keys=["observation"],
+            in_keys_inv=[],
+        )
     )
-    # transformed_env.append_transform(SCALE)
-    transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
-    # transformed_env.append_transform(TensorDictPrimer(padding_mask=env.action_spec))
-
     transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["observation"]))
     transformed_env.append_transform(
         CatFrames(in_keys=["observation"], N=env_cfg.stacked_frames, dim=-2)
@@ -86,18 +100,21 @@ def make_transformed_env_states(base_env, env_cfg):
     transformed_env.append_transform(
         CatFrames(in_keys=["return_to_go"], N=env_cfg.stacked_frames, dim=-2)
     )
-
-    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["return_to_go"], allow_positive_dim=True))
-    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["observation"], allow_positive_dim=True))
-    # transformed_env.append_transform(UnsqueezeTransform(0, in_keys=["action"], allow_positive_dim=True))
+    if train:
+        transformed_env.append_transform(RewardSum())
 
     return transformed_env
 
 
-def make_parallel_env(env_cfg, state_dict):
-    num_envs = env_cfg.num_envs
+def make_parallel_env(env_cfg, state_dict, train=False):
+    if train:
+        num_envs = env_cfg.num_train_envs
+    else:
+        num_envs = env_cfg.num_eval_envs
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
+        ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))),
+        env_cfg,
+        train,
     )
     for t in env.transform:
         if isinstance(t, ObservationNorm):
@@ -106,10 +123,9 @@ def make_parallel_env(env_cfg, state_dict):
     return env
 
 
-def make_test_env(env_cfg):
-    env_cfg.num_envs = 1
+def make_env(env_cfg, train=False):
     state_dict = get_stats(env_cfg)
-    env = make_parallel_env(env_cfg, state_dict=state_dict)
+    env = make_parallel_env(env_cfg, state_dict=state_dict, train=train)
     return env
 
 
@@ -131,42 +147,67 @@ def init_stats(env, n_samples_stats):
 
 
 def make_collector(cfg, policy):
-    env_cfg = cfg.env
+    exclude_target_return = ExcludeTransform(
+        "return_to_go",
+        ("next", "return_to_go"),
+        ("next", "action"),
+        ("next", "observation"),
+        "scale",
+        "loc",
+    )
+    cat = CatFrames(in_keys=["action"], N=20, dim=-2, padding="zeros")
+    transforms = Compose(
+        exclude_target_return,
+        cat,
+    )
     collector_cfg = cfg.collector
     collector_class = SyncDataCollector
-    state_dict = get_stats(env_cfg)
-    # to exclude inference target returns
-    exclude = ExcludeTransform("return_to_go")  # next return to go
     collector = collector_class(
-        make_parallel_env(env_cfg, state_dict=state_dict),
+        make_env(cfg.env, train=True),
         policy,
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_devices,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
-        postproc=exclude,
+        postproc=transforms,
     )
     return collector
 
 
-def make_replay_buffer(rb_cfg):
+def make_offline_replay_buffer(rb_cfg, reward_scaling):
     r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
-    transforms = [r2g]
-    sampler = RandomSampler()
-    return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(rb_cfg.capacity),
-        sampler=sampler,
-        transform=Compose(*transforms),
+    reward_scale = RewardScaling(
+        loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
+    )
+    catframes = CatFrames(
+        in_keys=["action", "observation", "return_to_go"],
+        N=rb_cfg.stacked_frames,
+        dim=-2,
+        padding="zeros",
     )
 
+    d2f = DoubleToFloat(
+        in_keys=["observation", ("next", "observation")],
+        in_keys_inv=[],
+    )
+    exclude = ExcludeTransform(
+        "next_observations",
+        "timeout",
+        "terminal",
+        "info",
+        ("next", "timeout"),
+        ("next", "terminal"),
+        ("next", "observation"),
+        ("next", "info"),
+    )
 
-def make_offline_replay_buffer(rb_cfg):
-    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
-    cat_r2g = CatFrames(in_keys=["return_to_go"], N=rb_cfg.stacked_frames, dim=-2)
-    cat_obs = CatFrames(in_keys=["observation"], N=rb_cfg.stacked_frames, dim=-2)
-    cat_actions = CatFrames(in_keys=["action"], N=rb_cfg.stacked_frames, dim=-2)
-    exclude_next_obs = ExcludeTransform("next_observations")
-    transforms = Compose(r2g, cat_r2g, cat_obs, cat_actions, exclude_next_obs)
+    transforms = Compose(
+        d2f,
+        r2g,
+        reward_scale,
+        catframes,
+        exclude,
+    )
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
         split_trajs=False,
@@ -174,32 +215,52 @@ def make_offline_replay_buffer(rb_cfg):
         sampler=SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
     )
-    # data.append_transform(
-    #     Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
-    # )
-    # data.append_transform(
-
-    # )
-    # data.append_transform(
-
-    # )
+    # TODO: add obsnorm here
 
     return data
+
+
+def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
+    offline_data = offline_buffer.sample(100000)
+    offline_data.del_("return_to_go")
+    offline_data.del_("index")  # delete
+
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    reward_scale = RewardScaling(
+        loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
+    )
+    catframes = CatFrames(
+        in_keys=["return_to_go"], N=rb_cfg.stacked_frames, dim=-2, padding="zeros"
+    )
+    transforms = Compose(
+        r2g,
+        reward_scale,
+        catframes,
+    )
+    storage = LazyMemmapStorage(
+        rb_cfg.capacity, rb_cfg.buffer_scratch_dir, device=rb_cfg.device
+    )
+
+    replay_buffer = TensorDictReplayBuffer(
+        pin_memory=False,
+        prefetch=rb_cfg.prefetch,
+        transform=transforms,
+        storage=storage,
+        batch_size=rb_cfg.batch_size,
+    )
+    # init buffer with offline data
+    # replay_buffer.extend(offline_data.clone().detach().to_tensordict())
+
+    return replay_buffer
 
 
 # ====================================================================
 # Model
 # -----
-#
-# We give one version of the model for learning from pixels, and one for state.
-# TorchRL comes in handy at this point, as the high-level interactions with
-# these models is unchanged, regardless of the modality.
-#
 
 
 def make_decision_transformer_model(cfg):
     env_cfg = cfg.env
-    # model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
 
     action_spec = proof_environment.action_spec
@@ -210,11 +271,22 @@ def make_decision_transformer_model(cfg):
         "observation",
         "action",
         "return_to_go",
-        # "timesteps",
-    ]  # return_to_go, timesteps
+    ]
 
-    actor_net = DTActor(state_dim=state_dim, action_dim=action_spec.shape[-1])
+    actor_net = DTActor(
+        state_dim=state_dim,
+        action_dim=action_spec.shape[-1],
+        transformer_config=cfg.transformer,
+    )
 
+    actor_module = TensorDictModule(
+        actor_net,
+        in_keys=in_keys,
+        out_keys=[
+            "loc",
+            "scale",
+        ],
+    )
     dist_class = TanhNormal
     dist_kwargs = {
         "min": -1.0,
@@ -222,29 +294,28 @@ def make_decision_transformer_model(cfg):
         "tanh_loc": False,
     }
 
-    actor_module = TensorDictModule(
-        actor_net, in_keys=in_keys, out_keys=["loc", "scale"]  # , "hidden_state"],
-    )
     actor = ProbabilisticActor(
         spec=action_spec,
-        in_keys=["loc", "scale"],  # , "hidden_state"],
-        out_keys=["action", "log_prob"],  # , "hidden_state"],
+        in_keys=["loc", "scale"],
+        out_keys=["action", "log_prob"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,
         default_interaction_mode="random",
         cache_dist=False,
-        return_log_prob=True,
+        return_log_prob=False,
     )
 
     # init the lazy layers
     with torch.no_grad(), set_exploration_mode("random"):
         td = proof_environment.rollout(max_steps=100)
         td["action"] = td["next", "action"]
-        print(td)
         actor(td)
 
-    return actor
+    inference_actor = DecisionTransformerInferenceWrapper(
+        actor,
+    )
+    return inference_actor, actor
 
 
 # ====================================================================
@@ -256,20 +327,29 @@ def make_loss(loss_cfg, actor_network):
     loss = OnlineDTLoss(
         actor_network,
         loss_cfg.alpha_init,
-        loss_cfg.min_alpha,
-        loss_cfg.max_alpha,
     )
     return loss
 
 
-def make_dt_optimizer(optim_cfg, actor_network):
+def make_dt_optimizer(optim_cfg, actor_network, loss):
     # Should be Lambda Optimizer
-    optimizer = torch.optim.Adam(
+    dt_optimizer = torch.optim.Adam(
         actor_network.parameters(),
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
+        eps=1.0e-8,
     )
-    return optimizer
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        dt_optimizer, lambda steps: min((steps + 1) / optim_cfg.warmup_steps, 1)
+    )
+
+    log_temp_optimizer = torch.optim.Adam(
+        [loss.log_alpha],
+        lr=1e-4,
+        betas=[0.9, 0.999],
+    )
+
+    return dt_optimizer, log_temp_optimizer, scheduler
 
 
 # ====================================================================

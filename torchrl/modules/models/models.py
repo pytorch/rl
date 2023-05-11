@@ -13,6 +13,7 @@ from torch.nn import functional as F
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -1139,61 +1140,42 @@ class LSTMNet(nn.Module):
         return self._lstm(input, hidden0_in, hidden1_in)
 
 
-from torchrl.modules.models.decision_transformer import DecisionTransformer
-
-
 class DTActor(nn.Module):
     """Decision Transformer Actor class.
 
     Presented in "Online Decision Transformer",
     https://arxiv.org/abs/2202.05607.pdf
 
-    The DDPG Actor takes as input an observation vector and returns an action from it.
-    It is trained to maximise the value returned by the DDPG Q Value network.
 
-    Args:
-        action_dim (int): length of the action vector
-        mlp_net_kwargs (dict, optional): kwargs for MLP.
-            Default: {
-            'in_features': None,
-            'out_features': action_dim,
-            'depth': 2,
-            'num_cells': [400, 300],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-        }
-        device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
     def __init__(
         self,
         state_dim: int,
         action_dim: int,
-        mlp_net_kwargs: Optional[dict] = None,
+        transformer_config: Dict,
         device: Optional[DEVICE_TYPING] = None,
     ):
         super().__init__()
-        mlp_net_default_kwargs = {
-            "out_features": action_dim * 2,
-            "depth": 1,
-            "num_cells": [512],
-            "activation_class": nn.ReLU,
-            "bias_last_layer": True,
-        }
         self.transformer = DecisionTransformer(
             state_dim=state_dim,
             action_dim=action_dim,
-            hidden_size=512,
-            max_ep_len=1000,
-            ordering=False,
+            config=transformer_config,
         )
-        # log_std_bounds: Tuple[float, float] = [-5.0, 2.0],
-        log_std_bounds = [-5.0, 2.0]
-        self.log_std_bounds = log_std_bounds
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
-        mlp_net_default_kwargs.update(mlp_net_kwargs)
-        self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        # self.apply(dt_actor_weight_init)
+        self.action_layer = nn.Linear(
+            transformer_config.n_embd, action_dim * 2, device=device
+        )
+
+        self.log_std_min, self.log_std_max = -5.0, 2.0
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.apply(weight_init)
 
     def forward(
         self,
@@ -1201,25 +1183,19 @@ class DTActor(nn.Module):
         action: torch.Tensor,
         return_to_go: torch.Tensor,
     ) -> torch.Tensor:
-
         if observation.ndim == 2:
-            observation = observation.unsqueeze(0).float()
+            observation = observation.unsqueeze(0)
             action = action.unsqueeze(0)
             return_to_go = return_to_go.unsqueeze(0)
-        hidden_state = self.transformer(observation, action, return_to_go)  # timesteps
-        out = self.mlp(hidden_state)[:, -1]
-        mu, log_std = out.chunk(2, -1)
+        hidden_state = self.transformer(observation, action, return_to_go)
+        out = self.action_layer(hidden_state)
+        mu, log_std = torch.chunk(out, 2, -1)
         log_std = torch.tanh(log_std)
-        log_std = min(self.log_std_bounds) + 0.5 * (
-            max(self.log_std_bounds) - min(self.log_std_bounds)
-        ) * (log_std + 1.0)
-        std = torch.exp(log_std)
+        # log_std is the output of tanh so it will be between [-1, 1]
+        # map it to be between [log_std_min, log_std_max]
+        log_std = self.log_std_min + 0.5 * (self.log_std_max - self.log_std_min) * (
+            log_std + 1.0
+        )
+        std = log_std.exp()
+
         return (mu, std)
-
-
-def dt_actor_weight_init(m):
-    """Weight init used in the Decision Transformer for the actor layers."""
-    if isinstance(m, torch.nn.Linear):
-        nn.init.orthogonal_(m.weight.data)
-        if hasattr(m.bias, "data"):
-            m.bias.data.fill_(0.0)

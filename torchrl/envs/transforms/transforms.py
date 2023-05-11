@@ -1107,7 +1107,6 @@ class TargetReturn(Transform):
                 # if target is stacked
                 target_return = target_return[-1] - reward
             else:
-                # reward.ndim == 2 and target_return.ndim == 2:
                 target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
@@ -1115,7 +1114,6 @@ class TargetReturn(Transform):
                 # if target is stacked
                 target_return = target_return[-1] - reward
             else:
-                # reward.ndim == target_return.ndim
                 target_return = target_return - reward
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
@@ -2109,7 +2107,6 @@ class CatFrames(ObservationTransform):
             # If so, we must add an offset
             data = tensordict.get(in_key)
             if isinstance(in_key, tuple) and in_key[0] == "next":
-
                 # let's get the out_key we have already processed
                 prev_out_key = dict(zip(self.in_keys, self.out_keys))[in_key[1]]
                 prev_val = tensordict.get(prev_out_key)
@@ -4166,7 +4163,7 @@ class Reward2GoTransform(Transform):
                 item = self._inv_apply_transform(
                     tensordict.get(in_key), done_or_truncated
                 )
-                tensordict.set(out_key, item, inplace=True)
+                tensordict.set(out_key, item)
         if not found:
             raise KeyError(f"Could not find any of the input keys {self.in_keys}.")
         return tensordict

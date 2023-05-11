@@ -561,7 +561,6 @@ class _OrnsteinUhlenbeckProcess:
     def add_sample(
         self, tensordict: TensorDictBase, eps: float = 1.0
     ) -> TensorDictBase:
-
         if self.noise_key not in tensordict.keys():
             self._make_noise_pair(tensordict)
         is_init = tensordict.get("is_init", None)
