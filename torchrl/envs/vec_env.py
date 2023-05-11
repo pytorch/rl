@@ -280,7 +280,9 @@ class _BatchedEnv(EnvBase):
             _input_spec = {}
             for md in meta_data:
                 _input_spec.update(md.specs["input_spec"])
-            input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
+            input_spec = CompositeSpec(
+                _input_spec, shape=meta_data[0].batch_size, device=device
+            )
             input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(
                 device
             )
@@ -290,7 +292,9 @@ class _BatchedEnv(EnvBase):
             _output_spec = {}
             for md in meta_data:
                 _output_spec.update(md.specs["output_spec"])
-            output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
+            output_spec = CompositeSpec(
+                _output_spec, shape=meta_data[0].batch_size, device=device
+            )
             output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(
                 device
             )
@@ -1165,6 +1169,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             _reward_spec=self._get_reward_spec(),
             _done_spec=self._get_done_spec(),
             shape=(self.num_workers,),
+            device=self.device,
         )
 
     def _get_observation_spec(self) -> TensorSpec:
@@ -1183,6 +1188,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return CompositeSpec(
             observation=observation_spec,
             shape=(self.num_workers,),
+            device=self.device,
         )
 
     def _add_shape_to_spec(self, spec: TensorSpec) -> TensorSpec:
