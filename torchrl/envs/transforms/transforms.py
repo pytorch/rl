@@ -564,7 +564,7 @@ but got an object of type {type(transform)}."""
     @property
     def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        if self._output_spec is None or not self.cache_specs:
+        if self.__dict__.get('_output_spec', None) is None or not self.cache_specs:
             output_spec = self.base_env.output_spec.clone()
             output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
@@ -572,7 +572,7 @@ but got an object of type {type(transform)}."""
             if self.cache_specs:
                 self.__dict__["_output_spec"] = output_spec
         else:
-            output_spec = self._output_spec
+            output_spec = self.__dict__.get('_output_spec', None)
         return output_spec
 
     @property
@@ -583,7 +583,7 @@ but got an object of type {type(transform)}."""
     @property
     def input_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
-        if self._input_spec is None or not self.cache_specs:
+        if self.__dict__.get('_input_spec', None) is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
             input_spec.unlock_()
             input_spec = self.transform.transform_input_spec(input_spec)
@@ -591,7 +591,7 @@ but got an object of type {type(transform)}."""
             if self.cache_specs:
                 self.__dict__["_input_spec"] = input_spec
         else:
-            input_spec = self._input_spec
+            input_spec = self.__dict__.get('_input_spec', None)
         return input_spec
 
     @property

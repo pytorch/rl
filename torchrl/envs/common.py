@@ -425,7 +425,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
 
             if self.__dict__.get('_input_spec', None) is None:
-                self.input_spec = CompositeSpec(
+                self.__dict__['_input_spec'] = CompositeSpec(
                     _action_spec=value,
                     _state_spec=CompositeSpec(
                         shape=self.batch_size, device=self.device
