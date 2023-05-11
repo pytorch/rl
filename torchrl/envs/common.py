@@ -250,35 +250,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # we want an error to be raised if we pass batch_size but
             # it's already been set
             self.batch_size = torch.Size(batch_size)
-        if "_input_spec" not in self.__dir__():
-            self.__dict__["_input_spec"] = CompositeSpec(
-                _state_spec=None,
-                _action_spec=None,
-                shape=self.batch_size,
-            )
-        if "_output_spec" not in self.__dir__():
-            self.__dict__["_output_spec"] = CompositeSpec(
-                _observation_spec=None,
-                _done_spec=None,
-                _reward_spec=None,
-                shape=self.batch_size,
-            )
-        if self._input_spec is not None:
-            self._input_spec.lock_(recurse=True)
-            if set(self._input_spec.keys()) != {"_action_spec", "_state_spec"}:
-                raise ValueError(
-                    f"input_spec can only contain '_action_spec' and '_state_spec' entries. Got {self.__dict__['_input_spec'].keys()}"
-                )
-        if self._output_spec is not None:
-            self._output_spec.lock_(recurse=True)
-            if set(self._output_spec.keys()) != {
-                "_observation_spec",
-                "_reward_spec",
-                "_done_spec",
-            }:
-                raise ValueError(
-                    f"input_spec can only contain '_observation_spec', '_reward_spec' and '_done_spec' entries. Got {self.__dict__['_output_spec'].keys()}"
-                )
         self._run_type_checks = run_type_checks
 
     @classmethod
@@ -325,11 +296,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_size(self) -> torch.Size:
-        if ("_batch_size" not in self.__dir__()) and (
-            "_batch_size" not in self.__class__.__dict__
-        ):
-            self._batch_size = torch.Size([])
-        return self._batch_size
+        _batch_size = getattr(self, "_batch_size", None)
+        if _batch_size is None:
+            _batch_size = self._batch_size = torch.Size([])
+        return _batch_size
 
     @batch_size.setter
     def batch_size(self, value: torch.Size) -> None:
@@ -338,9 +308,29 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             hasattr(self, "output_spec")
             and self.output_spec.shape[: len(value)] != value
         ):
+            self.output_spec.unlock_()
             self.output_spec.shape = value
+            self.output_spec.lock_()
         if hasattr(self, "input_spec") and self.input_spec.shape[: len(value)] != value:
+            self.input_spec.unlock_()
             self.input_spec.shape = value
+            self.input_spec.lock_()
+
+
+    @property
+    def device(self) -> torch.device:
+        device = getattr(self, "_device", None)
+        if device is None:
+            device = self._device = torch.device("cpu")
+        return device
+
+    @device.setter
+    def device(self, value: torch.device) -> None:
+        device = getattr(self, "_device", None)
+        if device is None:
+            self._device = torch.device(value)
+            return
+        raise RuntimeError("device cannot be set. Call env.to(device) instead.")
 
     def ndimension(self):
         return len(self.batch_size)
@@ -352,7 +342,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
-        return self._input_spec
+        input_spec = getattr(self, '_input_spec', None)
+        if input_spec is None:
+            input_spec = CompositeSpec(
+                _state_spec=CompositeSpec(shape=self.batch_size),
+                _action_spec=CompositeSpec(shape=self.batch_size),
+                shape=self.batch_size,
+                device=self.device
+            ).lock_()
+            self.__dict__["_input_spec"] = input_spec
+        return input_spec
 
     @input_spec.setter
     def input_spec(self, value: TensorSpec) -> None:
@@ -360,9 +359,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def output_spec(self) -> TensorSpec:
-        output_spec = self._output_spec
+        output_spec = getattr(self, '_output_spec', None)
         if output_spec is None:
-            output_spec = CompositeSpec(shape=self.batch_size, device=self.device)
+            output_spec = CompositeSpec(
+                _observation_spec=CompositeSpec(shape=self.batch_size),
+                _reward_spec=CompositeSpec(shape=self.batch_size),
+                _done_spec=CompositeSpec(shape=self.batch_size),
+                shape=self.batch_size,
+                device=self.device
+            ).lock_()
             self.__dict__["_output_spec"] = output_spec
         return output_spec
 
@@ -379,9 +384,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the action is in a nested tensordict, this property will return its
         location.
         """
-        try:
-            return self.__dict__["_action_key"]
-        except KeyError:
+        key = self.__dict__.get('_action_key', None)
+        if key is None:
             keys = self.input_spec["_action_spec"].keys(True, True)
             for key in keys:
                 # the first key is the reward
@@ -390,8 +394,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 self.__dict__["_action_key"] = key
                 break
             else:
-                raise ValueError("Could not find action spec")
-            return key
+                raise AttributeError("Could not find action spec")
+        return key
 
     # Action spec: action specs belong to input_spec
     @property
@@ -436,9 +440,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the reward is in a nested tensordict, this property will return its
         location.
         """
-        try:
-            return self.__dict__["_reward_key"]
-        except KeyError:
+        key = self.__dict__.get('_reward_key', None)
+        if key is None:
             keys = self.output_spec["_reward_spec"].keys(True, True)
             for key in keys:
                 # the first key is the reward
@@ -447,21 +450,23 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 self.__dict__["_reward_key"] = key
                 break
             else:
-                raise ValueError("Could not find reward spec")
-            return key
+                raise AttributeError("Could not find reward spec")
+        return key
 
     # Reward spec: reward specs belong to output_spec
     @property
     def reward_spec(self) -> TensorSpec:
-        self.output_spec.unlock_()
         try:
-            return self.output_spec[("_reward_spec", *self.reward_key)]
-        except KeyError:
+            out = self.output_spec[("_reward_spec", *self.reward_key)]
+        except (KeyError, AttributeError):
             # populate the "reward" entry
-            self.output_spec["_reward_spec"] = UnboundedContinuousTensorSpec(
+            # this will be raised if there is not _reward_spec (unlikely) or no reward_key
+            # Since output_spec is lazily populated with an empty composite spec for
+            # reward_spec, the second case is much more likely to occur.
+            self.reward_spec = out = UnboundedContinuousTensorSpec(
                 shape=(*self.batch_size, 1), device=self.device
             )
-            return self.output_spec[("_reward_spec", *self.reward_key)]
+        return out
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
@@ -511,20 +516,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
-        self.output_spec.unlock_()
-        try:
-            return self.__dict__["_done_key"]
-        except KeyError:
+        key = self.__dict__.get('_done_key', None)
+        if key is None:
             keys = self.output_spec["_done_spec"].keys(True, True)
             for key in keys:
-                # the first key is the done
+                # the first key is the reward
                 if not isinstance(key, tuple):
                     key = (key,)
                 self.__dict__["_done_key"] = key
                 break
             else:
-                raise ValueError("Could not find done spec")
-            return key
+                raise AttributeError("Could not find done spec")
+        return key
 
     # Done spec: done specs belong to output_spec
     @property
@@ -533,6 +536,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             out = self.output_spec[("_done_spec", *self.done_key)]
         except (KeyError, AttributeError):
             # populate the "done" entry
+            # this will be raised if there is not _done_spec (unlikely) or no done_key
+            # Since output_spec is lazily populated with an empty composite spec for
+            # done_spec, the second case is much more likely to occur.
             self.done_spec = out = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
@@ -907,7 +913,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             output_spec=self.output_spec,
             input_spec=self.input_spec,
             shape=self.batch_size,
-        )
+        ).lock_()
 
     def rollout(
         self,

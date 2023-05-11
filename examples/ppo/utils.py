@@ -278,22 +278,21 @@ def make_ppo_models(cfg):
 def make_ppo_modules_state(proof_environment):
 
     # Define input shape
-    env_specs = proof_environment.specs
-    input_shape = env_specs["output_spec"]["observation"]["observation_vector"].shape
+    input_shape = proof_environment.observation_spec["observation_vector"].shape
 
     # Define distribution class and kwargs
     continuous_actions = False
-    if isinstance(env_specs["input_spec"]["action"].space, DiscreteBox):
-        num_outputs = env_specs["input_spec"]["action"].space.n
+    if isinstance(proof_environment.action_spec.space, DiscreteBox):
+        num_outputs = proof_environment.action_spec.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
         continuous_actions = True
-        num_outputs = env_specs["input_spec"]["action"].shape[-1] * 2
+        num_outputs = proof_environment.action_spec.shape[-1] * 2
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": env_specs["input_spec"]["action"].space.minimum,
-            "max": env_specs["input_spec"]["action"].space.maximum,
+            "min": proof_environment.action_spec.space.minimum,
+            "max": proof_environment.action_spec.space.maximum,
             "tanh_loc": False,
         }
 
@@ -332,7 +331,7 @@ def make_ppo_modules_state(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["loc", "scale"] if continuous_actions else ["logits"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        spec=CompositeSpec(action=proof_environment.action_spec),
         safe=True,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
@@ -354,19 +353,19 @@ def make_ppo_modules_pixels(proof_environment):
 
     # Define input shape
     env_specs = proof_environment.specs
-    input_shape = env_specs["output_spec"]["observation"]["pixels"].shape
+    input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(env_specs["input_spec"]["action"].space, DiscreteBox):
-        num_outputs = env_specs["input_spec"]["action"].space.n
+    if isinstance(proof_environment.action_spec.space, DiscreteBox):
+        num_outputs = proof_environment.action_spec.space.n
         distribution_class = OneHotCategorical
         distribution_kwargs = {}
     else:  # is ContinuousBox
-        num_outputs = env_specs["input_spec"]["action"].shape
+        num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": env_specs["input_spec"]["action"].space.minimum,
-            "max": env_specs["input_spec"]["action"].space.maximum,
+            "min": proof_environment.action_spec.space.minimum,
+            "max": proof_environment.action_spec.space.maximum,
         }
 
     # Define input keys
@@ -412,7 +411,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_module = ProbabilisticActor(
         policy_module,
         in_keys=["logits"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        spec=CompositeSpec(action=proof_environment.action_spec),
         safe=True,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,

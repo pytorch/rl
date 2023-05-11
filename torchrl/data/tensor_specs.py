@@ -2437,6 +2437,8 @@ class CompositeSpec(TensorSpec):
 
     @shape.setter
     def shape(self, value: torch.Size):
+        if self.locked:
+            raise RuntimeError("Cannot modify shape of locked composite spec.")
         for key, spec in self.items():
             if isinstance(spec, CompositeSpec):
                 if spec.shape[: self.ndim] != self.shape:
@@ -3006,6 +3008,7 @@ class CompositeSpec(TensorSpec):
             for value in self.values():
                 if isinstance(value, CompositeSpec):
                     value.lock_(recurse)
+        return self
 
     def unlock_(self, recurse=False):
         """Unlocks the CompositeSpec and allows modification of its content.
@@ -3019,6 +3022,7 @@ class CompositeSpec(TensorSpec):
             for value in self.values():
                 if isinstance(value, CompositeSpec):
                     value.unlock_(recurse)
+        return self
 
     @property
     def locked(self):
