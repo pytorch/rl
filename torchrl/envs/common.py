@@ -341,7 +341,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
-        input_spec = getattr(self, "_input_spec", None)
+        input_spec = self.__dict__.get('_input_spec', None)
         if input_spec is None:
             input_spec = CompositeSpec(
                 _state_spec=CompositeSpec(shape=self.batch_size),
@@ -358,7 +358,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def output_spec(self) -> TensorSpec:
-        output_spec = getattr(self, "_output_spec", None)
+        output_spec = self.__dict__.get('_output_spec', None)
         if output_spec is None:
             output_spec = CompositeSpec(
                 _observation_spec=CompositeSpec(shape=self.batch_size),
