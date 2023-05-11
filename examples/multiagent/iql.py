@@ -1,23 +1,20 @@
 import time
 
 import torch
+
 import wandb
 from models.mlp import MultiAgentMLP
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import (
-    RandomSampler,
-    SamplerWithoutReplacement,
-)
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueActor
-from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
+from torchrl.objectives import DQNLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
-
 from utils.logging import log_evaluation, log_training
 
 
@@ -25,13 +22,13 @@ def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-if __name__ == "__main__":
+def train(seed):
     # Device
     training_device = "cpu" if not torch.has_cuda else "cuda:0"
     vmas_device = training_device
 
     # Seeding
-    seed = 0
+    seed = seed
     torch.manual_seed(seed)
 
     # Log
@@ -45,7 +42,7 @@ if __name__ == "__main__":
     total_frames = frames_per_batch * n_iters
     memory_size = frames_per_batch
 
-    scenario_name = "balance"
+    scenario_name = "navigation"
     env_config = {
         "n_agents": 3,
     }
@@ -248,3 +245,8 @@ if __name__ == "__main__":
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
     wandb.finish()
+
+
+if __name__ == "__main__":
+    for seed in [0]:
+        train(seed)

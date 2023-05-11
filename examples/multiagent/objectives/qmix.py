@@ -8,17 +8,11 @@ from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict.nn import (
-    make_functional,
-    repopulate_module,
-    TensorDictModule,
-    TensorDictSequential,
-)
+from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from torch import nn
-from torchrl.data.tensor_specs import TensorSpec
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeSequential
 
+from torchrl.data.tensor_specs import TensorSpec
+from torchrl.modules import SafeSequential
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.modules.utils.utils import _find_action_space
