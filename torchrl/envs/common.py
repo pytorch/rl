@@ -404,7 +404,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @action_spec.setter
     def action_spec(self, value: TensorSpec) -> None:
         try:
-            if self._input_spec is not None:
+            if self.__dict__.get('_input_spec', None) is not None:
                 self.input_spec.unlock_()
             try:
                 delattr(self, "_action_key")
@@ -479,7 +479,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
         try:
-            if self._output_spec is not None:
+            if self.__dict__.get('_output_spec', None) is not None:
                 self.output_spec.unlock_()
             try:
                 delattr(self, "_reward_key")
@@ -558,7 +558,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
         try:
-            if self._output_spec is not None:
+            if self.__dict__.get('_output_spec', None) is not None:
                 self.output_spec.unlock_()
             try:
                 delattr(self, "_done_key")
@@ -608,7 +608,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @observation_spec.setter
     def observation_spec(self, value: TensorSpec) -> None:
         try:
-            self.output_spec.unlock_()
+            if self.__dict__.get('_output_spec', None) is not None:
+                self.output_spec.unlock_()
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an observation_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -634,7 +635,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @state_spec.setter
     def state_spec(self, value: TensorSpec) -> None:
         try:
-            self.input_spec.unlock_()
+            if self.__dict__.get('_input_spec', None) is not None:
+                self.input_spec.unlock_()
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an state_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
