@@ -250,9 +250,12 @@ class VmasWrapper(_EnvWrapper):
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
             envs_to_reset = _reset.squeeze(-1).any(-1)
-            for env_index, to_reset in enumerate(envs_to_reset):
-                if to_reset:
-                    self._env.reset_at(env_index, return_observations=False)
+            if envs_to_reset.all():
+                self._env.reset(return_observations=False)
+            else:
+                for env_index, to_reset in enumerate(envs_to_reset):
+                    if to_reset:
+                        self._env.reset_at(env_index, return_observations=False)
         else:
             self._env.reset(return_observations=False)
 
