@@ -242,10 +242,10 @@ class _BatchedEnv(EnvBase):
         if self._single_task:
             self._batch_size = meta_data.batch_size
 
-            input_spec = meta_data.specs["input_spec"].unlock_().to(meta_data.device)
+            input_spec = meta_data.specs["input_spec"].to(meta_data.device)
             self.action_spec = input_spec["_action_spec"]
             self.state_spec = input_spec["_state_spec_spec"]
-            output_spec = meta_data.specs["output_spec"].unlock_().to(meta_data.device)
+            output_spec = meta_data.specs["output_spec"].to(meta_data.device)
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
@@ -275,7 +275,6 @@ class _BatchedEnv(EnvBase):
             output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
             output_spec = (
                 output_spec.expand(self.num_workers, *output_spec.shape)
-                .unlock_()
                 .to(self._device)
             )
             self.observation_spec = output_spec["_observation_spec"]
