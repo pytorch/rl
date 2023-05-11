@@ -310,7 +310,9 @@ def _split_and_pad_sequence(
     return tensor
 
 
-def _inv_pad_sequence(tensor: torch.Tensor, splits: torch.Tensor):
+def _inv_pad_sequence(
+    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+):
     """Inverse a pad_sequence operation.
 
     If tensor is of shape [B, T], than splits must be of of shape [B] with all elements
