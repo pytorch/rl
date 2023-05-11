@@ -266,6 +266,7 @@ class _BatchedEnv(EnvBase):
             output_spec = meta_data.specs["output_spec"].to(device)
             print('asp', input_spec["_action_spec"], 'device', device)
             self.action_spec = input_spec["_action_spec"]
+            print("result", self.input_spec['_action_spec'])
             self.state_spec = input_spec["_state_spec"]
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
