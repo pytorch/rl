@@ -156,6 +156,8 @@ class MockSerialEnv(EnvBase):
             )
         if done_spec is None:
             done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
+        if state_spec is None:
+            state_spec = CompositeSpec(shape=batch_size)
         input_spec = CompositeSpec(
             _action_spec=action_spec, _state_spec=state_spec, shape=batch_size
         )
