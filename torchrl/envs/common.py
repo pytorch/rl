@@ -391,6 +391,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             break
         else:
             raise AttributeError("Could not find action spec")
+        return key
 
     # Action spec: action specs belong to input_spec
     @property
@@ -464,6 +465,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             break
         else:
             raise AttributeError("Could not find reward spec")
+        return key
 
     # Reward spec: reward specs belong to output_spec
     @property
@@ -539,6 +541,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             break
         else:
             raise AttributeError("Could not find done spec")
+        return key
 
     # Done spec: done specs belong to output_spec
     @property
