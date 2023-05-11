@@ -242,7 +242,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     ):
         super().__init__()
         if device is not None:
-            self.__dict__['_device'] = torch.device(device)
+            self.__dict__["_device"] = torch.device(device)
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
@@ -341,7 +341,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
-        input_spec = self.__dict__.get('_input_spec', None)
+        input_spec = self.__dict__.get("_input_spec", None)
         if input_spec is None:
             input_spec = CompositeSpec(
                 _state_spec=CompositeSpec(shape=self.batch_size),
@@ -358,7 +358,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def output_spec(self) -> TensorSpec:
-        output_spec = self.__dict__.get('_output_spec', None)
+        output_spec = self.__dict__.get("_output_spec", None)
         if output_spec is None:
             output_spec = CompositeSpec(
                 _observation_spec=CompositeSpec(shape=self.batch_size),
@@ -423,8 +423,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action=value, shape=self.batch_size, device=self.device
                 )
 
-            if self.__dict__.get('_input_spec', None) is None:
-                self.__dict__['_input_spec'] = CompositeSpec(
+            if self.__dict__.get("_input_spec", None) is None:
+                self.__dict__["_input_spec"] = CompositeSpec(
                     _action_spec=value,
                     _state_spec=CompositeSpec(
                         shape=self.batch_size, device=self.device
@@ -1181,8 +1181,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device = torch.device(device)
         if device == self.device:
             return self
-        self.__dict__["_input_spec"] = self.input_spec.to(device)
-        self.__dict__["_output_spec"] = self.output_spec.to(device)
+        self.__dict__["_input_spec"] = self.input_spec.to(device).lock_()
+        self.__dict__["_output_spec"] = self.output_spec.to(device).lock_()
         self._device = device
         return super().to(device)
 

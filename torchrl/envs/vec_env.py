@@ -470,6 +470,7 @@ class _BatchedEnv(EnvBase):
 
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
+        self._properties_set = False
 
         self._shutdown_workers()
         self.is_closed = True
