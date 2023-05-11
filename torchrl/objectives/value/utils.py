@@ -289,7 +289,8 @@ def _split_and_pad_sequence(tensor, splits):
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
-            shape,
+            *shape,
+            *tensor.shape[1:],
             dtype=tensor.dtype,
             device=tensor.device,
         )
