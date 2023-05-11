@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Union
+
 import torch
 
 from tensordict import TensorDictBase
@@ -215,7 +217,9 @@ def _get_num_per_traj(dones_and_truncated):
     return num_per_traj
 
 
-def _split_and_pad_sequence(tensor, splits):
+def _split_and_pad_sequence(
+    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+):
     """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
     Compatible with tensordict inputs.
@@ -281,11 +285,13 @@ def _split_and_pad_sequence(tensor, splits):
 
     """
     tensor = _flatten_batch(tensor)
-    max_val = max(splits)
-    shape = (len(splits), max_val)
+    max_seq_len = torch.max(splits)
+    shape = (len(splits), max_seq_len)
 
-    splits = splits.unsqueeze(1).expand(shape)
-    mask = (splits - torch.arange(0, shape[-1], device=tensor.device)).gt(0)
+    range = torch.tile(
+        torch.arange(max_seq_len, device=tensor.device), (len(splits), 1)
+    )
+    mask = range < splits.unsqueeze(1)
 
     def _fill_tensor(tensor):
         empty_tensor = torch.zeros(
@@ -304,7 +310,7 @@ def _split_and_pad_sequence(tensor, splits):
     return tensor
 
 
-def _inv_pad_sequence(tensor, splits):
+def _inv_pad_sequence(tensor: torch.Tensor, splits: torch.Tensor):
     """Inverse a pad_sequence operation.
 
     If tensor is of shape [B, T], than splits must be of of shape [B] with all elements
