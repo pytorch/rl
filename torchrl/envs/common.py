@@ -1171,7 +1171,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             return self
         self.__dict__["_input_spec"] = self.input_spec.to(device)
         self.__dict__["_output_spec"] = self.output_spec.to(device)
-        self.device = device
+        self._device = device
         return super().to(device)
 
     def fake_tensordict(self) -> TensorDictBase:

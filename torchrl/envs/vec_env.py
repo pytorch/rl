@@ -90,6 +90,7 @@ def lazy_property(prop: property):
 
 def lazy(fun):
     """Converts a fun in a lazy fun, that will call _set_properties when queried the first time."""
+
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
         if not self._properties_set:
