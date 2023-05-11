@@ -122,7 +122,6 @@ class TestUtils:
 
         is_init = td.get("is_init").squeeze(-1)
         splits = _get_num_per_traj_init(is_init)
-
         splitted = _split_and_pad_sequence(
             td.select("observation", strict=False), splits
         )
