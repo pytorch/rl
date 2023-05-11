@@ -383,18 +383,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the action is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get("_action_key", None)
-        if key is None:
-            keys = self.input_spec["_action_spec"].keys(True, True)
-            for key in keys:
-                # the first key is the reward
-                if not isinstance(key, tuple):
-                    key = (key,)
-                self.__dict__["_action_key"] = key
-                break
-            else:
-                raise AttributeError("Could not find action spec")
-        return key
+        keys = self.input_spec["_action_spec"].keys(True, True)
+        for key in keys:
+            # the first key is the reward
+            if not isinstance(key, tuple):
+                key = (key,)
+            break
+        else:
+            raise AttributeError("Could not find action spec")
 
     # Action spec: action specs belong to input_spec
     @property
@@ -460,18 +456,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the reward is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get("_reward_key", None)
-        if key is None:
-            keys = self.output_spec["_reward_spec"].keys(True, True)
-            for key in keys:
-                # the first key is the reward
-                if not isinstance(key, tuple):
-                    key = (key,)
-                self.__dict__["_reward_key"] = key
-                break
-            else:
-                raise AttributeError("Could not find reward spec")
-        return key
+        keys = self.output_spec["_reward_spec"].keys(True, True)
+        for key in keys:
+            # the first key is the reward
+            if not isinstance(key, tuple):
+                key = (key,)
+            break
+        else:
+            raise AttributeError("Could not find reward spec")
 
     # Reward spec: reward specs belong to output_spec
     @property
@@ -539,18 +531,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
-        key = self.__dict__.get("_done_key", None)
-        if key is None:
-            keys = self.output_spec["_done_spec"].keys(True, True)
-            for key in keys:
-                # the first key is the reward
-                if not isinstance(key, tuple):
-                    key = (key,)
-                self.__dict__["_done_key"] = key
-                break
-            else:
-                raise AttributeError("Could not find done spec")
-        return key
+        keys = self.output_spec["_done_spec"].keys(True, True)
+        for key in keys:
+            # the first key is the reward
+            if not isinstance(key, tuple):
+                key = (key,)
+            break
+        else:
+            raise AttributeError("Could not find done spec")
 
     # Done spec: done specs belong to output_spec
     @property
