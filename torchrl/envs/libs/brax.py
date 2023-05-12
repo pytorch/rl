@@ -150,7 +150,7 @@ class BraxWrapper(_EnvWrapper):
         )
         # extract state spec from instance
         state_spec = self._make_state_spec(env)
-        self.input_spec["state"] = state_spec
+        self.state_spec["state"] = state_spec
         self.observation_spec["state"] = state_spec.clone()
 
     def _make_state_example(self):
