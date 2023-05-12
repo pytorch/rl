@@ -1582,9 +1582,10 @@ class ActorCriticWrapper(SafeSequential):
 class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
     """Inference Action Wrapper for the Decision Transformer.
 
-    A wrapper specifically designed for the Decision Transformer, which will mask the context of the
-    input tensordict to the inferece context. The output will be a TensorDict with be the input TensorDict
-    and the last predicted action of the predicted output sequence.
+    A wrapper specifically designed for the Decision Transformer, which will mask the
+    input tensordict sequences to the inferece context.
+    The output will be a TensorDict with the same keys as the input, but with only the last
+    action of the predicted action sequence and the last return to go.
 
     Args:
         policy (TensorDictModule): The policy module that takes in
@@ -1596,6 +1597,56 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         action_key (str): The key of the action in the input TensorDict
         return_to_go_key (str): The key of the return to go in the input TensorDict
         spec (Optional[TensorSpec]): The spec of the input TensorDict. If None, it will be inferred from the policy module.
+
+    Examples:
+    >>> import torch
+    >>> from tensordict import TensorDict
+    >>> from tensordict.nn import TensorDictModule
+    >>> from torchrl.modules import (
+    ...      ProbabilisticActor,
+    ...      DTActor,
+    ...      TanhNormal,
+    ...      DecisionTransformerInferenceWrapper,
+    ...  )
+
+    >>> actor_module = TensorDictModule(
+                DTActor(state_dim=4, action_dim=2),
+                in_keys=in_keys,
+                out_keys=[
+                    "loc",
+                    "scale",])
+    >>> dist_class = TanhNormal
+    >>> dist_kwargs = {
+            "min": -1.0,
+            "max": 1.0,
+            "tanh_loc": False,
+        }
+    >>> actor = ProbabilisticActor(
+        in_keys=["loc", "scale"],
+        out_keys=["action", "log_prob"],
+        module=actor_module,
+        distribution_class=dist_class,
+        distribution_kwargs=dist_kwargs)
+
+    >>> inference_actor = DecisionTransformerInferenceWrapper(actor)
+    >>> print(inference_actor)
+    >>> sequence_length = 20
+    >>> td = TensorDict({"observation": torch.randn(1, sequence_length, 4),
+                         "action": torch.randn(1, sequence_length, 2),
+                         "return_to_go": torch.randn(1, sequence_length, 1)}, [1,])
+
+    >>> print(inference_actor(td.clone()))
+    TensorDict(
+        fields={
+            action: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            loc: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            observation: Tensor(shape=torch.Size([1, 20, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            sample_log_prob: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+            scale: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+            return_to_go: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([1]),
+        device=None,
+        is_shared=False)
     """
 
     def __init__(
