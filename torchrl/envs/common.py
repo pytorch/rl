@@ -582,7 +582,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     )
             else:
                 nestedval = value
-                value = CompositeSpec(done=value.to(device), shape=self.batch_size, device=device)
+                value = CompositeSpec(
+                    done=value.to(device), shape=self.batch_size, device=device
+                )
             if len(nestedval.shape) == 0:
                 raise RuntimeError(
                     "the done_spec shape cannot be empty (this error"
