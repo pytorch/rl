@@ -240,9 +240,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
-        super().__init__()
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
+        super().__init__()
         self.dtype = dtype_map.get(dtype, dtype)
         if "is_closed" not in self.__dir__():
             self.is_closed = True
