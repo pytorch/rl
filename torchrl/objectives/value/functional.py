@@ -105,14 +105,11 @@ def generalized_advantage_estimate(
         *batch_size, time_steps, lastdim, device=device, dtype=dtype
     )
     prev_advantage = 0
+    delta = reward + (gamma * next_state_value * not_done) - state_value
+    discount = gamma * lmbda * not_done
     for t in reversed(range(time_steps)):
-        delta = (
-            reward[..., t, :]
-            + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
-            - state_value[..., t, :]
-        )
-        prev_advantage = advantage[..., t, :] = delta + (
-            gamma * lmbda * prev_advantage * not_done[..., t, :]
+        prev_advantage = advantage[..., t, :] = delta[..., t, :] + (
+            prev_advantage * discount[..., t, :]
         )
 
     value_target = advantage + state_value
@@ -127,6 +124,7 @@ def _fast_vec_gae(
     done: torch.Tensor,
     gamma: float,
     lmbda: float,
+    thr: float = 1e-7,
 ):
     """Fast vectorized Generalized Advantage Estimate when gamma and lmbda are scalars.
 
@@ -140,9 +138,12 @@ def _fast_vec_gae(
         done (torch.Tensor): a [B, T] boolean tensor containing the done states
         gamma (scalar): the gamma decay (trajectory discount)
         lmbda (scalar): the lambda decay (exponential mean discount)
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
     """
     # _gen_num_per_traj and _split_and_pad_sequence need
     # time dimension at last position
@@ -158,7 +159,16 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
-    gammalmbdas = torch.ones_like(td0_flat[0])
+    device = done.device
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
+    else:
+        gammalmbda_tensor = gammalmbda
+    lim = (
+        (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
+    )
+    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+
     gammalmbdas[1:] = gammalmbda
     gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
     gammalmbdas = gammalmbdas.unsqueeze(-1)
