@@ -1123,11 +1123,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         with set_gym_backend("gym"):
             self.action_spec = self._get_action_spec()
             output_spec = self._get_output_spec()
-            print('output_spec device', output_spec.device)
-            print('output_spec[obs] device', output_spec["_observation_spec"].device)
-            print('self.output_spec device', self.output_spec.device)
             self.observation_spec = output_spec["_observation_spec"]
-            print('self.observation_spec device', self.observation_spec.device)
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
 

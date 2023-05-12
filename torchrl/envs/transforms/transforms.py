@@ -1862,9 +1862,6 @@ class ObservationNorm(ObservationTransform):
         else:
             scale = self.scale
             loc = self.loc
-            print('obs', obs.device)
-            print('loc', loc.device)
-            print('scale', scale.device)
             return obs * scale + loc
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
