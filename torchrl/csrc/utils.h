@@ -26,3 +26,22 @@ torch::Tensor simplefilter(torch::Tensor input, float decay) {
   }
   return result;
 }
+
+torch::Tensor gae(float gdecay, float ldecay, torch::Tensor val, torch::Tensor nextval, torch::Tensor reward, torch::Tensor done, ) {
+  torch::Tensor notdone = (~done).to(torch::kInt);
+  torch::Tensor advantage = reward + gdecay * val * notdone - nextval;
+  torch::Tensor discount = gdecay * ldecay * notdone;
+
+  torch::Tensor result = torch::empty_like(val);
+  int rows = val.size(-1);
+
+  torch::Tensor gae = torch::zeros_like(val.select(-1, 0));
+  for (int i = rows - 1; i >= 0; i--) {
+    auto row = advantage.select(-1, i);
+    auto curr_discount = discount.select(-1, i);
+    gae = row + curr_discount * gae;
+
+    result.index_put_({torch::indexing::Ellipsis, i}, gae);
+  }
+  return result;
+}
