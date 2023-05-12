@@ -22,8 +22,6 @@ class Collate(nn.Module):
         self.device = torch.device(device)
 
     def __call__(self, batch):
-        batch = torch.stack(batch, dim=0).contiguous()
-        batch.batch_size = []
         if self.device.type == "cuda":
             batch = batch.pin_memory()
         return batch.to(self.device)
@@ -42,15 +40,17 @@ class PromptDataset(Dataset):
         self._memmap = np.memmap(path, dtype=np.uint16, mode="r")
         self.block_size = block_size
 
-    def __getitem__(self, idx):
+    def __getitems__(self, idx):
+        idx = torch.tensor(idx).unsqueeze(1) + torch.arange(self.block_size).unsqueeze(
+            0
+        )
+
         return Data(
-            prompt=torch.from_numpy(
-                self._memmap[idx : idx + self.block_size].astype(np.int64)
+            prompt=torch.from_numpy(self._memmap[idx[:]].astype(np.int64)).view_as(idx),
+            target=torch.from_numpy(self._memmap[idx[:] + 1].astype(np.int64)).view_as(
+                idx
             ),
-            target=torch.from_numpy(
-                self._memmap[idx + 1 : idx + self.block_size + 1].astype(np.int64)
-            ),
-            batch_size=[self.block_size],
+            batch_size=[],
         )
 
     def __len__(self):

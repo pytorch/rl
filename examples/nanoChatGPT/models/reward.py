@@ -76,7 +76,6 @@ def init_reward_model(config):
 
 if __name__ == "__main__":
     import tiktoken
-    import torch
 
     # FIXME: this relative import breaks when running this file
     # below code gives an example of usage but is not easily runnable

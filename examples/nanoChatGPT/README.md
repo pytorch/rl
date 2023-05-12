@@ -42,6 +42,7 @@ Default configuration can be found in `config/train.yaml`, and any option can be
 ```sh
 python train.py --batch_size=128
 ```
+> **_NOTE:_**  Apple Silicon Macbooks users make sure to use `--device=mps` and prepend all commands with `PYTORCH_ENABLE_MPS_FALLBACK=1` to enable CPU fallback
 
 ### Training the reward model
 

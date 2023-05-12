@@ -19,23 +19,28 @@ HERE = Path(__file__).parent
 @torch.no_grad()
 def _step(self, tensordict):
     self.step_num += 1
-    prompt = tensordict["prompt"]
+    prompt = tensordict.get("prompt")
 
     # perform the action
-    action = tensordict["action"].squeeze(-1)
+    action = tensordict.get("action")
+
+    # The output must be written in a ``"next"`` entry
+    next_prompt = torch.hstack((prompt, action))[:, -self.block_size :]
 
     # compute the reward
-    if self.step_num >= self.config["episode_length"]:
-        reward = self.reward_model(prompt).unsqueeze(-1)
+    if self.step_num >= self.episode_length:
+        reward = self.reward_model(next_prompt)
         done = torch.ones_like(reward, dtype=torch.bool)
     else:
         reward = torch.zeros((*tensordict.batch_size, 1))
         done = torch.zeros_like(reward, dtype=torch.bool)
+    assert self.reward_spec.shape == reward.shape, (
+        self.batch_size,
+        reward.shape,
+        reward.dtype,
+    )
+    assert self.done_spec.shape == done.shape, (self.batch_size, done.shape, done.dtype)
 
-    # The output must be written in a ``"next"`` entry
-    next_prompt = torch.hstack((prompt, action[..., None]))[
-        :, -self.config["block_size"] :
-    ]
     out = TensorDict(
         {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
         tensordict.shape,
@@ -46,20 +51,15 @@ def _step(self, tensordict):
 @torch.no_grad()
 def _reset(self, tensordict):
     self.step_num = 0
-    if tensordict is None or tensordict.is_empty():
-        # if no tensordict is passed, we generate a single set of hyperparameters
-        # Otherwise, we assume that the input tensordict contains all the relevant
-        # parameters to get started.
-        tensordict = TensorDict({}, batch_size=self.config["batch_size"])
-
     batch = next(self.dataloader)
 
+    prompt = batch.prompt[:, -self.block_size :]
     out = TensorDict(
         {
-            "prompt": batch.prompt[:, -self.config["block_size"] :],
-            "done": torch.zeros((*batch.prompt.shape[:-1], 1, 1), dtype=torch.bool),
+            "prompt": prompt,
+            "done": torch.zeros((*prompt.shape[:-1], 1), dtype=torch.bool),
         },
-        tensordict.shape,
+        self.batch_size,
     )
     return out
 
@@ -70,10 +70,10 @@ def _make_spec(self):
         prompt=BoundedTensorSpec(
             minimum=0,
             maximum=DEFAULT_VOCAB_SIZE,
-            shape=(self.config["batch_size"], self.config["block_size"]),
+            shape=(*self.batch_size, self.config["block_size"]),
             dtype=torch.int64,
         ),
-        shape=(self.config["batch_size"],),
+        shape=self.batch_size,
     )
     # since the environment is stateless, we expect the previous output as input
     self.input_spec = self.observation_spec.clone()
@@ -82,16 +82,14 @@ def _make_spec(self):
     self.action_spec = BoundedTensorSpec(
         minimum=0,
         maximum=DEFAULT_VOCAB_SIZE,
-        shape=(self.config["batch_size"], 1),
+        shape=(*self.batch_size, 1),
         dtype=torch.int64,
     )
-    self.reward_spec = UnboundedContinuousTensorSpec(
-        shape=(self.config["batch_size"], 1, 1)
-    )
+    self.reward_spec = UnboundedContinuousTensorSpec(shape=(*self.batch_size, 1))
     self.done_spec = BoundedTensorSpec(
         minimum=0,
         maximum=1,
-        shape=(self.config["batch_size"], 1, 1),
+        shape=(*self.batch_size, 1),
         dtype=torch.bool,
     )
 
@@ -107,7 +105,11 @@ class RLHFEnv(EnvBase):
     def __init__(self, reward_model=None, config=None, dataloader=None, seed=None):
         # if td_params is None:
         #     td_params = self.gen_params()
-        super().__init__(device=config["device"], batch_size=[config["batch_size"]])
+        batch_size = config["batch_size"]
+        device = config["device"]
+        self.episode_length = config["episode_length"]
+        self.block_size = config["block_size"]
+        super().__init__(device=device, batch_size=[batch_size])
 
         self.reward_model = reward_model
         self.config = config
