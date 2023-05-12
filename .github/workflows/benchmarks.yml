@@ -12,6 +12,10 @@ permissions:
   deployments: write
   contents: write
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
 
   benchmark_cpu:

@@ -9,6 +9,10 @@ on:
       - release/*
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   python-source-and-configs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
