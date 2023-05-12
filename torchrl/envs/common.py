@@ -343,9 +343,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @device.setter
     def device(self, value: torch.device) -> None:
-        device = getattr(self, "_device", None)
+        device = self.__dict__.get("_device", None)
         if device is None:
-            self._device = torch.device(value)
+            self.__dict__['_device'] = value
             return
         raise RuntimeError("device cannot be set. Call env.to(device) instead.")
 
