@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +34,7 @@ jobs:
           cd benchmarks/
           python -m pytest --benchmark-json output.json
       - name: Store benchmark results
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: CPU Benchmark Results
@@ -108,6 +112,7 @@ jobs:
         python -m pytest --benchmark-json output.json
     - name: Store benchmark results
       uses: benchmark-action/github-action-benchmark@v1
+      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       with:
         name: GPU Benchmark Results
         tool: 'pytest'
