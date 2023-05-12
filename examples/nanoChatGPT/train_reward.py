@@ -51,9 +51,9 @@ def main():
 
     # ######## TRAINING LOOP ########
     t0 = time.time()
-    for iter_num in range(iter_num, config["max_iters"]):
+    for it in range(iter_num, config["max_iters"]):
         # get and update the learning rate
-        lr = lr_scheduler(iter_num)
+        lr = lr_scheduler(it)
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
@@ -75,21 +75,23 @@ def main():
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-        if iter_num % config["eval_interval"] == 0:
+        if it % config["eval_interval"] == 0:
             # evaluate the loss on train/val sets and write checkpoints
             val_loss = estimate_loss(model, val_loader)
             train_loss = estimate_loss(model, train_loader)
             print(
-                f"Evaluation: iter {iter_num}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
             )
             if val_loss < best_val_loss or config["always_save_checkpoint"]:
                 best_val_loss = val_loss
-                if iter_num > 0:
+                if it > 0:
                     checkpoint = {
-                        "model": model.module._orig_mod.state_dict() if config["compile"] else model.module.state_dict(),
+                        "model": model.module._orig_mod.state_dict()
+                        if config["compile"]
+                        else model.module.state_dict(),
                         "optimizer": optimizer.state_dict(),
                         "model_kwargs": model_kwargs,
-                        "iter_num": iter_num,
+                        "iter_num": it,
                         "best_val_loss": best_val_loss,
                         "config": config,
                     }
@@ -97,11 +99,10 @@ def main():
                     torch.save(
                         checkpoint, os.path.join(config["out_dir_reward"], "ckpt.pt")
                     )
-        elif iter_num % config["log_interval"] == 0:
+        elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
-            print(f"iter {iter_num}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
-        iter_num += 1
+            print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
 
 if __name__ == "__main__":

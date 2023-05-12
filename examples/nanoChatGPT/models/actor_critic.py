@@ -1,7 +1,7 @@
 import copy
 
 import torch.nn as nn
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch.distributions.categorical import Categorical
 
 from torchrl.modules import (
@@ -42,8 +42,11 @@ class ActorCritic(ActorValueOperator):
                 return_log_prob=True,
             ),
         )
-        value_head = TensorDictModule(
-            value_head, in_keys=["x"], out_keys=["state_value"]
+        value_head = TensorDictSequential(
+            TensorDictModule(value_head, in_keys=["x"], out_keys=["state_value"]),
+            TensorDictModule(
+                lambda x: x[:, -1, :], in_keys=["state_value"], out_keys=["state_value"]
+            ),
         )
 
         super().__init__(common, actor_head, value_head)

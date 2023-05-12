@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 import yaml
 
@@ -22,3 +23,14 @@ def load_and_update_config(path):
             config[key] = value
 
     return config
+
+
+def get_file_logger(name, filename, level=logging.DEBUG):
+    logger = logging.getLogger(name)
+    handler = logging.FileHandler(filename)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s, %(name)s %(levelname)s %(message)s")
+    )
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    return logger
