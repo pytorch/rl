@@ -3,7 +3,7 @@ from typing import Optional
 
 import torch
 
-from data.shakespeare import get_dataloaders
+from data import get_prompt_dataloaders
 from models.reward import init_reward_model
 from models.transformer import DEFAULT_VOCAB_SIZE
 from tensordict.tensordict import TensorDict
@@ -133,7 +133,7 @@ def main():
 
     config = load_and_update_config("config/train_rlhf.yaml")
     reward_model, _ = init_reward_model(config)
-    train_loader, _ = get_dataloaders(config)
+    train_loader, _ = get_prompt_dataloaders(config)
     env = RLHFEnv(reward_model=reward_model, dataloader=train_loader, config=config)
 
     check_env_specs(env)

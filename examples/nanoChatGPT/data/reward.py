@@ -110,7 +110,7 @@ def create_datasets(config):
     return train_data, val_data
 
 
-def get_dataloaders(config):
+def get_reward_dataloaders(config):
     train_data, val_data = create_datasets(config)
     train_data.memmap_()
     val_data.memmap_()
