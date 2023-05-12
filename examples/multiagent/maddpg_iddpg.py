@@ -48,7 +48,7 @@ def train(seed):
     total_frames = frames_per_batch * n_iters
     memory_size = frames_per_batch
 
-    scenario_name = "navigation"
+    scenario_name = "balance"
     env_config = {
         "n_agents": 3,
     }
