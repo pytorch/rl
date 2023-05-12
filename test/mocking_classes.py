@@ -293,11 +293,7 @@ class MockBatchedLockedEnv(EnvBase):
             cls._input_spec["_action_spec"] = CompositeSpec(
                 action=cls._input_spec["_action_spec"], shape=batch_size
             )
-        return super().__new__(
-            cls,
-            *args,
-            **kwargs,
-        )
+        return super().__new__(cls, *args, **kwargs)
 
     def __init__(self, device="cpu", batch_size=None):
         super(MockBatchedLockedEnv, self).__init__(device=device, batch_size=batch_size)

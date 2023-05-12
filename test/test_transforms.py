@@ -5,7 +5,7 @@
 import abc
 import argparse
 import itertools
-from copy import copy, deepcopy
+from copy import copy
 from functools import partial
 
 import numpy as np
@@ -5073,7 +5073,7 @@ class TestTensorDictPrimer(TransformBase):
             env = ContinuousActionVecMockEnv()
             env.set_seed(100)
             kwargs = {
-                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                key: spec.clone() if key != "action" else env.action_spec.clone()
                 # copy to avoid having the same spec for all keys
                 for key in default_keys
             }

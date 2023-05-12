@@ -263,6 +263,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         cls._device = None
         # cached in_keys to be excluded from update when calling step
         cls._cache_in_keys = None
+
+        # We may assign _input_spec to the cls, but it must be assigned to the instance
+        # we pull it off, and place it back where it belongs
+        _input_spec = None
+        if hasattr(cls, "_input_spec"):
+            _input_spec = cls._input_spec.clone()
+            delattr(cls, "_input_spec")
+        _output_spec = None
+        if hasattr(cls, "_output_spec"):
+            _output_spec = cls._output_spec.clone()
+            delattr(cls, "_output_spec")
+        env = super().__new__(cls)
+        if _input_spec is not None:
+            env.__dict__["_input_spec"] = _input_spec
+        if _output_spec is not None:
+            env.__dict__["_output_spec"] = _output_spec
+        return env
+
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
