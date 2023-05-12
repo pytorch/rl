@@ -100,7 +100,7 @@ def generalized_advantage_estimate(
     device = state_value.device
     lastdim = next_state_value.shape[-1]
 
-    not_done = 1 - done.to(dtype)
+    not_done = (~done).int()
     *batch_size, time_steps = not_done.shape[:-1]
     advantage = torch.empty(
         *batch_size, time_steps, lastdim, device=device, dtype=dtype
@@ -154,7 +154,7 @@ def _fast_vec_gae(
     next_state_value = next_state_value.transpose(-2, -1)
 
     gammalmbda = gamma * lmbda
-    not_done = 1 - done.int()
+    not_done = (~done).int()
     td0 = reward + not_done * gamma * next_state_value - state_value
 
     num_per_traj = _get_num_per_traj(done)
@@ -220,7 +220,7 @@ def vec_generalized_advantage_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
     dtype = state_value.dtype
-    not_done = 1 - done.to(dtype)
+    not_done = (~done).to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
@@ -338,7 +338,7 @@ def td0_return_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
     advantage = reward + gamma * not_done * next_state_value
     return advantage
 
@@ -395,7 +395,7 @@ def td1_return_estimate(
         raise RuntimeError(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -652,7 +652,7 @@ def td_lambda_return_estimate(
             "All input tensors (value, reward and done states) must share a unique shape."
         )
 
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -825,7 +825,7 @@ def vec_td_lambda_return_estimate(
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     first_below_thr_gamma = None
 

@@ -33,15 +33,15 @@ torch::Tensor gae(float gdecay, float ldecay, torch::Tensor val, torch::Tensor n
   torch::Tensor discount = gdecay * ldecay * notdone;
 
   torch::Tensor result = torch::empty_like(val);
-  int rows = val.size(-1);
+  int rows = val.size(0);
 
-  torch::Tensor gae = torch::zeros_like(val.select(-1, 0));
+  torch::Tensor gae = torch::zeros_like(val.select(0, 0));
   for (int i = rows - 1; i >= 0; i--) {
-    auto row = advantage.select(-1, i);
-    auto curr_discount = discount.select(-1, i);
+    auto row = advantage[i];
+    auto curr_discount = discount[i];
     gae = row + curr_discount * gae;
 
-    result.index_put_({torch::indexing::Ellipsis, i}, gae);
+    result[i] = gae;
   }
   return result;
 }

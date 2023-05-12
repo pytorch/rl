@@ -199,6 +199,24 @@ def _flatten_batch(tensor):
     return tensor.flatten(0, -1)
 
 
+# def _get_num_per_traj(dones_and_truncated):
+#     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
+#
+#     Args:
+#         dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
+#
+#     Returns:
+#         A list of integers representing the number of steps in each trajectory
+#
+#     """
+#     dones_and_truncated = dones_and_truncated.clone()
+#     dones_and_truncated[..., -1] = 1
+#     dones_and_truncated = _flatten_batch(dones_and_truncated)
+#     num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
+#     num_per_traj[1:] -= num_per_traj[:-1].clone()
+#     return num_per_traj
+
+
 def _get_num_per_traj(dones_and_truncated):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
@@ -206,14 +224,16 @@ def _get_num_per_traj(dones_and_truncated):
         dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
 
     Returns:
-        A list of integers representing the number of steps in each trajectories
+        A list of integers representing the number of steps in each trajectory
 
     """
     dones_and_truncated = dones_and_truncated.clone()
     dones_and_truncated[..., -1] = 1
-    dones_and_truncated = _flatten_batch(dones_and_truncated)
-    num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
-    num_per_traj[1:] -= num_per_traj[:-1].clone()
+    arange = torch.arange(
+        1, 1 + dones_and_truncated.numel(), device=dones_and_truncated.device
+    )
+    num_per_traj = arange[dones_and_truncated.reshape(-1)]
+    num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
 
 
@@ -288,9 +308,10 @@ def _split_and_pad_sequence(
     max_seq_len = torch.max(splits)
     shape = (len(splits), max_seq_len)
 
-    arange = torch.tile(
-        torch.arange(max_seq_len, device=tensor.device), (len(splits), 1)
-    )
+    # int16 supports length up to 32767
+    arange = torch.arange(
+        max_seq_len, device=tensor.device, dtype=torch.int16
+    ).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
 
     def _fill_tensor(tensor):
@@ -330,8 +351,9 @@ def _inv_pad_sequence(
     if splits.numel() == 1:
         return tensor
 
-    arange = torch.tile(
-        torch.arange(tensor.shape[-1], device=tensor.device), (tensor.shape[0], 1)
-    )
-    idx = (arange < splits.unsqueeze(1)).reshape(-1)
+    # int16 supports length up to 32767
+    arange = torch.arange(
+        tensor.shape[-1], device=tensor.device, dtype=torch.int16
+    ).unsqueeze(0)
+    idx = (arange < splits.unsqueeze(1)).view(-1)
     return tensor.reshape(-1)[idx]
