@@ -11,3 +11,18 @@
 torch::Tensor safetanh(torch::Tensor input) {
   return torch::clamp(torch::tanh(input), -0.999999, 0.999999);
 }
+
+torch::Tensor simplefilter(torch::Tensor input, float decay) {
+  input = input.contiguous();
+  torch::Tensor result = torch::empty_like(input);
+  int rows = input.size(-1);
+
+  torch::Tensor val = torch::zeros_like(input.select(-1, 0));
+  for (int i = rows - 1; i >= 0; i--) {
+    auto row = input.index({torch::indexing::Ellipsis, i});
+    val = row + decay * val;
+//    auto indices = torch::tensor({i}, torch::kLong);
+    result.index_put_({torch::indexing::Ellipsis, i}, val);
+  }
+  return result;
+}

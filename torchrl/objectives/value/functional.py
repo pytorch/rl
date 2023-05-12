@@ -7,6 +7,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 from tensordict import MemmapTensor
+from torchrl._torchrl import simplefilter
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -159,22 +160,23 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
-    device = done.device
-    if not isinstance(gammalmbda, torch.Tensor):
-        gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
-    else:
-        gammalmbda_tensor = gammalmbda
-    lim = (
-        (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
-    )
-    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
-
-    gammalmbdas[1:] = gammalmbda
-    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-    gammalmbdas = gammalmbdas.unsqueeze(-1)
-
-    advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
-    advantage = advantage.squeeze(1)
+    # device = done.device
+    # if not isinstance(gammalmbda, torch.Tensor):
+    #     gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
+    # else:
+    #     gammalmbda_tensor = gammalmbda
+    # lim = (
+    #     (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
+    # )
+    # gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+    #
+    # gammalmbdas[1:] = gammalmbda
+    # gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    # gammalmbdas = gammalmbdas.unsqueeze(-1)
+    #
+    # advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
+    # advantage = advantage.squeeze(1)
+    advantage = simplefilter(td0_flat, gammalmbda)
     advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
 
     value_target = advantage + state_value
