@@ -396,20 +396,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Action spec: action specs belong to input_spec
     @property
     def action_spec(self) -> TensorSpec:
-        print('getting action_spec')
-        try:
-            asp = self.input_spec['_action_spec']
-            print('asp', asp)
-        except Exception as err:
-            print("asp failed")
-            raise err
-        try:
-            ak = self.action_key
-            print('ak', ak)
-        except Exception as err:
-            print('ak failed')
-            raise err
-        return asp[ak]
         return self.input_spec[("_action_spec", *self.action_key)]
 
     @action_spec.setter
