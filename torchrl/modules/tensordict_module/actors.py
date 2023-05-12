@@ -1673,6 +1673,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         tensordict.set(self.action_key, out_action)
         out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
         tensordict.set(self.return_to_go_key, out_rtg)
+        # set unmasked observation
         tensordict.set(
             self.observation_key, unmasked_tensordict.get(self.observation_key)
         )

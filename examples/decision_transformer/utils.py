@@ -202,10 +202,10 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     )
 
     transforms = Compose(
-        d2f,
         r2g,
         reward_scale,
         catframes,
+        d2f,
         exclude,
     )
     data = D4RLExperienceReplay(
@@ -221,10 +221,6 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
 
 
 def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
-    offline_data = offline_buffer.sample(100000)
-    offline_data.del_("return_to_go")
-    offline_data.del_("index")  # delete
-
     r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
     reward_scale = RewardScaling(
         loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
@@ -235,7 +231,7 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
     transforms = Compose(
         r2g,
         reward_scale,
-        catframes,
+        catframes,  # TODO: cat frames is not an inverse transform doesnt get triggered!
     )
     storage = LazyMemmapStorage(
         rb_cfg.capacity, rb_cfg.buffer_scratch_dir, device=rb_cfg.device
@@ -244,12 +240,15 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
         prefetch=rb_cfg.prefetch,
-        transform=transforms,
         storage=storage,
         batch_size=rb_cfg.batch_size,
     )
     # init buffer with offline data
-    # replay_buffer.extend(offline_data.clone().detach().to_tensordict())
+    offline_data = offline_buffer.sample(100000)
+    offline_data.del_("index")
+    replay_buffer.extend(offline_data.clone().detach().to_tensordict())
+    # add transforms after offline data extension to not trigger reward-to-go calculation
+    replay_buffer.append_transform(transforms)
 
     return replay_buffer
 

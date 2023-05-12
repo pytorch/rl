@@ -119,6 +119,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(current_frames)
 
         tensordict = tensordict.reshape(-1)
+        # only used for logging
         tensordict.del_("episode_reward")
 
         online_buffer.extend(tensordict.cpu().clone().detach())
