@@ -242,12 +242,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     ):
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
-            output_spec = self.__dict__.get('_output_spec', None)
+            output_spec = self.__dict__.get("_output_spec", None)
             if output_spec is not None:
-                self.__dict__['_output_spec'] = output_spec.to(self.device)
-            input_spec = self.__dict__.get('_input_spec', None)
+                self.__dict__["_output_spec"] = output_spec.to(self.device)
+            input_spec = self.__dict__.get("_input_spec", None)
             if input_spec is not None:
-                self.__dict__['_input_spec'] = input_spec.to(self.device)
+                self.__dict__["_input_spec"] = input_spec.to(self.device)
 
         super().__init__()
         self.dtype = dtype_map.get(dtype, dtype)
@@ -345,14 +345,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def device(self) -> torch.device:
         device = self.__dict__.get("_device", None)
         if device is None:
-            device = self.__dict__['_device'] = torch.device("cpu")
+            device = self.__dict__["_device"] = torch.device("cpu")
         return device
 
     @device.setter
     def device(self, value: torch.device) -> None:
         device = self.__dict__.get("_device", None)
         if device is None:
-            self.__dict__['_device'] = value
+            self.__dict__["_device"] = value
             return
         raise RuntimeError("device cannot be set. Call env.to(device) instead.")
 
