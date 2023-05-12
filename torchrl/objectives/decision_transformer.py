@@ -21,8 +21,8 @@ class OnlineDTLoss(LossModule):
     Presented in "Online Decision Transformer" https://arxiv.org/abs/2202.05607
     Args:
         actor_network (ProbabilisticActor): stochastic actor
-        alpha_init:
-        samples_mc_entropy:
+        alpha_init (float): initial value of the temperature parameter
+        samples_mc_entropy (int): number of samples to estimate the entropy
 
     """
 
