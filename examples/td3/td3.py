@@ -261,7 +261,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     q_loss = None
 
     for i, tensordict in enumerate(collector):
-
         # update weights of the inference policy
         collector.update_policy_weights_()
 

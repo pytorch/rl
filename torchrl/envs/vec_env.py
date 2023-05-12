@@ -221,13 +221,13 @@ class _BatchedEnv(EnvBase):
             meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
-            )
+            ).clone()
         else:
             n_tasks = len(create_env_fn)
             self.meta_data = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i])
+                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
                 )
         self._set_properties()
 
@@ -317,23 +317,8 @@ class _BatchedEnv(EnvBase):
 
     batch_size = lazy_property(EnvBase.batch_size)
     device = lazy_property(EnvBase.device)
-    # input_spec = lazy_property(EnvBase.input_spec)
-    # output_spec = lazy_property(EnvBase.output_spec)
-    action_spec = lazy_property(EnvBase.action_spec)
-    state_spec = lazy_property(EnvBase.state_spec)
-    observation_spec = lazy_property(EnvBase.observation_spec)
-    reward_spec = lazy_property(EnvBase.reward_spec)
-    done_spec = lazy_property(EnvBase.done_spec)
-
-    @property
-    def device(self) -> torch.device:
-        if self._device is None:
-            self._set_properties()
-        return self._device
-
-    @device.setter
-    def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
+    input_spec = lazy_property(EnvBase.input_spec)
+    output_spec = lazy_property(EnvBase.output_spec)
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
