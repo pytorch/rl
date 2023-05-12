@@ -214,9 +214,9 @@ class JumanjiWrapper(GymLikeEnv):
         self.reward_spec = self._make_reward_spec(env)
 
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env).expand(self.batch_size)
-        self.input_spec["state"] = self.state_spec
-        self.observation_spec["state"] = self.state_spec
+        state_spec = self._make_state_spec(env).expand(self.batch_size)
+        self.state_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
         # build state example for data conversion
         self._state_example = self._make_state_example(env)
@@ -238,7 +238,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def read_state(self, state):
         state_dict = _object_to_tensordict(state, self.device, self.batch_size)
-        return self.state_spec.encode(state_dict)
+        return self.state_spec['state'].encode(state_dict)
 
     def read_obs(self, obs):
         if isinstance(obs, (list, jnp.ndarray, np.ndarray)):

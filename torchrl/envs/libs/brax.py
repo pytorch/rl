@@ -149,9 +149,9 @@ class BraxWrapper(_EnvWrapper):
             shape=self.batch_size,
         )
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env)
-        self.input_spec["state"] = self.state_spec
-        self.observation_spec["state"] = self.state_spec.clone()
+        state_spec = self._make_state_spec(env)
+        self.input_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
     def _make_state_example(self):
         key = jax.random.PRNGKey(0)
