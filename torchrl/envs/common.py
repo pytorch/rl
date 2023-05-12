@@ -336,9 +336,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def device(self) -> torch.device:
-        device = getattr(self, "_device", None)
+        device = self.__dict__.get("_device", None)
         if device is None:
-            device = self._device = torch.device("cpu")
+            device = self.__dict__['_device'] = torch.device("cpu")
         return device
 
     @device.setter
