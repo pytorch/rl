@@ -81,6 +81,7 @@ from torchrl.objectives import (
     DreamerValueLoss,
     IQLLoss,
     KLPENPPOLoss,
+    OnlineDTLoss,
     PPOLoss,
     SACLoss,
     TD3Loss,
@@ -1508,7 +1509,6 @@ class TestDiscreteSAC:
         target_entropy,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
 
@@ -1856,7 +1856,6 @@ class TestREDQ:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -1945,7 +1944,6 @@ class TestREDQ:
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     def test_redq_shared(self, delay_qvalue, num_qvalue, device):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -2050,7 +2048,6 @@ class TestREDQ:
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq_batched(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3317,6 +3314,146 @@ class TestDreamer:
         loss_module.zero_grad()
 
 
+class TestOnlineDT:
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        return actor.to(device)
+
+    def _create_mock_data_odt(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, 1, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+                "reward2go": reward2go,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_odt(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, T, 1, device=device)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "reward": reward2go,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_seq_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+
 class TestIQL:
     seed = 0
 
@@ -3439,7 +3576,6 @@ class TestIQL:
         expectile,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(device=device)
 
@@ -3736,7 +3872,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     # total dist
     d0 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
@@ -3752,7 +3888,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for i in range(value_network_update_interval + 1):
             # test that no update is occuring until value_network_update_interval
             d1 = 0.0
-            for (key, source_val) in upd._sources.items(True, True):
+            for key, source_val in upd._sources.items(True, True):
                 if not isinstance(key, tuple):
                     key = (key,)
                 key = ("target_" + key[0], *key[1:])
@@ -3767,7 +3903,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert upd.counter == 0
         # test that a new update has occured
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -3780,7 +3916,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     elif mode == "soft":
         upd.step()
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -3793,7 +3929,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     upd.init_()
     upd.step()
     d2 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
