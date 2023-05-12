@@ -3,12 +3,12 @@ from pathlib import Path
 
 import torch
 
-from data.shakespeare import get_dataloaders
+from data import get_prompt_dataloaders
 from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from shared import setup
-from tensordict.nn import set_skip_existing, TensorDictModuleBase
+from tensordict.nn import TensorDictModuleBase
 from torch import vmap
 
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -60,7 +60,7 @@ def main():
     optimizer = torch.optim.AdamW(loss_fn.parameters(), lr=1e-3)
 
     # DataLoader
-    train_loader, _ = get_dataloaders(config)
+    train_loader, _ = get_prompt_dataloaders(config)
 
     # Environment
     env = RLHFEnv(reward_model=reward_model, config=config, dataloader=train_loader)

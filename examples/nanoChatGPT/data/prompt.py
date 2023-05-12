@@ -1,3 +1,6 @@
+# download and prepare the openai_summarize_tldr dataset for fine tuning transformers
+# adapted from
+# https://github.com/sanjeevanahilan/nanoChatGPT/blob/3cde2746c7ea8b0bd32edd44c76ead581bbda5d5/data/openai_summarize_tldr/prepare.py
 from pathlib import Path
 from typing import Optional
 
@@ -7,6 +10,7 @@ import torch.nn as nn
 from tensordict import tensorclass
 from torch.utils.data import Dataset
 
+from .openai_summarize_tldr import create_tldr_memmaps
 from .utils import create_infinite_dataloader
 
 HERE = Path(__file__).parent
@@ -33,7 +37,7 @@ class Data:
     loss: Optional[torch.Tensor] = None
 
 
-class PairedDataset(Dataset):
+class PromptDataset(Dataset):
     def __init__(self, path, block_size):
         self._memmap = np.memmap(path, dtype=np.uint16, mode="r")
         self.block_size = block_size
@@ -58,14 +62,27 @@ class PairedDataset(Dataset):
 
 
 def create_datasets(config):
-    data_dir = HERE.parent / "models" / "nanoGPT" / "data" / config["dataset"]
-    train_data = PairedDataset(data_dir / "train.bin", block_size=config["block_size"])
-    val_data = PairedDataset(data_dir / "val.bin", block_size=config["block_size"])
+    if config["dataset"] == "shakespeare":
+        data_dir = HERE.parent / "models" / "nanoGPT" / "data" / config["dataset"]
+        if not (data_dir / "train.bin").exists():
+            raise RuntimeError(
+                "Shakespeare data has not be prepared. Run "
+                "python models/nanoGPT/data/shakespeare/prepare.py"
+            )
+    elif config["dataset"] == "tldr":
+        data_dir = HERE / "tldr"
+        if not (data_dir / "train.bin").exists():
+            create_tldr_memmaps()
+    else:
+        raise ValueError(f"Dataset {config['dataset']} is not recognised")
+
+    train_data = PromptDataset(data_dir / "train.bin", block_size=config["block_size"])
+    val_data = PromptDataset(data_dir / "val.bin", block_size=config["block_size"])
 
     return train_data, val_data
 
 
-def get_dataloaders(config):
+def get_prompt_dataloaders(config):
     train_data, val_data = create_datasets(config)
 
     train_loader = create_infinite_dataloader(

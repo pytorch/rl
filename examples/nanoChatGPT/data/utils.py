@@ -9,7 +9,7 @@ def create_infinite_dataloader(data, config, collate_fn):
     dl = DataLoader(
         data,
         batch_size=config["batch_size"],
-        shuffle=True,  # TODO: perhaps validation set shouldn't be shuffled?
+        shuffle=True,
         collate_fn=collate_fn,
         drop_last=True,
     )

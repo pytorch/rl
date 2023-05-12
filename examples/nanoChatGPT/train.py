@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 
-from data.shakespeare import get_dataloaders
+from data import get_prompt_dataloaders
 from models.transformer import init_optimizer, init_transformer
 from shared import create_lr_scheduler, setup
 from utils import load_and_update_config
@@ -57,7 +57,7 @@ def main():
 
     estimate_loss = create_loss_estimator(config, ctx)
 
-    train_loader, val_loader = get_dataloaders(config)
+    train_loader, val_loader = get_prompt_dataloaders(config)
 
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
