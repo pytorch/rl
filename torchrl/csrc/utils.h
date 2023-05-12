@@ -27,7 +27,7 @@ torch::Tensor simplefilter(torch::Tensor input, float decay) {
   return result;
 }
 
-torch::Tensor gae(float gdecay, float ldecay, torch::Tensor val, torch::Tensor nextval, torch::Tensor reward, torch::Tensor done, ) {
+torch::Tensor gae(float gdecay, float ldecay, torch::Tensor val, torch::Tensor nextval, torch::Tensor reward, torch::Tensor done) {
   torch::Tensor notdone = (~done).to(torch::kInt);
   torch::Tensor advantage = reward + gdecay * val * notdone - nextval;
   torch::Tensor discount = gdecay * ldecay * notdone;
