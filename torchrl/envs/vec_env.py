@@ -258,7 +258,6 @@ class _BatchedEnv(EnvBase):
         meta_data = self.meta_data
         self._properties_set = True
         if self._single_task:
-            print('setting for single task')
             self._batch_size = meta_data.batch_size
             device = self._device = meta_data.device
 
