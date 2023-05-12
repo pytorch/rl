@@ -420,6 +420,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def action_spec(self, value: TensorSpec) -> None:
         try:
             self.input_spec.unlock_()
+            device = self.input_spec.device
             try:
                 delattr(self, "_action_key")
             except AttributeError:
@@ -435,10 +436,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     )
             else:
                 value = CompositeSpec(
-                    action=value, shape=self.batch_size, device=self.device
+                    action=value.to(device), shape=self.batch_size, device=device
                 )
 
-            self.input_spec["_action_spec"] = value.to(self.device)
+            self.input_spec["_action_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
 
@@ -481,6 +482,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def reward_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
+            device = self.output_spec.device
             try:
                 delattr(self, "_reward_key")
             except AttributeError:
@@ -505,7 +507,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             else:
                 nestedval = value
                 value = CompositeSpec(
-                    reward=value, shape=self.batch_size, device=self.device
+                    reward=value.to(device), shape=self.batch_size, device=device
                 )
             if len(nestedval.shape) == 0:
                 raise RuntimeError(
@@ -514,7 +516,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."
                 )
-            self.output_spec["_reward_spec"] = value.to(self.device)
+            self.output_spec["_reward_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()
 
@@ -556,6 +558,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def done_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
+            device = self.output_spec.device
             try:
                 delattr(self, "_done_key")
             except AttributeError:
@@ -579,7 +582,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     )
             else:
                 nestedval = value
-                value = CompositeSpec(done=value, shape=self.batch_size)
+                value = CompositeSpec(done=value.to(device), shape=self.batch_size, device=device)
             if len(nestedval.shape) == 0:
                 raise RuntimeError(
                     "the done_spec shape cannot be empty (this error"
@@ -587,7 +590,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     " with a null number of dimensions. Try using a multidimensional"
                     " spec instead, for instance with a singleton dimension at the tail)."
                 )
-            self.output_spec["_done_spec"] = value.to(self.device)
+            self.output_spec["_done_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()
 
@@ -605,6 +608,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def observation_spec(self, value: TensorSpec) -> None:
         try:
             self.output_spec.unlock_()
+            device = self.output_spec.device
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an observation_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -615,7 +619,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            self.output_spec["_observation_spec"] = value.to(self.device)
+            self.output_spec["_observation_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()
 
@@ -631,6 +635,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def state_spec(self, value: TensorSpec) -> None:
         try:
             self.input_spec.unlock_()
+            device = self.input_spec.device
             if not isinstance(value, CompositeSpec):
                 raise TypeError("The type of an state_spec must be Composite.")
             elif value.shape[: len(self.batch_size)] != self.batch_size:
@@ -641,7 +646,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            self.input_spec["_state_spec"] = value.to(self.device)
+            self.input_spec["_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
 
