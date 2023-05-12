@@ -1278,7 +1278,10 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         self._constructor_kwargs = kwargs
         self._check_kwargs(kwargs)
         self._env = self._build_env(**kwargs)  # writes the self._env attribute
+        print("Calling _make_spec with device", self.device)
         self._make_specs(self._env)  # writes the self._env attribute
+        print("output spec device", self.output_spec.device)
+        print("obs spec device", self.observation_spec.device)
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
 
