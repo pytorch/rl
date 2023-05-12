@@ -15,16 +15,16 @@ import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
 
+from torchrl._utils import prod, seed_generator
+
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-
-from .._utils import prod, seed_generator
-from ..data.utils import DEVICE_TYPING
-from .utils import get_available_libraries, step_mdp
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
@@ -218,6 +218,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     @batch_size.setter
     def batch_size(self, value: torch.Size) -> None:
         self._batch_size = torch.Size(value)
+
+    def ndimension(self):
+        return len(self.batch_size)
+
+    @property
+    def ndim(self):
+        return self.ndimension()
 
     # Parent specs: input and output spec.
     @property
@@ -661,6 +668,97 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         Returns:
             TensorDict object containing the resulting trajectory.
 
+        The data returned will be marked with a "time" dimension name for the last
+        dimension of the tensordict (at the ``env.ndim`` index).
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from torchrl.envs.transforms import TransformedEnv, StepCounter
+            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(max_steps=20))
+            >>> rollout = env.rollout(max_steps=1000)
+            >>> print(rollout)
+            TensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    done: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([20, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            step_count: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([20]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([20, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    step_count: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([20, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([20]),
+                device=cpu,
+                is_shared=False)
+            >>> print(rollout.names)
+            ['time']
+            >>> # with envs that contain more dimensions
+            >>> from torchrl.envs import SerialEnv
+            >>> env = SerialEnv(3, lambda: TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(max_steps=20)))
+            >>> rollout = env.rollout(max_steps=1000)
+            >>> print(rollout)
+            TensorDict(
+                fields={
+                    action: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    done: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    next: TensorDict(
+                        fields={
+                            done: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                            observation: Tensor(shape=torch.Size([3, 20, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                            reward: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                            step_count: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                            truncated: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                        batch_size=torch.Size([3, 20]),
+                        device=cpu,
+                        is_shared=False),
+                    observation: Tensor(shape=torch.Size([3, 20, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    step_count: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([3, 20, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([3, 20]),
+                device=cpu,
+                is_shared=False)
+            >>> print(rollout.names)
+            [None, 'time']
+
+        In some instances, contiguous tensordict cannot be obtained because
+        they cannot be stacked. This can happen when the data returned at
+        each step may have a different shape, or when different environments
+        are executed together. In that case, ``return_contiguous=False``
+        will cause the returned tensordict to be a lazy stack of tensordicts:
+
+        Examples:
+            >>> rollout = env.rollout(4, return_contiguous=False)
+            >>> print(rollout)
+        LazyStackedTensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: LazyStackedTensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([3, 4]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([3, 4]),
+            device=cpu,
+            is_shared=False)
+            >>> print(rollout.names)
+            [None, 'time']
+
         """
         try:
             policy_device = next(policy.parameters()).device
@@ -718,6 +816,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
         out_td = torch.stack(tensordicts, len(batch_size))
+        out_td.refine_names(..., "time")
         if return_contiguous:
             return out_td.contiguous()
         return out_td

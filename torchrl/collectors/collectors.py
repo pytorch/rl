@@ -300,7 +300,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
         if policy_weights is not None:
             self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
         elif self.get_weights_fn is not None:
-            self.policy.load_state_dict(self.get_weights_fn())
+            self.policy_weights.apply(lambda x: x.data).update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -463,6 +463,12 @@ class SyncDataCollector(DataCollectorBase):
             device=cpu,
             is_shared=False)
         >>> del collector
+
+    The collector delivers batches of data that are marked with a ``"time"``
+    dimension.
+
+    Examples:
+        >>> assert data.names[-1] == "time"
 
     """
 
@@ -665,6 +671,7 @@ class SyncDataCollector(DataCollectorBase):
                 device=self.storing_device,
             ),
         )
+        self._tensordict_out.refine_names(..., "time")
 
         if split_trajs is None:
             split_trajs = False

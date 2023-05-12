@@ -289,7 +289,7 @@ class TestRB:
         trainer._process_batch_hook(td)
         td_out = trainer._process_optim_batch_hook(td)
         if prioritized:
-            td_out.set(replay_buffer.priority_key, torch.rand(N))
+            td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
         trainer._post_loss_hook(td_out)
 
         trainer2 = mocking_trainer()
@@ -424,7 +424,7 @@ class TestRB:
             # sample from rb
             td_out = trainer._process_optim_batch_hook(td)
             if prioritized:
-                td_out.set(replay_buffer.priority_key, torch.rand(N))
+                td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
             trainer.save_trainer(True)
 

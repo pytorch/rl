@@ -16,6 +16,8 @@ from functools import wraps
 import pytest
 import torch
 import torch.cuda
+
+from tensordict import tensorclass
 from torchrl._utils import implement_for, seed_generator
 
 from torchrl.envs import ObservationNorm
@@ -295,3 +297,15 @@ def get_transform_out(env_name, transformed_in, obs_key=None):
             )
 
     return t_out
+
+
+def make_tc(td):
+    """Makes a tensorclass from a tensordict instance."""
+
+    class MyClass:
+        pass
+
+    MyClass.__annotations__ = {}
+    for key in td.keys():
+        MyClass.__annotations__[key] = torch.Tensor
+    return tensorclass(MyClass)

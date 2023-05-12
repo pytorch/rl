@@ -646,6 +646,40 @@ class TestComposite:
         assert ts["nested_cp"]["act"] is not None
 
 
+@pytest.mark.parametrize("recurse", [True, False])
+def test_lock(recurse):
+    shape = [3, 4, 5]
+    spec = CompositeSpec(
+        a=CompositeSpec(
+            b=CompositeSpec(shape=shape[:3], device="cpu"), shape=shape[:2]
+        ),
+        shape=shape[:1],
+    )
+    spec["a"] = spec["a"].clone()
+    spec["a", "b"] = spec["a", "b"].clone()
+    assert not spec.locked
+    spec.lock_(recurse=recurse)
+    assert spec.locked
+    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        spec["a"] = spec["a"].clone()
+    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        spec.set("a", spec["a"].clone())
+    if recurse:
+        assert spec["a"].locked
+        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+            spec["a"].set("b", spec["a", "b"].clone())
+        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+            spec["a", "b"] = spec["a", "b"].clone()
+    else:
+        assert not spec["a"].locked
+        spec["a", "b"] = spec["a", "b"].clone()
+        spec["a"].set("b", spec["a", "b"].clone())
+    spec.unlock_(recurse=recurse)
+    spec["a"] = spec["a"].clone()
+    spec["a", "b"] = spec["a", "b"].clone()
+    spec["a"].set("b", spec["a", "b"].clone())
+
+
 def test_keys_to_empty_composite_spec():
     keys = [("key1", "out"), ("key1", "in"), "key2", ("key1", "subkey1", "subkey2")]
     composite = _keys_to_empty_composite_spec(keys)
