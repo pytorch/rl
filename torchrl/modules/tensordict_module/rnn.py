@@ -15,10 +15,10 @@ from torch import nn
 
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (
-    _get_num_per_traj_init,
     _inv_pad_sequence,
     _split_and_pad_sequence,
 )
+from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
 class LSTMModule(ModuleBase):
