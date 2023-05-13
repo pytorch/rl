@@ -309,8 +309,9 @@ def _split_and_pad_sequence(
     shape = (len(splits), max_seq_len)
 
     # int16 supports length up to 32767
+    dtype = torch.int16 if tensor.shape[-1] < 32767 else torch.int32
     arange = torch.arange(
-        max_seq_len, device=tensor.device, dtype=torch.int16
+        max_seq_len, device=tensor.device, dtype=dtype
     ).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
 
@@ -352,8 +353,9 @@ def _inv_pad_sequence(
         return tensor
 
     # int16 supports length up to 32767
+    dtype = torch.int16 if tensor.shape[-1] < 32767 else torch.int32
     arange = torch.arange(
-        tensor.shape[-1], device=tensor.device, dtype=torch.int16
+        tensor.shape[-1], device=tensor.device, dtype=dtype
     ).unsqueeze(0)
     idx = (arange < splits.unsqueeze(1)).view(-1)
     return tensor.reshape(-1)[idx]
