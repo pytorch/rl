@@ -46,13 +46,18 @@ def _transpose_time(fun):
     @wraps(fun)
     def transposed_fun(*args, time_dim=-2, **kwargs):
         def transpose_tensor(tensor):
+            if (
+                not isinstance(tensor, (torch.Tensor, MemmapTensor))
+                or tensor.numel() <= 1
+            ):
+                return tensor, False
             if time_dim < 0:
                 timedim = tensor.ndim + time_dim
             else:
                 timedim = time_dim
             if timedim < 0 or timedim >= tensor.ndim:
                 raise RuntimeError(ERROR.format(tensor.shape, timedim))
-            if isinstance(tensor, (torch.Tensor, MemmapTensor)) and tensor.ndim >= 2:
+            if tensor.ndim >= 2:
                 single_dim = False
                 tensor = tensor.transpose(timedim, -2)
             elif tensor.ndim == 1 and timedim == 0:
