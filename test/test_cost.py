@@ -99,7 +99,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value.advantages import GAE, TD1Estimator, TDLambdaEstimator
 from torchrl.objectives.value.functional import (
-    _get_num_per_traj_init,
+    _transpose_time,
     generalized_advantage_estimate,
     td0_advantage_estimate,
     td1_advantage_estimate,
@@ -111,6 +111,7 @@ from torchrl.objectives.value.functional import (
 from torchrl.objectives.value.utils import (
     _custom_conv1d,
     _get_num_per_traj,
+    _get_num_per_traj_init,
     _inv_pad_sequence,
     _make_gammas_tensor,
     _split_and_pad_sequence,
@@ -5254,6 +5255,35 @@ class TestUtils:
         reversed = _inv_pad_sequence(splitted, splits)
         reversed = reversed.reshape(td.shape)
         torch.testing.assert_close(td["observation"], reversed["observation"])
+
+    def test_timedimtranspose_single(self):
+        @_transpose_time
+        def fun(a, b, time_dim=-2):
+            return a + 1
+
+        x = torch.zeros(10)
+        y = torch.ones(10)
+        with pytest.raises(RuntimeError):
+            z = fun(x, y, time_dim=-3)
+        with pytest.raises(RuntimeError):
+            z = fun(x, y, time_dim=-2)
+        z = fun(x, y, time_dim=-1)
+        assert z.shape == torch.Size([10])
+        assert (z == 1).all()
+
+        @_transpose_time
+        def fun(a, b, time_dim=-2):
+            return a + 1, b + 1
+
+        with pytest.raises(RuntimeError):
+            z1, z2 = fun(x, y, time_dim=-3)
+        with pytest.raises(RuntimeError):
+            z1, z2 = fun(x, y, time_dim=-2)
+        z1, z2 = fun(x, y, time_dim=-1)
+        assert z1.shape == torch.Size([10])
+        assert (z1 == 1).all()
+        assert z2.shape == torch.Size([10])
+        assert (z2 == 2).all()
 
 
 @pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])

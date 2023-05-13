@@ -43,22 +43,60 @@ def _transpose_time(fun):
     If not -2, makes a transpose of all the multi-dim input tensors to bring
     time at -2, and does the opposite transform for the outputs.
     """
+    ERROR = (
+        "The tensor shape and the time dimension are not compatible: "
+        "got {} and time_dim={}."
+    )
 
     @wraps(fun)
     def transposed_fun(*args, time_dim=-2, **kwargs):
         def transpose_tensor(tensor):
-            if isinstance(tensor, (torch.Tensor, MemmapTensor)) and tensor.ndim >= 2:
-                tensor = tensor.transpose(time_dim, -2)
-            return tensor
+            if (
+                not isinstance(tensor, (torch.Tensor, MemmapTensor))
+                or tensor.numel() <= 1
+            ):
+                return tensor, False
+            if time_dim < 0:
+                timedim = tensor.ndim + time_dim
+            else:
+                timedim = time_dim
+            if timedim < 0 or timedim >= tensor.ndim:
+                raise RuntimeError(ERROR.format(tensor.shape, timedim))
+            if tensor.ndim >= 2:
+                single_dim = False
+                tensor = tensor.transpose(timedim, -2)
+            elif tensor.ndim == 1 and timedim == 0:
+                single_dim = True
+                tensor = tensor.unsqueeze(-1)
+            else:
+                raise RuntimeError(ERROR.format(tensor.shape, timedim))
+            return tensor, single_dim
 
         if time_dim != -2:
-            args = [transpose_tensor(arg) for arg in args]
-            kwargs = {k: transpose_tensor(item) for k, item in kwargs.items()}
+            args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
+            single_dim = any(single_dim)
+            for k, item in kwargs.items():
+                item, sd = transpose_tensor(item)
+                single_dim = single_dim or sd
+                kwargs[k] = item
             out = fun(*args, time_dim=-2, **kwargs)
             if isinstance(out, torch.Tensor):
-                return transpose_tensor(out)
-            return tuple(transpose_tensor(_out) for _out in out)
-        return fun(*args, time_dim=time_dim, **kwargs)
+                out = transpose_tensor(out)[0]
+                if single_dim:
+                    out = out.squeeze(-2)
+                return out
+            if single_dim:
+                return tuple(transpose_tensor(_out)[0].squeeze(-2) for _out in out)
+            return tuple(transpose_tensor(_out)[0] for _out in out)
+        out = fun(*args, time_dim=time_dim, **kwargs)
+        if isinstance(out, tuple):
+            for _out in out:
+                if _out.ndim < 2:
+                    raise RuntimeError(ERROR.format(_out.shape, time_dim))
+        else:
+            if out.ndim < 2:
+                raise RuntimeError(ERROR.format(out.shape, time_dim))
+        return out
 
     return transposed_fun
 
@@ -989,13 +1027,6 @@ def vec_td_lambda_advantage_estimate(
 ########################################################################
 # Reward to go
 # ------------
-
-
-def _get_num_per_traj_init(is_init):
-    """Like _get_num_per_traj, but with is_init signal."""
-    done = torch.zeros_like(is_init)
-    done[..., :-1][is_init[..., 1:]] = 1
-    return _get_num_per_traj(done)
 
 
 @_transpose_time

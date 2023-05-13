@@ -357,3 +357,10 @@ def _inv_pad_sequence(
     ).unsqueeze(0)
     idx = (arange < splits.unsqueeze(1)).view(-1)
     return tensor.reshape(-1)[idx]
+
+
+def _get_num_per_traj_init(is_init):
+    """Like _get_num_per_traj, but with is_init signal."""
+    done = torch.zeros_like(is_init)
+    done[..., :-1][is_init[..., 1:]] = 1
+    return _get_num_per_traj(done)
