@@ -303,8 +303,9 @@ def _split_and_pad_sequence(
             *tensor.shape[1:],
             dtype=tensor.dtype,
             device=tensor.device,
+            requires_grad=tensor.requires_grad,
         )
-        empty_tensor[mask] = tensor
+        empty_tensor.masked_scatter_(mask, tensor)
         return empty_tensor
 
     if isinstance(tensor, TensorDictBase):
@@ -342,7 +343,7 @@ def _inv_pad_sequence(
         tensor.shape[-1], device=tensor.device, dtype=dtype
     ).unsqueeze(0)
     idx = (arange < splits.unsqueeze(1)).view(-1)
-    return tensor.reshape(-1)[idx]
+    return tensor.view(-1)[idx]
 
 
 def _get_num_per_traj_init(is_init):
