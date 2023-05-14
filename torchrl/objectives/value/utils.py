@@ -203,10 +203,7 @@ def _get_num_per_traj(dones_and_truncated):
     """
     dones_and_truncated = dones_and_truncated.clone()
     dones_and_truncated[..., -1] = 1
-    arange = torch.arange(
-        1, 1 + dones_and_truncated.numel(), device=dones_and_truncated.device
-    )
-    num_per_traj = arange[dones_and_truncated.reshape(-1)]
+    num_per_traj = torch.where(dones_and_truncated.view(-1))[0]+1
     num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
 
