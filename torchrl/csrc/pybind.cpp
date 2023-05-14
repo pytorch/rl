@@ -23,6 +23,4 @@ PYBIND11_MODULE(_torchrl, m) {
   torchrl::DefineMinSegmentTree<double>("Fp64", m);
 
   m.def("safetanh", &safetanh, "Safe Tanh");
-  m.def("simplefilter", &simplefilter, "Simple 1d filter");
-  m.def("gae", &gae, "GAE");
 }
