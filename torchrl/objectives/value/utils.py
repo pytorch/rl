@@ -303,7 +303,6 @@ def _split_and_pad_sequence(
             *tensor.shape[1:],
             dtype=tensor.dtype,
             device=tensor.device,
-            requires_grad=tensor.requires_grad,
         )
         empty_tensor.masked_scatter_(mask, tensor)
         return empty_tensor
