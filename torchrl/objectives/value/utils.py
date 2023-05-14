@@ -74,15 +74,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         # out = (batched_val_pad @ filter.transpose(-2, -1)).squeeze().unsqueeze(-2)
         out = torch.einsum("btsj,btsj->bst", batched_val_pad, filter)
     else:
-        val_pad = torch.cat(
-            [
-                tensor,
-                torch.zeros(
-                    tensor.shape[0], 1, filter.shape[-2] - 1, device=tensor.device
-                ),
-            ],
-            -1,
-        )
+        val_pad = torch.nn.functional.pad(tensor, [0, filter.shape[-2] - 1])
 
         # shape = val.shape
         filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
