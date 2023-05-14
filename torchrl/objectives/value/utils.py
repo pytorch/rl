@@ -199,24 +199,6 @@ def _flatten_batch(tensor):
     return tensor.flatten(0, -1)
 
 
-# def _get_num_per_traj(dones_and_truncated):
-#     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
-#
-#     Args:
-#         dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
-#
-#     Returns:
-#         A list of integers representing the number of steps in each trajectory
-#
-#     """
-#     dones_and_truncated = dones_and_truncated.clone()
-#     dones_and_truncated[..., -1] = 1
-#     dones_and_truncated = _flatten_batch(dones_and_truncated)
-#     num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
-#     num_per_traj[1:] -= num_per_traj[:-1].clone()
-#     return num_per_traj
-
-
 def _get_num_per_traj(dones_and_truncated):
     """Because we mark the end of each batch with a truncated signal, we can concatenate them.
 
@@ -309,10 +291,10 @@ def _split_and_pad_sequence(
     shape = (len(splits), max_seq_len)
 
     # int16 supports length up to 32767
-    dtype = torch.int16 if tensor.shape[-1] < 32767 else torch.int32
-    arange = torch.arange(
-        max_seq_len, device=tensor.device, dtype=dtype
-    ).unsqueeze(0)
+    dtype = (
+        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
+    )
+    arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
 
     def _fill_tensor(tensor):
@@ -353,7 +335,9 @@ def _inv_pad_sequence(
         return tensor
 
     # int16 supports length up to 32767
-    dtype = torch.int16 if tensor.shape[-1] < 32767 else torch.int32
+    dtype = (
+        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
+    )
     arange = torch.arange(
         tensor.shape[-1], device=tensor.device, dtype=dtype
     ).unsqueeze(0)

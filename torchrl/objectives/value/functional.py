@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import math
 import os
 from distutils.util import strtobool
 from functools import wraps
@@ -9,7 +10,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 from tensordict import MemmapTensor
-from torchrl._torchrl import simplefilter
 
 CPP = strtobool(os.environ.get("VALUE_CPP", "0"))
 
@@ -209,9 +209,7 @@ def _fast_vec_gae(
         gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
     else:
         gammalmbda_tensor = gammalmbda
-    lim = (
-        (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
-    )
+    lim = int(math.log(thr) / gammalmbda_tensor.log().item())
     gammalmbdas = torch.ones_like(td0_flat[0][:lim])
 
     gammalmbdas[1:] = gammalmbda
