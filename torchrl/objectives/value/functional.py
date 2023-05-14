@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import importlib.util
 
 import math
 from functools import wraps
@@ -160,7 +159,7 @@ def generalized_advantage_estimate(
 
     return advantage, value_target
 
-@profile
+
 def _fast_vec_gae(
     reward: torch.Tensor,
     state_value: torch.Tensor,
@@ -201,7 +200,7 @@ def _fast_vec_gae(
     td0 = reward + not_done * gamma * next_state_value - state_value
 
     num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence(td0, num_per_traj)
+    td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
 
     device = done.device
     if not isinstance(gammalmbda, torch.Tensor):
@@ -225,7 +224,7 @@ def _fast_vec_gae(
     #         torch.tensor([1.0, 0.0], device=device, dtype=dtype),
     #         clamp=False,
     #     ).flip(-1)
-    advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
+    advantage = _inv_pad_sequence(advantage, num_per_traj, mask=mask).view_as(reward)
 
     value_target = advantage + state_value
 

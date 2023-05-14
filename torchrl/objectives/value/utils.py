@@ -220,7 +220,7 @@ def _get_num_per_traj(dones_and_truncated):
 
 
 def _split_and_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor, return_mask=False
 ):
     """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
@@ -311,11 +311,15 @@ def _split_and_pad_sequence(
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
     else:
         tensor = _fill_tensor(tensor)
+    if return_mask:
+        return tensor, mask
     return tensor
 
 
 def _inv_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+    tensor: Union[torch.Tensor, TensorDictBase],
+    splits: torch.Tensor,
+    mask: torch.Tensor = None,
 ):
     """Inverse a pad_sequence operation.
 
@@ -334,15 +338,18 @@ def _inv_pad_sequence(
     if splits.numel() == 1:
         return tensor
 
-    # int16 supports length up to 32767
-    dtype = (
-        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
-    )
-    arange = torch.arange(
-        tensor.shape[-1], device=tensor.device, dtype=dtype
-    ).unsqueeze(0)
-    idx = (arange < splits.unsqueeze(1)).view(-1)
-    return tensor.view(-1)[idx]
+    if mask is None:
+        # int16 supports length up to 32767
+        dtype = (
+            torch.int16
+            if tensor.shape[-1] < torch.iinfo(torch.int16).max
+            else torch.int32
+        )
+        arange = torch.arange(
+            tensor.shape[-1], device=tensor.device, dtype=dtype
+        ).unsqueeze(0)
+        mask = arange < splits.unsqueeze(1)
+    return tensor[mask]
 
 
 def _get_num_per_traj_init(is_init):
