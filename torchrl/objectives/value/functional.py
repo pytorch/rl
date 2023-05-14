@@ -159,7 +159,7 @@ def generalized_advantage_estimate(
 
     return advantage, value_target
 
-@profile
+
 def _fast_vec_gae(
     reward: torch.Tensor,
     state_value: torch.Tensor,
