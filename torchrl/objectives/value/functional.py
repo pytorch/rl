@@ -5,19 +5,12 @@
 import importlib.util
 
 import math
-import os
-from distutils.util import strtobool
 from functools import wraps
 from typing import Optional, Tuple, Union
 
 import torch
-import torchaudio.functional
 
 from tensordict import MemmapTensor
-
-_has_torchaudio = importlib.util.find_spec('torchaudio') is not None
-
-CPP = strtobool(os.environ.get("VALUE_CPP", "0"))
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -167,7 +160,7 @@ def generalized_advantage_estimate(
 
     return advantage, value_target
 
-
+@profile
 def _fast_vec_gae(
     reward: torch.Tensor,
     state_value: torch.Tensor,
@@ -211,23 +204,27 @@ def _fast_vec_gae(
     td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
     device = done.device
-    if not _has_torchaudio:
-        if not isinstance(gammalmbda, torch.Tensor):
-            gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
-        else:
-            gammalmbda_tensor = gammalmbda
-        lim = int(math.log(thr) / gammalmbda_tensor.log().item())
-        gammalmbdas = torch.ones_like(td0_flat[0][:lim])
-
-        gammalmbdas[1:] = gammalmbda
-        gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-        gammalmbdas = gammalmbdas.unsqueeze(-1)
-
-        advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
-        advantage = advantage.squeeze(1)
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
     else:
-        dtype = td0_flat.dtype
-        advantage = torchaudio.functional.lfilter(td0_flat.flip(-1), torch.tensor([1.0, -gammalmbda], dtype=dtype, device=device), torch.tensor([1.0, 0.0], device=device, dtype=dtype), clamp=False).flip(-1)
+        gammalmbda_tensor = gammalmbda
+    lim = int(math.log(thr) / gammalmbda_tensor.log().item())
+    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+
+    gammalmbdas[1:] = gammalmbda
+    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+
+    advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
+    advantage = advantage.squeeze(1)
+    # torchaudio version: slightly slower than plain conv1d:
+    #     dtype = td0_flat.dtype
+    #     advantage = torchaudio.functional.lfilter(
+    #         td0_flat.flip(-1),
+    #         torch.tensor([1.0, -gammalmbda], dtype=dtype, device=device),
+    #         torch.tensor([1.0, 0.0], device=device, dtype=dtype),
+    #         clamp=False,
+    #     ).flip(-1)
     advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
 
     value_target = advantage + state_value
