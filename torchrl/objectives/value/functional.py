@@ -142,16 +142,16 @@ def generalized_advantage_estimate(
         raise RuntimeError(SHAPE_ERR)
     dtype = next_state_value.dtype
     device = state_value.device
-    lastdim = next_state_value.shape[-1]
 
     not_done = (~done).int()
-    *batch_size, time_steps = not_done.shape[:-1]
+    *batch_size, time_steps, lastdim = not_done.shape
     advantage = torch.empty(
         *batch_size, time_steps, lastdim, device=device, dtype=dtype
     )
     prev_advantage = 0
-    delta = reward + (gamma * next_state_value * not_done) - state_value
-    discount = gamma * lmbda * not_done
+    gnotdone = gamma * not_done
+    delta = reward + (gnotdone * next_state_value) - state_value
+    discount = lmbda * gnotdone
     for t in reversed(range(time_steps)):
         prev_advantage = advantage[..., t, :] = delta[..., t, :] + (
             prev_advantage * discount[..., t, :]
