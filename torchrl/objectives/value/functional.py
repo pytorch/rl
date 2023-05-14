@@ -36,6 +36,10 @@ from torchrl.objectives.value.utils import (
     _split_and_pad_sequence,
 )
 
+SHAPE_ERR = (
+    "All input tensors (value, reward and done states) must share a unique shape."
+)
+
 
 def _transpose_time(fun):
     """Checks the time_dim argument of the function to allow for any dim.
@@ -135,9 +139,7 @@ def generalized_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     dtype = next_state_value.dtype
     device = state_value.device
     lastdim = next_state_value.shape[-1]
@@ -202,25 +204,22 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(td0, num_per_traj)
 
-    if not CPP:
-        device = done.device
-        if not isinstance(gammalmbda, torch.Tensor):
-            gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
-        else:
-            gammalmbda_tensor = gammalmbda
-        lim = (
-            (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
-        )
-        gammalmbdas = torch.ones_like(td0_flat[0][:lim])
-
-        gammalmbdas[1:] = gammalmbda
-        gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-        gammalmbdas = gammalmbdas.unsqueeze(-1)
-
-        advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
-        advantage = advantage.squeeze(1)
+    device = done.device
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
     else:
-        advantage = simplefilter(td0_flat, gammalmbda)
+        gammalmbda_tensor = gammalmbda
+    lim = (
+        (torch.tensor(thr, device=device).log() / gammalmbda_tensor.log()).int().item()
+    )
+    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+
+    gammalmbdas[1:] = gammalmbda
+    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+
+    advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
+    advantage = advantage.squeeze(1)
     advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
 
     value_target = advantage + state_value
@@ -260,9 +259,7 @@ def vec_generalized_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     dtype = state_value.dtype
     not_done = (~done).to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
@@ -348,9 +345,7 @@ def td0_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     returns = td0_return_estimate(gamma, next_state_value, reward, done)
     advantage = returns - state_value
     return advantage
@@ -379,9 +374,7 @@ def td0_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
     advantage = reward + gamma * not_done * next_state_value
     return advantage
@@ -436,9 +429,7 @@ def td1_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
@@ -519,9 +510,7 @@ def td1_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td1_return_estimate(
@@ -630,9 +619,7 @@ def vec_td1_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     return (
         vec_td1_return_estimate(
             gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
@@ -692,9 +679,7 @@ def td_lambda_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
 
     not_done = (~done).int()
 
@@ -791,9 +776,7 @@ def td_lambda_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
@@ -852,9 +835,7 @@ def vec_td_lambda_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     shape = next_state_value.shape
 
     *batch, T, lastdim = shape
@@ -1007,9 +988,7 @@ def vec_td_lambda_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     return (
         vec_td_lambda_return_estimate(
             gamma,
