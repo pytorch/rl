@@ -107,11 +107,7 @@ class _BatchedEnv(EnvBase):
         memmap (bool): whether or not the returned tensordict will be placed in memory map.
         policy_proof (callable, optional): if provided, it'll be used to get the list of
             tensors to return through the :obj:`step()` and :obj:`reset()` methods, such as :obj:`"hidden"` etc.
-        device (str, int, torch.device): for consistency, this argument is kept. However this
-            argument should not be passed, as the device will be inferred from the environments.
-            It is assumed that all environments will run on the same device as a common shared
-            tensordict will be used to pass data from process to process. The device can be
-            changed after instantiation using :obj:`env.to(device)`.
+        device (str, int, torch.device): TODO
         allow_step_when_done (bool, optional): if ``True``, batched environments can
             execute steps after a done state is encountered.
             Defaults to ``False``.
@@ -139,14 +135,14 @@ class _BatchedEnv(EnvBase):
         device: Optional[DEVICE_TYPING] = None,
         allow_step_when_done: bool = False,
     ):
-        if device is not None:
-            raise ValueError(
-                "Device setting for batched environment can't be done at initialization. "
-                "The device will be inferred from the constructed environment. "
-                "It can be set through the `to(device)` method."
-            )
+        # if device is not None:
+        #     raise ValueError(
+        #         "Device setting for batched environment can't be done at initialization. "
+        #         "The device will be inferred from the constructed environment. "
+        #         "It can be set through the `to(device)` method."
+        #     )
 
-        super().__init__(device=None)
+        super().__init__(device=device)
         self.is_closed = True
         self._cache_in_keys = None
 
@@ -240,30 +236,28 @@ class _BatchedEnv(EnvBase):
         if self._single_task:
             self._batch_size = meta_data.batch_size
 
-            input_spec = meta_data.specs["input_spec"]
+            input_spec = meta_data.specs["input_spec"].to(self.device)
             self.input_spec = input_spec
-            output_spec = meta_data.specs["output_spec"]
+            output_spec = meta_data.specs["output_spec"].to(self.device)
             self.output_spec = output_spec
 
             self._dummy_env_str = meta_data.env_str
-            self._device = meta_data.device
             self._env_tensordict = meta_data.tensordict
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
-            self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
 
             _input_spec = {}
             for md in meta_data:
-                _input_spec.update(md.specs["input_spec"])
+                _input_spec.update(md.specs["input_spec"].to(self.device))
             input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
             input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
             self.input_spec = input_spec
 
             _output_spec = {}
             for md in meta_data:
-                _output_spec.update(md.specs["output_spec"])
+                _output_spec.update(md.specs["output_spec"].to(self.device))
             output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
             output_spec = output_spec.expand(self.num_workers, *output_spec.shape)
             self.output_spec = output_spec
@@ -925,7 +919,7 @@ def _run_worker_pipe_shared_mem(
             )
         env = env_fun
     is_cuda = torch.device(device).type == "cuda"
-    env = env.to(device)
+    # env = env.to(device)
 
     i = -1
     initialized = False
@@ -933,6 +927,7 @@ def _run_worker_pipe_shared_mem(
     # make sure that process can be closed
     tensordict = None
     _td = None
+    pin_memory = env.device == torch.device("cpu") and is_cuda
 
     while True:
         try:
