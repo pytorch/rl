@@ -202,12 +202,11 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
 
-    device = done.device
     if not isinstance(gammalmbda, torch.Tensor):
-        gammalmbda_tensor = torch.tensor(gammalmbda, device=device)
+        gammalmbda_log = math.log(gammalmbda)
     else:
-        gammalmbda_tensor = gammalmbda
-    lim = int(math.log(thr) / gammalmbda_tensor.log().item())
+        gammalmbda_log = gammalmbda.log().item()
+    lim = int(math.log(thr) / gammalmbda_log)
     gammalmbdas = torch.ones_like(td0_flat[0][:lim])
 
     gammalmbdas[1:] = gammalmbda
