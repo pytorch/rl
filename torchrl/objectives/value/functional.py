@@ -793,13 +793,23 @@ def _fast_td_lambda_return_estimate(
     reward = reward.transpose(-2, -1)
     next_state_value = next_state_value.transpose(-2, -1)
 
+    gammalmbda = gamma * lmbda
+
     not_done = (~done).int()
     num_per_traj = _get_num_per_traj(done)
+    nvalue_ndone = not_done * next_state_value
 
-    t = not_done * next_state_value * gamma * (1 - lmbda) + reward
-    t_flat, mask = _split_and_pad_sequence(t, num_per_traj, return_mask=True)
+    if isinstance(gamma, torch.Tensor):
+        t = nvalue_ndone * gamma.clone() * (1 - lmbda) + reward
+    else:
+        t = nvalue_ndone * gamma * (1 - lmbda) + reward
 
-    gammalmbda = gamma * lmbda
+    v3 = nvalue_ndone.clone()
+    v3[..., :-1] = 0
+
+    t_flat, mask = _split_and_pad_sequence(
+        t + v3 * gammalmbda, num_per_traj, return_mask=True
+    )
 
     if not isinstance(gammalmbda, torch.Tensor):
         gammalmbda_log = math.log(gammalmbda)
@@ -812,13 +822,7 @@ def _fast_td_lambda_return_estimate(
     gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
     gammalmbdas = gammalmbdas.unsqueeze(-1)
 
-    # TODO: optimize the second _split_and_pad_sequence away
-    # must be possible
-    v3 = next_state_value * not_done
-    v3[..., :-1] = 0
-    v3 = _split_and_pad_sequence(v3, num_per_traj)
-
-    ret_flat = _custom_conv1d((t_flat + gamma * lmbda * v3).unsqueeze(1), gammalmbdas)
+    ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
     ret = ret_flat.squeeze(1)[mask]
 
     return ret.view_as(reward).transpose(-1, -2)

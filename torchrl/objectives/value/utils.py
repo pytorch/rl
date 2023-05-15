@@ -340,22 +340,7 @@ def _inv_pad_sequence(
         ).unsqueeze(0)
         mask = arange < splits.unsqueeze(1)
 
-    # print(f"{tensor.shape = }")
-    # print(f"{mask.shape = }")
     return tensor[mask]
-
-
-# def _inv_pad_sequence(
-#    tensor, splits
-# ):
-#    if splits.numel() == 1:
-#        return tensor
-#
-#    arange = torch.tile(
-#        torch.arange(tensor.shape[-1], device=tensor.device), (tensor.shape[0], 1)
-#    )
-#    idx = (arange < splits.unsqueeze(1)).reshape(-1)
-#    return tensor.reshape(-1)[idx]
 
 
 def _get_num_per_traj_init(is_init):
