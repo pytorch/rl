@@ -973,7 +973,7 @@ def _run_worker_pipe_shared_mem(
             if "_reset" in _td.keys():
                 _td.del_("_reset")
             if pin_memory:
-                _td.pin_memory()
+                _td = _td.pin_memory()
             if not is_cuda:
                 tensordict.update_(_td.select(*keys, strict=False))
                 data = None
@@ -993,7 +993,7 @@ def _run_worker_pipe_shared_mem(
                 _td = tensordict.clone(recurse=False)
             _td = env._step(_td)
             if pin_memory:
-                _td.pin_memory()
+                _td = _td.pin_memory()
             msg = "step_result"
             if not is_cuda:
                 tensordict.update_(_td.select("next"))
