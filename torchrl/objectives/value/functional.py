@@ -793,17 +793,14 @@ def _fast_td_lambda_return_estimate(
     reward = reward.transpose(-2, -1)
     next_state_value = next_state_value.transpose(-2, -1)
 
-    gammalmbda = gamma * lmbda
+    gamma_tensor = torch.Tensor([gamma], device=reward.device)
+    gammalmbda = gamma_tensor * lmbda
 
     not_done = (~done).int()
     num_per_traj = _get_num_per_traj(done)
     nvalue_ndone = not_done * next_state_value
 
-    if isinstance(gamma, torch.Tensor):
-        t = nvalue_ndone * gamma.clone() * (1 - lmbda) + reward
-    else:
-        t = nvalue_ndone * gamma * (1 - lmbda) + reward
-
+    t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
     v3 = nvalue_ndone.clone()
     v3[..., :-1] = 0
 
