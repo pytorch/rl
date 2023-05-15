@@ -506,7 +506,7 @@ class TensorSpec:
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.tensor(val, device=self.device, dtype=self.dtype)
+            val = torch.as_tensor(val, device=self.device, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
