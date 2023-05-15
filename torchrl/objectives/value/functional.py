@@ -216,15 +216,7 @@ def _fast_vec_gae(
 
     advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
     advantage = advantage.squeeze(1)
-    # torchaudio version: slightly slower than plain conv1d:
-    #     dtype = td0_flat.dtype
-    #     advantage = torchaudio.functional.lfilter(
-    #         td0_flat.flip(-1),
-    #         torch.tensor([1.0, -gammalmbda], dtype=dtype, device=device),
-    #         torch.tensor([1.0, 0.0], device=device, dtype=dtype),
-    #         clamp=False,
-    #     ).flip(-1)
-    advantage = _inv_pad_sequence(advantage, num_per_traj, mask=mask).view_as(reward)
+    advantage = advantage[mask].view_as(reward)
 
     value_target = advantage + state_value
 
