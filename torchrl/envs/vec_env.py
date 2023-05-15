@@ -729,7 +729,6 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        # keys = set()
         for i in range(self.num_workers):
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
@@ -790,24 +789,32 @@ class ParallelEnv(_BatchedEnv):
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
+            if _reset.numel() == tensordict.numel():
+                tensordict = tensordict.exclude("_reset")
             if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
                 raise RuntimeError(
                     "_reset flag in tensordict should follow env.done_spec"
                 )
+            empty = tensordict.is_empty() and not isinstance(
+                tensordict, LazyStackedTensorDict
+            )
         else:
             _reset = torch.ones(
                 self.done_spec.shape, dtype=torch.bool, device=self.device
             )
-
+            empty = True
+        resets = _reset.view(_reset.shape[0], -1).any(-1)
+        channels = []
         for i, channel in enumerate(self.parent_channels):
-            if tensordict is not None:
+            if tensordict is not None and not empty:
                 tensordict_ = tensordict[i]
+                # lazy stacks may still have keys
                 if tensordict_.is_empty():
                     tensordict_ = None
             else:
                 tensordict_ = None
             kwargs["tensordict"] = tensordict_
-            if not _reset[i].any():
+            if not resets[i]:
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
                         *self._selected_reset_keys, strict=False
@@ -821,11 +828,10 @@ class ParallelEnv(_BatchedEnv):
                     )
                 # we must update the
                 continue
+            channels.append((i, channel))
             channel.send((cmd_out, kwargs))
 
-        for i, channel in enumerate(self.parent_channels):
-            if not _reset[i].any():
-                continue
+        for i, channel in channels:
             cmd_in, data = channel.recv()
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
@@ -948,6 +954,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             tensordict = data
+            keys = list(tensordict.keys(True, True))
             if not (tensordict.is_shared() or tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -955,7 +962,7 @@ def _run_worker_pipe_shared_mem(
             initialized = True
 
         elif cmd == "reset":
-            reset_kwargs = data
+            reset_kwargs = data if data is not None else {}
             if verbose:
                 print(f"resetting worker {pid}")
             if not initialized:
@@ -968,17 +975,11 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 _td.pin_memory()
             if not is_cuda:
-                tensordict.update_(
-                    _td.select(*tensordict.keys(True, True), strict=False)
-                )
-                child_pipe.send(("reset_obs", None))
+                tensordict.update_(_td.select(*keys, strict=False))
+                data = None
             else:
-                child_pipe.send(
-                    (
-                        "reset_obs",
-                        _td.select(*tensordict.keys(True, True), strict=False),
-                    )
-                )
+                data = _td.select(*keys, strict=False)
+            child_pipe.send(("reset_obs", data))
 
         elif cmd == "step":
             if not initialized:

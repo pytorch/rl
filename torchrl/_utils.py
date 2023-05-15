@@ -28,8 +28,11 @@ class timeit:
 
     _REG = {}
 
-    def __init__(self, name):
+    def __init__(self, name, skipn=0):
         self.name = name
+        if not skipn >= 0:
+            raise ValueError("wrong skipn value.")
+        self.skipn = skipn
 
     def __call__(self, fn):
         @wraps(fn)
@@ -49,8 +52,10 @@ class timeit:
 
         count = val[2]
         N = count + 1
-        val[0] = val[0] * (count / N) + t / N
-        val[1] += t
+        if N > self.skipn:
+            Ncorr = N - self.skipn
+            val[0] = val[0] * (count / Ncorr) + t / Ncorr
+            val[1] += t
         val[2] = N
 
     @staticmethod

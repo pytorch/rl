@@ -2643,15 +2643,16 @@ class CompositeSpec(TensorSpec):
     def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
+            out.batch_size = self.shape
         else:
-            out = TensorDict({}, torch.Size([]), _run_checks=False)
+            out = TensorDict({}, self.shape, _run_checks=False, device=self.device)
         for key, item in vals.items():
             if item is None:
                 raise RuntimeError(
                     "CompositeSpec.encode cannot be used with missing values."
                 )
             try:
-                out[key] = self[key].encode(item)
+                out.set(key, self[key].encode(item))
             except KeyError:
                 raise KeyError(
                     f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key."

@@ -807,8 +807,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
             if not break_when_any_done and done.any():
                 _reset = done.clone()
-                tensordict.set("_reset", _reset)
-                self.reset(tensordict)
+                self.reset(tensordict.select().set("_reset", _reset))
 
             if callback is not None:
                 callback(self, tensordict)

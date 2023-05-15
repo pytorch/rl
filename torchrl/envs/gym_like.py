@@ -158,7 +158,7 @@ class GymLikeEnv(_EnvWrapper):
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
-    ) -> Dict[str, Any]:
+    ) -> TensorDictBase:
         """Reads an observation from the environment and returns an observation compatible with the output TensorDict.
 
         Args:
@@ -173,7 +173,7 @@ class GymLikeEnv(_EnvWrapper):
                 # naming it 'state' will result in envs that have a different name for the state vector
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
-        if not isinstance(observations, (TensorDict, dict)):
+        elif not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         observations = self.observation_spec.encode(observations)
@@ -220,16 +220,12 @@ class GymLikeEnv(_EnvWrapper):
             if do_break:
                 break
 
-        obs_dict = self.read_obs(obs)
+        tensordict_out = self.read_obs(obs)
 
         if reward is None:
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
-
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
 
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
@@ -249,11 +245,7 @@ class GymLikeEnv(_EnvWrapper):
         if len(other) == 1:
             info = other[0]
 
-        tensordict_out = TensorDict(
-            source=self.read_obs(obs),
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        tensordict_out = self.read_obs(obs)
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
         elif info is None and self.info_dict_reader is not None:
@@ -262,10 +254,11 @@ class GymLikeEnv(_EnvWrapper):
                 if key not in tensordict_out.keys():
                     tensordict_out[key] = item.zero()
 
-        tensordict_out.setdefault(
-            "done",
-            self.done_spec.zero(),
-        )
+        if "done" not in tensordict_out.keys():
+            tensordict_out.set(
+                "done",
+                self.done_spec.zero(),
+            )
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
