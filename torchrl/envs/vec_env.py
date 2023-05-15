@@ -142,7 +142,9 @@ class _BatchedEnv(EnvBase):
         #         "It can be set through the `to(device)` method."
         #     )
 
-        super().__init__(device=device)
+        super().__init__(device=None)
+        self.__dict__['_device'] = device
+
         self.is_closed = True
         self._cache_in_keys = None
 
@@ -184,7 +186,6 @@ class _BatchedEnv(EnvBase):
         self._batch_size = None
         self.__dict__["_output_spec"] = None
         self.__dict__["_input_spec"] = None
-        self._device = None
         self._dummy_env_str = None
         self._seeds = None
         # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
@@ -286,8 +287,8 @@ class _BatchedEnv(EnvBase):
 
     @property
     def device(self) -> torch.device:
-        if self._device is None:
-            self._set_properties()
+        # if self._device is None:
+        #     self._set_properties()
         return self._device
 
     @device.setter
@@ -469,18 +470,18 @@ class _BatchedEnv(EnvBase):
             if self._single_task
             else [meta_data.to(device) for meta_data in self.meta_data]
         )
-        if not self.is_closed:
-            warn(
-                "Casting an open environment to another device requires closing and re-opening it. "
-                "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
-            )
-            # the tensordicts must be re-created on device
-            super().to(device)
-            self.close()
-            self.start()
-        else:
-            self.input_spec = self.input_spec.to(device)
-            self.output_spec = self.output_spec.to(device)
+        # if not self.is_closed:
+        #     warn(
+        #         "Casting an open environment to another device requires closing and re-opening it. "
+        #         "This may have unexpected and unwanted effects (e.g. on seeding etc.)"
+        #     )
+        #     # the tensordicts must be re-created on device
+        #     super().to(device)
+        #     self.close()
+        #     self.start()
+        # else:
+        #     self.input_spec = self.input_spec.to(device)
+        #     self.output_spec = self.output_spec.to(device)
         return self
 
 
