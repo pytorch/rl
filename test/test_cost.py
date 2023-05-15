@@ -4308,6 +4308,51 @@ class TestValues:
 
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
+    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_tdlambda_tensor_gamma_single_element(
+        self, device, gamma, lmbda, N, T, has_done
+    ):
+        """Tests vec_td_lambda_advantage_estimate against itself with
+        gamma being a tensor with a single element
+
+        """
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device)
+        state_value = torch.randn(*N, T, 1, device=device)
+        next_state_value = torch.randn(*N, T, 1, device=device)
+
+        gamma_tensor = torch.as_tensor([gamma], device=device)
+
+        v1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
+
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+        # # same with last done being true
+        done[..., -1, :] = True  # terminating trajectory
+
+        v1 = vec_td_lambda_advantage_estimate(
+            gamma, lmbda, state_value, next_state_value, reward, done
+        )
+        v2 = vec_td_lambda_advantage_estimate(
+            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+        )
+
+        torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
     @pytest.mark.parametrize("T", [3, 5, 200])
     @pytest.mark.parametrize("has_done", [True, False])

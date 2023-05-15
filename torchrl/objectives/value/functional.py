@@ -781,6 +781,49 @@ def td_lambda_advantage_estimate(
     return advantage
 
 
+def _fast_td_lambda_return_estimate(
+    gamma,
+    lmbda,
+    next_state_value,
+    reward,
+    done,
+    thr=1e-7,
+):
+    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1)
+
+    not_done = (~done).int()
+    num_per_traj = _get_num_per_traj(done)
+
+    t = not_done * next_state_value * gamma * (1 - lmbda) + reward
+    t_flat, mask = _split_and_pad_sequence(t, num_per_traj, return_mask=True)
+
+    gammalmbda = gamma * lmbda
+
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_log = math.log(gammalmbda)
+    else:
+        gammalmbda_log = gammalmbda.log().item()
+    lim = int(math.log(thr) / gammalmbda_log)
+
+    gammalmbdas = torch.ones_like(t_flat[0][:lim], device=reward.device)
+    gammalmbdas[1:] = gammalmbda
+    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+
+    # TODO: optimize the second _split_and_pad_sequence away
+    # must be possible
+    v3 = next_state_value * not_done
+    v3[..., :-1] = 0
+    v3 = _split_and_pad_sequence(v3, num_per_traj)
+
+    ret_flat = _custom_conv1d((t_flat + gamma * lmbda * v3).unsqueeze(1), gammalmbdas)
+    ret = ret_flat.squeeze(1)[mask]
+
+    return ret.view_as(reward).transpose(-1, -2)
+
+
 @_transpose_time
 def vec_td_lambda_return_estimate(
     gamma,
@@ -831,9 +874,27 @@ def vec_td_lambda_return_estimate(
     """
     if not (next_state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
+
+    gamma_thr = 1e-7
     shape = next_state_value.shape
 
     *batch, T, lastdim = shape
+
+    def _is_scalar(tensor):
+        return not isinstance(tensor, torch.Tensor) or tensor.numel() == 1
+
+    # if gamma and lmbda are scalars we can call the fast implementation
+    # rolling_gamma False/True is identical when gamma/lambda are scalars
+    # TODO: remove this case from later if/else block;
+    if _is_scalar(gamma) and _is_scalar(lmbda):
+        return _fast_td_lambda_return_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            thr=gamma_thr,
+        )
 
     next_state_value = next_state_value.transpose(-2, -1).unsqueeze(-2)
     if len(batch):
@@ -852,6 +913,7 @@ def vec_td_lambda_return_estimate(
     # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
     # some intermediate dones and (3) there is a single gamma and no done.
     # (3) can be treated much faster than (1) and (2) (lower mem footprint)
+
     if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
         if rolling_gamma is None:
             rolling_gamma = True
@@ -888,14 +950,14 @@ def vec_td_lambda_return_estimate(
     lambdas_cp = torch.cumprod(lambdas, -2)
 
     if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas_cp < 1e-7
+        first_below_thr = gammas_cp < gamma_thr
         while first_below_thr.ndimension() > 2:
             # if we have multiple gammas, we only want to truncate if _all_ of
             # the geometric sequences fall below the threshold
             first_below_thr = first_below_thr.all(axis=0)
         if first_below_thr.any():
             first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas_cp < 1e-7
+        first_below_thr = lambdas_cp < gamma_thr
         if first_below_thr.any() and first_below_thr_gamma is not None:
             first_below_thr = max(
                 first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
