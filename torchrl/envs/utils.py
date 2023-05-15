@@ -164,7 +164,9 @@ def step_mdp(
     if keep_other:
         # TODO: make this work with nested keys
         other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, strict=False)
+    if other_keys:
+        select_tensordict = tensordict.select(*other_keys, strict=False)
+
     excluded = []
     if exclude_reward:
         excluded.append("reward")
@@ -173,7 +175,13 @@ def step_mdp(
     next_td = tensordict.get("next")
     if len(excluded):
         next_td = next_td.exclude(*excluded)
-    select_tensordict = select_tensordict.update(next_td)
+    if other_keys:
+        select_tensordict = select_tensordict.update(next_td)
+    elif len(excluded):
+        # no need to clone since the td comes from exclude
+        select_tensordict = next_td
+    else:
+        select_tensordict = next_td.clone(False)
 
     if next_tensordict is not None:
         return next_tensordict.update(select_tensordict)
