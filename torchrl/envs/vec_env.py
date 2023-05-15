@@ -674,7 +674,7 @@ class ParallelEnv(_BatchedEnv):
                     channel2,
                     env_fun,
                     self.create_env_kwargs[idx],
-                    False,
+                    self.pin_memory,
                     self.env_input_keys,
                     self.device,
                     self.allow_step_when_done,
