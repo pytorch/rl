@@ -74,15 +74,7 @@ def _custom_conv1d(tensor: torch.Tensor, filter: torch.Tensor):
         # out = (batched_val_pad @ filter.transpose(-2, -1)).squeeze().unsqueeze(-2)
         out = torch.einsum("btsj,btsj->bst", batched_val_pad, filter)
     else:
-        val_pad = torch.cat(
-            [
-                tensor,
-                torch.zeros(
-                    tensor.shape[0], 1, filter.shape[-2] - 1, device=tensor.device
-                ),
-            ],
-            -1,
-        )
+        val_pad = torch.nn.functional.pad(tensor, [0, filter.shape[-2] - 1])
 
         # shape = val.shape
         filter = filter.squeeze(-1).unsqueeze(0).unsqueeze(0)  # 1 x 1 x T
@@ -206,19 +198,19 @@ def _get_num_per_traj(dones_and_truncated):
         dones_and_truncated (torch.Tensor): A done or truncated mark of shape [*B, T]
 
     Returns:
-        A list of integers representing the number of steps in each trajectories
+        A list of integers representing the number of steps in each trajectory
 
     """
     dones_and_truncated = dones_and_truncated.clone()
-    dones_and_truncated[..., -1] = 1
-    dones_and_truncated = _flatten_batch(dones_and_truncated)
-    num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
-    num_per_traj[1:] -= num_per_traj[:-1].clone()
+    dones_and_truncated[..., -1] = True
+    # TODO: find a way of copying once only, eg not using reshape
+    num_per_traj = torch.where(dones_and_truncated.reshape(-1))[0] + 1
+    num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
 
 
 def _split_and_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor, return_mask=False
 ):
     """Given a tensor of size [*B, T, F] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
 
@@ -288,9 +280,11 @@ def _split_and_pad_sequence(
     max_seq_len = torch.max(splits)
     shape = (len(splits), max_seq_len)
 
-    arange = torch.tile(
-        torch.arange(max_seq_len, device=tensor.device), (len(splits), 1)
+    # int16 supports length up to 32767
+    dtype = (
+        torch.int16 if tensor.shape[-1] < torch.iinfo(torch.int16).max else torch.int32
     )
+    arange = torch.arange(max_seq_len, device=tensor.device, dtype=dtype).unsqueeze(0)
     mask = arange < splits.unsqueeze(1)
 
     def _fill_tensor(tensor):
@@ -307,11 +301,15 @@ def _split_and_pad_sequence(
         tensor = tensor.apply(_fill_tensor, batch_size=[*shape])
     else:
         tensor = _fill_tensor(tensor)
+    if return_mask:
+        return tensor, mask
     return tensor
 
 
 def _inv_pad_sequence(
-    tensor: Union[torch.Tensor, TensorDictBase], splits: torch.Tensor
+    tensor: Union[torch.Tensor, TensorDictBase],
+    splits: torch.Tensor,
+    mask: torch.Tensor = None,
 ):
     """Inverse a pad_sequence operation.
 
@@ -330,11 +328,18 @@ def _inv_pad_sequence(
     if splits.numel() == 1:
         return tensor
 
-    arange = torch.tile(
-        torch.arange(tensor.shape[-1], device=tensor.device), (tensor.shape[0], 1)
-    )
-    idx = (arange < splits.unsqueeze(1)).reshape(-1)
-    return tensor.reshape(-1)[idx]
+    if mask is None:
+        # int16 supports length up to 32767
+        dtype = (
+            torch.int16
+            if tensor.shape[-1] < torch.iinfo(torch.int16).max
+            else torch.int32
+        )
+        arange = torch.arange(
+            tensor.shape[-1], device=tensor.device, dtype=dtype
+        ).unsqueeze(0)
+        mask = arange < splits.unsqueeze(1)
+    return tensor[mask]
 
 
 def _get_num_per_traj_init(is_init):

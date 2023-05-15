@@ -2,10 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+import math
 from functools import wraps
 from typing import Optional, Tuple, Union
 
 import torch
+
 from tensordict import MemmapTensor
 
 __all__ = [
@@ -137,22 +140,19 @@ def generalized_advantage_estimate(
         raise RuntimeError(SHAPE_ERR)
     dtype = next_state_value.dtype
     device = state_value.device
-    lastdim = next_state_value.shape[-1]
 
-    not_done = 1 - done.to(dtype)
-    *batch_size, time_steps = not_done.shape[:-1]
+    not_done = (~done).int()
+    *batch_size, time_steps, lastdim = not_done.shape
     advantage = torch.empty(
         *batch_size, time_steps, lastdim, device=device, dtype=dtype
     )
     prev_advantage = 0
+    gnotdone = gamma * not_done
+    delta = reward + (gnotdone * next_state_value) - state_value
+    discount = lmbda * gnotdone
     for t in reversed(range(time_steps)):
-        delta = (
-            reward[..., t, :]
-            + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
-            - state_value[..., t, :]
-        )
-        prev_advantage = advantage[..., t, :] = delta + (
-            gamma * lmbda * prev_advantage * not_done[..., t, :]
+        prev_advantage = advantage[..., t, :] = delta[..., t, :] + (
+            prev_advantage * discount[..., t, :]
         )
 
     value_target = advantage + state_value
@@ -167,6 +167,7 @@ def _fast_vec_gae(
     done: torch.Tensor,
     gamma: float,
     lmbda: float,
+    thr: float = 1e-7,
 ):
     """Fast vectorized Generalized Advantage Estimate when gamma and lmbda are scalars.
 
@@ -180,9 +181,12 @@ def _fast_vec_gae(
         done (torch.Tensor): a [B, T] boolean tensor containing the done states
         gamma (scalar): the gamma decay (trajectory discount)
         lmbda (scalar): the lambda decay (exponential mean discount)
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
     """
     # _gen_num_per_traj and _split_and_pad_sequence need
     # time dimension at last position
@@ -192,20 +196,26 @@ def _fast_vec_gae(
     next_state_value = next_state_value.transpose(-2, -1)
 
     gammalmbda = gamma * lmbda
-    not_done = 1 - done.int()
+    not_done = (~done).int()
     td0 = reward + not_done * gamma * next_state_value - state_value
 
     num_per_traj = _get_num_per_traj(done)
-    td0_flat = _split_and_pad_sequence(td0, num_per_traj)
+    td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
 
-    gammalmbdas = torch.ones_like(td0_flat[0])
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_log = math.log(gammalmbda)
+    else:
+        gammalmbda_log = gammalmbda.log().item()
+    lim = int(math.log(thr) / gammalmbda_log)
+    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+
     gammalmbdas[1:] = gammalmbda
     gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
     gammalmbdas = gammalmbdas.unsqueeze(-1)
 
     advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
     advantage = advantage.squeeze(1)
-    advantage = _inv_pad_sequence(advantage, num_per_traj).view_as(reward)
+    advantage = advantage[mask].view_as(reward)
 
     value_target = advantage + state_value
 
@@ -246,7 +256,7 @@ def vec_generalized_advantage_estimate(
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
     dtype = state_value.dtype
-    not_done = 1 - done.to(dtype)
+    not_done = (~done).to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
@@ -360,7 +370,7 @@ def td0_return_estimate(
     """
     if not (next_state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
     advantage = reward + gamma * not_done * next_state_value
     return advantage
 
@@ -415,7 +425,7 @@ def td1_return_estimate(
     """
     if not (next_state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -666,7 +676,7 @@ def td_lambda_return_estimate(
     if not (next_state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
 
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -835,7 +845,7 @@ def vec_td_lambda_return_estimate(
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     first_below_thr_gamma = None
 
