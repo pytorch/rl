@@ -884,9 +884,8 @@ def vec_td_lambda_return_estimate(
     def _is_scalar(tensor):
         return not isinstance(tensor, torch.Tensor) or tensor.numel() == 1
 
-    # if gamma and lmbda are scalars we can call the fast implementation
-    # rolling_gamma False/True is identical when gamma/lambda are scalars
-    # TODO: remove this case from later if/else block;
+    # There are two use-cases: if gamma/lmbda are scalars we can use the
+    # fast implementation, if not we must construct a gamma tensor.
     if _is_scalar(gamma) and _is_scalar(lmbda):
         return _fast_td_lambda_return_estimate(
             gamma=gamma,
@@ -909,62 +908,31 @@ def vec_td_lambda_return_estimate(
     device = reward.device
     not_done = (~done).int()
 
-    first_below_thr_gamma = None
+    if rolling_gamma is None:
+        rolling_gamma = True
+    if rolling_gamma:
+        gamma = gamma * not_done
+    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
-    # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
-    # some intermediate dones and (3) there is a single gamma and no done.
-    # (3) can be treated much faster than (1) and (2) (lower mem footprint)
-
-    if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
-        if rolling_gamma is None:
-            rolling_gamma = True
-        if rolling_gamma:
-            gamma = gamma * not_done
-        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-
-        if not rolling_gamma:
-            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
-            if not done_follows_done:
-                raise NotImplementedError(
-                    "When using rolling_gamma=False and vectorized TD(lambda), "
-                    "make sure that conseducitve trajectories are separated as different batch "
-                    "items. Propagating a gamma value across trajectories is not permitted with "
-                    "this method. Check that you need to use rolling_gamma=False, and if so "
-                    "consider using the non-vectorized version of the return computation or splitting "
-                    "your trajectories."
-                )
-            else:
-                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
-
-    else:
-        if rolling_gamma is not None:
-            raise RuntimeError(
-                "rolling_gamma cannot be set if a non-tensor gamma is provided"
+    if not rolling_gamma:
+        done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
+        if not done_follows_done:
+            raise NotImplementedError(
+                "When using rolling_gamma=False and vectorized TD(lambda) with time-dependent gamma, "
+                "make sure that conseducitve trajectories are separated as different batch "
+                "items. Propagating a gamma value across trajectories is not permitted with "
+                "this method. Check that you need to use rolling_gamma=False, and if so "
+                "consider using the non-vectorized version of the return computation or splitting "
+                "your trajectories."
             )
-        gammas = torch.ones(T + 1, 1, device=device)
-        gammas[1:] = gamma
+        else:
+            gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
 
     gammas_cp = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
     lambdas_cp = torch.cumprod(lambdas, -2)
-
-    if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas_cp < gamma_thr
-        while first_below_thr.ndimension() > 2:
-            # if we have multiple gammas, we only want to truncate if _all_ of
-            # the geometric sequences fall below the threshold
-            first_below_thr = first_below_thr.all(axis=0)
-        if first_below_thr.any():
-            first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas_cp < gamma_thr
-        if first_below_thr.any() and first_below_thr_gamma is not None:
-            first_below_thr = max(
-                first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
-            )
-            gammas_cp = gammas_cp[..., :first_below_thr, :]
-            lambdas_cp = lambdas_cp[:first_below_thr]
 
     gammas = gammas[..., 1:, :]
     lambdas = lambdas[1:]

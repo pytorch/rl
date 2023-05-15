@@ -4307,34 +4307,49 @@ class TestValues:
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
-    @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
+    @pytest.mark.parametrize("gamma", [0.5, 0.99])
+    @pytest.mark.parametrize("lmbda", [0.25, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("T", [3, 100])
+    @pytest.mark.parametrize("F", [1, 4])
     @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize(
+        "gamma_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    @pytest.mark.parametrize("lmbda_tensor", ["scalar", "tensor_single_element"])
     def test_tdlambda_tensor_gamma_single_element(
-        self, device, gamma, lmbda, N, T, has_done
+        self, device, gamma, lmbda, N, T, F, has_done, gamma_tensor, lmbda_tensor
     ):
         """Tests vec_td_lambda_advantage_estimate against itself with
-        gamma being a tensor with a single element
+        gamma being a tensor or a scalar
 
         """
         torch.manual_seed(0)
 
-        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        done = torch.zeros(*N, T, F, device=device, dtype=torch.bool)
         if has_done:
             done = done.bernoulli_(0.1)
-        reward = torch.randn(*N, T, 1, device=device)
-        state_value = torch.randn(*N, T, 1, device=device)
-        next_state_value = torch.randn(*N, T, 1, device=device)
+        reward = torch.randn(*N, T, F, device=device)
+        state_value = torch.randn(*N, T, F, device=device)
+        next_state_value = torch.randn(*N, T, F, device=device)
 
-        gamma_tensor = torch.as_tensor([gamma], device=device)
+        if gamma_tensor == "tensor":
+            gamma_vec = torch.full_like(reward, gamma)
+        elif gamma_tensor == "tensor_single_element":
+            gamma_vec = torch.as_tensor([gamma], device=device)
+        else:
+            gamma_vec = gamma
+
+        if gamma_tensor == "tensor_single_element":
+            lmbda_vec = torch.as_tensor([lmbda], device=device)
+        else:
+            lmbda_vec = lmbda
 
         v1 = vec_td_lambda_advantage_estimate(
             gamma, lmbda, state_value, next_state_value, reward, done
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -4346,7 +4361,7 @@ class TestValues:
             gamma, lmbda, state_value, next_state_value, reward, done
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done
+            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
