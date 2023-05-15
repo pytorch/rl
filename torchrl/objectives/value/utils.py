@@ -203,6 +203,7 @@ def _get_num_per_traj(dones_and_truncated):
     """
     dones_and_truncated = dones_and_truncated.clone()
     dones_and_truncated[..., -1] = True
+    # TODO: find a way of copying once only, eg not using reshape
     num_per_traj = torch.where(dones_and_truncated.reshape(-1))[0] + 1
     num_per_traj[1:] = num_per_traj[1:] - num_per_traj[:-1]
     return num_per_traj
@@ -293,7 +294,7 @@ def _split_and_pad_sequence(
             dtype=tensor.dtype,
             device=tensor.device,
         )
-        empty_tensor.masked_scatter_(mask, tensor)
+        empty_tensor[mask] = tensor
         return empty_tensor
 
     if isinstance(tensor, TensorDictBase):
