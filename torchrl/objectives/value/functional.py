@@ -801,8 +801,8 @@ def _fast_td_lambda_return_estimate(
     nvalue_ndone = not_done * next_state_value
 
     t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
-    v3 = nvalue_ndone.clone()
-    v3[..., :-1] = 0
+    v3 = torch.zeros_like(t)
+    v3[..., -1] = nvalue_ndone[..., -1].clone()
 
     t_flat, mask = _split_and_pad_sequence(
         t + v3 * gammalmbda, num_per_traj, return_mask=True
