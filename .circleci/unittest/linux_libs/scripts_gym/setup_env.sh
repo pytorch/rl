@@ -92,7 +92,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
 
 # ROM licence for Atari
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
+wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz --no-check-certificate
 tar -xzvf rarlinux-x64-5.7.1.tar.gz
 mkdir Roms
 wget http://www.atarimania.com/roms/Roms.rar
