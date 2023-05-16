@@ -812,7 +812,7 @@ def _fast_td_lambda_return_estimate(
     reward = reward.transpose(-2, -1)
     next_state_value = next_state_value.transpose(-2, -1)
 
-    gamma_tensor = torch.Tensor([gamma], device=device)
+    gamma_tensor = torch.tensor([gamma], device=device)
     gammalmbda = gamma_tensor * lmbda
 
     not_done = (~done).int()
