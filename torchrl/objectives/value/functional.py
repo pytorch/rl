@@ -789,11 +789,12 @@ def _fast_td_lambda_return_estimate(
     done,
     thr=1e-7,
 ):
+    device = reward.device
     done = done.transpose(-2, -1)
     reward = reward.transpose(-2, -1)
     next_state_value = next_state_value.transpose(-2, -1)
 
-    gamma_tensor = torch.Tensor([gamma], device=reward.device)
+    gamma_tensor = torch.Tensor([gamma], device=device)
     gammalmbda = gamma_tensor * lmbda
 
     not_done = (~done).int()
@@ -801,7 +802,7 @@ def _fast_td_lambda_return_estimate(
     nvalue_ndone = not_done * next_state_value
 
     t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
-    v3 = torch.zeros_like(t)
+    v3 = torch.zeros_like(t, device=device)
     v3[..., -1] = nvalue_ndone[..., -1].clone()
 
     t_flat, mask = _split_and_pad_sequence(
@@ -814,7 +815,7 @@ def _fast_td_lambda_return_estimate(
         gammalmbda_log = gammalmbda.log().item()
     lim = int(math.log(thr) / gammalmbda_log)
 
-    gammalmbdas = torch.ones_like(t_flat[0][:lim], device=reward.device)
+    gammalmbdas = torch.ones_like(t_flat[0][:lim], device=device)
     gammalmbdas[1:] = gammalmbda
     gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
     gammalmbdas = gammalmbdas.unsqueeze(-1)
