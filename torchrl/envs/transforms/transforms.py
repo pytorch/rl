@@ -951,15 +951,17 @@ class ToTensorImage(ObservationTransform):
             *list(range(observation.ndimension() - 3)), -1, -3, -2
         )
         observation = observation.div(255).to(self.dtype)
-        if observation.ndimension() == 3 and self.unsqueeze:
+        if self._should_unsqueeze(observation):
             observation = observation.unsqueeze(0)
         return observation
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
+        unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
         observation_spec.shape = torch.Size(
             [
+                *unsqueeze_dim,
                 *observation_spec.shape[:-3],
                 observation_spec.shape[-1],
                 observation_spec.shape[-3],
@@ -968,6 +970,14 @@ class ToTensorImage(ObservationTransform):
         )
         observation_spec.dtype = self.dtype
         return observation_spec
+
+    def _should_unsqueeze(self, observation_like: torch.FloatTensor | TensorSpec):
+        has_3_dimensions = False
+        if isinstance(observation_like, torch.FloatTensor):
+            has_3_dimensions = observation_like.ndimension() == 3
+        else:
+            has_3_dimensions = len(observation_like.shape) == 3
+        return has_3_dimensions and self.unsqueeze
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
         if isinstance(spec.space, ContinuousBox):
