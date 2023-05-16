@@ -830,7 +830,7 @@ def _fast_td_lambda_return_estimate(
     # cutoff gammalmbdas as soon as is smaller than `thr`
     lim = int(math.log(thr) / gammalmbda.log().item())
     # create decay filter [1, g, g**2, g**3, ...]
-    gammalmbdas = gammalmbda.pow(torch.arange(lim)).unsqueeze(-1)
+    gammalmbdas = gammalmbda.pow(torch.arange(lim, device=device)).unsqueeze(-1)
 
     ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
     ret = ret_flat.squeeze(1)[mask]
