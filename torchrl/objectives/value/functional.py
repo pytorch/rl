@@ -782,13 +782,31 @@ def td_lambda_advantage_estimate(
 
 
 def _fast_td_lambda_return_estimate(
-    gamma,
-    lmbda,
-    next_state_value,
-    reward,
-    done,
-    thr=1e-7,
+    gamma: Union[torch.Tensor, float],
+    lmbda: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    thr: float = 1e-7,
 ):
+    """Fast vectorized TD lambda return estimate.
+
+    In contrast to the generalized `vec_td_lambda_return_estimate` this function does not need
+    to allocate a big tensor of the form [B, T, T], but it only works with gamma/lmbda being scalars.
+
+    Args:
+        gamma (scalar): the gamma decay, can be a tensor with a single element (trajectory discount)
+        lmbda (scalar): the lambda decay (exponential mean discount)
+        next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
+        reward (torch.Tensor): a [*B, T, F] tensor containing rewards
+        done (torch.Tensor): a [B, T] boolean tensor containing the done states
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
+    """
     device = reward.device
     done = done.transpose(-2, -1)
     reward = reward.transpose(-2, -1)
@@ -809,16 +827,10 @@ def _fast_td_lambda_return_estimate(
         t + v3 * gammalmbda, num_per_traj, return_mask=True
     )
 
-    if not isinstance(gammalmbda, torch.Tensor):
-        gammalmbda_log = math.log(gammalmbda)
-    else:
-        gammalmbda_log = gammalmbda.log().item()
-    lim = int(math.log(thr) / gammalmbda_log)
-
-    gammalmbdas = torch.ones_like(t_flat[0][:lim], device=device)
-    gammalmbdas[1:] = gammalmbda
-    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-    gammalmbdas = gammalmbdas.unsqueeze(-1)
+    # cutoff gammalmbdas as soon as is smaller than `thr`
+    lim = int(math.log(thr) / gammalmbda.log().item())
+    # create decay filter [1, g, g**2, g**3, ...]
+    gammalmbdas = gammalmbda.pow(torch.arange(lim)).unsqueeze(-1)
 
     ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
     ret = ret_flat.squeeze(1)[mask]
