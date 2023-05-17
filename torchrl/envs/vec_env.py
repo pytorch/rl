@@ -143,7 +143,7 @@ class _BatchedEnv(EnvBase):
         #     )
 
         super().__init__(device=None)
-        self.__dict__['_device'] = device
+        self.__dict__["_device"] = torch.device(device)
 
         self.is_closed = True
         self._cache_in_keys = None
@@ -651,8 +651,8 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-
         for idx in range(_num_workers):
+            print("starting", idx)
             if self._verbose:
                 print(f"initiating worker {idx}")
             # No certainty which module multiprocessing_context is
@@ -685,7 +685,10 @@ class ParallelEnv(_BatchedEnv):
         for channel, shared_tensordict in zip(
             self.parent_channels, self.shared_tensordicts
         ):
-            channel.send(("init", shared_tensordict))
+            if self.device.type == "cuda":
+                channel.send(("init", None))
+            else:
+                channel.send(("init", shared_tensordict))
         self.is_closed = False
 
     @_check_start
@@ -722,9 +725,17 @@ class ParallelEnv(_BatchedEnv):
             tensordict.select(*self.env_input_keys, strict=False)
         )
         for i in range(self.num_workers):
-            self.parent_channels[i].send(("step", None))
+            self.parent_channels[i].send(
+                ("step", self.shared_tensordicts[i].select(*self.env_input_keys))
+            )
 
-        for i in range(self.num_workers):
+        read = set()
+        i = 0
+        while len(read) < self.num_workers:
+            # for i in range(self.num_workers):
+            if i in read or not self.parent_channels[i].poll():
+                i = (i + 1) % self.num_workers
+                continue
             msg, data = self.parent_channels[i].recv()
             if msg != "step_result":
                 raise RuntimeError(
@@ -732,6 +743,7 @@ class ParallelEnv(_BatchedEnv):
                 )
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
+            read.add(i)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return self.shared_tensordict_parent.select(*self._selected_step_keys).clone()
@@ -950,11 +962,12 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             tensordict = data
-            keys = list(tensordict.keys(True, True))
-            if not (tensordict.is_shared() or tensordict.is_memmap()):
-                raise RuntimeError(
-                    "tensordict must be placed in shared memory (share_memory_() or memmap_())"
-                )
+            if tensordict is not None:
+                keys = list(tensordict.keys(True, True))
+                if not (tensordict.is_shared() or tensordict.is_memmap()):
+                    raise RuntimeError(
+                        "tensordict must be placed in shared memory (share_memory_() or memmap_())"
+                    )
             initialized = True
 
         elif cmd == "reset":
@@ -974,20 +987,23 @@ def _run_worker_pipe_shared_mem(
                 tensordict.update_(_td.select(*keys, strict=False))
                 data = None
             else:
-                data = _td.select(*keys, strict=False)
+                data = _td.to(device, non_blocking=True)
             child_pipe.send(("reset_obs", data))
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if _td is not None:
-                _td = _td.update(
-                    tensordict.select(*env_input_keys),
-                )
+            if not is_cuda:
+                if _td is not None:
+                    _td = _td.update(
+                        tensordict.select(*env_input_keys),
+                    )
+                else:
+                    _td = tensordict.clone(recurse=False)
             else:
-                _td = tensordict.clone(recurse=False)
-            _td = env._step(_td)
+                _td = data
+            _td = env._step(_td.to(env.device))
             if pin_memory:
                 _td = _td.pin_memory()
             msg = "step_result"
@@ -996,7 +1012,7 @@ def _run_worker_pipe_shared_mem(
                 data = (msg, None)
                 child_pipe.send(data)
             else:
-                data = (msg, _td.select("next"))
+                data = (msg, _td.select("next").to(device, non_blocking=True))
                 child_pipe.send(data)
 
         elif cmd == "close":
