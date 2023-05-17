@@ -112,6 +112,43 @@ def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     )
 
 
+# the following code is not meant for merging into main,
+# but for test performances in CI
+def gl01(t, gammalmbda, device):
+    gammalmbdas = torch.ones_like(t[0], device=device)
+    gammalmbdas[1:] = gammalmbda
+    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+    return gammalmbdas
+
+
+def gl02(lim, gammalmbda, device):
+    gammalmbda = torch.tensor([gammalmbda], device=device)
+    gammalmbdas = gammalmbda.pow(torch.arange(lim, device=device)).unsqueeze(-1)
+    return gammalmbdas
+
+
+def gl03(t, gammalmbda, device):
+    gammalmbdas = torch.full_like(t[0], gammalmbda, device=device)
+    gammalmbdas[0] = 1.0
+    gammalmbdas = gammalmbdas.cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+    return gammalmbdas
+
+
+@pytest.mark.parametrize("lim", [5, 10, 50, 100, 500, 1000, 2000, 5000])
+@pytest.mark.parametrize("f", [gl01, gl02, gl03])
+def test_create_decay(benchmark, lim, f):
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+
+    t = torch.ones((1, lim), device=device)
+    gammalmbda = 0.9
+    if f != gl02:
+        benchmark(f, t, gammalmbda, device)
+    else:
+        benchmark(f, lim, gammalmbda, device)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
