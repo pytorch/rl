@@ -415,10 +415,14 @@ class TestCatFrames(TransformBase):
         torch.manual_seed(10)
         envbase.set_seed(10)
         tdbase = envbase.rollout(10)
+        tdbase0 = tdbase.clone()
 
         model = nn.Sequential(cat_frames2, nn.Identity())
         model(tdbase)
         assert (td == tdbase).all()
+        with pytest.raises(ValueError, match="The last dimension of the tensordict"):
+            tdbase0.names = None
+            model(tdbase0)
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
@@ -3757,8 +3761,18 @@ class TestRewardSum(TransformBase):
         t = RewardSum()
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            ValueError, match="At least one dimension of the tensordict"
+        ):
             t(td)
+        td.batch_size = [10]
+        td.names = ["time"]
+        with pytest.raises(KeyError):
+            t(td)
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
+        t(td)
 
     def test_transform_compose(
         self,
@@ -3766,8 +3780,18 @@ class TestRewardSum(TransformBase):
         t = Compose(RewardSum())
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            ValueError, match="At least one dimension of the tensordict"
+        ):
             t(td)
+        td.batch_size = [10]
+        td.names = ["time"]
+        with pytest.raises(KeyError):
+            t(td)
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
+        t(td)
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_env(
@@ -3789,24 +3813,34 @@ class TestRewardSum(TransformBase):
     def test_transform_model(
         self,
     ):
-        t = RewardSum()
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
         model = nn.Sequential(t, nn.Identity())
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
-            model(td)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        data = env.rollout(10)
+        data_exclude = data.exclude(("next", "episode_reward"))
+        model(data_exclude)
+        assert (
+            data_exclude["next", "episode_reward"] == data["next", "episode_reward"]
+        ).all()
 
     def test_transform_rb(
         self,
     ):
-        t = RewardSum()
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
         rb = ReplayBuffer(storage=LazyTensorStorage(10))
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        data = env.rollout(10)
+        data_exclude = data.exclude(("next", "episode_reward"))
         rb.append_transform(t)
-        rb.extend(td)
-        with pytest.raises(NotImplementedError):
-            _ = rb.sample(2)
+        rb.add(data_exclude)
+        sample = rb.sample(1).squeeze(0)
+        assert (
+            sample["next", "episode_reward"] == data["next", "episode_reward"]
+        ).all()
 
     @pytest.mark.parametrize(
         "keys",
