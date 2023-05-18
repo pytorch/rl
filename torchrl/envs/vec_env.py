@@ -761,9 +761,8 @@ class ParallelEnv(_BatchedEnv):
 
         del self.shared_tensordicts, self.shared_tensordict_parent
 
-        for queue_out in self.queues_out:
+        for queue_out, queue_in in zip(self.queues_out, self.queues_in):
             queue_out.close()
-        for queue_in in self.queues_in:
             queue_in.close()
         for proc in self._workers:
             proc.join()
@@ -1010,6 +1009,7 @@ def _run_worker_pipe_shared_mem(
 
             queue_out.put(("closing", None))
             queue_out.close()
+            queue_in.close()
             if verbose:
                 print(f"{pid} closed")
             break
