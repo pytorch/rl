@@ -775,7 +775,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.reset()
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
-
         if policy is None:
 
             def policy(td):

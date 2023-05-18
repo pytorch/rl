@@ -16,6 +16,8 @@ from warnings import warn
 
 import numpy as np
 import torch
+import torchrl
+
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
@@ -36,6 +38,7 @@ from torchrl.envs.utils import _sort_keys
 
 _has_envpool = importlib.util.find_spec("envpool")
 
+TIMEOUT = 1000
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -63,7 +66,7 @@ class _dispatch_caller_parallel:
 
         results = []
         for queue_in in self.parallel_env.queues_in:
-            msg, result = queue_in.get(timeout=10)
+            msg, result = queue_in.get(timeout=TIMEOUT)
             results.append(result)
 
         return results
@@ -700,7 +703,7 @@ class ParallelEnv(_BatchedEnv):
         for queue_out in self.queues_out:
             queue_out.put(("state_dict", None))
         for idx, queue_in in enumerate(self.queues_in):
-            msg, _state_dict = queue_in.get(timeout=10)
+            msg, _state_dict = queue_in.get(timeout=TIMEOUT)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected 'state_dict' but received {msg}")
             state_dict[f"worker{idx}"] = _state_dict
@@ -716,7 +719,7 @@ class ParallelEnv(_BatchedEnv):
         for i, queue_out in enumerate(self.queues_out):
             queue_out.put(("load_state_dict", state_dict[f"worker{i}"]))
         for queue_in in self.queues_in:
-            msg, _ = queue_in.get(timeout=10)
+            msg, _ = queue_in.get(timeout=TIMEOUT)
             if msg != "loaded":
                 raise RuntimeError(f"Expected 'loaded' but received {msg}")
 
@@ -732,7 +735,7 @@ class ParallelEnv(_BatchedEnv):
 
         # keys = set()
         for i, queue_in in enumerate(self.queues_in):
-            msg, data = queue_in.get(timeout=10)
+            msg, data = queue_in.get(timeout=TIMEOUT)
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
@@ -753,7 +756,7 @@ class ParallelEnv(_BatchedEnv):
             if self._verbose:
                 print(f"closing {i}")
             queue_out.put(("close", None))
-            msg, _ = queue_in.get(timeout=10)
+            msg, _ = queue_in.get(timeout=TIMEOUT)
             if msg != "closing":
                 raise RuntimeError(
                     f"Expected 'closing' but received {msg} from worker {i}"
@@ -777,7 +780,7 @@ class ParallelEnv(_BatchedEnv):
         for queue_out, queue_in in zip(self.queues_out, self.queues_in):
             queue_out.put(("seed", (seed, static_seed)))
             self._seeds.append(seed)
-            msg, new_seed = queue_in.get(timeout=10)
+            msg, new_seed = queue_in.get(timeout=TIMEOUT)
             if msg != "seeded":
                 raise RuntimeError(f"Expected 'seeded' but received {msg}")
             seed = new_seed
@@ -800,7 +803,7 @@ class ParallelEnv(_BatchedEnv):
 
         for i, queue_out in enumerate(self.queues_out):
             if tensordict is not None:
-                tensordict_ = tensordict[i]
+                tensordict_ = tensordict[i].to_tensordict().share_memory_()
                 if tensordict_.is_empty():
                     tensordict_ = None
             else:
@@ -820,12 +823,17 @@ class ParallelEnv(_BatchedEnv):
                     )
                 # we must update the
                 continue
+            if i == 0:
+                print("resetting 0")
+                if kwargs['tensordict'] is not None:
+                    print("action", kwargs['tensordict']['action'], kwargs['tensordict']['action'].is_shared())
+                    print("sending", kwargs['tensordict']['_reset'], kwargs['tensordict']['_reset'].is_shared())
             queue_out.put((cmd_out, kwargs))
 
         for i, queue_in in enumerate(self.queues_in):
             if not _reset[i].any():
                 continue
-            cmd_in, data = queue_in.get(timeout=10)
+            cmd_in, data = queue_in.get(timeout=TIMEOUT)
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
@@ -928,7 +936,7 @@ def _run_worker_pipe_shared_mem(
 
     while True:
         try:
-            cmd, data = queue_in.get(timeout=10)
+            cmd, data = queue_in.get(timeout=TIMEOUT)
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
