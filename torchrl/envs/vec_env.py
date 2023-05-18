@@ -803,6 +803,7 @@ class ParallelEnv(_BatchedEnv):
 
         for i, queue_out in enumerate(self.queues_out):
             if tensordict is not None:
+                # TODO: filter unnecessary key and/or use in-place buffer updating
                 tensordict_ = tensordict[i].to_tensordict().share_memory_()
                 if tensordict_.is_empty():
                     tensordict_ = None
