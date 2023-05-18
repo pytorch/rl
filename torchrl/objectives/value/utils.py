@@ -339,6 +339,7 @@ def _inv_pad_sequence(
             tensor.shape[-1], device=tensor.device, dtype=dtype
         ).unsqueeze(0)
         mask = arange < splits.unsqueeze(1)
+
     return tensor[mask]
 
 

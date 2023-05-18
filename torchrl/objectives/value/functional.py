@@ -781,6 +781,63 @@ def td_lambda_advantage_estimate(
     return advantage
 
 
+def _fast_td_lambda_return_estimate(
+    gamma: Union[torch.Tensor, float],
+    lmbda: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    thr: float = 1e-7,
+):
+    """Fast vectorized TD lambda return estimate.
+
+    In contrast to the generalized `vec_td_lambda_return_estimate` this function does not need
+    to allocate a big tensor of the form [B, T, T], but it only works with gamma/lmbda being scalars.
+
+    Args:
+        gamma (scalar): the gamma decay, can be a tensor with a single element (trajectory discount)
+        lmbda (scalar): the lambda decay (exponential mean discount)
+        next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
+        reward (torch.Tensor): a [*B, T, F] tensor containing rewards
+        done (torch.Tensor): a [B, T] boolean tensor containing the done states
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
+    """
+    device = reward.device
+    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1)
+
+    gamma_tensor = torch.tensor([gamma], device=device)
+    gammalmbda = gamma_tensor * lmbda
+
+    not_done = (~done).int()
+    num_per_traj = _get_num_per_traj(done)
+    nvalue_ndone = not_done * next_state_value
+
+    t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
+    v3 = torch.zeros_like(t, device=device)
+    v3[..., -1] = nvalue_ndone[..., -1].clone()
+
+    t_flat, mask = _split_and_pad_sequence(
+        t + v3 * gammalmbda, num_per_traj, return_mask=True
+    )
+
+    # cutoff gammalmbdas as soon as is smaller than `thr`
+    lim = int(math.log(thr) / gammalmbda.log().item())
+    # create decay filter [1, g, g**2, g**3, ...]
+    gammalmbdas = gammalmbda.pow(torch.arange(lim, device=device)).unsqueeze(-1)
+
+    ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
+    ret = ret_flat.squeeze(1)[mask]
+
+    return ret.view_as(reward).transpose(-1, -2)
+
+
 @_transpose_time
 def vec_td_lambda_return_estimate(
     gamma,
@@ -831,9 +888,26 @@ def vec_td_lambda_return_estimate(
     """
     if not (next_state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
+
+    gamma_thr = 1e-7
     shape = next_state_value.shape
 
     *batch, T, lastdim = shape
+
+    def _is_scalar(tensor):
+        return not isinstance(tensor, torch.Tensor) or tensor.numel() == 1
+
+    # There are two use-cases: if gamma/lmbda are scalars we can use the
+    # fast implementation, if not we must construct a gamma tensor.
+    if _is_scalar(gamma) and _is_scalar(lmbda):
+        return _fast_td_lambda_return_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            thr=gamma_thr,
+        )
 
     next_state_value = next_state_value.transpose(-2, -1).unsqueeze(-2)
     if len(batch):
@@ -847,61 +921,31 @@ def vec_td_lambda_return_estimate(
     device = reward.device
     not_done = (~done).int()
 
-    first_below_thr_gamma = None
+    if rolling_gamma is None:
+        rolling_gamma = True
+    if rolling_gamma:
+        gamma = gamma * not_done
+    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
-    # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
-    # some intermediate dones and (3) there is a single gamma and no done.
-    # (3) can be treated much faster than (1) and (2) (lower mem footprint)
-    if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
-        if rolling_gamma is None:
-            rolling_gamma = True
-        if rolling_gamma:
-            gamma = gamma * not_done
-        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-
-        if not rolling_gamma:
-            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
-            if not done_follows_done:
-                raise NotImplementedError(
-                    "When using rolling_gamma=False and vectorized TD(lambda), "
-                    "make sure that conseducitve trajectories are separated as different batch "
-                    "items. Propagating a gamma value across trajectories is not permitted with "
-                    "this method. Check that you need to use rolling_gamma=False, and if so "
-                    "consider using the non-vectorized version of the return computation or splitting "
-                    "your trajectories."
-                )
-            else:
-                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
-
-    else:
-        if rolling_gamma is not None:
-            raise RuntimeError(
-                "rolling_gamma cannot be set if a non-tensor gamma is provided"
+    if not rolling_gamma:
+        done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
+        if not done_follows_done:
+            raise NotImplementedError(
+                "When using rolling_gamma=False and vectorized TD(lambda) with time-dependent gamma, "
+                "make sure that conseducitve trajectories are separated as different batch "
+                "items. Propagating a gamma value across trajectories is not permitted with "
+                "this method. Check that you need to use rolling_gamma=False, and if so "
+                "consider using the non-vectorized version of the return computation or splitting "
+                "your trajectories."
             )
-        gammas = torch.ones(T + 1, 1, device=device)
-        gammas[1:] = gamma
+        else:
+            gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
 
     gammas_cp = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
     lambdas_cp = torch.cumprod(lambdas, -2)
-
-    if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas_cp < 1e-7
-        while first_below_thr.ndimension() > 2:
-            # if we have multiple gammas, we only want to truncate if _all_ of
-            # the geometric sequences fall below the threshold
-            first_below_thr = first_below_thr.all(axis=0)
-        if first_below_thr.any():
-            first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas_cp < 1e-7
-        if first_below_thr.any() and first_below_thr_gamma is not None:
-            first_below_thr = max(
-                first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
-            )
-            gammas_cp = gammas_cp[..., :first_below_thr, :]
-            lambdas_cp = lambdas_cp[:first_below_thr]
 
     gammas = gammas[..., 1:, :]
     lambdas = lambdas[1:]
