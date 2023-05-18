@@ -2398,7 +2398,7 @@ class TestPPO:
             assert "loss_kl_init" not in loss.keys()
             with pytest.raises(
                 RuntimeError,
-                match="The initial actor parameters cannot be retrieved when kl_init_coef is 0",
+                match="The initial actor parameters cannot be retrieved when kl_coef is 0",
             ):
                 loss_fn.initial_actor_params
 
