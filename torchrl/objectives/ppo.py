@@ -739,7 +739,7 @@ def _kl(p, q, samples_mc_kl=None):
 
 
 # our own memo
-_KL_MEMO = dict()
+_KL_MEMO = {}
 
 
 def _has_kl(p, q):
