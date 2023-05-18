@@ -370,7 +370,7 @@ class ClipPPOLoss(PPOLoss):
             parameters for the actor. These will be used to return a ``"loss_kl_init"``
             differentiable entry in the output loss TensorDict that can be used
             to constrain the policy to stay close to its original configuration.
-            Defaults to 0 (ie no loss).
+            Defaults to 0 (i.e., no KL component in the loss).
             .. note::
               if this KL has to be registered but not used for training, the
               resulting ``"loss_kl_init"`` can be detached after loss
