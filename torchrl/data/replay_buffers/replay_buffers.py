@@ -313,7 +313,7 @@ class ReplayBuffer:
         if self._transform is not None and is_tensor_collection(data):
             data = self._transform.inv(data.get("_data"))
         elif self._transform is not None and len(self._transform):
-            data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
+            data = self._transform.inv(data)
         with self._replay_lock:
             index = self._writer.extend(data)
             self._sampler.extend(index)
@@ -663,7 +663,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
 
     def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
-
         super().__init__(**kw)
         self.priority_key = priority_key
 
