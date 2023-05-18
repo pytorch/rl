@@ -75,7 +75,7 @@ class PPOLoss(LossModule):
             parameters for both policy and critic losses.
         kl_init_coef (scalar, optional): A coefficient for the KL-divergence
             between the current actor configuration and the initial one.
-            If ``kl_init_coef > 0``, a ``init_actor_params`` attribute
+            If ``kl_init_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
             parameters for the actor. These will be used to return a ``"loss_kl_init"``
             differentiable entry in the output loss TensorDict that can be used
@@ -186,7 +186,10 @@ class PPOLoss(LossModule):
             self.gamma = gamma
 
     @property
-    def init_actor_params(self):
+    def initial_actor_params(self):
+        """The initial configuration of the actor parameters.
+
+        Raises an exception if kl_init_coef=0."""
         if self.kl_init_coef > 0:
             return self.target_actor_params
         raise RuntimeError(
@@ -259,7 +262,7 @@ class PPOLoss(LossModule):
         return self.critic_coef * loss_value
 
     def _kl_init(self, current_dist, tensordict):
-        init_dist = self.actor.get_dist(tensordict, params=self.init_actor_params)
+        init_dist = self.actor.get_dist(tensordict, params=self.initial_actor_params)
         kl_val = _kl(init_dist, current_dist, self.samples_mc_entropy)
         kl_val = kl_val.mean()
         return kl_val
@@ -365,7 +368,7 @@ class ClipPPOLoss(PPOLoss):
             parameters for both policy and critic losses.
         kl_init_coef (scalar, optional): A coefficient for the KL-divergence
             between the current actor configuration and the initial one.
-            If ``kl_init_coef > 0``, a ``init_actor_params`` attribute
+            If ``kl_init_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
             parameters for the actor. These will be used to return a ``"loss_kl_init"``
             differentiable entry in the output loss TensorDict that can be used
@@ -563,9 +566,9 @@ class KLPENPPOLoss(PPOLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
-        kl_init_coef (scalar, optional): A coefficient for the KL-divergence
+        kl_coef (scalar, optional): A coefficient for the KL-divergence
             between the current actor configuration and the initial one.
-            If ``kl_init_coef > 0``, a ``init_actor_params`` attribute
+            If ``kl_init_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
             parameters for the actor. These will be used to return a ``"loss_kl_init"``
             differentiable entry in the output loss TensorDict that can be used
@@ -640,7 +643,7 @@ class KLPENPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
-        kl_init_coef: float = 0.0,
+        kl_coef: float = 0.0,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -656,7 +659,7 @@ class KLPENPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             value_key=value_key,
-            kl_init_coef=kl_init_coef,
+            kl_init_coef=kl_coef,
             **kwargs,
         )
 
