@@ -10,7 +10,6 @@ import logging
 import os
 from collections import OrderedDict
 from copy import deepcopy
-from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from warnings import warn
@@ -59,12 +58,12 @@ class _dispatch_caller_parallel:
     def __call__(self, *args, **kwargs):
         # remove self from args
         args = [_arg if _arg is not self.parallel_env else "_self" for _arg in args]
-        for channel in self.parallel_env.parent_channels:
-            channel.send((self.attr, (args, kwargs)))
+        for queue_out in self.parallel_env.queues_out:
+            queue_out.put((self.attr, (args, kwargs)))
 
         results = []
-        for channel in self.parallel_env.parent_channels:
-            msg, result = channel.recv()
+        for queue_in in self.parallel_env.queues_in:
+            msg, result = queue_in.get(timeout=10)
             results.append(result)
 
         return results
@@ -121,7 +120,7 @@ class _BatchedEnv(EnvBase):
     _verbose: bool = VERBOSE
     _excluded_wrapped_keys = [
         "is_closed",
-        "parent_channels",
+        "queues",
         "batch_size",
         "_dummy_env_str",
     ]
@@ -654,14 +653,16 @@ class ParallelEnv(_BatchedEnv):
         _num_workers = self.num_workers
         ctx = mp.get_context("spawn")
 
-        self.parent_channels = []
+        self.queues_out = []
+        self.queues_in = []
         self._workers = []
 
         for idx in range(_num_workers):
             if self._verbose:
                 print(f"initiating worker {idx}")
             # No certainty which module multiprocessing_context is
-            channel1, channel2 = ctx.Pipe()
+            queue_out = ctx.Queue(maxsize=1)
+            queue_in = ctx.Queue(maxsize=1)
             env_fun = self.create_env_fn[idx]
             if env_fun.__class__.__name__ != "EnvCreator":
                 env_fun = CloudpickleWrapper(env_fun)
@@ -670,8 +671,8 @@ class ParallelEnv(_BatchedEnv):
                 target=_run_worker_pipe_shared_mem,
                 args=(
                     idx,
-                    channel1,
-                    channel2,
+                    queue_out,
+                    queue_in,
                     env_fun,
                     self.create_env_kwargs[idx],
                     False,
@@ -682,24 +683,24 @@ class ParallelEnv(_BatchedEnv):
             )
             w.daemon = True
             w.start()
-            channel2.close()
-            self.parent_channels.append(channel1)
+            self.queues_out.append(queue_out)
+            self.queues_in.append(queue_in)
             self._workers.append(w)
 
         # send shared tensordict to workers
-        for channel, shared_tensordict in zip(
-            self.parent_channels, self.shared_tensordicts
+        for queue_out, shared_tensordict in zip(
+            self.queues_out, self.shared_tensordicts
         ):
-            channel.send(("init", shared_tensordict))
+            queue_out.put(("init", shared_tensordict))
         self.is_closed = False
 
     @_check_start
     def state_dict(self) -> OrderedDict:
         state_dict = OrderedDict()
-        for channel in self.parent_channels:
-            channel.send(("state_dict", None))
-        for idx, channel in enumerate(self.parent_channels):
-            msg, _state_dict = channel.recv()
+        for queue_out in self.queues_out:
+            queue_out.put(("state_dict", None))
+        for idx, queue_in in enumerate(self.queues_in):
+            msg, _state_dict = queue_in.get(timeout=10)
             if msg != "state_dict":
                 raise RuntimeError(f"Expected 'state_dict' but received {msg}")
             state_dict[f"worker{idx}"] = _state_dict
@@ -712,10 +713,10 @@ class ParallelEnv(_BatchedEnv):
             state_dict = OrderedDict(
                 **{f"worker{idx}": state_dict for idx in range(self.num_workers)}
             )
-        for i, channel in enumerate(self.parent_channels):
-            channel.send(("load_state_dict", state_dict[f"worker{i}"]))
-        for channel in self.parent_channels:
-            msg, _ = channel.recv()
+        for i, queue_out in enumerate(self.queues_out):
+            queue_out.put(("load_state_dict", state_dict[f"worker{i}"]))
+        for queue_in in self.queues_in:
+            msg, _ = queue_in.get(timeout=10)
             if msg != "loaded":
                 raise RuntimeError(f"Expected 'loaded' but received {msg}")
 
@@ -726,12 +727,12 @@ class ParallelEnv(_BatchedEnv):
         self.shared_tensordict_parent.update_(
             tensordict.select(*self.env_input_keys, strict=False)
         )
-        for i in range(self.num_workers):
-            self.parent_channels[i].send(("step", None))
+        for queue_out in self.queues_out:
+            queue_out.put(("step", None))
 
         # keys = set()
-        for i in range(self.num_workers):
-            msg, data = self.parent_channels[i].recv()
+        for i, queue_in in enumerate(self.queues_in):
+            msg, data = queue_in.get(timeout=10)
             if msg != "step_result":
                 raise RuntimeError(
                     f"Expected 'step_result' but received {msg} from worker {i}"
@@ -748,14 +749,11 @@ class ParallelEnv(_BatchedEnv):
             raise RuntimeError(
                 "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
             )
-        for i, channel in enumerate(self.parent_channels):
+        for i, (queue_out, queue_in) in enumerate(zip(self.queues_out, self.queues_in)):
             if self._verbose:
                 print(f"closing {i}")
-            # try:
-            channel.send(("close", None))
-            # except:
-            #     raise RuntimeError(f"closing {channel} number {i} failed")
-            msg, _ = channel.recv()
+            queue_out.put(("close", None))
+            msg, _ = queue_in.get(timeout=10)
             if msg != "closing":
                 raise RuntimeError(
                     f"Expected 'closing' but received {msg} from worker {i}"
@@ -763,22 +761,24 @@ class ParallelEnv(_BatchedEnv):
 
         del self.shared_tensordicts, self.shared_tensordict_parent
 
-        for channel in self.parent_channels:
-            channel.close()
+        for queue_out in self.queues_out:
+            queue_out.close()
+        for queue_in in self.queues_in:
+            queue_in.close()
         for proc in self._workers:
             proc.join()
         del self._workers
-        del self.parent_channels
+        del self.queues_out
 
     @_check_start
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
     ) -> Optional[int]:
         self._seeds = []
-        for channel in self.parent_channels:
-            channel.send(("seed", (seed, static_seed)))
+        for queue_out, queue_in in zip(self.queues_out, self.queues_in):
+            queue_out.put(("seed", (seed, static_seed)))
             self._seeds.append(seed)
-            msg, new_seed = channel.recv()
+            msg, new_seed = queue_in.get(timeout=10)
             if msg != "seeded":
                 raise RuntimeError(f"Expected 'seeded' but received {msg}")
             seed = new_seed
@@ -799,7 +799,7 @@ class ParallelEnv(_BatchedEnv):
                 self.done_spec.shape, dtype=torch.bool, device=self.device
             )
 
-        for i, channel in enumerate(self.parent_channels):
+        for i, queue_out in enumerate(self.queues_out):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
                 if tensordict_.is_empty():
@@ -821,12 +821,12 @@ class ParallelEnv(_BatchedEnv):
                     )
                 # we must update the
                 continue
-            channel.send((cmd_out, kwargs))
+            queue_out.put((cmd_out, kwargs))
 
-        for i, channel in enumerate(self.parent_channels):
+        for i, queue_in in enumerate(self.queues_in):
             if not _reset[i].any():
                 continue
-            cmd_in, data = channel.recv()
+            cmd_in, data = queue_in.get(timeout=10)
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
@@ -898,8 +898,8 @@ def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> Ordered
 
 def _run_worker_pipe_shared_mem(
     idx: int,
-    parent_pipe: connection.Connection,
-    child_pipe: connection.Connection,
+    queue_in,
+    queue_out,
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
@@ -908,7 +908,6 @@ def _run_worker_pipe_shared_mem(
     allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
-    parent_pipe.close()
     pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
         env = env_fun(**env_fun_kwargs)
@@ -930,7 +929,7 @@ def _run_worker_pipe_shared_mem(
 
     while True:
         try:
-            cmd, data = child_pipe.recv()
+            cmd, data = queue_in.get(timeout=10)
         except EOFError as err:
             raise EOFError(f"proc {pid} failed, last command: {cmd}.") from err
         if cmd == "seed":
@@ -939,7 +938,7 @@ def _run_worker_pipe_shared_mem(
             # torch.manual_seed(data)
             # np.random.seed(data)
             new_seed = env.set_seed(data[0], static_seed=data[1])
-            child_pipe.send(("seeded", new_seed))
+            queue_out.put(("seeded", new_seed))
 
         elif cmd == "init":
             if verbose:
@@ -971,9 +970,9 @@ def _run_worker_pipe_shared_mem(
                 tensordict.update_(
                     _td.select(*tensordict.keys(True, True), strict=False)
                 )
-                child_pipe.send(("reset_obs", None))
+                queue_out.put(("reset_obs", None))
             else:
-                child_pipe.send(
+                queue_out.put(
                     (
                         "reset_obs",
                         _td.select(*tensordict.keys(True, True), strict=False),
@@ -997,10 +996,10 @@ def _run_worker_pipe_shared_mem(
             if not is_cuda:
                 tensordict.update_(_td.select("next"))
                 data = (msg, None)
-                child_pipe.send(data)
+                queue_out.put(data)
             else:
                 data = (msg, _td.select("next"))
-                child_pipe.send(data)
+                queue_out.put(data)
 
         elif cmd == "close":
             del tensordict, _td, data
@@ -1009,8 +1008,8 @@ def _run_worker_pipe_shared_mem(
             env.close()
             del env
 
-            child_pipe.send(("closing", None))
-            child_pipe.close()
+            queue_out.put(("closing", None))
+            queue_out.close()
             if verbose:
                 print(f"{pid} closed")
             break
@@ -1018,12 +1017,12 @@ def _run_worker_pipe_shared_mem(
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
             msg = "loaded"
-            child_pipe.send((msg, None))
+            queue_out.put((msg, None))
 
         elif cmd == "state_dict":
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
             msg = "state_dict"
-            child_pipe.send((msg, state_dict))
+            queue_out.put((msg, state_dict))
 
         else:
             err_msg = f"{cmd} from env"
@@ -1043,10 +1042,10 @@ def _run_worker_pipe_shared_mem(
             except Exception as err:
                 raise RuntimeError(f"querying {err_msg} resulted in an error.") from err
             if cmd not in ("to"):
-                child_pipe.send(("_".join([cmd, "done"]), result))
+                queue_out.put(("_".join([cmd, "done"]), result))
             else:
                 # don't send env through pipe
-                child_pipe.send(("_".join([cmd, "done"]), None))
+                queue_out.put(("_".join([cmd, "done"]), None))
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
