@@ -1974,6 +1974,7 @@ class CatFrames(ObservationTransform):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         padding="same",
+        as_inverse=False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -1996,6 +1997,7 @@ class CatFrames(ObservationTransform):
             )
         # keeps track of calls to _reset since it's only _call that will populate the buffer
         self._just_reset = False
+        self.as_inverse = as_inverse
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -2088,6 +2090,12 @@ class CatFrames(ObservationTransform):
             shape[self.dim] = self.N * shape[self.dim]
             observation_spec.shape = torch.Size(shape)
         return observation_spec
+
+    def _inv_apply_transform(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.as_inverse:
+            return self.forward(tensordict)
+        else:
+            raise KeyError("Inverse transform not implemented for this transform.")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
