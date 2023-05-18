@@ -823,11 +823,6 @@ class ParallelEnv(_BatchedEnv):
                     )
                 # we must update the
                 continue
-            if i == 0:
-                print("resetting 0")
-                if kwargs['tensordict'] is not None:
-                    print("action", kwargs['tensordict']['action'], kwargs['tensordict']['action'].is_shared())
-                    print("sending", kwargs['tensordict']['_reset'], kwargs['tensordict']['_reset'].is_shared())
             queue_out.put((cmd_out, kwargs))
 
         for i, queue_in in enumerate(self.queues_in):
