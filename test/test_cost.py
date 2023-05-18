@@ -2380,7 +2380,7 @@ class TestPPO:
             raise NotImplementedError
 
         loss_fn = loss_class(
-            actor, value, loss_critic_type="l2", kl_init_coef=kl_coef
+            actor, value, loss_critic_type="l2", kl_coef=kl_coef
         )
         if advantage is not None:
             advantage(td)
