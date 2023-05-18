@@ -2351,9 +2351,10 @@ class TestPPO:
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("kl_init_coef", (0.0, 1.0))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
+    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est, kl_init_coef):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2376,7 +2377,7 @@ class TestPPO:
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", kl_init_coef=kl_init_coef)
         if advantage is not None:
             advantage(td)
         else:
@@ -2386,6 +2387,12 @@ class TestPPO:
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        if kl_init_coef:
+            assert loss["loss_kl_init"].requires_grad
+            assert loss["loss_kl_init"].numel() <= 1
+        else:
+            assert "loss_kl_init" not in loss.keys()
+
         loss_critic.backward(retain_graph=True)
         # check that grads are independent and non null
         named_parameters = loss_fn.named_parameters()
