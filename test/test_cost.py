@@ -2392,10 +2392,10 @@ class TestPPO:
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         if kl_coef:
-            assert loss["loss_kl_init"].requires_grad
-            assert loss["loss_kl_init"].numel() <= 1
+            assert loss["loss_kl_to_init"].requires_grad
+            assert loss["loss_kl_to_init"].numel() <= 1
         else:
-            assert "loss_kl_init" not in loss.keys()
+            assert "loss_kl_to_init" not in loss.keys()
             with pytest.raises(
                 RuntimeError,
                 match="The initial actor parameters cannot be retrieved when kl_coef is 0",

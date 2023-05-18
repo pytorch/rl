@@ -77,13 +77,13 @@ class PPOLoss(LossModule):
             between the current actor configuration and the initial one.
             If ``kl_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
-            parameters for the actor. These will be used to return a ``"loss_kl_init"``
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
             differentiable entry in the output loss TensorDict that can be used
             to constrain the policy to stay close to its original configuration.
             Defaults to 0 (i.e., no KL component in the loss).
             .. note::
               if this KL has to be registered but not used for training, the
-              resulting ``"loss_kl_init"`` can be detached after loss
+              resulting ``"loss_kl_to_init"`` can be detached after loss
               computation.
 
 
@@ -293,8 +293,8 @@ class PPOLoss(LossModule):
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
         if self.kl_coef:
-            loss_kl_init = self.kl_coef * self._kl_init(dist, tensordict)
-            td_out.set("loss_kl_init", loss_kl_init.mean())
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
 
         return td_out
 
@@ -370,13 +370,13 @@ class ClipPPOLoss(PPOLoss):
             between the current actor configuration and the initial one.
             If ``kl_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
-            parameters for the actor. These will be used to return a ``"loss_kl_init"``
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
             differentiable entry in the output loss TensorDict that can be used
             to constrain the policy to stay close to its original configuration.
             Defaults to 0 (i.e., no KL component in the loss).
             .. note::
               if this KL has to be registered but not used for training, the
-              resulting ``"loss_kl_init"`` can be detached after loss
+              resulting ``"loss_kl_to_init"`` can be detached after loss
               computation.
 
     .. note:
@@ -512,8 +512,8 @@ class ClipPPOLoss(PPOLoss):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
         if self.kl_coef:
-            loss_kl_init = self.kl_coef * self._kl_init(dist, tensordict)
-            td_out.set("loss_kl_init", loss_kl_init.mean())
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
         td_out.set("ESS", ess.mean() / batch)
         return td_out
 
@@ -570,13 +570,13 @@ class KLPENPPOLoss(PPOLoss):
             between the current actor configuration and the initial one.
             If ``kl_coef > 0``, a ``initial_actor_params`` attribute
             will be available and contain the initial configuration of the
-            parameters for the actor. These will be used to return a ``"loss_kl_init"``
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
             differentiable entry in the output loss TensorDict that can be used
             to constrain the policy to stay close to its original configuration.
             Defaults to 0 (i.e., no loss).
             .. note::
               if this KL has to be registered but not used for training, the
-              resulting ``"loss_kl_init"`` can be detached after loss
+              resulting ``"loss_kl_to_init"`` can be detached after loss
               computation.
 
 
@@ -708,7 +708,7 @@ class KLPENPPOLoss(PPOLoss):
         td_out = TensorDict(
             {
                 "loss_objective": -neg_loss.mean(),
-                "kl": kl_val.detach().mean(),
+                "kl_to_prev": kl_val.detach().mean(),
             },
             [],
         )
@@ -723,8 +723,8 @@ class KLPENPPOLoss(PPOLoss):
             td_out.set("loss_critic", loss_critic.mean())
 
         if self.kl_coef:
-            loss_kl_init = self.kl_coef * self._kl_init(dist, tensordict)
-            td_out.set("loss_kl_init", loss_kl_init.mean())
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
 
         return td_out
 
@@ -741,7 +741,7 @@ def _kl(p, q, samples_mc_kl=None):
     return kl
 
 
-# our own memo
+# our own memo: see torch.distributions.kl implementation for context
 _KL_MEMO = {}
 
 
