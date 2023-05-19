@@ -2082,9 +2082,7 @@ class CatFrames(ObservationTransform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or (
-            tensordict.names[-1] is not None and tensordict.names[-1] != "time"
-        ):
+        if not tensordict.ndim or tensordict.names[-1] != "time":
             raise ValueError(
                 "The last dimension of the tensordict must be marked as 'time'."
             )
@@ -3378,9 +3376,17 @@ class RewardSum(Transform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError(
-            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
-        )
+        time_dim = [i for i, name in enumerate(tensordict.names) if name == "time"]
+        if not time_dim:
+            raise ValueError(
+                "At least one dimension of the tensordict must be named 'time' in offline mode"
+            )
+        time_dim = time_dim[0] - 1
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            reward = tensordict.get(in_key)
+            cumsum = reward.cumsum(time_dim)
+            tensordict.set(out_key, cumsum)
+        return tensordict
 
 
 class StepCounter(Transform):
