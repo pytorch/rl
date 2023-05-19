@@ -4,74 +4,73 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule
+from transformers import GPT2PreTrainedModel
 
-from .transformer import init_transformer
-from .utils import _remove_state_dict_prefixes, load_checkpoint
+from .transformer import forward_wrap, init_transformer
+from .utils import crop_block_size, print_trainable_parameters
 
 
-class RewardModel(nn.Module):
+class RewardModel(GPT2PreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"attn.masked_bias",
+        r"attn.bias",
+        r"lm_head.weight",
+    ]
+
     def __init__(self, model):
-        super().__init__()
-        self.model = deepcopy(model)
-        self.config = model.config
+        super().__init__(model.config)
 
-        self.n_embd = model.lm_head.in_features
-        self.block_size = model.config.block_size
-        self.reward_head = nn.Linear(self.model.lm_head.in_features, 1, bias=False)
+        self.transformer = deepcopy(model.transformer)
+        self.block_size = model.config.n_positions
+        # replace last layer with the reward layer
+        self.lm_head = nn.Linear(model.lm_head.in_features, 1, bias=False)
 
-    def forward(self, idx):
-        device = idx.device
-        b, t = idx.size()
-        assert (
-            t <= self.config.block_size
-        ), f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        # shape (1, t)
-        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
-        # forward the GPT model itself
-        # token embeddings of shape (b, t, n_embd)
-        tok_emb = self.model.transformer.wte(idx)
-        # position embeddings of shape (1, t, n_embd)
-        pos_emb = self.model.transformer.wpe(pos)
-        x = self.model.transformer.drop(tok_emb + pos_emb)
-        for block in self.model.transformer.h:
-            x = block(x)
-        x = self.model.transformer.ln_f(x)
+        self.forward = model.forward
 
-        return self.reward_head(x[:, -1, :])
+    def forward(self, input_ids):
+        batch_size, sequence_length = input_ids.shape[:2]
+        transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=None)
+        hidden_states = transformer_outputs[0]
+        logits = self.lm_head(hidden_states)
+        # extract logit of last token in sequence
+        return logits[:, -1, :]
 
 
 def init_reward_model(config):
-    # skip compilation because we will compile the entire reward model as one
-    model, model_kwargs = init_transformer(
-        config, as_tensordictmodule=False, skip_compilation=True
-    )
-    model = RewardModel(model)
-
-    print("Config of model: ", model.config)
-    out_dir = Path(config["out_dir_reward"])
-
-    if not out_dir.exists():
-        print(f"Create {config['out_dir_reward']}")
-        out_dir.mkdir()
-
+    model_kwargs = {
+        "resid_pdrop": config["dropout"],
+        "embd_pdrop": config["dropout"],
+        "attn_pdrop": config["dropout"],
+    }
     if config["init_reward_from"] == "scratch":
-        print("initializing reward from scratch")
+        model = init_transformer(
+            config, as_tensordictmodule=False, skip_compilation=True
+        )
+        model = RewardModel(model)
     elif config["init_reward_from"] == "resume":
-        print(f"Resuming training from {config['out_dir_reward']}")
-        checkpoint = load_checkpoint(out_dir, device=config["device"])
-        state_dict = checkpoint["model"]
-        _remove_state_dict_prefixes(state_dict, unwanted_prefixes=["_orig_mod."])
-        model.load_state_dict(state_dict)
+        model = RewardModel.from_pretrained(config["out_dir_reward"], **model_kwargs)
+    else:
+        raise ValueError(f"option {config['init_reward_from']=} not recognised")
+
+    # crop down the model block size if desired, using model surgery
+    if config["block_size"] < model.config.n_positions:
+        print(
+            f"cropping model from block_size {model.config.n_positions} to {config['block_size']}"
+        )
+        crop_block_size(model, config["block_size"])
+        print_trainable_parameters(model)
 
     model.to(config["device"])
     # compile the model
-    if config["compile"]:
-        print("compiling the model... (takes a ~minute)")
-        model = torch.compile(model)  # requires PyTorch 2.0
+    print("compiling the model... (takes a ~minute)")
+    model = torch.compile(model)  # requires PyTorch 2.0
 
     model = TensorDictModule(model, in_keys=["input"], out_keys=["reward"])
-    return model, model_kwargs
+    return model
 
 
 if __name__ == "__main__":

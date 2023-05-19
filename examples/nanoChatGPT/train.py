@@ -13,9 +13,8 @@ from pathlib import Path
 import torch
 
 from data import get_prompt_dataloaders
-from models.transformer import init_optimizer, init_transformer
-from shared import create_lr_scheduler, setup
-from utils import load_and_update_config
+from models.transformer import init_transformer
+from utils import create_lr_scheduler, load_and_update_config, setup
 
 HERE = Path(__file__).parent
 
@@ -48,11 +47,17 @@ def main():
     ctx = setup(config)
 
     # ######## INIT MODELS ########
-    model, model_kwargs = init_transformer(config)
+    model = init_transformer(config)
 
     # ######## INIT TRAINING FUNCTIONS ########
     scaler = init_scaler(config)
-    optimizer = init_optimizer(model, config)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config["learning_rate"],
+        weight_decay=config["weight_decay"],
+        betas=(config["beta1"], config["beta2"]),
+    )
+
     lr_scheduler = create_lr_scheduler(config)
 
     estimate_loss = create_loss_estimator(config, ctx)
@@ -110,17 +115,16 @@ def main():
                 best_val_loss = val_loss
                 if it > 0:
                     checkpoint = {
-                        "model": model.module._orig_mod.state_dict()
-                        if config["compile"]
-                        else model.module.state_dict(),
                         "optimizer": optimizer.state_dict(),
-                        "model_kwargs": model_kwargs,
                         "iter_num": it,
                         "best_val_loss": best_val_loss,
                         "config": config,
                     }
                     print(f"saving checkpoint to {config['out_dir']}")
-                    torch.save(checkpoint, os.path.join(config["out_dir"], "ckpt.pt"))
+                    model.module.save_pretrained(config["out_dir"])
+                    torch.save(
+                        checkpoint, os.path.join(config["out_dir"], "ckpt_status.pt")
+                    )
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
