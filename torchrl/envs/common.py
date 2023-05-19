@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from numbers import Number
 from typing import Any, Callable, Dict, Iterator, Optional, Union
 
 import numpy as np
