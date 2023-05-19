@@ -545,7 +545,11 @@ class SerialEnv(_BatchedEnv):
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(*self._selected_step_keys).clone()
+        return (
+            self.shared_tensordict_parent.select(*self._selected_step_keys)
+            .exclude("_reset")
+            .clone()
+        )
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -603,7 +607,11 @@ class SerialEnv(_BatchedEnv):
                 _td.select(*self._selected_keys, strict=False)
             )
 
-        return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
+        return (
+            self.shared_tensordict_parent.select(*self._selected_reset_keys)
+            .exclude("_reset")
+            .clone()
+        )
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -750,7 +758,11 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return self.shared_tensordict_parent.select(*self._selected_step_keys).clone()
+        return (
+            self.shared_tensordict_parent.select(*self._selected_step_keys)
+            .exclude("_reset")
+            .clone()
+        )
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -846,7 +858,11 @@ class ParallelEnv(_BatchedEnv):
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
 
-        return self.shared_tensordict_parent.select(*self._selected_reset_keys).clone()
+        return (
+            self.shared_tensordict_parent.select(*self._selected_reset_keys)
+            .exclude("_reset")
+            .clone()
+        )
 
     def __reduce__(self):
         if not self.is_closed:
@@ -982,11 +998,18 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             if not is_cuda:
                 shared_tensordict.update_(
-                    local_tensordict.select(*shared_tensordict.keys(True, True), strict=False)
+                    local_tensordict.select(
+                        *shared_tensordict.keys(True, True), strict=False
+                    )
                 )
                 out = ("reset_obs", None)
             else:
-                out = ("reset_obs",local_tensordict.select(*shared_tensordict.keys(True, True), strict=False),)
+                out = (
+                    "reset_obs",
+                    local_tensordict.select(
+                        *shared_tensordict.keys(True, True), strict=False
+                    ),
+                )
             queue_out.put(out)
 
         elif cmd == "step":
