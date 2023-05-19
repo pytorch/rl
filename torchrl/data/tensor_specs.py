@@ -482,11 +482,16 @@ class TensorSpec:
 
         return decorator
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+    def encode(self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False) -> torch.Tensor:
         """Encodes a value given the specified spec, and return the corresponding tensor.
 
         Args:
             val (np.ndarray or torch.Tensor): value to be encoded as tensor.
+
+        Keyword Args:
+            ignore_device (bool, optional): if ``True``, the spec device will
+                be ignored. This is used to group tensor casting within a call
+                to ``TensorDict(..., device="cuda")`` which is faster.
 
         Returns:
             torch.Tensor matching the required tensor specs.
@@ -506,7 +511,10 @@ class TensorSpec:
                 stride > 0 for stride in val.strides
             ):
                 val = val.copy()
-            val = torch.tensor(val, device=self.device, dtype=self.dtype)
+            if not ignore_device:
+                val = torch.tensor(val, device=self.device, dtype=self.dtype)
+            else:
+                val = torch.as_tensor(val, dtype=self.dtype)
             if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
                 if (
@@ -1114,9 +1122,14 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         self,
         val: Union[np.ndarray, torch.Tensor],
         space: Optional[DiscreteBox] = None,
+        *,
+        ignore_device: bool = False,
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.tensor(val, dtype=self.dtype, device=self.device)
+            if ignore_device:
+                val = torch.tensor(val, dtype=self.dtype)
+            else:
+                val = torch.tensor(val, dtype=self.dtype, device=self.device)
 
         if space is None:
             space = self.space
@@ -1735,9 +1748,12 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         ).squeeze(-2)
         return x
 
-    def encode(self, val: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+    def encode(self, val: Union[np.ndarray, torch.Tensor], *, ignore_device: bool=False) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
-            val = torch.tensor(val, device=self.device)
+            if not ignore_device:
+                val = torch.tensor(val, device=self.device)
+            else:
+                val = torch.as_tensor(val)
 
         x = []
         for v, space in zip(val.unbind(-1), self.space):
@@ -1745,7 +1761,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 raise RuntimeError(
                     f"value {v} is greater than the allowed max {space.n}"
                 )
-            x.append(super(MultiOneHotDiscreteTensorSpec, self).encode(v, space))
+            x.append(super(MultiOneHotDiscreteTensorSpec, self).encode(v, space, ignore_device=ignore_device))
         return torch.cat(x, -1)
 
     def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
@@ -2640,7 +2656,7 @@ class CompositeSpec(TensorSpec):
             raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
 
-    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    def encode(self, vals: Dict[str, Any], *, ignore_device: bool = False) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
         else:
@@ -2651,7 +2667,7 @@ class CompositeSpec(TensorSpec):
                     "CompositeSpec.encode cannot be used with missing values."
                 )
             try:
-                out[key] = self[key].encode(item)
+                out[key] = self[key].encode(item, ignore_device=ignore_device)
             except KeyError:
                 raise KeyError(
                     f"The CompositeSpec instance with keys {self.keys()} does not have a '{key}' key."
@@ -3087,7 +3103,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             f"LazyStackedCompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
         )
 
-    def encode(self, vals: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    def encode(self, vals: Dict[str, Any], ignore_device: bool=False) -> Dict[str, torch.Tensor]:
         pass
 
     def __delitem__(self, key):

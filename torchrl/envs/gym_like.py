@@ -154,7 +154,7 @@ class GymLikeEnv(_EnvWrapper):
             step_reward (reward in the format provided by the inner env): reward of this particular step
 
         """
-        return total_reward + self.reward_spec.encode(step_reward)
+        return total_reward + self.reward_spec.encode(step_reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -176,7 +176,7 @@ class GymLikeEnv(_EnvWrapper):
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        observations = self.observation_spec.encode(observations)
+        observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -226,13 +226,13 @@ class GymLikeEnv(_EnvWrapper):
             reward = np.nan
         reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
         done = self._to_tensor(done, dtype=torch.bool)
+        obs_dict['reward'] = reward
+        obs_dict['done'] = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
         )
 
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
 

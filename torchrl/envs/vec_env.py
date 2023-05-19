@@ -931,7 +931,6 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    is_cuda = torch.device(device).type == "cuda"
     env = env.to(device)
 
     i = -1
@@ -952,7 +951,8 @@ def _run_worker_pipe_shared_mem(
             # torch.manual_seed(data)
             # np.random.seed(data)
             new_seed = env.set_seed(data[0], static_seed=data[1])
-            queue_out.put(("seeded", new_seed))
+            out = ("seeded", new_seed)
+            queue_out.put(out)
 
         elif cmd == "init":
             if verbose:
@@ -982,7 +982,8 @@ def _run_worker_pipe_shared_mem(
             shared_tensordict.update_(
                 local_td.select(*shared_tensordict.keys(True, True), strict=False)
             )
-            queue_out.put(("reset_obs", None))
+            out = ("reset_obs", None)
+            queue_out.put(out)
 
         elif cmd == "step":
             if not initialized:
@@ -999,8 +1000,8 @@ def _run_worker_pipe_shared_mem(
                 local_td.pin_memory()
             msg = "step_result"
             shared_tensordict.update_(local_td.select("next"))
-            data = (msg, None)
-            queue_out.put(data)
+            out = (msg, None)
+            queue_out.put(out)
 
         elif cmd == "close":
             del shared_tensordict, local_td, data
@@ -1008,8 +1009,8 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before closing")
             env.close()
             del env
-
-            queue_out.put(("closing", None))
+            out = ("closing", None)
+            queue_out.put(out)
             queue_out.close()
             queue_in.close()
             if verbose:
@@ -1018,13 +1019,13 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
-            msg = "loaded"
-            queue_out.put((msg, None))
+            out = ("loaded", None)
+            queue_out.put(out)
 
         elif cmd == "state_dict":
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
-            msg = "state_dict"
-            queue_out.put((msg, state_dict))
+            out = ("state_dict", state_dict)
+            queue_out.put(out)
 
         else:
             err_msg = f"{cmd} from env"
@@ -1044,10 +1045,12 @@ def _run_worker_pipe_shared_mem(
             except Exception as err:
                 raise RuntimeError(f"querying {err_msg} resulted in an error.") from err
             if cmd not in ("to"):
-                queue_out.put(("_".join([cmd, "done"]), result))
+                out = ("_".join([cmd, "done"]), result)
+                queue_out.put(out)
             else:
                 # don't send env through pipe
-                queue_out.put(("_".join([cmd, "done"]), None))
+                out = ("_".join([cmd, "done"]), None)
+                queue_out.put(out)
 
 
 class MultiThreadedEnvWrapper(_EnvWrapper):
