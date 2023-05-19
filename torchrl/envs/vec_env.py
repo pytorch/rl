@@ -931,7 +931,7 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
-    # is_cuda = torch.device(device).type == "cuda"
+    is_cuda = torch.device(device).type == "cuda"
     env = env.to(device)
 
     i = -1
@@ -980,13 +980,13 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
-            # if not is_cuda:
-            shared_tensordict.update_(
-                local_tensordict.select(*shared_tensordict.keys(True, True), strict=False)
-            )
-            out = ("reset_obs", None)
-            # else:
-            #     out = ("reset_obs",local_tensordict.select(*shared_tensordict.keys(True, True), strict=False),)
+            if not is_cuda:
+                shared_tensordict.update_(
+                    local_tensordict.select(*shared_tensordict.keys(True, True), strict=False)
+                )
+                out = ("reset_obs", None)
+            else:
+                out = ("reset_obs",local_tensordict.select(*shared_tensordict.keys(True, True), strict=False),)
             queue_out.put(out)
 
         elif cmd == "step":
@@ -1003,11 +1003,11 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            # if not is_cuda:
-            shared_tensordict.update_(local_tensordict.select("next"))
-            out = (msg, None)
-            # else:
-            #     out = (msg, local_tensordict.select("next"))
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict.select("next"))
+                out = (msg, None)
+            else:
+                out = (msg, local_tensordict.select("next"))
             queue_out.put(out)
 
         elif cmd == "close":
