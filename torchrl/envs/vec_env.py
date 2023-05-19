@@ -931,6 +931,7 @@ def _run_worker_pipe_shared_mem(
                 "env_fun_kwargs must be empty if an environment is passed to a process."
             )
         env = env_fun
+    is_cuda = torch.device(device).type == "cuda"
     env = env.to(device)
 
     i = -1
@@ -938,7 +939,7 @@ def _run_worker_pipe_shared_mem(
 
     # make sure that process can be closed
     shared_tensordict = None
-    local_td = None
+    local_tensordict = None
 
     while True:
         try:
@@ -973,38 +974,44 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            local_td = env._reset(tensordict=shared_tensordict)
+            local_tensordict = env._reset(tensordict=shared_tensordict.clone(False))
 
-            if "_reset" in local_td.keys():
-                local_td.del_("_reset")
+            if "_reset" in local_tensordict.keys():
+                local_tensordict.del_("_reset")
             if pin_memory:
-                local_td.pin_memory()
-            shared_tensordict.update_(
-                local_td.select(*shared_tensordict.keys(True, True), strict=False)
-            )
-            out = ("reset_obs", None)
+                local_tensordict.pin_memory()
+            if not is_cuda:
+                shared_tensordict.update_(
+                    local_tensordict.select(*shared_tensordict.keys(True, True), strict=False)
+                )
+                out = ("reset_obs", None)
+            else:
+                out = ("reset_obs",local_tensordict.select(*shared_tensordict.keys(True, True), strict=False),)
             queue_out.put(out)
 
         elif cmd == "step":
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if local_td is not None:
-                local_td = local_td.update(
+            if local_tensordict is not None:
+                local_tensordict = local_tensordict.update(
                     shared_tensordict.select(*env_input_keys),
                 )
             else:
-                local_td = shared_tensordict.clone(recurse=False)
-            local_td = env._step(local_td)
+                local_tensordict = shared_tensordict.clone(recurse=False)
+            local_tensordict = env._step(local_tensordict)
             if pin_memory:
-                local_td.pin_memory()
+                local_tensordict.pin_memory()
             msg = "step_result"
-            shared_tensordict.update_(local_td.select("next"))
-            out = (msg, None)
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict.select("next"))
+                out = (msg, None)
+            else:
+                out = (msg, local_tensordict.select("next"))
             queue_out.put(out)
 
         elif cmd == "close":
-            del shared_tensordict, local_td, data
+            del shared_tensordict, local_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
