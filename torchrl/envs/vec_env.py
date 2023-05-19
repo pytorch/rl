@@ -936,8 +936,8 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     # make sure that process can be closed
-    tensordict = None
-    _td = None
+    shared_tensordict = None
+    local_tensordict = None
 
     while True:
         try:
@@ -958,36 +958,35 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            tensordict = data
-            if not (tensordict.is_shared() or tensordict.is_memmap()):
+            shared_tensordict = data
+            if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
                 )
             initialized = True
 
         elif cmd == "reset":
-            reset_kwargs = data
             if verbose:
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env._reset(**reset_kwargs)
+            local_tensordict = env._reset(tensordict=shared_tensordict.clone(False))
 
-            if "_reset" in _td.keys():
-                _td.del_("_reset")
+            if "_reset" in local_tensordict.keys():
+                local_tensordict.del_("_reset")
             if pin_memory:
-                _td.pin_memory()
+                local_tensordict.pin_memory()
             if not is_cuda:
-                tensordict.update_(
-                    _td.select(*tensordict.keys(True, True), strict=False)
+                shared_tensordict.update_(
+                    local_tensordict.select(*shared_tensordict.keys(True, True), strict=False)
                 )
                 child_pipe.send(("reset_obs", None))
             else:
                 child_pipe.send(
                     (
                         "reset_obs",
-                        _td.select(*tensordict.keys(True, True), strict=False),
+                        local_tensordict.select(*shared_tensordict.keys(True, True), strict=False),
                     )
                 )
 
@@ -995,26 +994,26 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if _td is not None:
-                _td = _td.update(
-                    tensordict.select(*env_input_keys),
+            if local_tensordict is not None:
+                local_tensordict = local_tensordict.update(
+                    shared_tensordict.select(*env_input_keys),
                 )
             else:
-                _td = tensordict.clone(recurse=False)
-            _td = env._step(_td)
+                local_tensordict = shared_tensordict.clone(recurse=False)
+            local_tensordict = env._step(local_tensordict)
             if pin_memory:
-                _td.pin_memory()
+                local_tensordict.pin_memory()
             msg = "step_result"
             if not is_cuda:
-                tensordict.update_(_td.select("next"))
+                shared_tensordict.update_(local_tensordict.select("next"))
                 data = (msg, None)
                 child_pipe.send(data)
             else:
-                data = (msg, _td.select("next"))
+                data = (msg, local_tensordict.select("next"))
                 child_pipe.send(data)
 
         elif cmd == "close":
-            del tensordict, _td, data
+            del shared_tensordict, local_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
