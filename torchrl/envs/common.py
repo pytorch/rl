@@ -833,6 +833,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> Union[torch.Tensor, dict]:
+        raise RuntimeError
         if device is None:
             device = self.device
 

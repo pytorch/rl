@@ -214,7 +214,7 @@ class GymLikeEnv(_EnvWrapper):
             if isinstance(done, bool) or (
                 isinstance(done, np.ndarray) and not len(done)
             ):
-                done = torch.tensor([done], device=self.device)
+                done = torch.tensor([done])
 
             done, do_break = self.read_done(done)
             if do_break:
@@ -223,11 +223,11 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict = self.read_obs(obs)
 
         if reward is None:
-            reward = np.nan
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
-        obs_dict['reward'] = reward
-        obs_dict['done'] = done
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        # done = self._to_tensor(done, dtype=torch.bool)
+        obs_dict["reward"] = reward
+        obs_dict["done"] = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
