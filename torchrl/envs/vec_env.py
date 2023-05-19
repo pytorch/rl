@@ -369,14 +369,16 @@ class _BatchedEnv(EnvBase):
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
+
         self._selected_keys = (
             set(self.env_output_keys)
             .union(self.env_input_keys)
             .union(self.env_obs_keys)
         )
         self._selected_keys.add("done")
+        self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + ["done"]
+        self._selected_reset_keys = self.env_obs_keys + ["done"] + ["_reset"]
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:
@@ -580,6 +582,10 @@ class SerialEnv(_BatchedEnv):
             if not _reset[i].any():
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
+                # If we don't do this, the result of calling reset and skipping one env
+                # will be that the env will have the data from the previous
+                # step at the root (since the shared_tensordict did not go through
+                # step_mdp).
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
                         *self._selected_reset_keys, strict=False
@@ -806,22 +812,27 @@ class ParallelEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            kwargs["tensordict"] = tensordict_
             if not _reset[i].any():
+                # We update the stored tensordict with the value of the "next"
+                # key as one may be surprised to receive data that is not up-to-date
+                # If we don't do this, the result of calling reset and skipping one env
+                # will be that the env will have the data from the previous
+                # step at the root (since the shared_tensordict did not go through
+                # step_mdp).
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
-                if kwargs["tensordict"] is not None:
+                if tensordict_ is not None:
                     self.shared_tensordicts[i].update_(
-                        kwargs["tensordict"].select(
-                            *self._selected_reset_keys, strict=False
-                        )
+                        tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
-                # we must update the
                 continue
-            channel.send((cmd_out, kwargs))
+            elif tensordict_ is not None:
+                # we update the shared tensordict with the new data
+                self.shared_tensordicts[i].update_(tensordict_)
+            channel.send((cmd_out, None))
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
