@@ -16,7 +16,6 @@ from warnings import warn
 
 import numpy as np
 import torch
-import torchrl
 
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
@@ -39,6 +38,7 @@ from torchrl.envs.utils import _sort_keys
 _has_envpool = importlib.util.find_spec("envpool")
 
 TIMEOUT = 1000
+
 
 def _check_start(fun):
     def decorated_fun(self: _BatchedEnv, *args, **kwargs):
@@ -371,14 +371,16 @@ class _BatchedEnv(EnvBase):
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
+
         self._selected_keys = (
             set(self.env_output_keys)
             .union(self.env_input_keys)
             .union(self.env_obs_keys)
         )
         self._selected_keys.add("done")
+        self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + ["done"]
+        self._selected_reset_keys = self.env_obs_keys + ["done"] + ["_reset"]
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:
@@ -582,6 +584,10 @@ class SerialEnv(_BatchedEnv):
             if not _reset[i].any():
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
+                # If we don't do this, the result of calling reset and skipping one env
+                # will be that the env will have the data from the previous
+                # step at the root (since the shared_tensordict did not go through
+                # step_mdp).
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
                         *self._selected_reset_keys, strict=False
@@ -809,22 +815,27 @@ class ParallelEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            kwargs["tensordict"] = tensordict_
             if not _reset[i].any():
+                # We update the stored tensordict with the value of the "next"
+                # key as one may be surprised to receive data that is not up-to-date
+                # If we don't do this, the result of calling reset and skipping one env
+                # will be that the env will have the data from the previous
+                # step at the root (since the shared_tensordict did not go through
+                # step_mdp).
                 self.shared_tensordicts[i].update_(
                     self.shared_tensordicts[i]["next"].select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
-                if kwargs["tensordict"] is not None:
+                if tensordict_ is not None:
                     self.shared_tensordicts[i].update_(
-                        kwargs["tensordict"].select(
-                            *self._selected_reset_keys, strict=False
-                        )
+                        tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
-                # we must update the
                 continue
-            queue_out.put((cmd_out, kwargs))
+            elif tensordict_ is not None:
+                # we update the shared tensordict with the new data
+                self.shared_tensordicts[i].update_(tensordict_)
+            queue_out.put((cmd_out, None))
 
         for i, queue_in in enumerate(self.queues_in):
             if not _reset[i].any():
@@ -927,8 +938,8 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     # make sure that process can be closed
-    tensordict = None
-    _td = None
+    shared_tensordict = None
+    local_td = None
 
     while True:
         try:
@@ -949,36 +960,37 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            tensordict = data
-            if not (tensordict.is_shared() or tensordict.is_memmap()):
+            shared_tensordict = data
+            if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
                 )
             initialized = True
 
         elif cmd == "reset":
-            reset_kwargs = data
             if verbose:
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            _td = env._reset(**reset_kwargs)
+            local_td = env._reset(tensordict=shared_tensordict)
 
-            if "_reset" in _td.keys():
-                _td.del_("_reset")
+            if "_reset" in local_td.keys():
+                local_td.del_("_reset")
             if pin_memory:
-                _td.pin_memory()
+                local_td.pin_memory()
             if not is_cuda:
-                tensordict.update_(
-                    _td.select(*tensordict.keys(True, True), strict=False)
+                shared_tensordict.update_(
+                    local_td.select(*shared_tensordict.keys(True, True), strict=False)
                 )
                 queue_out.put(("reset_obs", None))
             else:
                 queue_out.put(
                     (
                         "reset_obs",
-                        _td.select(*tensordict.keys(True, True), strict=False),
+                        local_td.select(
+                            *shared_tensordict.keys(True, True), strict=False
+                        ),
                     )
                 )
 
@@ -986,26 +998,26 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if _td is not None:
-                _td = _td.update(
-                    tensordict.select(*env_input_keys),
+            if local_td is not None:
+                local_td = local_td.update(
+                    shared_tensordict.select(*env_input_keys),
                 )
             else:
-                _td = tensordict.clone(recurse=False)
-            _td = env._step(_td)
+                local_td = shared_tensordict.clone(recurse=False)
+            local_td = env._step(local_td)
             if pin_memory:
-                _td.pin_memory()
+                local_td.pin_memory()
             msg = "step_result"
             if not is_cuda:
-                tensordict.update_(_td.select("next"))
+                shared_tensordict.update_(local_td.select("next"))
                 data = (msg, None)
                 queue_out.put(data)
             else:
-                data = (msg, _td.select("next"))
+                data = (msg, local_td.select("next"))
                 queue_out.put(data)
 
         elif cmd == "close":
-            del tensordict, _td, data
+            del shared_tensordict, local_td, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
