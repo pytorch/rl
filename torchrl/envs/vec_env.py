@@ -979,20 +979,10 @@ def _run_worker_pipe_shared_mem(
                 local_td.del_("_reset")
             if pin_memory:
                 local_td.pin_memory()
-            if not is_cuda:
-                shared_tensordict.update_(
-                    local_td.select(*shared_tensordict.keys(True, True), strict=False)
-                )
-                queue_out.put(("reset_obs", None))
-            else:
-                queue_out.put(
-                    (
-                        "reset_obs",
-                        local_td.select(
-                            *shared_tensordict.keys(True, True), strict=False
-                        ),
-                    )
-                )
+            shared_tensordict.update_(
+                local_td.select(*shared_tensordict.keys(True, True), strict=False)
+            )
+            queue_out.put(("reset_obs", None))
 
         elif cmd == "step":
             if not initialized:
@@ -1008,13 +998,9 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_td.pin_memory()
             msg = "step_result"
-            if not is_cuda:
-                shared_tensordict.update_(local_td.select("next"))
-                data = (msg, None)
-                queue_out.put(data)
-            else:
-                data = (msg, local_td.select("next"))
-                queue_out.put(data)
+            shared_tensordict.update_(local_td.select("next"))
+            data = (msg, None)
+            queue_out.put(data)
 
         elif cmd == "close":
             del shared_tensordict, local_td, data
