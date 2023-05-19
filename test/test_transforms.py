@@ -35,6 +35,7 @@ from torchrl.data import (
     CompositeSpec,
     LazyTensorStorage,
     ReplayBuffer,
+    TensorDictReplayBuffer,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -3923,6 +3924,34 @@ class TestReward2Go(TransformBase):
         out_key = "reward2go"
         r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
         rb = ReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
+        for i in range(batch):
+            while not done[i].any():
+                done[i] = done[i].bernoulli_(0.1)
+        reward = torch.randn(*batch_size, 1, device=device)
+        misc = torch.randn(*batch_size, 1, device=device)
+
+        td = TensorDict(
+            {"misc": misc, "next": {"done": done, "reward": reward}},
+            batch_size,
+            device=device,
+        )
+        rb.extend(td)
+        sample = rb.sample(13)
+        assert sample[out_key].shape == (13, t, 1)
+        assert (sample[out_key] != 0).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    @pytest.mark.parametrize("t", [3, 20])
+    def test_transform_offline_rb(self, done_flags, gamma, t, device):
+        batch = 10
+        batch_size = [batch, t]
+        torch.manual_seed(0)
+        out_key = "reward2go"
+        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
