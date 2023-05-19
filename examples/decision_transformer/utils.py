@@ -86,20 +86,17 @@ def make_transformed_env(base_env, env_cfg, train=False):
             in_keys_inv=[],
         )
     )
-    transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["observation"]))
     transformed_env.append_transform(
-        CatFrames(in_keys=["observation"], N=env_cfg.stacked_frames, dim=-2)
+        UnsqueezeTransform(-2, in_keys=["observation", "action", "return_to_go"])
+    )
+    transformed_env.append_transform(
+        CatFrames(
+            in_keys=["observation", "action", "return_to_go"],
+            N=env_cfg.stacked_frames,
+            dim=-2,
+        )
     )
 
-    transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["action"]))
-    transformed_env.append_transform(
-        CatFrames(in_keys=["action"], N=env_cfg.stacked_frames, dim=-2)
-    )
-
-    transformed_env.append_transform(UnsqueezeTransform(-2, in_keys=["return_to_go"]))
-    transformed_env.append_transform(
-        CatFrames(in_keys=["return_to_go"], N=env_cfg.stacked_frames, dim=-2)
-    )
     if train:
         transformed_env.append_transform(RewardSum())
 
@@ -184,6 +181,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         N=rb_cfg.stacked_frames,
         dim=-2,
         padding="zeros",
+        as_inverse=True,
     )
 
     d2f = DoubleToFloat(
@@ -226,7 +224,11 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
         loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
     )
     catframes = CatFrames(
-        in_keys=["return_to_go"], N=rb_cfg.stacked_frames, dim=-2, padding="zeros"
+        in_keys=["return_to_go"],
+        N=rb_cfg.stacked_frames,
+        dim=-2,
+        padding="zeros",
+        as_inverse=True,
     )
     transforms = Compose(
         r2g,

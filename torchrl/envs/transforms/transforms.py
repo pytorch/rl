@@ -2091,7 +2091,7 @@ class CatFrames(ObservationTransform):
             observation_spec.shape = torch.Size(shape)
         return observation_spec
 
-    def _inv_apply_transform(self, tensordict: TensorDictBase) -> torch.Tensor:
+    def _inv_call(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.as_inverse:
             return self.forward(tensordict)
         else:
