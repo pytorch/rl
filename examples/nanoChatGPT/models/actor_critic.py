@@ -1,5 +1,7 @@
 import copy
 
+import torch
+
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch.distributions.categorical import Categorical
@@ -25,12 +27,13 @@ class ActorCritic(ActorValueOperator):
         actor_head = base_model.lm_head
         base_model.lm_head = nn.Identity()
 
-        # TODO: compile base_model here?
-
         # critic network
         value_head = nn.Linear(n_embd, 1, bias=False)
 
-        common = TensorDictModule(base_model, in_keys=["prompt"], out_keys=["x"])
+        common = TensorDictSequential(
+            TensorDictModule(base_model, in_keys=["prompt"], out_keys=["x"]),
+            TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
+        )
 
         actor_head = TensorDictModule(actor_head, in_keys=["x"], out_keys=["logits"])
         actor_head = SafeProbabilisticTensorDictSequential(
@@ -42,18 +45,15 @@ class ActorCritic(ActorValueOperator):
                 return_log_prob=True,
             ),
         )
-        value_head = TensorDictSequential(
-            TensorDictModule(value_head, in_keys=["x"], out_keys=["state_value"]),
-            TensorDictModule(
-                lambda x: x[:, -1, :], in_keys=["state_value"], out_keys=["state_value"]
-            ),
+        value_head = TensorDictModule(
+            value_head, in_keys=["x"], out_keys=["state_value"]
         )
 
         super().__init__(common, actor_head, value_head)
 
 
 def init_actor_critic(config):
-    model_base, _ = init_transformer(
+    model_base = init_transformer(
         config, as_tensordictmodule=False, skip_compilation=True
     )
     a2c_model = ActorCritic(model_base)
@@ -62,6 +62,4 @@ def init_actor_critic(config):
     critic = a2c_model.get_value_operator()
     critic_head = a2c_model.get_value_head()
 
-    # FIXME: we are missing compile...
-    # but we would compile TDModule...check performance issues
     return actor, critic, critic_head

@@ -59,7 +59,7 @@ def main():
     actor.eval()  # deactivate dropout on all modules
     critic.eval()
 
-    reward_model, _ = init_reward_model(config)
+    reward_model = init_reward_model(config)
     reward_model.requires_grad_(False)
     reward_model.eval()
 

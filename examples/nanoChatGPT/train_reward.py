@@ -34,11 +34,11 @@ def main():
     ctx = setup(config)
 
     # ######## INIT MODELS ########
-    model, model_kwargs = init_reward_model(config)
+    model = init_reward_model(config)
 
     # ######## INIT TRAINING FUNCTIONS ########
 
-    optimizer = torch.optim.AdamW(model.model.parameters(), lr=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     lr_scheduler = create_lr_scheduler(config)
 
     estimate_loss = create_loss_estimator(config, ctx)
@@ -86,18 +86,16 @@ def main():
                 best_val_loss = val_loss
                 if it > 0:
                     checkpoint = {
-                        "model": model.module._orig_mod.state_dict()
-                        if config["compile"]
-                        else model.module.state_dict(),
                         "optimizer": optimizer.state_dict(),
-                        "model_kwargs": model_kwargs,
                         "iter_num": it,
                         "best_val_loss": best_val_loss,
                         "config": config,
                     }
                     print(f"saving checkpoint to {config['out_dir_reward']}")
+                    model.module.save_pretrained(config["out_dir_reward"])
                     torch.save(
-                        checkpoint, os.path.join(config["out_dir_reward"], "ckpt.pt")
+                        checkpoint,
+                        os.path.join(config["out_dir_reward"], "ckpt_status.pt"),
                     )
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point

@@ -1,15 +1,8 @@
 # nanoChatGPT
 
-This is a toy implementation of a chatGPT-like model built on top of [nanoGPT][nanoGPT].
+This is a toy implementation of a chatGPT-like model.
 
 ## Getting started
-
-You will need to pull the code for nanoGPT which we have included here as a Git submodule. From inside your local copy of the TorchRL repo, run
-
-```sh
-git submodule init
-git submodule update
-```
 
 Make sure you have PyTorch 2.0 installed. You can find installation instructions [here](https://pytorch.org/get-started/locally/).
 
@@ -59,5 +52,3 @@ To train the final model run
 ```sh
 python train_rlhf.py
 ```
-
-[nanoGPT]: https://github.com/karpathy/nanoGPT
