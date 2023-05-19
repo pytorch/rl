@@ -1025,9 +1025,11 @@ class TestBrax:
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 class TestVmas:
     @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
-    def test_all_vmas_scenarios(self, scenario_name):
+    @pytest.mark.parametrize("continuous_actions", [True, False])
+    def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
         env = VmasEnv(
             scenario=scenario_name,
+            continuous_actions=continuous_actions,
             num_envs=4,
         )
         env.set_seed(0)
