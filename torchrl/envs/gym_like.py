@@ -154,7 +154,7 @@ class GymLikeEnv(_EnvWrapper):
             step_reward (reward in the format provided by the inner env): reward of this particular step
 
         """
-        return total_reward + self.reward_spec.encode(step_reward)
+        return total_reward + self.reward_spec.encode(step_reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -176,14 +176,14 @@ class GymLikeEnv(_EnvWrapper):
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        observations = self.observation_spec.encode(observations)
+        observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
         action_np = self.read_action(action)
 
-        reward = self.reward_spec.zero()
+        reward = 0
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
@@ -214,7 +214,7 @@ class GymLikeEnv(_EnvWrapper):
             if isinstance(done, bool) or (
                 isinstance(done, np.ndarray) and not len(done)
             ):
-                done = torch.tensor([done], device=self.device)
+                done = torch.tensor([done])
 
             done, do_break = self.read_done(done)
             if do_break:
@@ -223,16 +223,16 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict = self.read_obs(obs)
 
         if reward is None:
-            reward = np.nan
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
+        # done = self._to_tensor(done, dtype=torch.bool)
+        obs_dict["reward"] = reward
+        obs_dict["done"] = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
         )
 
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
 
