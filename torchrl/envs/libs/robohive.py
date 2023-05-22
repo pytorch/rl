@@ -284,21 +284,25 @@ if _has_robohive:
             "robot_jnt": 1.0,
             "end_effector": 1.0,
         }
-        visual_obs_keys = {
-            "rgb:right_cam:224x224:2d": 1.0,
-            "rgb:left_cam:224x224:2d": 1.0,
-        }
+        # visual_obs_keys = {
+        #     "rgb:right_cam:224x224:2d": 1.0,
+        #     "rgb:left_cam:224x224:2d": 1.0,
+        # }
 
         env_names = copy(env_list)
 
         for env in env_list:
             try:
+                _env = gym.make(env)
+                cams = [_env.sim.model.id2name(ic,7) for ic in range(env.sim.model.ncam)]
+                visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+                print("env visual_keys", visual_keys)
                 new_env_name = "visual_" + env
                 register_env_variant(
                     env,
                     variants={
                         "obs_keys_wt": obs_keys_wt,
-                        "visual_keys": list(visual_obs_keys.keys()),
+                        "visual_keys": visual_keys,
                     },
                     variant_id=new_env_name,
                     override_keys=override_keys,
@@ -328,18 +332,22 @@ if _has_robohive:
             "robot_jnt": 1.0,
             "end_effector": 1.0,
         }
-        visual_obs_keys = {
-            "rgb:right_cam:224x224:2d": 1.0,
-            "rgb:left_cam:224x224:2d": 1.0,
-        }
+        # visual_obs_keys = {
+        #     "rgb:right_cam:224x224:2d": 1.0,
+        #     "rgb:left_cam:224x224:2d": 1.0,
+        # }
         for env in env_list:
             try:
+                _env = gym.make(env)
+                cams = [_env.sim.model.id2name(ic,7) for ic in range(env.sim.model.ncam)]
+                visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+                print("env visual_keys", visual_keys)
                 new_env_name = "visual_" + env
                 register_env_variant(
                     env,
                     variants={
                         "obs_keys_wt": obs_keys_wt,
-                        "visual_keys": visual_obs_keys,
+                        "visual_keys": visual_keys,
                     },
                     variant_id=new_env_name,
                     override_keys=override_keys,
@@ -357,18 +365,22 @@ if _has_robohive:
         env_list = ["door-v1", "hammer-v1", "pen-v1", "relocate-v1"]
         env_names = copy(env_list)
 
-        visual_obs_keys = [
+        visual_keys = [
             "rgb:vil_camera:224x224:2d",
             "rgb:fixed:224x224:2d",
         ]
         # Hand Manipulation Suite ======================================================================
         for env in env_list:
             try:
+                _env = gym.make(env)
+                cams = [_env.sim.model.id2name(ic,7) for ic in range(env.sim.model.ncam)]
+                visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+                print("env visual_keys", visual_keys)
                 new_env_name = "visual_" + env
                 register_env_variant(
                     env,
                     variants={
-                        "visual_keys": visual_obs_keys,
+                        "visual_keys": visual_keys,
                     },
                     variant_id=new_env_name,
                 )
@@ -414,6 +426,10 @@ if _has_robohive:
         # Hand Manipulation Suite ======================================================================
         for env in env_list:
             try:
+                _env = gym.make(env)
+                cams = [_env.sim.model.id2name(ic,7) for ic in range(env.sim.model.ncam)]
+                visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
+                print("env visual_keys", visual_keys)
                 new_env_name = "visual_" + env
                 register_env_variant(
                     env,
