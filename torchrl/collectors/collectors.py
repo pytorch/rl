@@ -1560,7 +1560,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        out_tensordicts_shared = OrderedDict()
+        out_tensordicts_shared = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
