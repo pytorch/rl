@@ -699,6 +699,10 @@ class ParallelEnv(_BatchedEnv):
             channel2.close()
             self.parent_channels.append(channel1)
             self._workers.append(w)
+            # we make sure that the process is fully started before launching
+            # the next one
+            msg = channel.recv()
+            assert msg == "started"
 
         # send shared tensordict to workers
         for channel, shared_tensordict in zip(
@@ -959,6 +963,8 @@ def _run_worker_pipe_shared_mem(
     # make sure that process can be closed
     shared_tensordict = None
     local_tensordict = None
+
+    child_pipe.send("started")
 
     while True:
         try:
