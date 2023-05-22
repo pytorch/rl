@@ -1203,12 +1203,6 @@ class TestConcurrentEnvs:
     @staticmethod
     def main_collector(j, q=None):
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
-        # if j > 6 and q is not None:
-        #     q.put("passed")
-        #     print("passing", j)
-        #     return
-        # else:
-        #     print("computing", j)
         N = 10
         n_workers = 1
         make_envs = [
@@ -1247,7 +1241,7 @@ class TestConcurrentEnvs:
 
         if td_equals.all():
             if q is not None:
-                q.put("passed")
+                q.put(("passed", j))
             else:
                 pass
         else:
@@ -1259,7 +1253,7 @@ class TestConcurrentEnvs:
                         print("r_p", r_p.get(key)[~item])
                         print("r_s", r_s.get(key)[~item])
                         s = s + f"\t{key}"
-                q.put(f"failed: {s}")
+                q.put((f"failed: {s}", j))
             else:
                 raise RuntimeError()
 
@@ -1276,12 +1270,12 @@ class TestConcurrentEnvs:
             q = mp.Queue(3)
             ps = []
             try:
-                for k in range(3, 10, 3):
-                    p = mp.Process(target=type(self).main_collector, args=(k, q))
+                for j in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_collector, args=(j, q))
                     ps.append(p)
                     p.start()
-                for j in range(3):
-                    msg = q.get(timeout=100)
+                for k in range(3):
+                    msg, j = q.get(timeout=100)
                     assert msg == "passed", j
             finally:
                 for p in ps:
