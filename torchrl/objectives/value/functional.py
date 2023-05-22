@@ -168,9 +168,14 @@ def _geom_series_like(t, r, thr):
     if isinstance(r, torch.Tensor):
         r = r.item()
 
-    lim = int(math.log(thr) / math.log(r))
+    if r == 0.0:
+        return torch.zeros_like(t)
+    elif r >= 1.0:
+        lim = t.numel()
+    else:
+        lim = int(math.log(thr) / math.log(r))
 
-    rs = torch.full_like(t[0][:lim], r, device=t.device)
+    rs = torch.full_like(t[:lim], r)
     rs[0] = 1.0
     rs = rs.cumprod(0)
     rs = rs.unsqueeze(-1)
@@ -219,7 +224,7 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
 
-    gammalmbdas = _geom_series_like(td0_flat, gammalmbda, thr=thr)
+    gammalmbdas = _geom_series_like(td0_flat[0], gammalmbda, thr=thr)
 
     advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
     advantage = advantage.squeeze(1)
@@ -835,7 +840,7 @@ def _fast_td_lambda_return_estimate(
         t + v3 * gammalmbda, num_per_traj, return_mask=True
     )
 
-    gammalmbdas = _geom_series_like(t_flat, gammalmbda, thr)
+    gammalmbdas = _geom_series_like(t_flat[0], gammalmbda, thr=thr)
 
     ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
     ret = ret_flat.squeeze(1)[mask]
@@ -1105,7 +1110,7 @@ def reward2go(
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(reward, num_per_traj)
-    gammas = _geom_series_like(td0_flat, gamma, thr=1e-7)
+    gammas = _geom_series_like(td0_flat[0], gamma, thr=1e-7)
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
     cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
