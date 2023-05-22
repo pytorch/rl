@@ -5,6 +5,7 @@
 
 import argparse
 import os.path
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -1202,6 +1203,7 @@ class TestConcurrentEnvs:
 
     @staticmethod
     def main_collector(j, q=None):
+        time.sleep(3)
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
         N = 10
         n_workers = 1
