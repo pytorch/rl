@@ -722,7 +722,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         try:
             self.input_spec.unlock_()
             if value is None:
-                self.input_spec['_state_spec'] = CompositeSpec(device=self.device, shape=self.batch_size)
+                self.input_spec["_state_spec"] = CompositeSpec(
+                    device=self.device, shape=self.batch_size
+                )
             else:
                 device = self.input_spec.device
                 if not isinstance(value, CompositeSpec):
