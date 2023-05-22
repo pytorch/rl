@@ -701,7 +701,7 @@ class ParallelEnv(_BatchedEnv):
             self._workers.append(w)
             # we make sure that the process is fully started before launching
             # the next one
-            msg = channel.recv()
+            msg = channel1.recv()
             assert msg == "started"
 
         # send shared tensordict to workers
