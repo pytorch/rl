@@ -1204,6 +1204,7 @@ class TestConcurrentEnvs:
 
     @staticmethod
     def main_collector(j, q=None):
+        time.sleep(j)
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
         N = 10
         n_workers = 1
