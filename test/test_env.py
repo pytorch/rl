@@ -1203,12 +1203,12 @@ class TestConcurrentEnvs:
     @staticmethod
     def main_collector(j, q=None):
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
-        if j > 6 and q is not None:
-            q.put("passed")
-            print("passing", j)
-            return
-        else:
-            print("computing", j)
+        # if j > 6 and q is not None:
+        #     q.put("passed")
+        #     print("passing", j)
+        #     return
+        # else:
+        #     print("computing", j)
         N = 10
         n_workers = 1
         make_envs = [
