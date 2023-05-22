@@ -1236,7 +1236,7 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
-        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
+        queue_out = mp.SimpleQueue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
