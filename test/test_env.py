@@ -32,8 +32,8 @@ from mocking_classes import (
     MockSerialEnv,
 )
 from packaging import version
-from tensordict.tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import TensorDictModuleBase
+from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1252,14 +1252,13 @@ class TestConcurrentEnvs:
                 s = ""
                 for key, item in td_equals.items(True, True):
                     if not item.all():
-                        print(key,"failed")
+                        print(key, "failed")
                         print("r_p", r_p.get(key)[~item])
                         print("r_s", r_s.get(key)[~item])
                         s = s + f"\t{key}"
                 q.put((f"failed: {s}", j))
             else:
                 raise RuntimeError()
-
 
     @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_concurrent(self, nproc):
@@ -1298,12 +1297,13 @@ class TestConcurrentEnvs:
                     p = mp.Process(target=type(self).main_collector, args=(j, q))
                     ps.append(p)
                     p.start()
-                for k in range(3):
+                for _ in range(3):
                     msg, j = q.get(timeout=100)
                     assert msg == "passed", j
             finally:
                 for p in ps:
                     p.join(timeout=2)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
