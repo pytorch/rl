@@ -1203,10 +1203,12 @@ class TestConcurrentEnvs:
     @staticmethod
     def main_collector(j, q=None):
         device = "cpu" if not torch.cuda.device_count() else "cuda:0"
-        if j > 6:
-            if q is not None:
-                q.put("passed")
+        if j > 6 and q is not None:
+            q.put("passed")
+            print("passing", j)
             return
+        else:
+            print("computing", j)
         N = 10
         n_workers = 1
         make_envs = [
@@ -1262,7 +1264,7 @@ class TestConcurrentEnvs:
                 raise RuntimeError()
 
 
-    @pytest.mark.parametrize("nproc", [1, 3])
+    @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_collector(self, nproc):
         if nproc == 1:
             self.main_collector(3)
