@@ -88,7 +88,7 @@ def make_transformed_env(base_env, env_cfg):
 
 def make_transformed_env_pixels(base_env, env_cfg):
     if not isinstance(env_cfg.reward_scaling, float):
-        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
+        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 1.0)
 
     env_library = LIBS[env_cfg.env_library]
     env = TransformedEnv(base_env)
@@ -129,7 +129,7 @@ def make_transformed_env_pixels(base_env, env_cfg):
 
 def make_transformed_env_states(base_env, env_cfg):
     if not isinstance(env_cfg.reward_scaling, float):
-        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
+        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 1.0)
 
     env_library = LIBS[env_cfg.env_library]
     env = TransformedEnv(base_env)

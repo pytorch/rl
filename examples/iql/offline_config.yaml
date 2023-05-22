@@ -1,6 +1,6 @@
 # Task and env
 env:
-  env_name: Hopper-v3
+  env_name: HalfCheetah-v3
   env_task: ""
   env_library: gym
   record_video: 0
@@ -8,10 +8,10 @@ env:
   frame_skip: 1
   from_pixels: False
   num_envs: 1
-  reward_scaling:
+  reward_scaling: 1.0
   noop: 1
   seed: 0
-  evaluation_interval: 1000
+  evaluation_interval: 500
 
 # Eval
 recorder:
@@ -22,21 +22,21 @@ recorder:
 # logger
 logger:
   backend: wandb
-  exp_name: iql_hopper-medium-v2
+  exp_name: iql_halfcheetah-medium-v2
 
 # Buffer
 replay_buffer:
-  dataset: hopper-medium-v2
+  dataset: halfcheetah-medium-v2
   batch_size: 256
 
 # Optimization
 optim:
-  device: cpu
+  device: cuda:0
   lr: 3e-4
   weight_decay: 0.0
   batch_size: 256
   lr_scheduler: ""
-  gradient_steps: 1000000
+  gradient_steps: 100000
 
 
 # Policy and model
@@ -49,7 +49,7 @@ model:
 loss: 
   loss_function: smooth_l1
   gamma: 0.99
-  tau: 0.05
+  tau: 0.005
   # IQL hyperparameter
   temperature: 3.0
   expectile: 0.7
