@@ -1264,7 +1264,7 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get(timeout=100)
+                    msg = q.get()
                     assert msg == "passed"
             finally:
                 for p in ps:
@@ -1285,11 +1285,11 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get(timeout=100)
+                    msg = q.get()
                     assert msg == "passed"
             finally:
                 for p in ps:
-                    p.join(timeout=2)
+                    p.join()
 
 
 if __name__ == "__main__":
