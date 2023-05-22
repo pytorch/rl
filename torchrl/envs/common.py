@@ -721,18 +721,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def state_spec(self, value: CompositeSpec) -> None:
         try:
             self.input_spec.unlock_()
-            device = self.input_spec.device
-            if not isinstance(value, CompositeSpec):
-                raise TypeError("The type of an state_spec must be Composite.")
-            elif value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                )
-            if value.shape[: len(self.batch_size)] != self.batch_size:
-                raise ValueError(
-                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
-                )
-            self.input_spec["_state_spec"] = value.to(device)
+            if value is None:
+                self.input_spec['_state_spec'] = CompositeSpec(device=self.device, shape=self.batch_size)
+            else:
+                device = self.input_spec.device
+                if not isinstance(value, CompositeSpec):
+                    raise TypeError("The type of an state_spec must be Composite.")
+                elif value.shape[: len(self.batch_size)] != self.batch_size:
+                    raise ValueError(
+                        f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    )
+                if value.shape[: len(self.batch_size)] != self.batch_size:
+                    raise ValueError(
+                        f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
+                    )
+                self.input_spec["_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
 
