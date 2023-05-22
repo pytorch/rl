@@ -58,16 +58,16 @@ def _transpose_time(fun):
                 or tensor.numel() <= 1
             ):
                 return tensor, False
-            if time_dim < 0:
-                timedim = tensor.ndim + time_dim
+            if time_dim >= 0:
+                timedim = time_dim - tensor.ndim
             else:
                 timedim = time_dim
-            if timedim < 0 or timedim >= tensor.ndim:
+            if timedim < -tensor.ndim or timedim >= 0:
                 raise RuntimeError(ERROR.format(tensor.shape, timedim))
             if tensor.ndim >= 2:
                 single_dim = False
                 tensor = tensor.transpose(timedim, -2)
-            elif tensor.ndim == 1 and timedim == 0:
+            elif tensor.ndim == 1 and timedim == -1:
                 single_dim = True
                 tensor = tensor.unsqueeze(-1)
             else:
