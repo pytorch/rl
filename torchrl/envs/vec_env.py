@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import time
 from collections import OrderedDict
 from copy import deepcopy
 from multiprocessing import connection
@@ -699,10 +700,6 @@ class ParallelEnv(_BatchedEnv):
             channel2.close()
             self.parent_channels.append(channel1)
             self._workers.append(w)
-            # we make sure that the process is fully started before launching
-            # the next one
-            msg = channel1.recv()
-            assert msg == "started"
 
         # send shared tensordict to workers
         for channel, shared_tensordict in zip(
@@ -1008,11 +1005,11 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
-            # if not is_cuda:
-            shared_tensordict.update_(local_tensordict)
-            out = ("reset_obs", None)
-            # else:
-            #     out = ("reset_obs", local_tensordict.exclude("next"))
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict)
+                out = ("reset_obs", None)
+            else:
+                out = ("reset_obs", local_tensordict.exclude("next"))
             child_pipe.send(out)
 
         elif cmd == "step":
@@ -1029,11 +1026,11 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            # if not is_cuda:
-            shared_tensordict.update_(local_tensordict.select("next"))
-            out = (msg, None)
-            # else:
-            #     out = (msg, local_tensordict.select("next"))
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict.select("next"))
+                out = (msg, None)
+            else:
+                out = (msg, local_tensordict.select("next"))
             child_pipe.send(out)
 
         elif cmd == "close":
