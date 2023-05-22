@@ -128,14 +128,35 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             observation_spec. Therefore, "observation_spec" should be thought as
             a generic data container for environment outputs that are not done
             or reward data.
-        reward_spec (TensorSpec): the leaf spec of the reward. If the reward
+        reward_spec (TensorSpec): the (leaf) spec of the reward. If the reward
             is nested within a tensordict, its location can be accessed via
-            the ``reward_key`` attribute.
-        done_spec (TensorSpec): the leaf spec of the done. If the done
+            the ``reward_key`` attribute:
+
+                >>> # accessing reward spec:
+                >>> reward_spec = env.reward_spec
+                >>> reward_spec = env.output_spec['_reward_spec'][env.reward_key]
+                >>> # accessing reward:
+                >>> reward = env.fake_tensordict()[('next', *env.reward_key)]
+
+        done_spec (TensorSpec): the (leaf) spec of the done. If the done
             is nested within a tensordict, its location can be accessed via
             the ``done_key`` attribute.
-        action_spec (TensorSpec): sampling spec of the actions. This attribute
+
+                >>> # accessing done spec:
+                >>> done_spec = env.done_spec
+                >>> done_spec = env.output_spec['_done_spec'][env.done_key]
+                >>> # accessing done:
+                >>> done = env.fake_tensordict()[('next', *env.done_key)]
+
+        action_spec (TensorSpec): the ampling spec of the actions. This attribute
             is contained in input_spec.
+
+                >>> # accessing action spec:
+                >>> action_spec = env.action_spec
+                >>> action_spec = env.input_spec['_action_spec'][env.action_key]
+                >>> # accessing action:
+                >>> action = env.fake_tensordict()[env.action_key]
+
         output_spec (CompositeSpec): The container for all output specs (reward,
             done and observation).
         input_spec (CompositeSpec): the container for all input specs (actions
@@ -146,6 +167,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             will be compared against their respective spec and an exception
             will be raised if they don't match.
             Defaults to False.
+
+    .. note::
+      The usage of ``done_key``, ``reward_key`` and ``action_key`` is aimed at
+      facilitating the custom placement of done, reward and action data within
+      the tensordict structures produced and read by the environment.
+      In most cases, these attributes can be ignored and the default values
+      (``"done"``, ``"reward"`` and ``"action"``) can be used.
 
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
@@ -427,6 +455,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Action spec: action specs belong to input_spec
     @property
     def action_spec(self) -> TensorSpec:
+        """The ``action`` leaf spec.
+
+        This property will always return the leaf spec of the action attribute,
+        which can be accessed in a typical rollout via
+
+            >>> fake_td = env.fake_tensordict()  # a typical tensordict
+            >>> action = fake_td[env.action_key]
+
+        This property is mutable.
+        """
         try:
             action_spec = self.input_spec["_action_spec"]
         except (KeyError, AttributeError):
@@ -490,7 +528,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def reward_key(self):
         """The reward key of an environment.
 
-        By default, non-nested keys are stored in the 'reward' key.
+        By default, non-nested keys are stored in the ``'reward'`` entry.
 
         If the reward is in a nested tensordict, this property will return its
         location.
@@ -503,6 +541,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Done spec: reward specs belong to output_spec
     @property
     def reward_spec(self) -> TensorSpec:
+        """The ``reward`` leaf spec.
+
+        This property will always return the leaf spec of the reward attribute,
+        which can be accessed in a typical rollout via
+
+            >>> fake_td = env.fake_tensordict()  # a typical tensordict
+            >>> reward = fake_td[("next", *env.reward_key)]
+
+        This property is mutable.
+        """
         try:
             reward_spec = self.output_spec["_reward_spec"]
         except (KeyError, AttributeError):
@@ -592,7 +640,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def done_key(self):
         """The done key of an environment.
 
-        By default, non-nested keys are stored in the 'done' key.
+        By default, non-nested keys are stored in the ``'done'`` entry.
 
         If the done is in a nested tensordict, this property will return its
         location.
@@ -605,6 +653,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Done spec: done specs belong to output_spec
     @property
     def done_spec(self) -> TensorSpec:
+        """The ``done`` leaf spec.
+
+        This property will always return the leaf spec of the done attribute,
+        which can be accessed in a typical rollout via
+
+            >>> fake_td = env.fake_tensordict()  # a typical tensordict
+            >>> done = fake_td[("next", *env.done_key)]
+
+        This property is mutable.
+        """
         try:
             done_spec = self.output_spec["_done_spec"]
         except (KeyError, AttributeError):
