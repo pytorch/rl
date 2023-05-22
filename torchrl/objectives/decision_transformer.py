@@ -11,6 +11,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 from torchrl.modules import ProbabilisticActor
+from torchrl.objectives.utils import distance_loss
 
 from .common import LossModule
 
@@ -93,5 +94,56 @@ class OnlineDTLoss(LossModule):
             "entropy": entropy,
             "loss_alpha": loss_alpha,
             "alpha": self.log_alpha.exp(),
+        }
+        return TensorDict(out, [])
+
+
+class DTLoss(LossModule):
+    r"""TorchRL implementation of the Online Decision Transformer loss.
+
+    Presented in "Decision Transformer" https://arxiv.org/abs/2202.05607
+    Args:
+        actor_network (ProbabilisticActor): stochastic actor
+
+    """
+
+    def __init__(
+        self,
+        actor_network: ProbabilisticActor,
+    ) -> None:
+        super().__init__()
+
+        # Actor Network
+        self.convert_to_functional(
+            actor_network,
+            "actor_network",
+            create_target_params=False,
+            funs_to_decorate=["forward"],
+        )
+
+    @property
+    def device(self) -> torch.device:
+        for p in self.parameters():
+            return p.device
+        raise RuntimeError(
+            "At least one of the networks of OnlineDTLoss must have trainable "
+            "parameters."
+        )
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Compute the loss for the Online Decision Transformer."""
+        # extract action targets
+        target_actions = torch.clone(tensordict["action"].detach()).to(self.device)
+
+        pred_actions = self.actor_network(
+            tensordict.to(self.device), params=self.actor_network_params
+        ).get("action")
+        loss = distance_loss(
+            pred_actions,
+            target_actions,
+            loss_function="l2",
+        ).mean()
+        out = {
+            "loss": loss,
         }
         return TensorDict(out, [])

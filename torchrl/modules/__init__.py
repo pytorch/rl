@@ -30,6 +30,7 @@ from .models import (
     NoisyLinear,
     ObsDecoder,
     ObsEncoder,
+    OnlineDTActor,
     reset_noise,
     RSSMPosterior,
     RSSMPrior,

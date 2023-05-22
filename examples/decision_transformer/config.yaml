@@ -5,11 +5,12 @@ env:
   env_library: gym
   record_video: 0
   stacked_frames: 20
+  inference_context: 20 # 5
   n_samples_stats: 2000
   frame_skip: 1
   from_pixels: False
   num_train_envs: 1
-  num_eval_envs: 1
+  num_eval_envs: 10
   reward_scaling: 0.001
   noop: 1
   seed: 0
@@ -55,7 +56,7 @@ optim:
   weight_decay: 5.0e-4
   batch_size: 256
   lr_scheduler: ""
-  pretrain_gradient_steps: 3000
+  pretrain_gradient_steps: 5000
   updates_per_episode: 300
   warmup_steps: 10000
 

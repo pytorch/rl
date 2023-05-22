@@ -17,5 +17,6 @@ from .models import (
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
+    OnlineDTActor,
 )
 from .utils import Squeeze2dLayer, SqueezeLayer

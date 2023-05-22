@@ -1140,8 +1140,8 @@ class LSTMNet(nn.Module):
         return self._lstm(input, hidden0_in, hidden1_in)
 
 
-class DTActor(nn.Module):
-    """Decision Transformer Actor class.
+class OnlineDTActor(nn.Module):
+    """Online Decision Transformer Actor class.
 
     Presented in "Online Decision Transformer",
     https://arxiv.org/abs/2202.05607.pdf
@@ -1199,3 +1199,53 @@ class DTActor(nn.Module):
         std = log_std.exp()
 
         return (mu, std)
+
+
+class DTActor(nn.Module):
+    """Decision Transformer Actor class.
+
+    Presented in "Decision Transformer",
+    https://arxiv.org/abs/2202.05607.pdf
+
+
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        transformer_config: Dict,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        self.transformer = DecisionTransformer(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            config=transformer_config,
+        )
+        self.action_layer = nn.Linear(
+            transformer_config.n_embd, action_dim, device=device
+        )
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.apply(weight_init)
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+    ) -> torch.Tensor:
+        if observation.ndim == 2:
+            observation = observation.unsqueeze(0)
+            action = action.unsqueeze(0)
+            return_to_go = return_to_go.unsqueeze(0)
+        hidden_state = self.transformer(observation, action, return_to_go)
+        out = self.action_layer(hidden_state)
+        return out

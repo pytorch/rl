@@ -2093,11 +2093,18 @@ class CatFrames(ObservationTransform):
 
     def _inv_call(self, tensordict: TensorDictBase) -> torch.Tensor:
         if self.as_inverse:
-            return self.forward(tensordict)
+            return self.unfolding(tensordict)
         else:
-            raise KeyError("Inverse transform not implemented for this transform.")
+            return tensordict
+            # raise KeyError("Inverse transform not implemented for this transform.")
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.as_inverse:
+            return tensordict
+        else:
+            return self.unfolding(tensordict)
+
+    def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim or (
             tensordict.names[-1] is not None and tensordict.names[-1] != "time"
