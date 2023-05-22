@@ -855,7 +855,6 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
-        time.sleep(1e-1)
         return (
             self.shared_tensordict_parent.select(*self._selected_reset_keys)
             .exclude("_reset")
