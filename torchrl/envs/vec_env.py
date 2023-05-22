@@ -854,7 +854,7 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
-
+        print(f"the done state is {self.shared_tensordict_parent.get('done')}")
         return (
             self.shared_tensordict_parent.select(*self._selected_reset_keys)
             .exclude("_reset")
@@ -987,13 +987,16 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            local_tensordict = env._reset(tensordict=shared_tensordict.clone(False))
+            local_tensordict = env._reset()
 
             if "_reset" in local_tensordict.keys():
                 local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
             # if not is_cuda:
+            print(
+                f"the done state on proc is {local_tensordict.get('done')}"
+                )
             shared_tensordict.update_(
                 local_tensordict.select(
                     *shared_tensordict.keys(True, True), strict=False
