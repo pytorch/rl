@@ -1183,14 +1183,18 @@ class TestConcurrentEnvs:
                 r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
                 r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
 
-        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+        if td_equals.all():
             if q is not None:
                 q.put("passed")
             else:
                 pass
         else:
             if q is not None:
-                q.put("failed")
+                s = ""
+                for key, item in td_equals.items(True, True):
+                    s = s + f"\n{key}: {item.all()}"
+                q.put(f"failed: {s}")
             else:
                 raise RuntimeError()
 
@@ -1229,14 +1233,19 @@ class TestConcurrentEnvs:
                 r_p.append(next(collector))
                 r_s.append(torch.cat([next(sc) for sc in single_collectors]))
 
-        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+
+        if td_equals.all():
             if q is not None:
                 q.put("passed")
             else:
                 pass
         else:
             if q is not None:
-                q.put("failed")
+                s = ""
+                for key, item in td_equals.items(True, True):
+                    s = s + f"\n{key}: {item.all()}"
+                q.put(f"failed: {s}")
             else:
                 raise RuntimeError()
 
