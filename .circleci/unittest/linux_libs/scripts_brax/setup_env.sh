@@ -55,7 +55,7 @@ cat "${this_dir}/environment.yml"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-sudo apt-get install libglfw3-dev
+apt-get install libglfw3-dev
 
 #yum makecache
 #yum -y install glfw-devel
