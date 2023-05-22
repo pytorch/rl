@@ -806,6 +806,7 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
+        is_cuda = self.device.type == "cuda"
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
@@ -842,10 +843,13 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            elif tensordict_ is not None:
+            elif tensordict_ is not None and not is_cuda:
                 # we update the shared tensordict with the new data
                 self.shared_tensordicts[i].update_(tensordict_)
-            channel.send((cmd_out, None))
+                out = (cmd_out, None)
+            elif tensordict_ is not None:
+                out = (cmd_out, tensordict_)
+            channel.send(tensordict_)
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
@@ -986,8 +990,12 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
+            if not is_cuda:
+                tensordict = shared_tensordict.exclude('next')
+            else:
+                tensordict = data
             # _td = tensordict.select("observation").to(env.device).clone()
-            local_tensordict = env._reset(tensordict=shared_tensordict.exclude('next'))
+            local_tensordict = env._reset(tensordict=tensordict)
 
             if "_reset" in local_tensordict.keys():
                 local_tensordict.del_("_reset")
