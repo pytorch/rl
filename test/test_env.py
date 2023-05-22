@@ -1242,10 +1242,7 @@ class TestConcurrentEnvs:
                 pass
         else:
             if q is not None:
-                s = ""
-                for key, item in td_equals.items(True, True):
-                    s = s + f"\n{key}: {item.all()}"
-                q.put(f"failed: {s}")
+                q.put("failed")
             else:
                 raise RuntimeError()
 
@@ -1256,7 +1253,7 @@ class TestConcurrentEnvs:
         else:
             from torch import multiprocessing as mp
 
-            q = mp.SimpleQueue()
+            q = mp.Queue(3)
             ps = []
             try:
                 for k in range(3, 10, 3):
@@ -1264,7 +1261,7 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get()
+                    msg = q.get(timeout=100)
                     assert msg == "passed"
             finally:
                 for p in ps:
@@ -1277,7 +1274,7 @@ class TestConcurrentEnvs:
         else:
             from torch import multiprocessing as mp
 
-            q = mp.SimpleQueue()
+            q = mp.Queue(3)
             ps = []
             try:
                 for k in range(3, 10, 3):
@@ -1285,11 +1282,11 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get()
+                    msg = q.get(timeout=100)
                     assert msg == "passed"
             finally:
                 for p in ps:
-                    p.join()
+                    p.join(timeout=2)
 
 
 if __name__ == "__main__":

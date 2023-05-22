@@ -1002,6 +1002,7 @@ def _run_worker_pipe_shared_mem(
                     *shared_tensordict.keys(True, True), strict=False
                 )
             )
+            time.sleep(1e-2)
             child_pipe.send(("reset_obs", None))
             # else:
             #     child_pipe.send(
@@ -1030,6 +1031,7 @@ def _run_worker_pipe_shared_mem(
             # if not is_cuda:
             shared_tensordict.update_(local_tensordict.select("next"))
             data = (msg, None)
+            time.sleep(1e-2)
             child_pipe.send(data)
             # else:
             #     data = (msg, local_tensordict.select("next"))
