@@ -44,13 +44,6 @@ class PPOLoss(LossModule):
         critic (ValueOperator): value operator.
 
     Keyword Args:
-        advantage_key (str, optional): the input tensordict key where the advantage is
-            expected to be written.
-            Defaults to ``"advantage"``.
-        value_target_key (str, optional): the input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
-        value_key (str, optional): the input tensordict key where the state
-            value is expected to be written. Defaults to ``"state_value"``.
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -71,6 +64,13 @@ class PPOLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        advantage_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -122,9 +122,6 @@ class PPOLoss(LossModule):
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
         *,
-        advantage_key: str = "advantage",
-        value_target_key: str = "value_target",
-        value_key: str = "state_value",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
@@ -133,6 +130,9 @@ class PPOLoss(LossModule):
         normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
+        advantage_key: str = None,
+        value_target_key: str = None,
+        value_key: str = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -145,9 +145,34 @@ class PPOLoss(LossModule):
         else:
             policy_params = None
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
-        self.value_key = value_key
+
+        self.tensordict_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "action_key": "action",
+        }
+        if advantage_key is not None:
+            warnings.warn(
+                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["advantage_key"] = advantage_key
+        if value_target_key is not None:
+            warnings.warn(
+                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["value_target_key"] = value_target_key
+        if value_key is not None:
+            warnings.warn(
+                "Setting 'value_key' via ctor is deprecated, use .set_keys(value_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["value_key"] = value_key
+        self.set_keys(**self.tensordict_keys)
+
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -295,12 +320,6 @@ class ClipPPOLoss(PPOLoss):
         critic (ValueOperator): value operator.
 
     Keyword Args:
-        advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
-            Defaults to ``"advantage"``.
-        value_target_key (str, optional): the input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
-        value_key (str, optional): the input tensordict key where the state
-            value is expected to be written. Defaults to ``"state_value"``.
         clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
             default: 0.2
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
@@ -323,6 +342,13 @@ class ClipPPOLoss(PPOLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        advantage_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -372,8 +398,6 @@ class ClipPPOLoss(PPOLoss):
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
         *,
-        advantage_key: str = "advantage",
-        value_key: str = "state_value",
         clip_epsilon: float = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
@@ -388,9 +412,7 @@ class ClipPPOLoss(PPOLoss):
         super(ClipPPOLoss, self).__init__(
             actor,
             critic,
-            advantage_key=advantage_key,
             entropy_bonus=entropy_bonus,
-            value_key=value_key,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
             critic_coef=critic_coef,
@@ -471,12 +493,6 @@ class KLPENPPOLoss(PPOLoss):
         critic (ValueOperator): value operator.
 
     Keyword Args:
-        advantage_key (str, optional): the input tensordict key where the advantage is expected to be written.
-            Defaults to ``"advantage"``.
-        value_target_key (str, optional): the input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
-        value_key (str, optional): the input tensordict key where the state
-            value is expected to be written. Defaults to ``"state_value"``.
         dtarg (scalar, optional): target KL divergence. Defaults to ``0.01``.
         samples_mc_kl (int, optional): number of samples used to compute the KL divergence
             if no analytical formula can be found. Defaults to ``1``.
@@ -506,6 +522,13 @@ class KLPENPPOLoss(PPOLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        advantage_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
 
 
     .. note:
@@ -556,9 +579,7 @@ class KLPENPPOLoss(PPOLoss):
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
         *,
-        advantage_key="advantage",
         dtarg: float = 0.01,
-        value_key: str = "state_value",
         beta: float = 1.0,
         increment: float = 2,
         decrement: float = 0.5,
@@ -576,7 +597,6 @@ class KLPENPPOLoss(PPOLoss):
         super(KLPENPPOLoss, self).__init__(
             actor,
             critic,
-            advantage_key=advantage_key,
             entropy_bonus=entropy_bonus,
             samples_mc_entropy=samples_mc_entropy,
             entropy_coef=entropy_coef,
@@ -585,7 +605,6 @@ class KLPENPPOLoss(PPOLoss):
             normalize_advantage=normalize_advantage,
             gamma=gamma,
             separate_losses=separate_losses,
-            value_key=value_key,
             **kwargs,
         )
 

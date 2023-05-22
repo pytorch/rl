@@ -73,6 +73,17 @@ class LossModule(nn.Module):
         self._has_update_associated = False
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
+        self.tensordict_keys = {}
+
+    def set_keys(self, **kwargs):
+        for key, value in kwargs.items():
+            if key not in self.tensordict_keys.keys():
+                raise ValueError(f"{key} not a valid tensordict key")
+            if value is None:
+                set_value = self.tensordict_keys[key]
+            else:
+                set_value = value
+            setattr(self, key, set_value)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".

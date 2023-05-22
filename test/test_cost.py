@@ -2629,6 +2629,57 @@ class TestPPO:
         for param in params:
             param.grad = None
 
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    def test_ppo_tensordict_keys(self, loss_class):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = loss_class(actor, value)
+
+        # test default values
+        assert loss_fn.advantage_key == "advantage"
+        assert loss_fn.value_target_key == "value_target"
+        assert loss_fn.value_key == "state_value"
+        assert loss_fn.sample_log_prob_key == "sample_log_prob"
+        assert loss_fn.action_key == "action"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(
+            advantage_key=new_key, value_target_key=new_key, value_key=new_key
+        )
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+        assert loss_fn.value_key == new_key
+        assert loss_fn.sample_log_prob_key == "sample_log_prob"
+        assert loss_fn.action_key == "action"
+
+        loss_fn.set_keys(sample_log_prob_key=new_key, action_key=new_key)
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+        assert loss_fn.value_key == new_key
+        assert loss_fn.sample_log_prob_key == new_key
+        assert loss_fn.action_key == new_key
+
+        # test unsupported key
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(unknown_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = loss_class(
+                actor,
+                value,
+                advantage_key=new_key,
+                value_target_key=new_key,
+                value_key=new_key,
+            )
+            assert loss_fn.advantage_key == new_key
+            assert loss_fn.value_target_key == new_key
+            assert loss_fn.value_key == new_key
+            assert loss_fn.sample_log_prob_key == "sample_log_prob"
+            assert loss_fn.action_key == "action"
+
 
 class TestA2C:
     seed = 0
@@ -2832,6 +2883,40 @@ class TestA2C:
                 assert "critic" in name
         for param in params:
             param.grad = None
+
+    def test_a2c_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = A2CLoss(actor, value)
+
+        # test default values
+        assert loss_fn.advantage_key == "advantage"
+        assert loss_fn.value_target_key == "value_target"
+        assert loss_fn.action_key == "action"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(advantage_key=new_key, value_target_key=new_key)
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+
+        loss_fn.set_keys(action_key=new_key)
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+        assert loss_fn.action_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(value_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = A2CLoss(
+                actor, value, advantage_key=new_key, value_target_key=new_key
+            )
+            assert loss_fn.advantage_key == new_key
+            assert loss_fn.value_target_key == new_key
+            assert loss_fn.action_key == "action"
 
 
 class TestReinforce:

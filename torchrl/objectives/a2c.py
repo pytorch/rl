@@ -33,10 +33,6 @@ class A2CLoss(LossModule):
     Args:
         actor (ProbabilisticTensorDictSequential): policy operator.
         critic (ValueOperator): value operator.
-        advantage_key (str): the input tensordict key where the advantage is expected to be written.
-            default: "advantage"
-        value_target_key (str): the input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
         entropy_bonus (bool): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int): if the distribution retrieved from the policy
@@ -53,6 +49,10 @@ class A2CLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        advantage_key (str): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is expected to be written.
+            default: "advantage"
+        value_target_key (str): [Deprecated, use set_keys() instead] the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -74,8 +74,6 @@ class A2CLoss(LossModule):
         actor: ProbabilisticTensorDictSequential,
         critic: TensorDictModule,
         *,
-        advantage_key: str = "advantage",
-        value_target_key: str = "value_target",
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coef: float = 0.01,
@@ -83,6 +81,8 @@ class A2CLoss(LossModule):
         loss_critic_type: str = "smooth_l1",
         gamma: float = None,
         separate_losses: bool = False,
+        advantage_key: str = None,
+        value_target_key: str = None,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -95,8 +95,26 @@ class A2CLoss(LossModule):
         else:
             policy_params = None
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
+
+        self.tensordict_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "action_key": "action",
+        }
+        if advantage_key is not None:
+            warnings.warn(
+                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["advantage_key"] = advantage_key
+        if value_target_key is not None:
+            warnings.warn(
+                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["value_target_key"] = value_target_key
+        self.set_keys(**self.tensordict_keys)
+
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.register_buffer(
