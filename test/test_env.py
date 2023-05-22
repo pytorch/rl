@@ -32,6 +32,7 @@ from mocking_classes import (
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.nn import TensorDictModuleBase
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1143,7 +1144,7 @@ def test_make_spec_from_td():
 class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""
 
-    class Policy(nn.Module):
+    class Policy(TensorDictModuleBase):
         in_keys = []
         out_keys = ["action"]
 
@@ -1273,7 +1274,7 @@ class TestConcurrentEnvs:
                     p.start()
                 for _ in range(3):
                     msg = q.get(timeout=100)
-                    assert msg == "passed"
+                    assert msg == "passed", j
             finally:
                 for p in ps:
                     p.join(timeout=2)
