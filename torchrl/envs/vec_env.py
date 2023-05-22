@@ -858,10 +858,11 @@ class ParallelEnv(_BatchedEnv):
         print(f"the done state is {self.shared_tensordict_parent.get('done')}")
         counter = 0
         while self.shared_tensordict_parent.get('done').any():
+            print("waiting", end="\t")
             counter += 1
             time.sleep(1e-2)
-            print("waiting")
             if counter >= 100:
+                print("\n")
                 break
         return (
             self.shared_tensordict_parent.select(*self._selected_reset_keys)
