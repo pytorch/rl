@@ -1194,7 +1194,7 @@ class TestConcurrentEnvs:
                 s = ""
                 for key, item in td_equals.items(True, True):
                     if not item.all():
-                        s = s + f"\n{key}"
+                        s = s + f"\t{key}"
                 q.put(f"failed: {s}")
             else:
                 raise RuntimeError()
@@ -1246,7 +1246,7 @@ class TestConcurrentEnvs:
                 s = ""
                 for key, item in td_equals.items(True, True):
                     if not item.all():
-                        s = s + f"\n{key}"
+                        s = s + f"\t{key}"
                 q.put(f"failed: {s}")
             else:
                 raise RuntimeError()

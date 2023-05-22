@@ -992,11 +992,11 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             if not is_cuda:
-                tensordict = shared_tensordict.exclude("next")
+                local_tensordict = shared_tensordict.exclude("next")
             else:
-                tensordict = data
+                local_tensordict = data
             # _td = tensordict.select("observation").to(env.device).clone()
-            local_tensordict = env._reset(tensordict=tensordict)
+            local_tensordict = env._reset(tensordict=local_tensordict)
 
             if "_reset" in local_tensordict.keys():
                 local_tensordict.del_("_reset")
