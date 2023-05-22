@@ -1234,7 +1234,9 @@ class TestConcurrentEnvs:
                 r_p.append(next(collector))
                 r_s.append(torch.cat([next(sc) for sc in single_collectors]))
 
-        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+        r_p = torch.stack(r_p).contiguous()
+        r_s = torch.stack(r_s).contiguous()
+        td_equals = r_p == r_s
 
         if td_equals.all():
             if q is not None:
