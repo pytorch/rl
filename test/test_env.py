@@ -1258,10 +1258,12 @@ class TestConcurrentEnvs:
                 raise RuntimeError()
 
 
-    @pytest.mark.parametrize("nproc", [3, 1])
+    @pytest.mark.parametrize("nproc", [1, 3])
     def test_mp_collector(self, nproc):
         if nproc == 1:
             self.main_collector(3)
+            self.main_collector(6)
+            self.main_collector(9)
         else:
             from torch import multiprocessing as mp
 
