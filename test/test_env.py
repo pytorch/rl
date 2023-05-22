@@ -1189,7 +1189,7 @@ class TestConcurrentEnvs:
         td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
         if td_equals.all():
             if q is not None:
-                q.put("passed")
+                q.put(("passed", j))
             else:
                 pass
         else:
@@ -1198,7 +1198,7 @@ class TestConcurrentEnvs:
                 for key, item in td_equals.items(True, True):
                     if not item.all():
                         s = s + f"\t{key}"
-                q.put(f"failed: {s}")
+                q.put((f"failed: {s}", j))
             else:
                 raise RuntimeError()
 
@@ -1264,6 +1264,8 @@ class TestConcurrentEnvs:
     def test_mp_concurrent(self, nproc):
         if nproc == 1:
             self.main_penv(3)
+            self.main_penv(6)
+            self.main_penv(9)
         else:
             from torch import multiprocessing as mp
 
@@ -1275,8 +1277,8 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get(timeout=100)
-                    assert msg == "passed"
+                    msg, j = q.get(timeout=100)
+                    assert msg == "passed", j
             finally:
                 for p in ps:
                     p.join()
