@@ -849,7 +849,9 @@ class ParallelEnv(_BatchedEnv):
                 out = (cmd_out, None)
             elif tensordict_ is not None:
                 out = (cmd_out, tensordict_)
-            channel.send(tensordict_)
+            else:
+                out = (cmd_out, None)
+            channel.send(out)
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
@@ -991,7 +993,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             if not is_cuda:
-                tensordict = shared_tensordict.exclude('next')
+                tensordict = shared_tensordict.exclude("next")
             else:
                 tensordict = data
             # _td = tensordict.select("observation").to(env.device).clone()
