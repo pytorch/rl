@@ -1593,11 +1593,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
-                if j == 0:
-                    data, idx = new_data
-                    out_tensordicts_shared[idx] = data
-                else:
-                    idx = new_data
+                # if j == 0:
+                data, idx = new_data
+                out_tensordicts_shared[idx] = data
+                # else:
+                #     idx = new_data
                 workers_frames[idx] = (
                     workers_frames[idx] + out_tensordicts_shared[idx].numel()
                 )
@@ -1786,11 +1786,11 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
-        if j == 0:
-            data, idx = new_data
-            self.out_tensordicts[idx] = data
-        else:
-            idx = new_data
+        # if j == 0:
+        data, idx = new_data
+        self.out_tensordicts[idx] = data
+        # else:
+        #     idx = new_data
         # we clone the data to make sure that we'll be working with a fixed copy
         out = self.out_tensordicts[idx].clone()
         return idx, j, out
@@ -2088,20 +2088,20 @@ def _main_async_collector(
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
-            if j == 0:
-                tensordict = d
-                if storing_device is not None and tensordict.device != storing_device:
-                    raise RuntimeError(
-                        f"expected device to be {storing_device} but got {tensordict.device}"
-                    )
-                tensordict.share_memory_()
-                data = (tensordict, idx)
-            else:
-                if d is not tensordict:
-                    raise RuntimeError(
-                        "SyncDataCollector should return the same tensordict modified in-place."
-                    )
-                data = idx  # flag the worker that has sent its data
+            # if j == 0:
+            tensordict = d
+            if storing_device is not None and tensordict.device != storing_device:
+                raise RuntimeError(
+                    f"expected device to be {storing_device} but got {tensordict.device}"
+                )
+            tensordict.share_memory_()
+            data = (tensordict, idx)
+            # else:
+            #     if d is not tensordict:
+            #         raise RuntimeError(
+            #             "SyncDataCollector should return the same tensordict modified in-place."
+            #         )
+            #     data = idx  # flag the worker that has sent its data
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
