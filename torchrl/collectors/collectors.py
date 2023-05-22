@@ -1785,7 +1785,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
-        new_data, j = self.queue_out.get(timeout=timeout)
+        new_data, j = self.queue_out.get()#timeout=timeout)
         # if j == 0:
         data, idx = new_data
         self.out_tensordicts[idx] = data
@@ -2103,7 +2103,7 @@ def _main_async_collector(
             #         )
             #     data = idx  # flag the worker that has sent its data
             try:
-                queue_out.put((data, j), timeout=_TIMEOUT)
+                queue_out.put((data, j))# timeout=_TIMEOUT)
                 if verbose:
                     print(f"worker {idx} successfully sent data")
                 j += 1
