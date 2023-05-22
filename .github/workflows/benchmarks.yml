@@ -3,11 +3,20 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 
 permissions:
   deployments: write
   contents: write
+
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -31,6 +40,7 @@ jobs:
           cd benchmarks/
           python -m pytest --benchmark-json output.json
       - name: Store benchmark results
+        if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: CPU Benchmark Results
@@ -60,6 +70,8 @@ jobs:
     steps:
     - name: Install deps
       run: |
+        export TZ=Europe/London
+        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
         apt-get update -y
         apt-get install software-properties-common -y
         add-apt-repository ppa:git-core/candidate -y
@@ -106,6 +118,7 @@ jobs:
         python -m pytest --benchmark-json output.json
     - name: Store benchmark results
       uses: benchmark-action/github-action-benchmark@v1
+      if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       with:
         name: GPU Benchmark Results
         tool: 'pytest'
