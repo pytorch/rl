@@ -327,13 +327,13 @@ class _BatchedEnv(EnvBase):
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
         if self._single_task:
-            shared_tensordict_parent = self._env_tensordict.to_tensordict()
+            shared_tensordict_parent = self._env_tensordict.clone()
             if not self._env_tensordict.shape[0] == self.num_workers:
                 raise RuntimeError(
                     "batched environment base tensordict has the wrong shape"
                 )
         else:
-            shared_tensordict_parent = self._env_tensordict.to_tensordict()
+            shared_tensordict_parent = self._env_tensordict.clone()
 
         if self._single_task:
             self.env_input_keys = sorted(self.input_spec.keys(True), key=_sort_keys)
@@ -1008,7 +1008,7 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             # if not is_cuda:
-            shared_tensordict.update_(local_tensordict)
+            shared_tensordict.update_(local_tensordict.cpu())
             out = ("reset_obs", None)
             # else:
             #     out = ("reset_obs", local_tensordict.exclude("next"))
@@ -1029,7 +1029,7 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             # if not is_cuda:
-            shared_tensordict.update_(local_tensordict.select("next"))
+            shared_tensordict.update_(local_tensordict.select("next").cpu())
             out = (msg, None)
             # else:
             #     out = (msg, local_tensordict.select("next"))
