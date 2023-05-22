@@ -300,7 +300,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
         if policy_weights is not None:
             self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
         elif self.get_weights_fn is not None:
-            self.policy.load_state_dict(self.get_weights_fn())
+            self.policy_weights.apply(lambda x: x.data).update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()

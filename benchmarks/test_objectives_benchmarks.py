@@ -75,6 +75,43 @@ def test_values(benchmark, val_fn, has_lmbda, has_state_value):
     )
 
 
+@pytest.mark.parametrize(
+    "gae_fn,gamma_tensor,batches,timesteps",
+    [
+        [generalized_advantage_estimate, False, 1, 512],
+        [vec_generalized_advantage_estimate, True, 1, 512],
+        [vec_generalized_advantage_estimate, False, 1, 512],
+        [vec_generalized_advantage_estimate, True, 32, 512],
+        [vec_generalized_advantage_estimate, False, 32, 512],
+    ],
+)
+def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
+    size = (batches, timesteps, 1)
+    print(size)
+
+    torch.manual_seed(0)
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    values = torch.randn(*size, device=device)
+    next_values = torch.randn(*size, device=device)
+    reward = torch.randn(*size, device=device)
+    done = torch.zeros(*size, dtype=torch.bool, device=device).bernoulli_(0.1)
+
+    gamma = 0.99
+    if gamma_tensor:
+        gamma = torch.full(size, gamma)
+    lmbda = 0.95
+
+    benchmark(
+        gae_fn,
+        gamma=gamma,
+        lmbda=lmbda,
+        state_value=values,
+        next_state_value=next_values,
+        reward=reward,
+        done=done,
+    )
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

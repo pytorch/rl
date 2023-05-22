@@ -951,15 +951,17 @@ class ToTensorImage(ObservationTransform):
             *list(range(observation.ndimension() - 3)), -1, -3, -2
         )
         observation = observation.div(255).to(self.dtype)
-        if observation.ndimension() == 3 and self.unsqueeze:
+        if self._should_unsqueeze(observation):
             observation = observation.unsqueeze(0)
         return observation
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         observation_spec = self._pixel_observation(observation_spec)
+        unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
         observation_spec.shape = torch.Size(
             [
+                *unsqueeze_dim,
                 *observation_spec.shape[:-3],
                 observation_spec.shape[-1],
                 observation_spec.shape[-3],
@@ -968,6 +970,14 @@ class ToTensorImage(ObservationTransform):
         )
         observation_spec.dtype = self.dtype
         return observation_spec
+
+    def _should_unsqueeze(self, observation_like: torch.FloatTensor | TensorSpec):
+        has_3_dimensions = False
+        if isinstance(observation_like, torch.FloatTensor):
+            has_3_dimensions = observation_like.ndimension() == 3
+        else:
+            has_3_dimensions = len(observation_like.shape) == 3
+        return has_3_dimensions and self.unsqueeze
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
         if isinstance(spec.space, ContinuousBox):
@@ -2072,9 +2082,7 @@ class CatFrames(ObservationTransform):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or (
-            tensordict.names[-1] is not None and tensordict.names[-1] != "time"
-        ):
+        if not tensordict.ndim or tensordict.names[-1] != "time":
             raise ValueError(
                 "The last dimension of the tensordict must be marked as 'time'."
             )
@@ -3368,9 +3376,17 @@ class RewardSum(Transform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError(
-            FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
-        )
+        time_dim = [i for i, name in enumerate(tensordict.names) if name == "time"]
+        if not time_dim:
+            raise ValueError(
+                "At least one dimension of the tensordict must be named 'time' in offline mode"
+            )
+        time_dim = time_dim[0] - 1
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            reward = tensordict.get(in_key)
+            cumsum = reward.cumsum(time_dim)
+            tensordict.set(out_key, cumsum)
+        return tensordict
 
 
 class StepCounter(Transform):

@@ -2,11 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+import math
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
-from tensordict import MemmapTensor, TensorDictBase
+
+from tensordict import MemmapTensor
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -23,7 +26,17 @@ __all__ = [
     "vec_td_lambda_advantage_estimate",
 ]
 
-from torchrl.objectives.value.utils import _custom_conv1d, _make_gammas_tensor
+from torchrl.objectives.value.utils import (
+    _custom_conv1d,
+    _get_num_per_traj,
+    _inv_pad_sequence,
+    _make_gammas_tensor,
+    _split_and_pad_sequence,
+)
+
+SHAPE_ERR = (
+    "All input tensors (value, reward and done states) must share a unique shape."
+)
 
 
 def _transpose_time(fun):
@@ -32,22 +45,60 @@ def _transpose_time(fun):
     If not -2, makes a transpose of all the multi-dim input tensors to bring
     time at -2, and does the opposite transform for the outputs.
     """
+    ERROR = (
+        "The tensor shape and the time dimension are not compatible: "
+        "got {} and time_dim={}."
+    )
 
     @wraps(fun)
     def transposed_fun(*args, time_dim=-2, **kwargs):
         def transpose_tensor(tensor):
-            if isinstance(tensor, (torch.Tensor, MemmapTensor)) and tensor.ndim >= 2:
-                tensor = tensor.transpose(time_dim, -2)
-            return tensor
+            if (
+                not isinstance(tensor, (torch.Tensor, MemmapTensor))
+                or tensor.numel() <= 1
+            ):
+                return tensor, False
+            if time_dim >= 0:
+                timedim = time_dim - tensor.ndim
+            else:
+                timedim = time_dim
+            if timedim < -tensor.ndim or timedim >= 0:
+                raise RuntimeError(ERROR.format(tensor.shape, timedim))
+            if tensor.ndim >= 2:
+                single_dim = False
+                tensor = tensor.transpose(timedim, -2)
+            elif tensor.ndim == 1 and timedim == -1:
+                single_dim = True
+                tensor = tensor.unsqueeze(-1)
+            else:
+                raise RuntimeError(ERROR.format(tensor.shape, timedim))
+            return tensor, single_dim
 
         if time_dim != -2:
-            args = [transpose_tensor(arg) for arg in args]
-            kwargs = {k: transpose_tensor(item) for k, item in kwargs.items()}
+            args, single_dim = zip(*(transpose_tensor(arg) for arg in args))
+            single_dim = any(single_dim)
+            for k, item in kwargs.items():
+                item, sd = transpose_tensor(item)
+                single_dim = single_dim or sd
+                kwargs[k] = item
             out = fun(*args, time_dim=-2, **kwargs)
             if isinstance(out, torch.Tensor):
-                return transpose_tensor(out)
-            return tuple(transpose_tensor(_out) for _out in out)
-        return fun(*args, time_dim=time_dim, **kwargs)
+                out = transpose_tensor(out)[0]
+                if single_dim:
+                    out = out.squeeze(-2)
+                return out
+            if single_dim:
+                return tuple(transpose_tensor(_out)[0].squeeze(-2) for _out in out)
+            return tuple(transpose_tensor(_out)[0] for _out in out)
+        out = fun(*args, time_dim=time_dim, **kwargs)
+        if isinstance(out, tuple):
+            for _out in out:
+                if _out.ndim < 2:
+                    raise RuntimeError(ERROR.format(_out.shape, time_dim))
+        else:
+            if out.ndim < 2:
+                raise RuntimeError(ERROR.format(out.shape, time_dim))
+        return out
 
     return transposed_fun
 
@@ -86,27 +137,22 @@ def generalized_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     dtype = next_state_value.dtype
     device = state_value.device
-    lastdim = next_state_value.shape[-1]
 
-    not_done = 1 - done.to(dtype)
-    *batch_size, time_steps = not_done.shape[:-1]
+    not_done = (~done).int()
+    *batch_size, time_steps, lastdim = not_done.shape
     advantage = torch.empty(
         *batch_size, time_steps, lastdim, device=device, dtype=dtype
     )
     prev_advantage = 0
+    gnotdone = gamma * not_done
+    delta = reward + (gnotdone * next_state_value) - state_value
+    discount = lmbda * gnotdone
     for t in reversed(range(time_steps)):
-        delta = (
-            reward[..., t, :]
-            + (gamma * next_state_value[..., t, :] * not_done[..., t, :])
-            - state_value[..., t, :]
-        )
-        prev_advantage = advantage[..., t, :] = delta + (
-            gamma * lmbda * prev_advantage * not_done[..., t, :]
+        prev_advantage = advantage[..., t, :] = delta[..., t, :] + (
+            prev_advantage * discount[..., t, :]
         )
 
     value_target = advantage + state_value
@@ -114,10 +160,75 @@ def generalized_advantage_estimate(
     return advantage, value_target
 
 
-@_transpose_time
-def vec_generalized_advantage_estimate(
+def _fast_vec_gae(
+    reward: torch.Tensor,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    done: torch.Tensor,
     gamma: float,
     lmbda: float,
+    thr: float = 1e-7,
+):
+    """Fast vectorized Generalized Advantage Estimate when gamma and lmbda are scalars.
+
+    In contrast to `vec_generalized_advantage_estimate` this function does not need
+    to allocate a big tensor of the form [B, T, T].
+
+    Args:
+        reward (torch.Tensor): a [*B, T, F] tensor containing rewards
+        state_value (torch.Tensor): a [*B, T, F] tensor containing state values (value function)
+        next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
+        done (torch.Tensor): a [B, T] boolean tensor containing the done states
+        gamma (scalar): the gamma decay (trajectory discount)
+        lmbda (scalar): the lambda decay (exponential mean discount)
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
+    """
+    # _gen_num_per_traj and _split_and_pad_sequence need
+    # time dimension at last position
+    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1)
+    state_value = state_value.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1)
+
+    gammalmbda = gamma * lmbda
+    not_done = (~done).int()
+    td0 = reward + not_done * gamma * next_state_value - state_value
+
+    num_per_traj = _get_num_per_traj(done)
+    td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
+
+    if not isinstance(gammalmbda, torch.Tensor):
+        gammalmbda_log = math.log(gammalmbda)
+    else:
+        gammalmbda_log = gammalmbda.log().item()
+    lim = int(math.log(thr) / gammalmbda_log)
+    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
+
+    gammalmbdas[1:] = gammalmbda
+    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
+    gammalmbdas = gammalmbdas.unsqueeze(-1)
+
+    advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
+    advantage = advantage.squeeze(1)
+    advantage = advantage[mask].view_as(reward)
+
+    value_target = advantage + state_value
+
+    advantage = advantage.transpose(-1, -2)
+    value_target = value_target.transpose(-1, -2)
+
+    return advantage, value_target
+
+
+@_transpose_time
+def vec_generalized_advantage_estimate(
+    gamma: Union[float, torch.Tensor],
+    lmbda: Union[float, torch.Tensor],
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
@@ -143,27 +254,37 @@ def vec_generalized_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     dtype = state_value.dtype
-    not_done = 1 - done.to(dtype)
+    not_done = (~done).to(dtype)
     *batch_size, time_steps, lastdim = not_done.shape
 
     value = gamma * lmbda
-    if isinstance(value, torch.Tensor):
+
+    if isinstance(value, torch.Tensor) and value.numel() > 1:
         # create tensor while ensuring that gradients are passed
-        gammalmbdas = torch.ones_like(not_done) * not_done * value
+        gammalmbdas = not_done * value
     else:
-        gammalmbdas = torch.full_like(not_done, value) * not_done
+        # when gamma and lmbda are scalars, use fast_vec_gae implementation
+        return _fast_vec_gae(
+            reward=reward,
+            state_value=state_value,
+            next_state_value=next_state_value,
+            done=done,
+            gamma=gamma,
+            lmbda=lmbda,
+        )
+
     gammalmbdas = _make_gammas_tensor(gammalmbdas, time_steps, True)
     gammalmbdas = gammalmbdas.cumprod(-2)
-    # first_below_thr = gammalmbdas < 1e-7
-    # # if we have multiple gammas, we only want to truncate if _all_ of
-    # # the geometric sequences fall below the threshold
-    # first_below_thr = first_below_thr.all(axis=0)
-    # if first_below_thr.any():
-    #     gammalmbdas = gammalmbdas[..., :first_below_thr, :]
+
+    first_below_thr = gammalmbdas < 1e-7
+    # if we have multiple gammas, we only want to truncate if _all_ of
+    # the geometric sequences fall below the threshold
+    first_below_thr = first_below_thr.flatten(0, 1).all(0).all(-1)
+    if first_below_thr.any():
+        first_below_thr = torch.where(first_below_thr)[0][0].item()
+        gammalmbdas = gammalmbdas[..., :first_below_thr, :]
 
     td0 = reward + not_done * gamma * next_state_value - state_value
 
@@ -219,9 +340,7 @@ def td0_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     returns = td0_return_estimate(gamma, next_state_value, reward, done)
     advantage = returns - state_value
     return advantage
@@ -250,10 +369,8 @@ def td0_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
-    not_done = 1 - done.to(next_state_value.dtype)
+        raise RuntimeError(SHAPE_ERR)
+    not_done = (~done).int()
     advantage = reward + gamma * not_done * next_state_value
     return advantage
 
@@ -307,10 +424,8 @@ def td1_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
-    not_done = 1 - done.to(next_state_value.dtype)
+        raise RuntimeError(SHAPE_ERR)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -390,9 +505,7 @@ def td1_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td1_return_estimate(
@@ -501,9 +614,7 @@ def vec_td1_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     return (
         vec_td1_return_estimate(
             gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
@@ -563,11 +674,9 @@ def td_lambda_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
 
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -662,9 +771,7 @@ def td_lambda_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
@@ -672,6 +779,63 @@ def td_lambda_advantage_estimate(
     )
     advantage = returns - state_value
     return advantage
+
+
+def _fast_td_lambda_return_estimate(
+    gamma: Union[torch.Tensor, float],
+    lmbda: float,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    thr: float = 1e-7,
+):
+    """Fast vectorized TD lambda return estimate.
+
+    In contrast to the generalized `vec_td_lambda_return_estimate` this function does not need
+    to allocate a big tensor of the form [B, T, T], but it only works with gamma/lmbda being scalars.
+
+    Args:
+        gamma (scalar): the gamma decay, can be a tensor with a single element (trajectory discount)
+        lmbda (scalar): the lambda decay (exponential mean discount)
+        next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
+        reward (torch.Tensor): a [*B, T, F] tensor containing rewards
+        done (torch.Tensor): a [B, T] boolean tensor containing the done states
+        thr (float): threshold for the filter. Below this limit, components will ignored.
+            Defaults to 1e-7.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x F]``, with ``F`` feature dimensions.
+
+    """
+    device = reward.device
+    done = done.transpose(-2, -1)
+    reward = reward.transpose(-2, -1)
+    next_state_value = next_state_value.transpose(-2, -1)
+
+    gamma_tensor = torch.tensor([gamma], device=device)
+    gammalmbda = gamma_tensor * lmbda
+
+    not_done = (~done).int()
+    num_per_traj = _get_num_per_traj(done)
+    nvalue_ndone = not_done * next_state_value
+
+    t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
+    v3 = torch.zeros_like(t, device=device)
+    v3[..., -1] = nvalue_ndone[..., -1].clone()
+
+    t_flat, mask = _split_and_pad_sequence(
+        t + v3 * gammalmbda, num_per_traj, return_mask=True
+    )
+
+    # cutoff gammalmbdas as soon as is smaller than `thr`
+    lim = int(math.log(thr) / gammalmbda.log().item())
+    # create decay filter [1, g, g**2, g**3, ...]
+    gammalmbdas = gammalmbda.pow(torch.arange(lim, device=device)).unsqueeze(-1)
+
+    ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
+    ret = ret_flat.squeeze(1)[mask]
+
+    return ret.view_as(reward).transpose(-1, -2)
 
 
 @_transpose_time
@@ -723,12 +887,27 @@ def vec_td_lambda_return_estimate(
 
     """
     if not (next_state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
+
+    gamma_thr = 1e-7
     shape = next_state_value.shape
 
     *batch, T, lastdim = shape
+
+    def _is_scalar(tensor):
+        return not isinstance(tensor, torch.Tensor) or tensor.numel() == 1
+
+    # There are two use-cases: if gamma/lmbda are scalars we can use the
+    # fast implementation, if not we must construct a gamma tensor.
+    if _is_scalar(gamma) and _is_scalar(lmbda):
+        return _fast_td_lambda_return_estimate(
+            gamma=gamma,
+            lmbda=lmbda,
+            next_state_value=next_state_value,
+            reward=reward,
+            done=done,
+            thr=gamma_thr,
+        )
 
     next_state_value = next_state_value.transpose(-2, -1).unsqueeze(-2)
     if len(batch):
@@ -740,63 +919,33 @@ def vec_td_lambda_return_estimate(
 
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
-    not_done = 1 - done.to(next_state_value.dtype)
+    not_done = (~done).int()
 
-    first_below_thr_gamma = None
+    if rolling_gamma is None:
+        rolling_gamma = True
+    if rolling_gamma:
+        gamma = gamma * not_done
+    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
-    # 3 use cases: (1) there is one gamma per time step, (2) there is a single gamma but
-    # some intermediate dones and (3) there is a single gamma and no done.
-    # (3) can be treated much faster than (1) and (2) (lower mem footprint)
-    if (isinstance(gamma, torch.Tensor) and gamma.numel() > 1) or done.any():
-        if rolling_gamma is None:
-            rolling_gamma = True
-        if rolling_gamma:
-            gamma = gamma * not_done
-        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-
-        if not rolling_gamma:
-            done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
-            if not done_follows_done:
-                raise NotImplementedError(
-                    "When using rolling_gamma=False and vectorized TD(lambda), "
-                    "make sure that conseducitve trajectories are separated as different batch "
-                    "items. Propagating a gamma value across trajectories is not permitted with "
-                    "this method. Check that you need to use rolling_gamma=False, and if so "
-                    "consider using the non-vectorized version of the return computation or splitting "
-                    "your trajectories."
-                )
-            else:
-                gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
-
-    else:
-        if rolling_gamma is not None:
-            raise RuntimeError(
-                "rolling_gamma cannot be set if a non-tensor gamma is provided"
+    if not rolling_gamma:
+        done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
+        if not done_follows_done:
+            raise NotImplementedError(
+                "When using rolling_gamma=False and vectorized TD(lambda) with time-dependent gamma, "
+                "make sure that conseducitve trajectories are separated as different batch "
+                "items. Propagating a gamma value across trajectories is not permitted with "
+                "this method. Check that you need to use rolling_gamma=False, and if so "
+                "consider using the non-vectorized version of the return computation or splitting "
+                "your trajectories."
             )
-        gammas = torch.ones(T + 1, 1, device=device)
-        gammas[1:] = gamma
+        else:
+            gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
 
     gammas_cp = torch.cumprod(gammas, -2)
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
     lambdas_cp = torch.cumprod(lambdas, -2)
-
-    if not isinstance(gamma, torch.Tensor) or gamma.numel() <= 0:
-        first_below_thr = gammas_cp < 1e-7
-        while first_below_thr.ndimension() > 2:
-            # if we have multiple gammas, we only want to truncate if _all_ of
-            # the geometric sequences fall below the threshold
-            first_below_thr = first_below_thr.all(axis=0)
-        if first_below_thr.any():
-            first_below_thr_gamma = first_below_thr.nonzero()[0, 0]
-        first_below_thr = lambdas_cp < 1e-7
-        if first_below_thr.any() and first_below_thr_gamma is not None:
-            first_below_thr = max(
-                first_below_thr_gamma, first_below_thr.nonzero()[0, 0]
-            )
-            gammas_cp = gammas_cp[..., :first_below_thr, :]
-            lambdas_cp = lambdas_cp[:first_below_thr]
 
     gammas = gammas[..., 1:, :]
     lambdas = lambdas[1:]
@@ -878,9 +1027,7 @@ def vec_td_lambda_advantage_estimate(
 
     """
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
-        raise RuntimeError(
-            "All input tensors (value, reward and done states) must share a unique shape."
-        )
+        raise RuntimeError(SHAPE_ERR)
     return (
         vec_td_lambda_return_estimate(
             gamma,
@@ -898,178 +1045,6 @@ def vec_td_lambda_advantage_estimate(
 ########################################################################
 # Reward to go
 # ------------
-
-
-def _flatten_batch(tensor):
-    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
-
-    Args:
-        tensor (torch.Tensor): a tensor of shape [B, T]
-    """
-    return tensor.flatten(0, 1)
-
-
-def _get_num_per_traj(dones_and_truncated):
-    """Because we mark the end of each batch with a truncated signal, we can concatenate them.
-
-    Args:
-        dones_and_truncated (torch.Tensor): A done or truncated mark of shape [B, T]
-
-    Returns:
-        A list of integers representing the number of steps in each trajectories
-    """
-    dones_and_truncated = dones_and_truncated.clone()
-    dones_and_truncated[..., -1] = 1
-    dones_and_truncated = _flatten_batch(dones_and_truncated)
-    num_per_traj = torch.ones_like(dones_and_truncated).cumsum(0)[dones_and_truncated]
-    num_per_traj[1:] -= num_per_traj[:-1].clone()
-    return num_per_traj
-
-
-def _get_num_per_traj_init(is_init):
-    """Like _get_num_per_traj, but with is_init signal."""
-    done = torch.zeros_like(is_init)
-    done[..., :-1][is_init[..., 1:]] = 1
-    return _get_num_per_traj(done)
-
-
-def _split_and_pad_sequence(tensor, splits):
-    """Given a tensor of size [B, T, *other] and the corresponding traj lengths (flattened), returns the padded trajectories [NPad, Tmax, *other].
-
-    Compatible with tensordict inputs.
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
-        >>> is_init[:, 0] = True
-        >>> is_init[0, 3] = True
-        >>> is_init[1, 2] = True
-        >>> tensordict = TensorDict({
-        ...     "is_init": is_init,
-        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
-        ... }, [4, 5])
-        >>> splits = _get_num_per_traj_init(is_init)
-        >>> print(splits)
-        tensor([3, 2, 2, 3, 5, 5])
-        >>> td = _split_and_pad_sequence(tensordict, splits)
-        >>> print(td)
-        TensorDict(
-            fields={
-                is_init: Tensor(shape=torch.Size([6, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-                obs: Tensor(shape=torch.Size([6, 5, 3]), device=cpu, dtype=torch.int64, is_shared=False)},
-            batch_size=torch.Size([6, 5]),
-            device=None,
-            is_shared=False)
-        >>> print(td["obs"])
-        tensor([[[ 0,  0,  0],
-                 [ 1,  1,  1],
-                 [ 2,  2,  2],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0]],
-        <BLANKLINE>
-                [[ 3,  3,  3],
-                 [ 4,  4,  4],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0]],
-        <BLANKLINE>
-                [[ 5,  5,  5],
-                 [ 6,  6,  6],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0]],
-        <BLANKLINE>
-                [[ 7,  7,  7],
-                 [ 8,  8,  8],
-                 [ 9,  9,  9],
-                 [ 0,  0,  0],
-                 [ 0,  0,  0]],
-        <BLANKLINE>
-                [[10, 10, 10],
-                 [11, 11, 11],
-                 [12, 12, 12],
-                 [13, 13, 13],
-                 [14, 14, 14]],
-        <BLANKLINE>
-                [[15, 15, 15],
-                 [16, 16, 16],
-                 [17, 17, 17],
-                 [18, 18, 18],
-                 [19, 19, 19]]])
-
-    """
-    tensor = _flatten_batch(tensor)
-    max_val = max(splits)
-    mask = torch.zeros(len(splits), max_val, dtype=torch.bool, device=tensor.device)
-    mask.scatter_(
-        index=max_val - torch.tensor(splits, device=tensor.device).unsqueeze(-1),
-        dim=1,
-        value=1,
-    )
-    mask = mask.cumsum(-1).flip(-1).bool()
-
-    def _fill_tensor(tensor):
-        empty_tensor = torch.zeros(
-            len(splits),
-            max_val,
-            *tensor.shape[1:],
-            dtype=tensor.dtype,
-            device=tensor.device,
-        )
-        empty_tensor[mask] = tensor
-        return empty_tensor
-
-    if isinstance(tensor, TensorDictBase):
-        tensor = tensor.apply(_fill_tensor, batch_size=[len(splits), max_val])
-    else:
-        tensor = _fill_tensor(tensor)
-    return tensor
-
-
-def _inv_pad_sequence(tensor, splits):
-    """Inverses a pad_sequence operation.
-
-    Examples:
-        >>> rewards = torch.randn(100, 20)
-        >>> num_per_traj = _get_num_per_traj(torch.zeros(100, 20).bernoulli_(0.1))
-        >>> padded = _split_and_pad_sequence(rewards, num_per_traj.tolist())
-        >>> reconstructed = _inv_pad_sequence(padded, num_per_traj)
-        >>> assert (reconstructed==rewards).all()
-
-
-    Compatible with tensordict inputs.
-
-    Examples:
-        >>> from tensordict import TensorDict
-        >>> is_init = torch.zeros(4, 5, dtype=torch.bool)
-        >>> is_init[:, 0] = True
-        >>> is_init[0, 3] = True
-        >>> is_init[1, 2] = True
-        >>> tensordict = TensorDict({
-        ...     "is_init": is_init,
-        ...     "obs": torch.arange(20).view(4, 5).unsqueeze(-1).expand(4, 5, 3),
-        ... }, [4, 5])
-        >>> splits = _get_num_per_traj_init(is_init)
-        >>> td = _split_and_pad_sequence(tensordict, splits)
-        >>> assert (_inv_pad_sequence(td, splits).view(tensordict.shape) == tensordict).all()
-
-    """
-    offset = torch.ones_like(splits) * tensor.shape[-1]
-    offset[0] = 0
-    offset = offset.cumsum(0)
-    z = torch.zeros(tensor.numel(), dtype=torch.bool, device=offset.device)
-
-    ones = offset + splits
-    ones = ones[ones < tensor.numel()]
-    # while ones[-1] == tensor.numel():
-    #     ones = ones[:-1]
-    z[ones] = 1
-    z_idx = z[offset[1:]]
-    z[offset[1:]] = torch.bitwise_xor(
-        z_idx, torch.ones_like(z_idx)
-    )  # make sure that the longest is accounted for
-    idx = z.cumsum(0) % 2 == 0
-    return tensor.reshape(-1)[idx]
 
 
 @_transpose_time
@@ -1130,6 +1105,7 @@ def reward2go(
     gammas[1:] = gammas[1:].cumprod(0)
     gammas = gammas.unsqueeze(-1)
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
+    cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)
     cumsum = cumsum.view_as(reward)
     if cumsum.shape != shape:
