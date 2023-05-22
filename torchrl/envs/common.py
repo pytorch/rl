@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from numbers import Number
 from typing import Any, Callable, Dict, Iterator, Optional, Union
 
 import numpy as np
@@ -1083,7 +1082,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.reset()
         elif tensordict is None:
             raise RuntimeError("tensordict must be provided when auto_reset is False")
-
         if policy is None:
 
             def policy(td):
@@ -1136,43 +1134,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         for key in tensordict.keys():
             if key.rfind("observation") >= 0:
                 yield key
-
-    def _to_tensor(
-        self,
-        value: Union[dict, bool, float, torch.Tensor, np.ndarray],
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[torch.dtype] = None,
-    ) -> Union[torch.Tensor, dict]:
-        if device is None:
-            device = self.device
-
-        if isinstance(value, dict):
-            return {
-                _key: self._to_tensor(_value, dtype=dtype, device=device)
-                for _key, _value in value.items()
-            }
-        elif isinstance(value, (bool, Number)):
-            value = np.array(value)
-
-        if dtype is None and self.dtype is not None:
-            dtype = self.dtype
-        elif dtype is not None:
-            dtype = dtype_map.get(dtype, dtype)
-        else:
-            dtype = value.dtype
-
-        if not isinstance(value, torch.Tensor):
-            if dtype is not None:
-                try:
-                    value = value.astype(dtype)
-                except TypeError:
-                    raise Exception(
-                        "dtype must be a numpy-compatible dtype. Got {dtype}"
-                    )
-            value = torch.as_tensor(value, device=device)
-        else:
-            value = value.to(device)
-        return value
 
     def close(self):
         self.is_closed = True

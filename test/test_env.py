@@ -224,7 +224,7 @@ def test_rollout_predictability(device):
     ],
 )
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
-@pytest.mark.parametrize("parallel", [False, True])
+@pytest.mark.parametrize("parallel", [True, False])
 def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     envs = []
     for horizon in [20, 30, 40]:
