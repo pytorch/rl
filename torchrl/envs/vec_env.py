@@ -993,26 +993,13 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
-            # if not is_cuda:
-            print(
-                f"the done state on proc is {local_tensordict.get('done')}"
-                )
-            shared_tensordict.update_(
-                local_tensordict.select(
-                    *shared_tensordict.keys(True, True), strict=False
-                )
-            )
-            time.sleep(1e-1)
-            child_pipe.send(("reset_obs", None))
-            # else:
-            #     child_pipe.send(
-            #         (
-            #             "reset_obs",
-            #             local_tensordict.select(
-            #                 *shared_tensordict.keys(True, True), strict=False
-            #             ),
-            #         )
-            #     )
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict)
+                out = ("reset_obs", None)
+            else:
+                out = ("reset_obs", local_tensordict.exclude("next"))
+                child_pipe.send(out)
+            child_pipe.send()
 
         elif cmd == "step":
             if not initialized:
@@ -1028,14 +1015,12 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            # if not is_cuda:
-            shared_tensordict.update_(local_tensordict.select("next"))
-            data = (msg, None)
-            time.sleep(1e-1)
-            child_pipe.send(data)
-            # else:
-            #     data = (msg, local_tensordict.select("next"))
-            #     child_pipe.send(data)
+            if not is_cuda:
+                shared_tensordict.update_(local_tensordict.select("next"))
+                out = (msg, None)
+            else:
+                out = (msg, local_tensordict.select("next"))
+            child_pipe.send(out)
 
         elif cmd == "close":
             del shared_tensordict, local_tensordict, data
