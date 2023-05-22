@@ -987,7 +987,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             # _td = tensordict.select("observation").to(env.device).clone()
-            local_tensordict = env._reset()
+            local_tensordict = env._reset(tensordict=shared_tensordict.exclude('next'))
 
             if "_reset" in local_tensordict.keys():
                 local_tensordict.del_("_reset")
