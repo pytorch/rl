@@ -1272,7 +1272,7 @@ class TestConcurrentEnvs:
                     p = mp.Process(target=type(self).main_collector, args=(k, q))
                     ps.append(p)
                     p.start()
-                for _ in range(3):
+                for j in range(3):
                     msg = q.get(timeout=100)
                     assert msg == "passed", j
             finally:
