@@ -1007,8 +1007,7 @@ def _run_worker_pipe_shared_mem(
                 out = ("reset_obs", None)
             else:
                 out = ("reset_obs", local_tensordict.exclude("next"))
-                child_pipe.send(out)
-            child_pipe.send()
+            child_pipe.send(out)
 
         elif cmd == "step":
             if not initialized:
