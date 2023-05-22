@@ -143,9 +143,9 @@ class A2CLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         if action.requires_grad:
-            raise RuntimeError("tensordict stored action require grad.")
+            raise RuntimeError(f"tensordict stored {self.action_key} require grad.")
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
         dist = self.actor.get_dist(tensordict_clone, params=self.actor_params)

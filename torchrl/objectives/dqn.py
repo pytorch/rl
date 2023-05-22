@@ -38,11 +38,6 @@ class DQNLoss(LossModule):
 
     Keyword Args:
         loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-        priority_key (str, optional): the key at which priority is assumed to
-            be stored within TensorDicts added to this ReplayBuffer.
-            This is to be used when the sampler is of type
-            :class:`~torchrl.data.PrioritizedSampler`.
-            Defaults to ``"td_error"``.
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
             create a double DQN. Default is ``False``.
@@ -53,6 +48,10 @@ class DQNLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
+        priority_key (str, optional): [Deprecated, use .set_keys() instead] the
+            key at which priority is assumed to be stored within TensorDicts added
+            to this ReplayBuffer.  This is to be used when the sampler is of type
+            :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
 
     """
 
@@ -63,13 +62,24 @@ class DQNLoss(LossModule):
         value_network: Union[QValueActor, nn.Module],
         *,
         loss_function: str = "l2",
-        priority_key: str = "td_error",
         delay_value: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
+        priority_key: str = None,
     ) -> None:
 
         super().__init__()
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
+
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
             module=value_network,
@@ -86,7 +96,6 @@ class DQNLoss(LossModule):
         self.value_network_in_keys = value_network.in_keys
 
         self.loss_function = loss_function
-        self.priority_key = priority_key
         if action_space is None:
             # infer from value net
             try:
@@ -237,6 +246,10 @@ class DistributionalDQNLoss(LossModule):
               Unlike :class:`DQNLoss`, this class does not currently support
               custom value functions. The next value estimation is always
               bootstrapped.
+        priority_key (str, optional): [Deprecated, use .set_keys() instead] the
+            key at which priority is assumed to be stored within TensorDicts added
+            to this ReplayBuffer.  This is to be used when the sampler is of type
+            :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
 
         delay_value (bool): whether to duplicate the value network into a new
             target value network to create double DQN
@@ -246,12 +259,23 @@ class DistributionalDQNLoss(LossModule):
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
         gamma: float,
-        priority_key: str = "td_error",
         delay_value: bool = False,
+        priority_key: str = None,
     ):
         super().__init__()
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
+        print(f"{self.priority_key = }")
+
         self.register_buffer("gamma", torch.tensor(gamma))
-        self.priority_key = priority_key
         self.delay_value = delay_value
 
         value_network = ensure_tensordict_compatible(

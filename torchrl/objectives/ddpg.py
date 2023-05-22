@@ -52,6 +52,12 @@ class DDPGLoss(LossModule):
         gamma: float = None,
     ) -> None:
         super().__init__()
+
+        self.tensordict_keys = {
+            "state_action_value_key": "state_action_value",
+        }
+        self.set_keys(**self.tensordict_keys)
+
         self.delay_actor = delay_actor
         self.delay_value = delay_value
 
@@ -136,7 +142,7 @@ class DDPGLoss(LossModule):
                 td_copy,
                 params=params,
             )
-        return -td_copy.get("state_action_value")
+        return -td_copy.get(self.state_action_value_key)
 
     def _loss_value(
         self,
@@ -148,7 +154,7 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get("state_action_value").squeeze(-1)
+        pred_val = td_copy.get(self.state_action_value_key).squeeze(-1)
 
         target_params = TensorDict(
             {

@@ -463,6 +463,28 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize("loss_class", (DQNLoss, DistributionalDQNLoss))
+    def test_dqn_tensordict_keys(self, loss_class):
+        actor = self._create_mock_distributional_actor(action_spec_type="one_hot")
+        loss_fn = loss_class(actor, gamma=0.9)
+
+        # test default values
+        assert loss_fn.priority_key == "td_error"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(priority_key=new_key)
+        assert loss_fn.priority_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(value_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = loss_class(actor, priority_key=new_key, gamma=0.9)
+            assert loss_fn.priority_key == new_key
+
 
 class TestDDPG:
     seed = 0
@@ -700,6 +722,23 @@ class TestDDPG:
         parameters = list(actor.parameters()) + list(value.parameters())
         for p in parameters:
             assert p.grad.norm() > 0.0
+
+    def test_ddpg_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = DDPGLoss(actor, value)
+
+        # test default values
+        assert loss_fn.state_action_value_key == "state_action_value"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(state_action_value_key=new_key)
+        assert loss_fn.state_action_value_key == new_key
+
+        # test unsupported key
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(unknown_key="test2")
 
 
 class TestTD3:

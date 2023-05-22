@@ -203,16 +203,16 @@ class PPOLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         if action.requires_grad:
-            raise RuntimeError("tensordict stored action requires grad.")
+            raise RuntimeError(f"tensordict stored {self.action_key} requires grad.")
 
         dist = self.actor.get_dist(tensordict, params=self.actor_params)
         log_prob = dist.log_prob(action)
 
-        prev_log_prob = tensordict.get("sample_log_prob")
+        prev_log_prob = tensordict.get(self.sample_log_prob_key)
         if prev_log_prob.requires_grad:
-            raise RuntimeError("tensordict prev_log_prob requires grad.")
+            raise RuntimeError(f"tensordict {self.sample_log_prob_key} requires grad.")
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         return log_weight, dist
