@@ -1236,7 +1236,7 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
-        queue_out = mp.SimpleQueue()  # sends data from proc to main
+        queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
         for i, (env_fun, env_fun_kwargs) in enumerate(
@@ -1560,7 +1560,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        out_tensordicts_shared = {}
+        out_tensordicts_shared = OrderedDict()
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
@@ -1593,11 +1593,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             for _ in range(self.num_workers):
                 new_data, j = self.queue_out.get()
-                # if j == 0:
-                data, idx = new_data
-                out_tensordicts_shared[idx] = data
-                # else:
-                #     idx = new_data
+                if j == 0:
+                    data, idx = new_data
+                    out_tensordicts_shared[idx] = data
+                else:
+                    idx = new_data
                 workers_frames[idx] = (
                     workers_frames[idx] + out_tensordicts_shared[idx].numel()
                 )
@@ -1785,12 +1785,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         return self.requested_frames_per_batch
 
     def _get_from_queue(self, timeout=None) -> Tuple[int, int, TensorDictBase]:
-        new_data, j = self.queue_out.get()#timeout=timeout)
-        # if j == 0:
-        data, idx = new_data
-        self.out_tensordicts[idx] = data
-        # else:
-        #     idx = new_data
+        new_data, j = self.queue_out.get(timeout=timeout)
+        if j == 0:
+            data, idx = new_data
+            self.out_tensordicts[idx] = data
+        else:
+            idx = new_data
         # we clone the data to make sure that we'll be working with a fixed copy
         out = self.out_tensordicts[idx].clone()
         return idx, j, out
@@ -2088,22 +2088,22 @@ def _main_async_collector(
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
                 # sending the trajectory in the queue until timeout when it's never going to be received.
                 continue
-            # if j == 0:
-            tensordict = d
-            if storing_device is not None and tensordict.device != storing_device:
-                raise RuntimeError(
-                    f"expected device to be {storing_device} but got {tensordict.device}"
-                )
-            tensordict.share_memory_()
-            data = (tensordict, idx)
-            # else:
-            #     if d is not tensordict:
-            #         raise RuntimeError(
-            #             "SyncDataCollector should return the same tensordict modified in-place."
-            #         )
-            #     data = idx  # flag the worker that has sent its data
+            if j == 0:
+                tensordict = d
+                if storing_device is not None and tensordict.device != storing_device:
+                    raise RuntimeError(
+                        f"expected device to be {storing_device} but got {tensordict.device}"
+                    )
+                tensordict.share_memory_()
+                data = (tensordict, idx)
+            else:
+                if d is not tensordict:
+                    raise RuntimeError(
+                        "SyncDataCollector should return the same tensordict modified in-place."
+                    )
+                data = idx  # flag the worker that has sent its data
             try:
-                queue_out.put((data, j))# timeout=_TIMEOUT)
+                queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
                     print(f"worker {idx} successfully sent data")
                 j += 1
