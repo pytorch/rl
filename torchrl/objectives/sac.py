@@ -82,10 +82,10 @@ class SACLoss(LossModule):
             Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -105,8 +105,8 @@ class SACLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
-        delay_value: bool = False,
+        delay_qvalue: bool = True,
+        delay_value: bool = True,
         gamma: float = None,
     ) -> None:
         if not _has_functorch:
