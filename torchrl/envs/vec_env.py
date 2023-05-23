@@ -739,25 +739,23 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        with torch.cuda.stream(self.stream):
-            self._assert_tensordict_shape(tensordict)
+        self._assert_tensordict_shape(tensordict)
 
-            self.shared_tensordict_parent.update_(
-                tensordict.select(*self.env_input_keys, strict=False)
-            )
-            for i in range(self.num_workers):
-                self.parent_channels[i].send(("step", None))
+        self.shared_tensordict_parent.update_(
+            tensordict.select(*self.env_input_keys, strict=False)
+        )
+        for i in range(self.num_workers):
+            self.parent_channels[i].send(("step", None))
 
-            # keys = set()
-            for i in range(self.num_workers):
-                msg, data = self.parent_channels[i].recv()
-                if msg != "step_result":
-                    raise RuntimeError(
-                        f"Expected 'step_result' but received {msg} from worker {i}"
-                    )
-                if data is not None:
-                    self.shared_tensordicts[i].update_(data)
-        torch.cuda.synchronize()
+        # keys = set()
+        for i in range(self.num_workers):
+            msg, data = self.parent_channels[i].recv()
+            if msg != "step_result":
+                raise RuntimeError(
+                    f"Expected 'step_result' but received {msg} from worker {i}"
+                )
+            if data is not None:
+                self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         return (
@@ -768,56 +766,54 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        with torch.cuda.stream(self.stream):
-            cmd_out = "reset"
-            if tensordict is not None and "_reset" in tensordict.keys():
-                self._assert_tensordict_shape(tensordict)
-                _reset = tensordict.get("_reset")
-                if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                    raise RuntimeError(
-                        "_reset flag in tensordict should follow env.done_spec"
-                    )
-            else:
-                _reset = torch.ones(
-                    self.done_spec.shape, dtype=torch.bool, device=self.device
+        cmd_out = "reset"
+        if tensordict is not None and "_reset" in tensordict.keys():
+            self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
                 )
+        else:
+            _reset = torch.ones(
+                self.done_spec.shape, dtype=torch.bool, device=self.device
+            )
 
-            for i, channel in enumerate(self.parent_channels):
-                if tensordict is not None:
-                    tensordict_ = tensordict[i]
-                    if tensordict_.is_empty():
-                        tensordict_ = None
-                else:
+        for i, channel in enumerate(self.parent_channels):
+            if tensordict is not None:
+                tensordict_ = tensordict[i]
+                if tensordict_.is_empty():
                     tensordict_ = None
-                if not _reset[i].any():
-                    # We update the stored tensordict with the value of the "next"
-                    # key as one may be surprised to receive data that is not up-to-date
-                    # If we don't do this, the result of calling reset and skipping one env
-                    # will be that the env will have the data from the previous
-                    # step at the root (since the shared_tensordict did not go through
-                    # step_mdp).
-                    self.shared_tensordicts[i].update_(
-                        self.shared_tensordicts[i]["next"].select(
-                            *self._selected_reset_keys, strict=False
-                        )
+            else:
+                tensordict_ = None
+            if not _reset[i].any():
+                # We update the stored tensordict with the value of the "next"
+                # key as one may be surprised to receive data that is not up-to-date
+                # If we don't do this, the result of calling reset and skipping one env
+                # will be that the env will have the data from the previous
+                # step at the root (since the shared_tensordict did not go through
+                # step_mdp).
+                self.shared_tensordicts[i].update_(
+                    self.shared_tensordicts[i]["next"].select(
+                        *self._selected_reset_keys, strict=False
                     )
-                    if tensordict_ is not None:
-                        self.shared_tensordicts[i].update_(
-                            tensordict_.select(*self._selected_reset_keys, strict=False)
-                        )
-                    continue
-                out = (cmd_out, tensordict_)
-                channel.send(out)
+                )
+                if tensordict_ is not None:
+                    self.shared_tensordicts[i].update_(
+                        tensordict_.select(*self._selected_reset_keys, strict=False)
+                    )
+                continue
+            out = (cmd_out, tensordict_)
+            channel.send(out)
 
-            for i, channel in enumerate(self.parent_channels):
-                if not _reset[i].any():
-                    continue
-                cmd_in, data = channel.recv()
-                if cmd_in != "reset_obs":
-                    raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
-                if data is not None:
-                    self.shared_tensordicts[i].update_(data)
-        torch.cuda.synchronize()
+        for i, channel in enumerate(self.parent_channels):
+            if not _reset[i].any():
+                continue
+            cmd_in, data = channel.recv()
+            if cmd_in != "reset_obs":
+                raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
+            if data is not None:
+                self.shared_tensordicts[i].update_(data)
         return (
             self.shared_tensordict_parent.select(*self._selected_reset_keys)
             .exclude("_reset")
