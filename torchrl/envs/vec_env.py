@@ -765,48 +765,6 @@ class ParallelEnv(_BatchedEnv):
         )
 
     @_check_start
-    def _shutdown_workers(self) -> None:
-        if self.is_closed:
-            raise RuntimeError(
-                "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
-            )
-        for i, channel in enumerate(self.parent_channels):
-            if self._verbose:
-                print(f"closing {i}")
-            # try:
-            channel.send(("close", None))
-            # except:
-            #     raise RuntimeError(f"closing {channel} number {i} failed")
-            msg, _ = channel.recv()
-            if msg != "closing":
-                raise RuntimeError(
-                    f"Expected 'closing' but received {msg} from worker {i}"
-                )
-
-        del self.shared_tensordicts, self.shared_tensordict_parent
-
-        for channel in self.parent_channels:
-            channel.close()
-        for proc in self._workers:
-            proc.join()
-        del self._workers
-        del self.parent_channels
-
-    @_check_start
-    def set_seed(
-        self, seed: Optional[int] = None, static_seed: bool = False
-    ) -> Optional[int]:
-        self._seeds = []
-        for channel in self.parent_channels:
-            channel.send(("seed", (seed, static_seed)))
-            self._seeds.append(seed)
-            msg, new_seed = channel.recv()
-            if msg != "seeded":
-                raise RuntimeError(f"Expected 'seeded' but received {msg}")
-            seed = new_seed
-        return seed
-
-    @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
         if tensordict is not None and "_reset" in tensordict.keys():
@@ -847,7 +805,6 @@ class ParallelEnv(_BatchedEnv):
                 continue
             out = (cmd_out, tensordict_)
             channel.send(out)
-        torch.cuda.synchronize()
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
@@ -863,6 +820,48 @@ class ParallelEnv(_BatchedEnv):
             .exclude("_reset")
             .clone()
         )
+
+    @_check_start
+    def _shutdown_workers(self) -> None:
+        if self.is_closed:
+            raise RuntimeError(
+                "calling {self.__class__.__name__}._shutdown_workers only allowed when env.is_closed = False"
+            )
+        for i, channel in enumerate(self.parent_channels):
+            if self._verbose:
+                print(f"closing {i}")
+            # try:
+            channel.send(("close", None))
+            # except:
+            #     raise RuntimeError(f"closing {channel} number {i} failed")
+            msg, _ = channel.recv()
+            if msg != "closing":
+                raise RuntimeError(
+                    f"Expected 'closing' but received {msg} from worker {i}"
+                )
+
+        del self.shared_tensordicts, self.shared_tensordict_parent
+
+        for channel in self.parent_channels:
+            channel.close()
+        for proc in self._workers:
+            proc.join()
+        del self._workers
+        del self.parent_channels
+
+    @_check_start
+    def set_seed(
+        self, seed: Optional[int] = None, static_seed: bool = False
+    ) -> Optional[int]:
+        self._seeds = []
+        for channel in self.parent_channels:
+            channel.send(("seed", (seed, static_seed)))
+            self._seeds.append(seed)
+            msg, new_seed = channel.recv()
+            if msg != "seeded":
+                raise RuntimeError(f"Expected 'seeded' but received {msg}")
+            seed = new_seed
+        return seed
 
     def __reduce__(self):
         if not self.is_closed:
