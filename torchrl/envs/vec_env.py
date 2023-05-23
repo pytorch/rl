@@ -670,7 +670,7 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-        self.stream = torch.cuda.Stream()
+        self.event = torch.cuda.Event()
         for idx in range(_num_workers):
             if self._verbose:
                 print(f"initiating worker {idx}")
@@ -744,6 +744,8 @@ class ParallelEnv(_BatchedEnv):
         self.shared_tensordict_parent.update_(
             tensordict.select(*self.env_input_keys, strict=False)
         )
+        self.event.record()
+        self.event.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
@@ -936,6 +938,8 @@ def _run_worker_pipe_shared_mem(
     allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
+    e = torch.cuda.Event()
+
     parent_pipe.close()
     pid = os.getpid()
     if not isinstance(env_fun, EnvBase):
@@ -996,6 +1000,8 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             shared_tensordict.update_(local_tensordict)
+            e.record()
+            e.synchronize()
             out = ("reset_obs", None)
             child_pipe.send(out)
 
@@ -1014,6 +1020,8 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             shared_tensordict.update_(local_tensordict.select("next"))
+            e.record()
+            e.synchronize()
             out = (msg, None)
             child_pipe.send(out)
 
