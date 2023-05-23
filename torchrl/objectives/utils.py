@@ -210,6 +210,8 @@ class TargetNetUpdater:
     def init_(self) -> None:
         if self.initialized:
             warnings.warn("Updated already initialized.")
+        found_distinct = False
+        self._distinct = {}
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
@@ -218,7 +220,18 @@ class TargetNetUpdater:
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
+            self._distinct[key] = target.data_ptr() != source.data.data_ptr()
+            found_distinct = found_distinct or self._distinct[key]
             target.data.copy_(source.data)
+        if not found_distinct:
+            raise RuntimeError(
+                f"The target and source data are identical for all params. "
+                "Have you created proper target parameters? "
+                "If the loss has a ``delay_value`` kwarg, make sure to set it "
+                "to True if it is not done by default. "
+                f"If no target parameter is needed, do not use a target updater such as {type(self)}."
+            )
+
         self.initialized = True
 
     def step(self) -> None:
@@ -231,6 +244,8 @@ class TargetNetUpdater:
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
+            if not self._distinct[key]:
+                continue
             target = self._targets[key]
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
