@@ -10,7 +10,6 @@ from data import get_prompt_dataloaders
 from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
-from shared import setup
 from tensordict.nn import TensorDictModuleBase
 from torch import vmap
 from torchrl.collectors import SyncDataCollector
@@ -19,7 +18,7 @@ from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from utils import get_file_logger, load_and_update_config
+from utils import get_file_logger, load_and_update_config, setup
 
 HERE = Path(__file__).parent
 

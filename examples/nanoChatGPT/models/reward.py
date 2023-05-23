@@ -10,34 +10,34 @@ from .transformer import forward_wrap, init_transformer
 from .utils import crop_block_size, print_trainable_parameters
 
 
-class RewardModel(GPT2PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"attn.masked_bias",
-        r"attn.bias",
-        r"lm_head.weight",
-    ]
+class RewardModel(nn.Module):
 
     def __init__(self, model):
-        super().__init__(model.config)
+        super().__init__()
 
         self.transformer = deepcopy(model.transformer)
-        self.block_size = model.config.n_positions
+        self.block_size = self.transformer.config.n_positions
         # replace last layer with the reward layer
         self.lm_head = nn.Linear(model.lm_head.in_features, 1, bias=False)
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-        self.forward = model.forward
+        self.config = self.transformer.config
 
     def forward(self, input_ids):
-        batch_size, sequence_length = input_ids.shape[:2]
         transformer_outputs = self.transformer(input_ids=input_ids, attention_mask=None)
         hidden_states = transformer_outputs[0]
         logits = self.lm_head(hidden_states)
         # extract logit of last token in sequence
         return logits[:, -1, :]
+    
+    @classmethod
+    def from_pretrained(cls, path):
+        save_dir = Path(path)
+        return torch.load(save_dir / "model.pt")
+
+
+    def save_pretrained(self, path):
+        save_dir = Path(path)
+        save_dir.mkdir(exist_ok=True)
+        torch.save(self, save_dir / "model.pt")
 
 
 def init_reward_model(config):
@@ -52,7 +52,7 @@ def init_reward_model(config):
         )
         model = RewardModel(model)
     elif config["init_reward_from"] == "resume":
-        model = RewardModel.from_pretrained(config["out_dir_reward"], **model_kwargs)
+        model = RewardModel.from_pretrained(config["out_dir_reward"])
     else:
         raise ValueError(f"option {config['init_reward_from']=} not recognised")
 
