@@ -742,7 +742,6 @@ class SyncDataCollector(DataCollectorBase):
                     key for key in tensordict_out.keys() if key.startswith("_")
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-            torch.cuda.synchronize()
             if self.return_same_td:
                 yield tensordict_out
             else:
@@ -1216,6 +1215,7 @@ class _MultiDataCollector(DataCollectorBase):
             self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
+        self.event = torch.cuda.Event()
 
     @property
     def frames_per_batch_worker(self):
@@ -1646,7 +1646,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 if excluded_keys:
                     out = out.exclude(*excluded_keys)
-            torch.cuda.synchronize()
+            self.event.record()
+            self.event.synchronize()
             yield out
             del out
 
@@ -1838,6 +1839,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
+            self.event.record()
+            self.event.synchronize()
             yield out
 
         # We don't want to shutdown yet, the user may want to call state_dict before
@@ -2000,6 +2003,7 @@ def _main_async_collector(
     verbose: bool = VERBOSE,
     interruptor=None,
 ) -> None:
+    event = torch.cuda.Event()
     pipe_parent.close()
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
@@ -2104,6 +2108,8 @@ def _main_async_collector(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
+            event.record()
+            event.synchronize()
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
