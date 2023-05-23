@@ -270,6 +270,8 @@ class SoftUpdate(TargetNetUpdater):
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
+    One and only one decay factor (tau or eps) must be specified.
+
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
@@ -277,7 +279,8 @@ class SoftUpdate(TargetNetUpdater):
 
                 \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
 
-            Defaults to 0.999
+            Exclusive with ``tau``.
+        tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.
     """
 
     def __init__(
@@ -289,8 +292,27 @@ class SoftUpdate(TargetNetUpdater):
             "REDQLoss",  # noqa: F821
             "TD3Loss",  # noqa: F821
         ],
-        eps: float = 0.999,
+        *,
+        eps: float = None,
+        tau: Optional[float] = None,
     ):
+        if eps is None and tau is None:
+            warnings.warn(
+                "Neither eps nor tau was provided. Taking the default value "
+                "eps=0.999. This behaviour will soon be deprecated.",
+                category=DeprecationWarning,
+            )
+            eps = 0.999
+        if (eps is None) ^ (tau is None):
+            if eps is None:
+                eps = 1 - tau
+        else:
+            raise ValueError("One and only one argument (tau or eps) can be specified.")
+        if eps < 0.5:
+            warnings.warn(
+                "Found an eps value < 0.5, which is unexpected. "
+                "You may want to use the `tau` keyword argument instead."
+            )
         if not (eps <= 1.0 and eps >= 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
@@ -310,6 +332,8 @@ class HardUpdate(TargetNetUpdater):
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+
+    Keyword Args:
         value_network_update_interval (scalar): how often the target network should be updated.
             default: 1000
     """
@@ -317,6 +341,7 @@ class HardUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        *,
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)
