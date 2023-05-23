@@ -938,10 +938,12 @@ def _run_worker_pipe_shared_mem(
     env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
     env_input_keys: Dict[str, Any],
-    device: DEVICE_TYPING = torch.device("cpu"),
+    device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
+    if device is None:
+        device = torch.device("cpu")
     if device.type == "cuda":
         event = torch.cuda.Event()
     else:

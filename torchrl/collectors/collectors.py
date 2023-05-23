@@ -1599,9 +1599,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = (
-                    workers_frames[idx] + buffers[idx].numel()
-                )
+                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
@@ -1623,9 +1621,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                out_buffer = torch.cat(
-                    list(buffers.values()), 0, out=out_buffer
-                )
+                out_buffer = torch.cat(list(buffers.values()), 0, out=out_buffer)
             else:
                 out_buffer = torch.cat(
                     [item.cpu() for item in buffers.values()],
