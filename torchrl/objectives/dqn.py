@@ -71,6 +71,8 @@ class DQNLoss(LossModule):
         super().__init__()
         self.tensordict_keys = {
             "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
         }
         if priority_key is not None:
             warnings.warn(
@@ -195,8 +197,8 @@ class DQNLoss(LossModule):
             params=self.value_network_params,
         )
 
-        action = tensordict.get("action")
-        pred_val = td_copy.get("action_value")
+        action = tensordict.get(self.action_key)
+        pred_val = td_copy.get(self.action_value_key)
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -265,6 +267,10 @@ class DistributionalDQNLoss(LossModule):
         super().__init__()
         self.tensordict_keys = {
             "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+            "reward_key": "reward",
+            "done_key": "done",
         }
         if priority_key is not None:
             warnings.warn(
@@ -325,9 +331,9 @@ class DistributionalDQNLoss(LossModule):
         Vmax = support.max().item()
         delta_z = (Vmax - Vmin) / (atoms - 1)
 
-        action = tensordict.get("action")
-        reward = tensordict.get(("next", "reward"))
-        done = tensordict.get(("next", "done"))
+        action = tensordict.get(self.action_key)
+        reward = tensordict.get(("next", self.reward_key))
+        done = tensordict.get(("next", self.done_key))
 
         steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
         discount = self.gamma**steps_to_next_obs
@@ -339,7 +345,7 @@ class DistributionalDQNLoss(LossModule):
             td_clone,
             params=self.value_network_params,
         )  # Log probabilities log p(s_t, ·; θonline)
-        action_log_softmax = td_clone.get("action_value")
+        action_log_softmax = td_clone.get(self.action_value_key)
 
         if self.action_space == "categorical":
             log_ps_a = self._log_ps_a_categorical(action, action_log_softmax)
@@ -356,7 +362,7 @@ class DistributionalDQNLoss(LossModule):
                 params=self.value_network_params,
             )  # Probabilities p(s_t+n, ·; θonline)
 
-            next_td_action = next_td.get("action")
+            next_td_action = next_td.get(self.action_key)
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
@@ -366,7 +372,7 @@ class DistributionalDQNLoss(LossModule):
                 next_td,
                 params=self.target_value_network_params,
             )  # Probabilities p(s_t+n, ·; θtarget)
-            pns = next_td.get("action_value").exp()
+            pns = next_td.get(self.action_value_key).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
             pns_a = pns[range(batch_size), :, argmax_indices_ns]

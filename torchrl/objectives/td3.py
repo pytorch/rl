@@ -82,6 +82,13 @@ class TD3Loss(LossModule):
 
         super().__init__()
 
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+        }
+        self.set_keys(**self.tensordict_keys)
+
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
 
@@ -104,7 +111,7 @@ class TD3Loss(LossModule):
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
-        self.max_action = actor_network.spec["action"].space.maximum.max().item()
+        self.max_action = actor_network.spec[self.action_key].space.maximum.max().item()
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
@@ -133,16 +140,17 @@ class TD3Loss(LossModule):
         )
         # add noise to target policy
         noise = torch.normal(
-            mean=torch.zeros(actor_output_td[1]["action"].shape),
-            std=torch.ones(actor_output_td[1]["action"].shape) * self.policy_noise,
+            mean=torch.zeros(actor_output_td[1][self.action_key].shape),
+            std=torch.ones(actor_output_td[1][self.action_key].shape)
+            * self.policy_noise,
         ).to(actor_output_td[1].device)
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
-        next_action = (actor_output_td[1]["action"] + noise).clamp(
+        next_action = (actor_output_td[1][self.action_key] + noise).clamp(
             -self.max_action, self.max_action
         )
-        actor_output_td[1].set("action", next_action, inplace=True)
-        tensordict_actor["action"] = actor_output_td["action"]
+        actor_output_td[1].set(self.action_key, next_action, inplace=True)
+        tensordict_actor[self.action_key] = actor_output_td[self.action_key]
 
         # repeat tensordict_actor to match the qvalue size
         _actor_loss_td = (
@@ -183,7 +191,9 @@ class TD3Loss(LossModule):
             qvalue_params,
         )
 
-        state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
+        state_action_value = tensordict_qval.get(self.state_action_value_key).squeeze(
+            -1
+        )
         (
             state_action_value_actor,
             next_state_action_value_qvalue,
@@ -196,7 +206,9 @@ class TD3Loss(LossModule):
         loss_actor = -(state_action_value_actor.min(0)[0]).mean()
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
-        tensordict.set(("next", "state_action_value"), next_state_value.unsqueeze(-1))
+        tensordict.set(
+            ("next", self.state_action_value_key), next_state_value.unsqueeze(-1)
+        )
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
         pred_val = state_action_value_qvalue
         td_error = (pred_val - target_value).pow(2)
@@ -211,7 +223,7 @@ class TD3Loss(LossModule):
             * 0.5
         )
 
-        tensordict_save.set("td_error", td_error.detach().max(0)[0])
+        tensordict_save.set(self.priority_key, td_error.detach().max(0)[0])
 
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(

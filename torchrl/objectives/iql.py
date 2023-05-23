@@ -44,9 +44,6 @@ class IQLLoss(LossModule):
         value_network (TensorDictModule, optional): V(s) parametric model.
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
-        priority_key (str, optional): tensordict key where to write the
-            priority (for prioritized replay buffer usage). Default is
-            `"td_error"`.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         temperature (float, optional):  Inverse temperature (beta).
@@ -55,7 +52,9 @@ class IQLLoss(LossModule):
             maximum of the Q-function.
         expectile (float, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
             for antmaze tasks that require dynamical programming ("stichting").
-
+        priority_key (str, optional): [Deprecated, use .set_keys() instead]
+            tensordict key where to write the priority (for prioritized replay
+            buffer usage). Default is `"td_error"`.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -81,7 +80,7 @@ class IQLLoss(LossModule):
             "log_prob_key": "_log_prob",
             "action_key": "action",
             "state_action_value_key": "state_action_value",
-            "state_value_key": "state_value",
+            "value_key": "state_value",
         }
         if priority_key is not None:
             warnings.warn(
@@ -206,9 +205,7 @@ class IQLLoss(LossModule):
                 td_copy,
                 params=self.value_network_params,
             )
-            value = td_copy.get(self.state_value_key).squeeze(
-                -1
-            )  # assert has no gradient
+            value = td_copy.get(self.value_key).squeeze(-1)  # assert has no gradient
 
         exp_a = torch.exp((min_q - value) * self.temperature)
         exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
@@ -230,14 +227,14 @@ class IQLLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        value = td_copy.get(self.state_value_key).squeeze(-1)
+        value = td_copy.get(self.value_key).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
         return value_loss
 
     def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         # TODO (refactor key usage): what to do with dynamically generated keys
-        tensordict = tensordict.select("next", *obs_keys, "action")
+        tensordict = tensordict.select("next", *obs_keys, self.action_key)
 
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params

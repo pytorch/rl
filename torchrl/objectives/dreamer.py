@@ -180,6 +180,14 @@ class DreamerActorLoss(LossModule):
         lmbda: int = None,
     ):
         super().__init__()
+        self.tensordict_keys = {
+            "belief_key": "belief",
+            "reward_key": "reward",
+            "value_key": "state_value",
+            "done_key": "done",
+        }
+        self.set_keys(**self.tensordict_keys)
+
         self.actor_model = actor_model
         self.value_model = value_model
         self.model_based_env = model_based_env
@@ -194,7 +202,7 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
-            tensordict = tensordict.select("state", "belief")
+            tensordict = tensordict.select("state", self.belief_key)
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_type(
@@ -215,8 +223,8 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = fake_data.get(("next", "reward"))
-        next_value = next_tensordict.get("state_value")
+        reward = fake_data.get(("next", self.reward_key))
+        next_value = next_tensordict.get(self.value_key)
         lambda_target = self.lambda_target(reward, next_value)
         fake_data.set("lambda_target", lambda_target)
 
@@ -235,9 +243,9 @@ class DreamerActorLoss(LossModule):
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         input_tensordict = TensorDict(
             {
-                ("next", "reward"): reward,
-                ("next", "state_value"): value,
-                ("next", "done"): done,
+                ("next", self.reward_key): reward,
+                ("next", self.value_key): value,
+                ("next", self.done_key): done,
             },
             [],
         )
@@ -312,6 +320,10 @@ class DreamerValueLoss(LossModule):
         gamma: int = 0.99,
     ):
         super().__init__()
+        self.tensordict_keys = {
+            "value_key": "state_value",
+        }
+        self.set_keys(**self.tensordict_keys)
         self.value_model = value_model
         self.value_loss = value_loss if value_loss is not None else "l2"
         self.gamma = gamma
@@ -331,7 +343,7 @@ class DreamerValueLoss(LossModule):
                 (
                     discount
                     * distance_loss(
-                        tensordict_select.get("state_value"),
+                        tensordict_select.get(self.value_key),
                         lambda_target,
                         self.value_loss,
                     )
@@ -342,7 +354,7 @@ class DreamerValueLoss(LossModule):
         else:
             value_loss = (
                 distance_loss(
-                    tensordict_select.get("state_value"),
+                    tensordict_select.get(self.value_key),
                     lambda_target,
                     self.value_loss,
                 )

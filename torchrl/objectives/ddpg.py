@@ -55,6 +55,7 @@ class DDPGLoss(LossModule):
 
         self.tensordict_keys = {
             "state_action_value_key": "state_action_value",
+            "priority_key": "td_error",
         }
         self.set_keys(**self.tensordict_keys)
 
@@ -111,7 +112,7 @@ class DDPGLoss(LossModule):
         if input_tensordict.device is not None:
             td_error = td_error.to(input_tensordict.device)
         input_tensordict.set(
-            "td_error",
+            self.priority_key,
             td_error,
             inplace=True,
         )

@@ -99,6 +99,7 @@ class A2CLoss(LossModule):
         self.tensordict_keys = {
             "advantage_key": "advantage",
             "value_target_key": "value_target",
+            "value_key": "state_value",
             "action_key": "action",
         }
         if advantage_key is not None:
@@ -162,7 +163,7 @@ class A2CLoss(LossModule):
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get("state_value")
+            ).get(self.value_key)
             loss_value = distance_loss(
                 target_return,
                 state_value,

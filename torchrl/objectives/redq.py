@@ -106,6 +106,10 @@ class REDQLoss(LossModule):
 
         self.tensordict_keys = {
             "priority_key": "td_error",
+            "action_key": "action",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "state_action_value_key": "state_action_value",
         }
         if priority_key is not None:
             warnings.warn(
@@ -167,7 +171,7 @@ class REDQLoss(LossModule):
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
+            target_entropy = -float(np.prod(actor_network.spec[self.action_key].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -185,7 +189,9 @@ class REDQLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_select = tensordict.clone(False).select("next", *obs_keys, "action")
+        tensordict_select = tensordict.clone(False).select(
+            "next", *obs_keys, self.action_key
+        )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
         ].sort()[0]
@@ -216,18 +222,19 @@ class REDQLoss(LossModule):
                 actor_params,
             )
             if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = "action"
+                sample_key = self.action_key
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             else:
-                sample_key = "action"
+                sample_key = self.action_key
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
-            tensordict_actor[sample_key] = tensordict_actor_dist.rsample()
-            tensordict_actor["sample_log_prob"] = tensordict_actor_dist.log_prob(
-                tensordict_actor[sample_key]
+            tensordict_actor.set(sample_key, tensordict_actor_dist.rsample())
+            tensordict_actor.set(
+                self.sample_log_prob_key,
+                tensordict_actor_dist.log_prob(tensordict_actor.get(sample_key)),
             )
 
         # repeat tensordict_actor to match the qvalue size
@@ -264,7 +271,9 @@ class REDQLoss(LossModule):
             qvalue_params,
         )
 
-        state_action_value = tensordict_qval.get("state_action_value").squeeze(-1)
+        state_action_value = tensordict_qval.get(self.state_action_value_key).squeeze(
+            -1
+        )
         (
             state_action_value_actor,
             next_state_action_value_qvalue,
@@ -273,7 +282,7 @@ class REDQLoss(LossModule):
             [self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets],
             dim=0,
         )
-        sample_log_prob = tensordict_actor.get("sample_log_prob").squeeze(-1)
+        sample_log_prob = tensordict_actor.get(self.sample_log_prob_key).squeeze(-1)
         (
             action_log_prob_actor,
             next_action_log_prob_qvalue,
@@ -288,7 +297,7 @@ class REDQLoss(LossModule):
         )
         next_state_value = next_state_value.min(0)[0]
 
-        tensordict_select.set(("next", "state_value"), next_state_value.unsqueeze(-1))
+        tensordict_select.set(("next", self.value_key), next_state_value.unsqueeze(-1))
         target_value = self.value_estimator.value_estimate(tensordict_select).squeeze(
             -1
         )
@@ -301,7 +310,7 @@ class REDQLoss(LossModule):
             loss_function=self.loss_function,
         ).mean(0)
 
-        tensordict.set("td_error", td_error.detach().max(0)[0])
+        tensordict.set(self.priority_key, td_error.detach().max(0)[0])
 
         loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
