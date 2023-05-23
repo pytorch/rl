@@ -1,21 +1,21 @@
 # Task and env
 env:
-  env_name: Hopper-v2
+  env_name: HalfCheetah-v3
   env_task: ""
   env_library: gym
   record_video: 0
   stacked_frames: 20
-  inference_context: 20 # 5
+  inference_context: 5 # for Hopper
   n_samples_stats: 2000
   frame_skip: 1
   from_pixels: False
   num_train_envs: 1
   num_eval_envs: 10
-  reward_scaling: 0.001
+  reward_scaling: 0.001 # for r2g
   noop: 1
-  seed: 0
-  eval_target_return: 3600
-  collect_target_return: 7200
+  seed: 2
+  eval_target_return: 6000 # 3600
+  collect_target_return: 12000 # 7200
   total_online_frames: 1000000
 
 
@@ -32,15 +32,15 @@ collector:
 # logger
 logger:
   backend: wandb
-  exp_name: oDT-Hopper-medium-v2
+  exp_name: DT-HalfCheetah-medium-v2
   pretrain_log_interval: 500 # record interval in frames
   fintune_log_interval: 1
   eval_steps: 1000
 
 # Buffer
 replay_buffer:
-  dataset: hopper-medium-v2
-  batch_size: 256
+  dataset: halfcheetah-medium-v2
+  batch_size: 64 # odt 256
   prb: 0
   stacked_frames: 20
   buffer_prefetch: 64
@@ -54,9 +54,9 @@ optim:
   device: cuda:0
   lr: 1.0e-4
   weight_decay: 5.0e-4
-  batch_size: 256
+  batch_size: 64 # odt 256
   lr_scheduler: ""
-  pretrain_gradient_steps: 5000
+  pretrain_gradient_steps: 55000
   updates_per_episode: 300
   warmup_steps: 10000
 
@@ -65,10 +65,10 @@ loss:
   alpha_init: 0.1
 
 transformer:
-  n_embd: 512
-  n_layer: 4
-  n_head: 4
-  n_inner: 2048 # 4*512
+  n_embd: 128 # odt 512
+  n_layer: 3 # odt 4
+  n_head: 1 # odt 4
+  n_inner: 512 # odt 2048 # 4*512
   activation: relu
   n_positions: 1024
   resid_pdrop: 0.1
