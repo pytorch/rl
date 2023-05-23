@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-import uuid
-from datetime import datetime
 
 import hydra
 import torch.cuda
@@ -75,15 +73,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         torch.device("cpu")
         if torch.cuda.device_count() == 0
         else torch.device("cuda:0")
-    )
-
-    exp_name = "_".join(
-        [
-            "SAC",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
     )
 
     exp_name = generate_exp_name("SAC", cfg.exp_name)

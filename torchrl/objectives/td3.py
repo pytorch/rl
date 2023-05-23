@@ -53,10 +53,10 @@ class TD3Loss(LossModule):
             ``"l1"``, Default is ``"smooth_l1"``.
         delay_actor (bool, optional): whether to separate the target actor
             networks from the actor networks used for
-            data collection. Default is ``False``.
+            data collection. Default is ``True``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
-            for data collection. Default is ``False``.
+            for data collection. Default is ``True``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -71,8 +71,8 @@ class TD3Loss(LossModule):
         noise_clip: float = 0.5,
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        delay_actor: bool = False,
-        delay_qvalue: bool = False,
+        delay_actor: bool = True,
+        delay_qvalue: bool = True,
         gamma: float = None,
     ) -> None:
         if not _has_functorch:
@@ -132,10 +132,11 @@ class TD3Loss(LossModule):
             actor_params,
         )
         # add noise to target policy
+        action = actor_output_td[1].get("action")
         noise = torch.normal(
-            mean=torch.zeros(actor_output_td[1]["action"].shape),
-            std=torch.ones(actor_output_td[1]["action"].shape) * self.policy_noise,
-        ).to(actor_output_td[1].device)
+            mean=torch.zeros(action.shape),
+            std=torch.full(action.shape, self.policy_noise),
+        ).to(action.device)
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
         next_action = (actor_output_td[1]["action"] + noise).clamp(

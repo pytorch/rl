@@ -184,7 +184,7 @@ def _init(
     # we put them together in a single actor-critic container.
     actor_critic = ActorCriticWrapper(actor_network, value_network)
     self.actor_critic = actor_critic
-    self.loss_funtion = "l2"
+    self.loss_function = "l2"
 
 
 ###############################################################################
@@ -316,7 +316,7 @@ def _loss_value(
     ).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on self.loss_funtion
-    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_function)
     td_error = (pred_val - target_value).pow(2)
 
     return loss_value, td_error, pred_val, target_value
