@@ -85,7 +85,7 @@ class LossModule(nn.Module):
         for key, value in kwargs.items():
             if value is not None:
                 warnings.warn(
-                    f"Setting '{key}' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                    f"Setting '{key}' via ctor is deprecated, use .set_keys({key}='some_key') instead.",
                     category=DeprecationWarning,
                 )
                 self.tensordict_keys[key] = value
@@ -104,10 +104,7 @@ class LossModule(nn.Module):
         for key, value in kwargs.items():
             if key not in self.tensordict_keys.keys():
                 raise ValueError(f"{key} not a valid tensordict key")
-            if value is None:
-                set_value = self.tensordict_keys[key]
-            else:
-                set_value = value
+            set_value = value if value is not None else self.tensordict_keys[key]
             setattr(self, key, set_value)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

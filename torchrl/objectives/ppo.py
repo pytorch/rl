@@ -64,11 +64,14 @@ class PPOLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
-        advantage_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is
+        advantage_key (str, optional): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
+            The input tensordict key where the advantage is
             expected to be written. Defaults to ``"advantage"``.
-        value_target_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the target state
+        value_target_key (str, optional): [Deprecated, use set_keys(value_target_key=value_target_key) instead]
+            The input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
-        value_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the state
+        value_key (str, optional): [Deprecated, use set_keys(value_key) instead]
+            The input tensordict key where the state
             value is expected to be written. Defaults to ``"state_value"``.
 
     .. note::

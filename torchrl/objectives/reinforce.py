@@ -33,10 +33,11 @@ class ReinforceLoss(LossModule):
             for the critic. Defaults to ``False``.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
-        advantage_key (str): [Deprecated, use .set_keys() instead] the input tensordict key where the advantage is
-            expected to be written.
+        advantage_key (str): [Deprecated, use .set_keys(advantage_key=advantage_key) instead]
+            The input tensordict key where the advantage is expected to be written.
             Defaults to ``"advantage"``.
-        value_target_key (str): [Deprecated, use .set_keys() instead] the input tensordict key where the target state
+        value_target_key (str): [Deprecated, use .set_keys(value_target_key=value_target_key) instead]
+            The input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
 
     .. note:
@@ -170,7 +171,7 @@ class ReinforceLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = "state_value"
+        value_key = self.value_key
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp

@@ -85,16 +85,6 @@ class A2CLoss(LossModule):
         value_target_key: str = None,
     ):
         super().__init__()
-        self.convert_to_functional(
-            actor, "actor", funs_to_decorate=["forward", "get_dist"]
-        )
-        if separate_losses:
-            # we want to make sure there are no duplicates in the params: the
-            # params of critic must be refs to actor if they're shared
-            policy_params = list(actor.parameters())
-        else:
-            policy_params = None
-        self.convert_to_functional(critic, "critic", compare_against=policy_params)
 
         tensordict_keys = {
             "advantage_key": "advantage",
@@ -106,6 +96,17 @@ class A2CLoss(LossModule):
         self._set_deprecated_ctor_keys(
             advantage_key=advantage_key, value_target_key=value_target_key
         )
+
+        self.convert_to_functional(
+            actor, "actor", funs_to_decorate=["forward", "get_dist"]
+        )
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor.parameters())
+        else:
+            policy_params = None
+        self.convert_to_functional(critic, "critic", compare_against=policy_params)
 
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
@@ -200,7 +201,7 @@ class A2CLoss(LossModule):
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
-        value_key = "state_value"
+        value_key = self.value_key
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp

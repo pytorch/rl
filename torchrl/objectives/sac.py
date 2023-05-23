@@ -83,9 +83,9 @@ class SACLoss(LossModule):
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
             Default is ``False``.
-        priority_key (str, optional): [Deprecated, use .set_keys() instead] tensordict key where to write the
-            priority (for prioritized replay buffer usage). Defaults to
-            ``"td_error"``.
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            Tensordict key where to write the
+            priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -507,8 +507,8 @@ class DiscreteSACLoss(LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
-        priority_key (str, optional): [Deprecated, use .set_keys() instead] Key
-            where to write the priority value for prioritized replay buffers.
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            Key where to write the priority value for prioritized replay buffers.
             Default is `"td_error"`.
 
     """

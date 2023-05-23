@@ -190,10 +190,11 @@ class TestLossModuleBase:
             "action_key": "action",
             "reward_key": "reward",
             "done_key": "done",
+            "steps_to_next_obs_key": "steps_to_next_obs",
         },
         SACLoss: {
             "priority_key": "td_error",
-            "state_value_key": "state_value",
+            "value_key": "state_value",
             "state_action_value_key": "state_action_value",
             "action_key": "action",
             "sample_log_prob_key": "sample_log_prob",
@@ -201,7 +202,7 @@ class TestLossModuleBase:
         },
         DiscreteSACLoss: {
             "priority_key": "td_error",
-            "state_value_key": "state_value",
+            "value_key": "state_value",
             "action_key": "action",
         },
         TD3Loss: {

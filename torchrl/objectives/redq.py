@@ -350,7 +350,7 @@ class REDQLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = "state_value"
+        value_key = self.value_key
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(

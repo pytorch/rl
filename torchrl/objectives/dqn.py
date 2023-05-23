@@ -48,8 +48,8 @@ class DQNLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
-        priority_key (str, optional): [Deprecated, use .set_keys() instead] the
-            key at which priority is assumed to be stored within TensorDicts added
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
 
@@ -243,8 +243,8 @@ class DistributionalDQNLoss(LossModule):
               Unlike :class:`DQNLoss`, this class does not currently support
               custom value functions. The next value estimation is always
               bootstrapped.
-        priority_key (str, optional): [Deprecated, use .set_keys() instead] the
-            key at which priority is assumed to be stored within TensorDicts added
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
 
@@ -266,6 +266,7 @@ class DistributionalDQNLoss(LossModule):
             "action_key": "action",
             "reward_key": "reward",
             "done_key": "done",
+            "steps_to_next_obs_key": "steps_to_next_obs",
         }
         self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
@@ -325,7 +326,7 @@ class DistributionalDQNLoss(LossModule):
         reward = tensordict.get(("next", self.reward_key))
         done = tensordict.get(("next", self.done_key))
 
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", 1)
+        steps_to_next_obs = tensordict.get(self.steps_to_next_obs_key, 1)
         discount = self.gamma**steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already

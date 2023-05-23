@@ -52,7 +52,7 @@ class IQLLoss(LossModule):
             maximum of the Q-function.
         expectile (float, optional): expectile :math:`\tau`. A larger value of :math:`\tau` is crucial
             for antmaze tasks that require dynamical programming ("stichting").
-        priority_key (str, optional): [Deprecated, use .set_keys() instead]
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
     """
@@ -257,7 +257,7 @@ class IQLLoss(LossModule):
         self.value_type = value_type
         value_net = self.value_network
 
-        value_key = "state_value"
+        value_key = self.value_key
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

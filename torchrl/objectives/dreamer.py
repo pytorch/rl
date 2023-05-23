@@ -259,7 +259,7 @@ class DreamerActorLoss(LossModule):
             value_type = self.default_value_estimator
         self.value_type = value_type
         value_net = None
-        value_key = "state_value"
+        value_key = self.value_key
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma

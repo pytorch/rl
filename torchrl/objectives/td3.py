@@ -150,7 +150,7 @@ class TD3Loss(LossModule):
             -self.max_action, self.max_action
         )
         actor_output_td[1].set(self.action_key, next_action, inplace=True)
-        tensordict_actor[self.action_key] = actor_output_td[self.action_key]
+        tensordict_actor.set(self.action_key, actor_output_td.get(self.action_key))
 
         # repeat tensordict_actor to match the qvalue size
         _actor_loss_td = (
