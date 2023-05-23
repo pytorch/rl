@@ -809,7 +809,6 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        is_cuda = self.device.type == "cuda"
         if tensordict is not None and "_reset" in tensordict.keys():
             self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
@@ -846,12 +845,10 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            elif tensordict_ is not None and not is_cuda:
+            elif tensordict_ is not None:
                 # we update the shared tensordict with the new data
                 self.shared_tensordicts[i].update_(tensordict_)
                 out = (cmd_out, None)
-            elif tensordict_ is not None:
-                out = (cmd_out, tensordict_)
             else:
                 out = (cmd_out, None)
             channel.send(out)
@@ -998,22 +995,15 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            if not is_cuda:
-                local_tensordict = shared_tensordict.exclude("next")
-            else:
-                local_tensordict = data
-            # _td = tensordict.select("observation").to(env.device).clone()
+            local_tensordict = shared_tensordict.exclude("next")
             local_tensordict = env._reset(tensordict=local_tensordict)
 
             if "_reset" in local_tensordict.keys():
                 local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
-            # if not is_cuda:
             shared_tensordict.update_(local_tensordict)
             out = ("reset_obs", None)
-            # else:
-            #     out = ("reset_obs", local_tensordict.exclude("next"))
             child_pipe.send(out)
 
         elif cmd == "step":
@@ -1030,11 +1020,8 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            # if not is_cuda:
             shared_tensordict.update_(local_tensordict.select("next"))
             out = (msg, None)
-            # else:
-            #     out = (msg, local_tensordict.select("next"))
             child_pipe.send(out)
 
         elif cmd == "close":
