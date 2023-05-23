@@ -1606,7 +1606,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     idx = new_data
                 copies[idx] = buffers[idx].clone()
                 workers_frames[idx] = (
-                    workers_frames[idx] + buffers[idx].numel()
+                    workers_frames[idx] + copies[idx].numel()
                 )
 
                 if workers_frames[idx] >= self.total_frames:
@@ -1616,7 +1616,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = buffers[idx].get(("collector", "traj_ids"))
+                traj_ids = copies[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1625,7 +1625,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in buffers.values():
+                for item in copies.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
@@ -1633,11 +1633,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if same_device:
                 out_buffer = torch.cat(
-                    list(buffers.values()), 0, out=out_buffer
+                    list(copies.values()), 0, out=out_buffer
                 )
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in buffers.values()],
+                    [item.cpu() for item in copies.values()],
                     0,
                     out=out_buffer,
                 )
@@ -1658,7 +1658,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del buffers
+        del buffers, copies
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
