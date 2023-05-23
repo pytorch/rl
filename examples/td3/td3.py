@@ -110,7 +110,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.seed)
 
     parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name, device=device))
     )
     parallel_env.set_seed(cfg.seed)
 
@@ -124,7 +124,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name, device=device))
         ),
         train_env.transform.clone(),
     )
