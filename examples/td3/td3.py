@@ -13,7 +13,7 @@ import tqdm
 from tensordict.nn import InteractionType
 
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -221,8 +221,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
 
     # Make Off-Policy Collector
-    collector = SyncDataCollector(
-        train_env,
+    collector = MultiaSyncDataCollector(
+        [train_env],
         actor_model_explore,
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
@@ -267,13 +267,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
 
         # extend the replay buffer with the new data
-        if ("collector", "mask") in tensordict.keys(True):
-            # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["collector", "mask"].sum()
-            tensordict = tensordict[tensordict.get(("collector", "mask")).squeeze(-1)]
-        else:
-            tensordict = tensordict.view(-1)
-            current_frames = tensordict.numel()
+        tensordict = tensordict.view(-1)
+        current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
