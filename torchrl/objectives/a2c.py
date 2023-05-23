@@ -49,8 +49,8 @@ class A2CLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
-        advantage_key (str): [Deprecated, use set_keys() instead] the input
-        tensordict key where the advantage is expected to be written.  default: "advantage"
+        advantage_key (str): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
+            The input tensordict key where the advantage is expected to be written.  default: "advantage"
             value_target_key (str): [Deprecated, use set_keys() instead] the input
             tensordict key where the target state value is expected to be written. Defaults to ``"value_target"``.
 

@@ -114,7 +114,7 @@ class SACLoss(LossModule):
         super().__init__()
         tensordict_keys = {
             "priority_key": "td_error",
-            "state_value_key": "state_value",
+            "value_key": "state_value",
             "state_action_value_key": "state_action_value",
             "action_key": "action",
             "sample_log_prob_key": "sample_log_prob",
@@ -438,7 +438,7 @@ class SACLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get(self.state_value_key).squeeze(-1)
+        pred_val = td_copy.get(self.value_key).squeeze(-1)
 
         action_dist = self.actor_network.get_dist(
             td_copy,
@@ -538,7 +538,7 @@ class DiscreteSACLoss(LossModule):
         super().__init__()
         tensordict_keys = {
             "priority_key": "td_error",
-            "state_value_key": "state_value",
+            "value_key": "state_value",
             "action_key": "action",
         }
         self._set_default_tensordict_keys(tensordict_keys)
@@ -675,7 +675,7 @@ class DiscreteSACLoss(LossModule):
             qvalue_params,
         )
 
-        state_action_value = tensordict_qval.get(self.state_value_key).squeeze(-1)
+        state_action_value = tensordict_qval.get(self.value_key).squeeze(-1)
         (
             state_action_value_actor,
             next_state_action_value_qvalue,
