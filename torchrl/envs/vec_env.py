@@ -845,12 +845,7 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            elif tensordict_ is not None:
-                # we update the shared tensordict with the new data
-                self.shared_tensordicts[i].update_(tensordict_)
-                out = (cmd_out, None)
-            else:
-                out = (cmd_out, None)
+            out = (cmd_out, tensordict_)
             channel.send(out)
         torch.cuda.synchronize()
 
@@ -995,7 +990,7 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            local_tensordict = shared_tensordict.exclude("next")
+            local_tensordict = data
             local_tensordict = env._reset(tensordict=local_tensordict)
 
             if "_reset" in local_tensordict.keys():
