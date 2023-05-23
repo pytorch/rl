@@ -1602,15 +1602,15 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     out_tensordicts_shared[idx] = data
                 else:
                     idx = new_data
+                if self.event is not None:
+                    self.event.record()
+                    self.event.synchronize()
                 workers_frames[idx] = (
                     workers_frames[idx] + out_tensordicts_shared[idx].numel()
                 )
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
-            if self.event is not None:
-                self.event.record()
-                self.event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
