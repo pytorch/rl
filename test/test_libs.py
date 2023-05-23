@@ -1411,12 +1411,12 @@ class TestOpenML:
 
 
 class TestRoboHive:
-    @pytest.mark.parametrize(
-        "envname", RoboHiveEnv.env_list
-    )
+    @pytest.mark.parametrize("envname", RoboHiveEnv.env_list)
     def test_robohive(self, envname):
+        print("env", envname)
         env = RoboHiveEnv(envname)
-        print("env", envname, "has rollout\n", env.rollout(3))
+        print("has rollout\n", env.rollout(3))
+        print(RoboHiveEnv(envname, from_pixels=True).rollout(3))
         check_env_specs(env)
 
 
