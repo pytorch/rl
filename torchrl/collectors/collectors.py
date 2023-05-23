@@ -1565,10 +1565,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         out_buffer = None
-        if torch.cuda.is_available():
-            event = torch.cuda.Event()
-        else:
-            event = None
 
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
@@ -1609,9 +1605,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
-            if event is not None:
-                event.record()
-                event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
                 traj_ids = buffers[idx].get(("collector", "traj_ids"))
@@ -1819,19 +1812,12 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         self.running = True
         i = -1
         self._frames = 0
-        if torch.cuda.is_available():
-            event = torch.cuda.Event()
-        else:
-            event = None
 
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             i += 1
             idx, j, out = self._get_from_queue()
-            if event is not None:
-                event.record()
-                event.synchronize()
 
             worker_frames = out.numel()
             if self.split_trajs:

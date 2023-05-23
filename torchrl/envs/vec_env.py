@@ -670,7 +670,10 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
-        self.event = torch.cuda.Event()
+        if self.device.type == "cuda":
+            self.event = torch.cuda.Event()
+        else:
+            self.event = None
         for idx in range(_num_workers):
             if self._verbose:
                 print(f"initiating worker {idx}")
@@ -744,8 +747,9 @@ class ParallelEnv(_BatchedEnv):
         self.shared_tensordict_parent.update_(
             tensordict.select(*self.env_input_keys, strict=False)
         )
-        self.event.record()
-        self.event.synchronize()
+        if self.event is not None:
+            self.event.record()
+            self.event.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
@@ -934,11 +938,14 @@ def _run_worker_pipe_shared_mem(
     env_fun_kwargs: Dict[str, Any],
     pin_memory: bool,
     env_input_keys: Dict[str, Any],
-    device: DEVICE_TYPING = "cpu",
+    device: DEVICE_TYPING = torch.device("cpu"),
     allow_step_when_done: bool = False,
     verbose: bool = False,
 ) -> None:
-    e = torch.cuda.Event()
+    if device.type == "cuda":
+        event = torch.cuda.Event()
+    else:
+        event = None
 
     parent_pipe.close()
     pid = os.getpid()
@@ -1000,8 +1007,9 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             shared_tensordict.update_(local_tensordict)
-            e.record()
-            e.synchronize()
+            if event is not None:
+                event.record()
+                event.synchronize()
             out = ("reset_obs", None)
             child_pipe.send(out)
 
@@ -1020,8 +1028,9 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             shared_tensordict.update_(local_tensordict.select("next"))
-            e.record()
-            e.synchronize()
+            if event is not None:
+                event.record()
+                event.synchronize()
             out = (msg, None)
             child_pipe.send(out)
 
