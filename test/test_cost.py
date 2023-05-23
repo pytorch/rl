@@ -1973,7 +1973,7 @@ class TestREDQ:
         )
 
         if delay_qvalue:
-            target_updater = SoftUpdate(loss_fn)
+            target_updater = SoftUpdate(loss_fn, tau=0.05)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
