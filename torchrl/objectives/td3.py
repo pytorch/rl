@@ -56,7 +56,7 @@ class TD3Loss(LossModule):
             data collection. Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
-            for data collection. Default is ``False``.
+            for data collection. Default is ``True``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -72,7 +72,7 @@ class TD3Loss(LossModule):
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
+        delay_qvalue: bool = True,
         gamma: float = None,
     ) -> None:
         if not _has_functorch:
