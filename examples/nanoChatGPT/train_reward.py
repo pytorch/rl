@@ -6,8 +6,7 @@ import torch
 
 from data import get_reward_dataloaders
 from models.reward import init_reward_model
-from shared import create_lr_scheduler, setup
-from utils import load_and_update_config
+from utils import load_and_update_config, create_lr_scheduler, setup
 
 HERE = Path(__file__).parent
 

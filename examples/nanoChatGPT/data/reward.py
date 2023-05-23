@@ -64,6 +64,9 @@ class PairwiseDataset:
 
             if chosen == rejected:
                 indices_to_skip.add(idx)
+            
+            if idx >= 1000:
+                break
 
         data = cls(
             chosen=MemmapTensor(
@@ -92,6 +95,8 @@ class PairwiseDataset:
                 batch_size=[],
             )
             i += 1
+            if idx >= 1000:
+                break
 
         return data
 
@@ -99,6 +104,7 @@ class PairwiseDataset:
 def create_datasets(config):
     # Make pairwise datasets for training
     print("Creating pairwise datasets")
+    assert config["dataset"] == "openai_summarize_comparisons"
     data_path = "CarperAI/openai_summarize_comparisons"
     train_data = PairwiseDataset.from_dataset(
         load_dataset(data_path, split="train"), max_length=config["block_size"]
