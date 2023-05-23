@@ -36,7 +36,7 @@ class DDPGLoss(LossModule):
         delay_actor (bool, optional): whether to separate the target actor networks from the actor networks used for
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
-            data collection. Default is ``False``.
+            data collection. Default is ``True``.
     """
 
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
@@ -48,7 +48,7 @@ class DDPGLoss(LossModule):
         *,
         loss_function: str = "l2",
         delay_actor: bool = False,
-        delay_value: bool = False,
+        delay_value: bool = True,
         gamma: float = None,
     ) -> None:
         super().__init__()
@@ -84,7 +84,7 @@ class DDPGLoss(LossModule):
 
         self.actor_in_keys = actor_network.in_keys
 
-        self.loss_funtion = loss_function
+        self.loss_function = loss_function
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -173,7 +173,7 @@ class DDPGLoss(LossModule):
 
         # td_error = pred_val - target_value
         loss_value = distance_loss(
-            pred_val, target_value, loss_function=self.loss_funtion
+            pred_val, target_value, loss_function=self.loss_function
         )
 
         return loss_value, (pred_val - target_value).pow(2), pred_val, target_value
