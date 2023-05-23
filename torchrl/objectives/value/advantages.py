@@ -106,7 +106,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         skip_existing: Optional[bool] = None,
     ):
         super().__init__()
-        print(f"{advantage_key = }")
         self.differentiable = differentiable
         self.skip_existing = skip_existing
         self.value_network = value_network

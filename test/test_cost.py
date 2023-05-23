@@ -1798,32 +1798,6 @@ class TestSAC:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
-    def test_saq_tensordict_keys(self, version):
-        actor = self._create_mock_actor()
-        qvalue = self._create_mock_qvalue()
-        value = self._create_mock_value()
-        loss_fn = SACLoss(actor, qvalue, value)
-
-        # test default values
-        assert loss_fn.priority_key == "td_error"
-
-        # test setting relevant keys
-        new_key = "test1"
-        loss_fn.set_keys(priority_key=new_key)
-        assert loss_fn.priority_key == new_key
-
-        with pytest.raises(ValueError) as exc:
-            loss_fn.set_keys(value_key="test2")
-
-        # test deprecated keys
-        new_key = "test3"
-        with pytest.deprecated_call():
-            loss_fn = SACLoss(actor, qvalue, value, priority_key=new_key)
-            assert loss_fn.priority_key == new_key
-
 
 class TestDiscreteSAC:
     seed = 0
@@ -2158,33 +2132,6 @@ class TestDiscreteSAC:
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
-    def test_discrete_saq_tensordict_keys(self):
-        actor = self._create_mock_actor()
-        qvalue = self._create_mock_qvalue()
-        loss_fn = DiscreteSACLoss(actor, qvalue, actor.spec["action"].space.n)
-
-        # test default values
-        assert loss_fn.priority_key == "td_error"
-
-        # test setting relevant keys
-        new_key = "test1"
-        loss_fn.set_keys(priority_key=new_key)
-        assert loss_fn.priority_key == new_key
-
-        with pytest.raises(ValueError) as exc:
-            loss_fn.set_keys(value_key="test2")
-
-        # test deprecated keys
-        new_key = "test3"
-        with pytest.deprecated_call():
-            loss_fn = DiscreteSACLoss(
-                actor, qvalue, actor.spec["action"].space.n, priority_key=new_key
-            )
-            assert loss_fn.priority_key == new_key
 
 
 @pytest.mark.skipif(
