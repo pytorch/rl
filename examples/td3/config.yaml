@@ -9,7 +9,7 @@ from_pixels: 0
 seed: 0
 
 # Collection
-init_random_frames: 500
+init_random_frames: 10000
 init_env_steps: 10000
 record_interval: 10
 record_frames: 10000
