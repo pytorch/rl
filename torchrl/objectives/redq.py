@@ -103,15 +103,6 @@ class REDQLoss(LossModule):
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
 
         super().__init__()
-
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "action_key": "action",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "state_action_value_key": "state_action_value",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -174,6 +165,16 @@ class REDQLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "action_key": "action",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "state_action_value_key": "state_action_value",
+        }
 
     @property
     def alpha(self):

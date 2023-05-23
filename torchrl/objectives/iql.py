@@ -75,14 +75,6 @@ class IQLLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "log_prob_key": "_log_prob",
-            "action_key": "action",
-            "state_action_value_key": "state_action_value",
-            "value_key": "state_value",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # IQL parameter
@@ -122,6 +114,16 @@ class IQLLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "log_prob_key": "_log_prob",
+            "action_key": "action",
+            "state_action_value_key": "state_action_value",
+            "value_key": "state_value",
+        }
 
     @property
     def device(self) -> torch.device:

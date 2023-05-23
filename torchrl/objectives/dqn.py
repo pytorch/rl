@@ -69,12 +69,7 @@ class DQNLoss(LossModule):
     ) -> None:
 
         super().__init__()
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
+
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.delay_value = delay_value
@@ -115,6 +110,14 @@ class DQNLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+        }
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
@@ -260,15 +263,6 @@ class DistributionalDQNLoss(LossModule):
         priority_key: str = None,
     ):
         super().__init__()
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
-            "reward_key": "reward",
-            "done_key": "done",
-            "steps_to_next_obs_key": "steps_to_next_obs",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.register_buffer("gamma", torch.tensor(gamma))
@@ -284,6 +278,17 @@ class DistributionalDQNLoss(LossModule):
             create_target_params=self.delay_value,
         )
         self.action_space = self.value_network.action_space
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+            "reward_key": "reward",
+            "done_key": "done",
+            "steps_to_next_obs_key": "steps_to_next_obs",
+        }
 
     @staticmethod
     def _log_ps_a_default(action, action_log_softmax, batch_size, atoms):

@@ -644,7 +644,7 @@ class TestLossModuleBase:
         tested_keys = set(self.DEFAULT_KEYS[loss_module].keys())
 
         loss_fn = self._construct_loss(loss_module)
-        avail_keys = set(loss_fn.tensordict_keys.keys())
+        avail_keys = set(loss_fn.default_tensordict_keys().keys())
         assert avail_keys.difference(tested_keys) == set()
 
 
@@ -4394,6 +4394,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 else:
                     target.data += 10
 
+        @staticmethod
+        def default_tensordict_keys():
+            return {}
+
     module = custom_module().to(device).to(dtype)
     _ = module.module1_params
     _ = module.target_module1_params
@@ -5611,6 +5615,10 @@ def test_shared_params(dest, expected_dtype, expected_device):
                 compare_against=list(actor_network.parameters()),
             )
 
+        @staticmethod
+        def default_tensordict_keys():
+            return {}
+
     actor_network = td_module.get_policy_operator()
     value_network = td_module.get_value_operator()
 
@@ -5848,6 +5856,10 @@ class TestBase:
                     compare_against=module_a.parameters() if compare_against else [],
                     expand_dim=expand_dim,
                 )
+
+            @staticmethod
+            def default_tensordict_keys():
+                return {}
 
         loss_module = MyLoss(compare_against=compare_against, expand_dim=expand_dim)
 

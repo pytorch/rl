@@ -82,13 +82,6 @@ class TD3Loss(LossModule):
 
         super().__init__()
 
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
-
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
 
@@ -115,6 +108,14 @@ class TD3Loss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+        }
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys

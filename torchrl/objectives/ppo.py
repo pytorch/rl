@@ -137,6 +137,13 @@ class PPOLoss(LossModule):
         value_key: str = None,
     ):
         super().__init__()
+
+        self._set_deprecated_ctor_keys(
+            advantage_key=advantage_key,
+            value_target_key=value_target_key,
+            value_key=value_key,
+        )
+
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
@@ -146,22 +153,8 @@ class PPOLoss(LossModule):
             policy_params = list(actor.parameters())
         else:
             policy_params = None
+
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
-
-        tensordict_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "action_key": "action",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
-        self._set_deprecated_ctor_keys(
-            advantage_key=advantage_key,
-            value_target_key=value_target_key,
-            value_key=value_key,
-        )
-
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
@@ -176,6 +169,16 @@ class PPOLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "action_key": "action",
+        }
 
     def reset(self) -> None:
         pass

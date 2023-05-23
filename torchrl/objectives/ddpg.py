@@ -53,12 +53,6 @@ class DDPGLoss(LossModule):
     ) -> None:
         super().__init__()
 
-        tensordict_keys = {
-            "state_action_value_key": "state_action_value",
-            "priority_key": "td_error",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
-
         self.delay_actor = delay_actor
         self.delay_value = delay_value
 
@@ -89,6 +83,13 @@ class DDPGLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "state_action_value_key": "state_action_value",
+            "priority_key": "td_error",
+        }
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.

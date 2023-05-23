@@ -86,13 +86,6 @@ class A2CLoss(LossModule):
     ):
         super().__init__()
 
-        tensordict_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "action_key": "action",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(
             advantage_key=advantage_key, value_target_key=value_target_key
         )
@@ -120,6 +113,15 @@ class A2CLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
         self.loss_critic_type = loss_critic_type
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "action_key": "action",
+        }
 
     def reset(self) -> None:
         pass

@@ -112,15 +112,6 @@ class SACLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
-            "sample_log_prob_key": "sample_log_prob",
-            "log_prob_key": "_log_prob",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
@@ -202,6 +193,17 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+            "sample_log_prob_key": "sample_log_prob",
+            "log_prob_key": "_log_prob",
+        }
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
@@ -536,12 +538,6 @@ class DiscreteSACLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        tensordict_keys = {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "action_key": "action",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -590,6 +586,14 @@ class DiscreteSACLoss(LossModule):
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "action_key": "action",
+        }
 
     @property
     def alpha(self):

@@ -81,14 +81,6 @@ class ReinforceLoss(LossModule):
         value_target_key: str = None,
     ) -> None:
         super().__init__()
-
-        tensordict_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
         self._set_deprecated_ctor_keys(
             advantage_key=advantage_key, value_target_key=value_target_key
         )
@@ -114,6 +106,15 @@ class ReinforceLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+        }
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         advantage = tensordict.get(self.advantage_key, None)

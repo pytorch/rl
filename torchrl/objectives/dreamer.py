@@ -73,7 +73,9 @@ class DreamerModelLoss(LossModule):
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
 
-        tensordict_keys = {
+    @staticmethod
+    def default_tensordict_keys():
+        return {
             "reward_key": "reward",
             "true_reward_key": "true_reward",
             "prior_mean_key": "prior_mean",
@@ -83,7 +85,6 @@ class DreamerModelLoss(LossModule):
             "pixels_key": "pixels",
             "reco_pixels_key": "reco_pixels",
         }
-        self._set_default_tensordict_keys(tensordict_keys)
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
@@ -183,13 +184,6 @@ class DreamerActorLoss(LossModule):
         lmbda: int = None,
     ):
         super().__init__()
-        tensordict_keys = {
-            "belief_key": "belief",
-            "reward_key": "reward",
-            "value_key": "state_value",
-            "done_key": "done",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
 
         self.actor_model = actor_model
         self.value_model = value_model
@@ -202,6 +196,15 @@ class DreamerActorLoss(LossModule):
         if lmbda is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "belief_key": "belief",
+            "reward_key": "reward",
+            "value_key": "state_value",
+            "done_key": "done",
+        }
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
@@ -323,15 +326,16 @@ class DreamerValueLoss(LossModule):
         gamma: int = 0.99,
     ):
         super().__init__()
-        tensordict_keys = {
-            "value_key": "state_value",
-        }
-        self._set_default_tensordict_keys(tensordict_keys)
-
         self.value_model = value_model
         self.value_loss = value_loss if value_loss is not None else "l2"
         self.gamma = gamma
         self.discount_loss = discount_loss
+
+    @staticmethod
+    def default_tensordict_keys():
+        return {
+            "value_key": "state_value",
+        }
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")

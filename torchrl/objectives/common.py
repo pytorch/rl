@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import warnings
+from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Iterator, List, Optional, Tuple, Union
 
@@ -38,7 +39,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-class LossModule(nn.Module):
+class LossModule(nn.Module, ABC):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -73,12 +74,13 @@ class LossModule(nn.Module):
         self._has_update_associated = False
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
-        self.tensordict_keys = {}
+        self.set_keys(**self.default_tensordict_keys())
 
-    def _set_default_tensordict_keys(self, tensordict_keys):
-        """Specify which tensordict keys should be used and can be configured by this loss."""
-        self.tensordict_keys = tensordict_keys
-        self.set_keys(**self.tensordict_keys)
+    @staticmethod
+    @abstractmethod
+    def default_tensordict_keys(self):
+        """Defines the default tensordict keys."""
+        ...
 
     def _set_deprecated_ctor_keys(self, **kwargs):
         """Helper function setting a tensordict key and creating a warning for using a deprecated argument."""
@@ -88,8 +90,7 @@ class LossModule(nn.Module):
                     f"Setting '{key}' via ctor is deprecated, use .set_keys({key}='some_key') instead.",
                     category=DeprecationWarning,
                 )
-                self.tensordict_keys[key] = value
-        self.set_keys(**self.tensordict_keys)
+            self.set_keys(**{key: value})
 
     def set_keys(self, **kwargs):
         """Specify tensordict key for given argument.
@@ -102,9 +103,11 @@ class LossModule(nn.Module):
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
         """
         for key, value in kwargs.items():
-            if key not in self.tensordict_keys.keys():
+            if key not in self.default_tensordict_keys().keys():
                 raise ValueError(f"{key} not a valid tensordict key")
-            set_value = value if value is not None else self.tensordict_keys[key]
+            set_value = (
+                value if value is not None else self.default_tensordict_keys()[key]
+            )
             setattr(self, key, set_value)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
