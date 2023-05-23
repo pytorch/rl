@@ -1,11 +1,12 @@
+import tqdm
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.libs.gym import GymEnv
 import torchrl
-from torchrl.envs.transforms.transforms import Compose, RewardSum
+from torchrl.envs.transforms.transforms import Compose, RewardSum, RewardScaling
 from torchrl.objectives import DDPGLoss
-from torchrl.data import ReplayBuffer, ListStorage
+from torchrl.data import ReplayBuffer, ListStorage, TensorDictReplayBuffer
 from torchrl.modules import (
     ConvNet,
     EGreedyWrapper,
@@ -29,14 +30,14 @@ seed = 0
 gamma = 0.99
 tau = 0.005
 frames_per_batch = 200  # Frames sampled each sampling iteration
-batch_size = 1  # in terms of rollout size
-utd = 1  # update to data ratio
+batch_size = 200  # in terms of rollout size
+utd = 200  # update to data ratio
 max_steps = 100
 n_iters = 500  # Number of sampling/training iterations
 warmup_frames = 100  # To prefill replay buffer
 total_frames = frames_per_batch * n_iters
 memory_size = frames_per_batch * 100
-lr = 0.0001
+lr = 0.001
 
 torch.manual_seed(0)
 
@@ -44,7 +45,7 @@ torch.manual_seed(0)
 def env():
     env = GymEnv("Pendulum-v1", from_pixels=False)
     env = TransformedEnv(
-        env, Compose(DoubleToFloat(in_keys=["observation"]), RewardSum())
+        env, Compose(DoubleToFloat(in_keys=["observation"]), RewardSum(), RewardScaling(loc=0.0, scale=0.1))
     )
     return env
 
@@ -103,7 +104,7 @@ actor = ProbabilisticActor(
     return_log_prob=False,
 )
 policy = AdditiveGaussianWrapper(
-    actor, annealing_num_steps=int(total_frames), sigma_end=0.05
+    actor, annealing_num_steps=int(total_frames), sigma_end=0.1, spec=proof_env.action_spec,
 )
 
 critic = ValueOperator(CriticNet(obs_size, act_size), in_keys=["observation", "action"])
@@ -114,20 +115,23 @@ collector = torchrl.collectors.SyncDataCollector(
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
 )
-buffer = ReplayBuffer(storage=LazyTensorStorage(memory_size), batch_size=batch_size)
+buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(memory_size), batch_size=batch_size)
 
 loss_module = DDPGLoss(
-    actor_network=policy,
+    actor_network=actor,
     value_network=critic,
-    gamma=gamma,
+    delay_value=True,
 )
+loss_module.make_value_estimator(gamma=gamma)
 target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
 
-critic_opt = torch.optim.Adam(actor.parameters(), lr)
-actor_opt = torch.optim.Adam(critic.parameters(), lr)
+actor_opt = torch.optim.Adam(actor.parameters(), lr)
+critic_opt = torch.optim.Adam(critic.parameters(), lr)
 
+pbar = tqdm.tqdm(total=total_frames)
 for i, tensordict in enumerate(collector):
-    buffer.add(tensordict)
+    pbar.update(tensordict.numel())
+    buffer.extend(tensordict)
     for j in range(utd):
         data = buffer.sample()
         loss = loss_module(data)
@@ -137,7 +141,7 @@ for i, tensordict in enumerate(collector):
         loss["loss_value"].backward()
         critic_opt.step()
         actor_opt.step()
-        print(
+        pbar.set_description(
             "Epoch {}: episode reward {:.2f} actor loss {:.2f}, critic loss {:.2f}".format(
                 i,
                 tensordict['next']["episode_reward"][tensordict['next']['done']].mean(),
@@ -145,5 +149,6 @@ for i, tensordict in enumerate(collector):
                 loss["loss_value"].item(),
             )
         )
-    target_net_updater.step()
+        target_net_updater.step()
+    policy.step(tensordict.numel())
     collector.update_policy_weights_()
