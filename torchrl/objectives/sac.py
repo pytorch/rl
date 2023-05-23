@@ -59,9 +59,6 @@ class SACLoss(LossModule):
 
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
-        priority_key (str, optional): tensordict key where to write the
-            priority (for prioritized replay buffer usage). Defaults to
-            ``"td_error"``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (float, optional): initial entropy multiplier.
@@ -86,6 +83,9 @@ class SACLoss(LossModule):
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
             Default is ``False``.
+        priority_key (str, optional): [Deprecated, use .set_keys() instead] tensordict key where to write the
+            priority (for prioritized replay buffer usage). Defaults to
+            ``"td_error"``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -97,7 +97,6 @@ class SACLoss(LossModule):
         value_network: Optional[TensorDictModule] = None,
         *,
         num_qvalue_nets: int = 2,
-        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -108,10 +107,21 @@ class SACLoss(LossModule):
         delay_qvalue: bool = False,
         delay_value: bool = False,
         gamma: float = None,
+        priority_key: str = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
 
         # Actor
         self.delay_actor = delay_actor
@@ -150,7 +160,6 @@ class SACLoss(LossModule):
             compare_against=list(actor_network.parameters()) + value_params,
         )
 
-        self.priority_key = priority_key
         self.loss_function = loss_function
         try:
             device = next(self.parameters()).device
@@ -485,8 +494,6 @@ class DiscreteSACLoss(LossModule):
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_actions (int): number of actions in the action space.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
-        priority_key (str, optional): Key where to write the priority value for prioritized replay buffers. Default is
-            `"td_error"`.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
         alpha_init (float, optional): initial entropy multiplier.
@@ -500,6 +507,9 @@ class DiscreteSACLoss(LossModule):
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
+        priority_key (str, optional): [Deprecated, use .set_keys() instead] Key
+            where to write the priority value for prioritized replay buffers.
+            Default is `"td_error"`.
 
     """
 
@@ -513,7 +523,6 @@ class DiscreteSACLoss(LossModule):
         num_actions: int,
         *,
         num_qvalue_nets: int = 2,
-        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -522,10 +531,22 @@ class DiscreteSACLoss(LossModule):
         target_entropy_weight: float = 0.98,
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
+        priority_key: str = None,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -542,7 +563,6 @@ class DiscreteSACLoss(LossModule):
             compare_against=list(actor_network.parameters()),
         )
         self.num_qvalue_nets = num_qvalue_nets
-        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:

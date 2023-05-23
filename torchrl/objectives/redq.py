@@ -53,9 +53,6 @@ class REDQLoss(LossModule):
         sub_sample_len (int, optional): number of Q-value networks to be
             subsampled to evaluate the next state value
             Default is ``2``.
-        priority_key (str, optional): Key where to write the priority value
-            for prioritized replay buffers. Default is
-            ``"td_error"``.
         loss_function (str, optional): loss function to be used for the Q-value.
             Can be one of  ``"smooth_l1"``, ``"l2"``,
             ``"l1"``, Default is ``"smooth_l1"``.
@@ -75,6 +72,9 @@ class REDQLoss(LossModule):
         gSDE (bool, optional): Knowing if gSDE is used is necessary to create
             random noise variables.
             Default is ``False``.
+        priority_key (str, optional): [Deprecated, use .set_keys() instead] Key where to write the priority value
+            for prioritized replay buffers. Default is
+            ``"td_error"``.
 
     """
 
@@ -88,7 +88,6 @@ class REDQLoss(LossModule):
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
-        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -98,11 +97,24 @@ class REDQLoss(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float = None,
+        priority_key: str = None,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
 
         super().__init__()
+
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -123,7 +135,6 @@ class REDQLoss(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:

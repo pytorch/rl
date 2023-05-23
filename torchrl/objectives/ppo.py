@@ -65,8 +65,7 @@ class PPOLoss(LossModule):
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
         advantage_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the advantage is
-            expected to be written.
-            Defaults to ``"advantage"``.
+            expected to be written. Defaults to ``"advantage"``.
         value_target_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
         value_key (str, optional): [Deprecated, use set_keys() instead] the input tensordict key where the state

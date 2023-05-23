@@ -31,13 +31,13 @@ class ReinforceLoss(LossModule):
         critic (ValueOperator): value operator.
         delay_value (bool, optional): if ``True``, a target network is needed
             for the critic. Defaults to ``False``.
-        advantage_key (str): the input tensordict key where the advantage is
-            expected to be written.
-            Defaults to ``"advantage"``.
-        value_target_key (str): the input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
         loss_critic_type (str): loss function for the value discrepancy.
             Can be one of "l1", "l2" or "smooth_l1". Defaults to ``"smooth_l1"``.
+        advantage_key (str): [Deprecated, use .set_keys() instead] the input tensordict key where the advantage is
+            expected to be written.
+            Defaults to ``"advantage"``.
+        value_target_key (str): [Deprecated, use .set_keys() instead] the input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -74,16 +74,34 @@ class ReinforceLoss(LossModule):
         critic: Optional[TensorDictModule] = None,
         *,
         delay_value: bool = False,
-        advantage_key: str = "advantage",
-        value_target_key: str = "value_target",
         loss_critic_type: str = "smooth_l1",
         gamma: float = None,
+        advantage_key: str = None,
+        value_target_key: str = None,
     ) -> None:
         super().__init__()
 
+        self.tensordict_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+        }
+        if advantage_key is not None:
+            warnings.warn(
+                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["advantage_key"] = advantage_key
+        if value_target_key is not None:
+            warnings.warn(
+                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["value_target_key"] = value_target_key
+        self.set_keys(**self.tensordict_keys)
+
         self.delay_value = delay_value
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
         self.loss_critic_type = loss_critic_type
 
         # Actor
@@ -121,7 +139,7 @@ class ReinforceLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = tensordict.get("sample_log_prob")
+        log_prob = tensordict.get(self.sample_log_prob_key)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])
@@ -137,7 +155,7 @@ class ReinforceLoss(LossModule):
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get("state_value")
+            ).get(self.value_key)
             loss_value = distance_loss(
                 target_return,
                 state_value,

@@ -73,6 +73,17 @@ class DreamerModelLoss(LossModule):
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
 
+        self.tensordict_keys = {
+            "reward_key": ("next", "reward"),
+            "prior_mean_key": ("next", "prior_mean"),
+            "prior_std_key": ("next", "prior_std"),
+            "posterior_mean_key": ("next", "posterior_mean"),
+            "posterior_std_key": ("next", "posterior_std"),
+            "pixels_key": ("next", "pixels"),
+            "reco_pixels_key": ("next", "reco_pixels"),
+        }
+        self.set_keys(**self.tensordict_keys)
+
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
         tensordict.rename_key_(("next", "reward"), ("next", "true_reward"))

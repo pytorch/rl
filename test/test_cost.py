@@ -1429,6 +1429,32 @@ class TestSAC:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
+    def test_saq_tensordict_keys(self, version):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+        loss_fn = SACLoss(actor, qvalue, value)
+
+        # test default values
+        assert loss_fn.priority_key == "td_error"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(priority_key=new_key)
+        assert loss_fn.priority_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(value_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = SACLoss(actor, qvalue, value, priority_key=new_key)
+            assert loss_fn.priority_key == new_key
+
 
 class TestDiscreteSAC:
     seed = 0
@@ -1763,6 +1789,33 @@ class TestDiscreteSAC:
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+    )
+    def test_discrete_saq_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        loss_fn = DiscreteSACLoss(actor, qvalue, actor.spec["action"].space.n)
+
+        # test default values
+        assert loss_fn.priority_key == "td_error"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(priority_key=new_key)
+        assert loss_fn.priority_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(value_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = DiscreteSACLoss(
+                actor, qvalue, actor.spec["action"].space.n, priority_key=new_key
+            )
+            assert loss_fn.priority_key == new_key
 
 
 @pytest.mark.skipif(
@@ -3053,6 +3106,62 @@ class TestReinforce:
                 allow_unused=False,
             )
 
+    def test_reinforce_tensordict_keys(self):
+        n_obs = 3
+        n_act = 5
+        gamma = 0.9
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        actor_net = ProbabilisticActor(
+            module,
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            in_keys=["loc", "scale"],
+            spec=UnboundedContinuousTensorSpec(n_act),
+        )
+
+        loss_fn = ReinforceLoss(
+            actor_net,
+            critic=value_net,
+            gamma=gamma,
+        )
+
+        # test default values
+        assert loss_fn.advantage_key == "advantage"
+        assert loss_fn.value_target_key == "value_target"
+        assert loss_fn.value_key == "state_value"
+        assert loss_fn.sample_log_prob_key == "sample_log_prob"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(advantage_key=new_key, value_target_key=new_key)
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+
+        loss_fn.set_keys(sample_log_prob_key=new_key, value_key=new_key)
+        assert loss_fn.advantage_key == new_key
+        assert loss_fn.value_target_key == new_key
+        assert loss_fn.value_key == new_key
+        assert loss_fn.sample_log_prob_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(unknown_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = ReinforceLoss(
+                actor_net,
+                critic=value_net,
+                gamma=gamma,
+                advantage_key=new_key,
+                value_target_key=new_key,
+            )
+
+            assert loss_fn.advantage_key == new_key
+            assert loss_fn.value_target_key == new_key
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 class TestDreamer:
@@ -3770,6 +3879,53 @@ class TestIQL:
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    def test_iql_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+        )
+
+        # test default values
+        assert loss_fn.priority_key == "td_error"
+        assert loss_fn.log_prob_key == "_log_prob"
+        assert loss_fn.action_key == "action"
+        assert loss_fn.state_action_value_key == "state_action_value"
+        assert loss_fn.state_value_key == "state_value"
+
+        # test setting relevant keys
+        new_key = "test1"
+        loss_fn.set_keys(
+            priority_key=new_key,
+            log_prob_key=new_key,
+            action_key=new_key,
+            state_action_value_key=new_key,
+            state_value_key=new_key,
+        )
+        assert loss_fn.priority_key == new_key
+        assert loss_fn.log_prob_key == new_key
+        assert loss_fn.action_key == new_key
+        assert loss_fn.state_action_value_key == new_key
+        assert loss_fn.state_value_key == new_key
+
+        with pytest.raises(ValueError) as exc:
+            loss_fn.set_keys(value_key="test2")
+
+        # test deprecated keys
+        new_key = "test3"
+        with pytest.deprecated_call():
+            loss_fn = IQLLoss(
+                actor_network=actor,
+                qvalue_network=qvalue,
+                value_network=value,
+                priority_key=new_key,
+            )
+            assert loss_fn.priority_key == new_key
 
 
 def test_hold_out():

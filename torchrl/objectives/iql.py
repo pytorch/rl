@@ -67,15 +67,29 @@ class IQLLoss(LossModule):
         value_network: Optional[TensorDictModule],
         *,
         num_qvalue_nets: int = 2,
-        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         temperature: float = 1.0,
         expectile: float = 0.5,
         gamma: float = None,
+        priority_key: str = None,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
+        self.tensordict_keys = {
+            "priority_key": "td_error",
+            "log_prob_key": "_log_prob",
+            "action_key": "action",
+            "state_action_value_key": "state_action_value",
+            "state_value_key": "state_value",
+        }
+        if priority_key is not None:
+            warnings.warn(
+                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.tensordict_keys["priority_key"] = priority_key
+        self.set_keys(**self.tensordict_keys)
 
         # IQL parameter
         self.temperature = temperature
@@ -110,7 +124,6 @@ class IQLLoss(LossModule):
             + list(value_network.parameters()),
         )
 
-        self.priority_key = priority_key
         self.loss_function = loss_function
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -158,7 +171,7 @@ class IQLLoss(LossModule):
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_value": loss_value.mean(),
-            "entropy": -td_device.get("_log_prob").mean().detach(),
+            "entropy": -td_device.get(self.log_prob_key).mean().detach(),
         }
 
         return TensorDict(
@@ -173,14 +186,14 @@ class IQLLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = dist.log_prob(tensordict["action"])
+        log_prob = dist.log_prob(tensordict[self.action_key])
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
-        min_q = td_q.get("state_action_value").min(0)[0].squeeze(-1)
+        min_q = td_q.get(self.state_action_value_key).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
             raise RuntimeError(
@@ -193,13 +206,15 @@ class IQLLoss(LossModule):
                 td_copy,
                 params=self.value_network_params,
             )
-            value = td_copy.get("state_value").squeeze(-1)  # assert has no gradient
+            value = td_copy.get(self.state_value_key).squeeze(
+                -1
+            )  # assert has no gradient
 
         exp_a = torch.exp((min_q - value) * self.temperature)
         exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
 
         # write log_prob in tensordict for alpha loss
-        tensordict.set("_log_prob", log_prob.detach())
+        tensordict.set(self.log_prob_key, log_prob.detach())
         return -(exp_a * log_prob).mean()
 
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -208,19 +223,20 @@ class IQLLoss(LossModule):
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
-        min_q = td_q.get("state_action_value").min(0)[0].squeeze(-1)
+        min_q = td_q.get(self.state_action_value_key).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
-        value = td_copy.get("state_value").squeeze(-1)
+        value = td_copy.get(self.state_value_key).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
         return value_loss
 
     def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
+        # TODO (refactor key usage): what to do with dynamically generated keys
         tensordict = tensordict.select("next", *obs_keys, "action")
 
         target_value = self.value_estimator.value_estimate(
@@ -230,7 +246,7 @@ class IQLLoss(LossModule):
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
-        pred_val = tensordict_expand.get("state_action_value").squeeze(-1)
+        pred_val = tensordict_expand.get(self.state_action_value_key).squeeze(-1)
         td_error = abs(pred_val - target_value)
         loss_qval = (
             distance_loss(

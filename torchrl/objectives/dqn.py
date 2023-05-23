@@ -273,7 +273,6 @@ class DistributionalDQNLoss(LossModule):
             )
             self.tensordict_keys["priority_key"] = priority_key
         self.set_keys(**self.tensordict_keys)
-        print(f"{self.priority_key = }")
 
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value
