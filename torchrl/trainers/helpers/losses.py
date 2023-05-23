@@ -97,7 +97,10 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
         **loss_kwargs,
     )
     loss_module.make_value_estimator(gamma=cfg.gamma)
-    target_net_updater = make_target_updater(cfg, loss_module)
+    if cfg.loss == "double":
+        target_net_updater = make_target_updater(cfg, loss_module)
+    else:
+        target_net_updater = None
     return loss_module, target_net_updater
 
 
