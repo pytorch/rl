@@ -71,7 +71,7 @@ class TD3Loss(LossModule):
         noise_clip: float = 0.5,
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
-        delay_actor: bool = False,
+        delay_actor: bool = True,
         delay_qvalue: bool = True,
         gamma: float = None,
     ) -> None:
