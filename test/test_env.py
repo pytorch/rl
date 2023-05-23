@@ -1279,6 +1279,7 @@ class TestConcurrentEnvs:
             finally:
                 for p in ps:
                     p.join()
+
     @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_collector(self, nproc):
         if nproc == 1:

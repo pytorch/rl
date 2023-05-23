@@ -1215,7 +1215,10 @@ class _MultiDataCollector(DataCollectorBase):
             self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
-        self.event = torch.cuda.Event()
+        if torch.cuda.is_available():
+            self.event = torch.cuda.Event()
+        else:
+            self.event = None
 
     @property
     def frames_per_batch_worker(self):
@@ -1605,8 +1608,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
-            self.event.record()
-            self.event.synchronize()
+            if self.event is not None:
+                self.event.record()
+                self.event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
@@ -1820,6 +1824,9 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             _check_for_faulty_process(self.procs)
             i += 1
             idx, j, out = self._get_from_queue()
+            if self.event is not None:
+                self.event.record()
+                self.event.synchronize()
 
             worker_frames = out.numel()
             if self.split_trajs:
@@ -1839,8 +1846,6 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             if self._exclude_private_keys:
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 out = out.exclude(*excluded_keys)
-            self.event.record()
-            self.event.synchronize()
             yield out
 
         # We don't want to shutdown yet, the user may want to call state_dict before
@@ -2003,7 +2008,10 @@ def _main_async_collector(
     verbose: bool = VERBOSE,
     interruptor=None,
 ) -> None:
-    event = torch.cuda.Event()
+    if storing_device.type == "cuda":
+        event = torch.cuda.Event()
+    else:
+        event = None
     pipe_parent.close()
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
@@ -2108,8 +2116,9 @@ def _main_async_collector(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
-            event.record()
-            event.synchronize()
+            if event is not None:
+                event.record()
+                event.synchronize()
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
