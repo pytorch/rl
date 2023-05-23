@@ -221,11 +221,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
 
     # Make Off-Policy Collector
-    collector = MultiSyncDataCollector(
-        # we'll just run one ParallelEnvironment. Adding elements to the list would increase the number of envs run in parallel
-        [
-            train_env,
-        ],
+    collector = SyncDataCollector(
+        train_env,
         actor_model_explore,
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
