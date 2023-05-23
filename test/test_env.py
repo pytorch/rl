@@ -1258,6 +1258,28 @@ class TestConcurrentEnvs:
                 raise RuntimeError()
 
     @pytest.mark.parametrize("nproc", [3, 1])
+    def test_mp_concurrent(self, nproc):
+        if nproc == 1:
+            self.main_penv(3)
+            self.main_penv(6)
+            self.main_penv(9)
+        else:
+            from torch import multiprocessing as mp
+
+            q = mp.Queue(3)
+            ps = []
+            try:
+                for k in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_penv, args=(k, q))
+                    ps.append(p)
+                    p.start()
+                for _ in range(3):
+                    msg, j = q.get(timeout=100)
+                    assert msg == "passed", j
+            finally:
+                for p in ps:
+                    p.join()
+    @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_collector(self, nproc):
         if nproc == 1:
             self.main_collector(3)
@@ -1280,28 +1302,6 @@ class TestConcurrentEnvs:
                 for p in ps:
                     p.join(timeout=2)
 
-    @pytest.mark.parametrize("nproc", [3, 1])
-    def test_mp_concurrent(self, nproc):
-        if nproc == 1:
-            self.main_penv(3)
-            self.main_penv(6)
-            self.main_penv(9)
-        else:
-            from torch import multiprocessing as mp
-
-            q = mp.Queue(3)
-            ps = []
-            try:
-                for k in range(3, 10, 3):
-                    p = mp.Process(target=type(self).main_penv, args=(k, q))
-                    ps.append(p)
-                    p.start()
-                for _ in range(3):
-                    msg, j = q.get(timeout=100)
-                    assert msg == "passed", j
-            finally:
-                for p in ps:
-                    p.join()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
