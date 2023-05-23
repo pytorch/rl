@@ -34,11 +34,12 @@ def make_target_updater(
     if cfg.loss == "double":
         if not cfg.hard_update:
             target_net_updater = SoftUpdate(
-                loss_module, 1 - 1 / cfg.value_network_update_interval
+                loss_module, eps=1 - 1 / cfg.value_network_update_interval
             )
         else:
             target_net_updater = HardUpdate(
-                loss_module, cfg.value_network_update_interval
+                loss_module,
+                value_network_update_interval=cfg.value_network_update_interval,
             )
     else:
         if cfg.hard_update:
