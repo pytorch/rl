@@ -1228,12 +1228,16 @@ class TestConcurrentEnvs:
         collector = iter(collector)
         single_collectors = [iter(sc) for sc in single_collectors]
 
+        event = torch.cuda.Event()
+
         r_p = []
         r_s = []
         for _ in range(N):
             with torch.no_grad():
                 r_p.append(next(collector))
                 r_s.append(torch.cat([next(sc) for sc in single_collectors]))
+                event.record()
+                event.synchronize()
 
         r_p = torch.stack(r_p).contiguous()
         r_s = torch.stack(r_s).contiguous()

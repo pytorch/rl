@@ -1561,7 +1561,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
         i = -1
         frames = 0
         buffers = {}
-        copies = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
@@ -1604,9 +1603,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
                     buffers[idx] = data
                 else:
                     idx = new_data
-                copies[idx] = buffers[idx].clone()
                 workers_frames[idx] = (
-                    workers_frames[idx] + copies[idx].numel()
+                    workers_frames[idx] + buffers[idx].numel()
                 )
 
                 if workers_frames[idx] >= self.total_frames:
@@ -1616,7 +1614,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = copies[idx].get(("collector", "traj_ids"))
+                traj_ids = buffers[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1625,7 +1623,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in copies.values():
+                for item in buffers.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
@@ -1633,11 +1631,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if same_device:
                 out_buffer = torch.cat(
-                    list(copies.values()), 0, out=out_buffer
+                    list(buffers.values()), 0, out=out_buffer
                 )
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in copies.values()],
+                    [item.cpu() for item in buffers.values()],
                     0,
                     out=out_buffer,
                 )
@@ -1658,7 +1656,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del buffers, copies
+        del buffers
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
