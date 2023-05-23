@@ -132,10 +132,12 @@ class TD3Loss(LossModule):
             actor_params,
         )
         # add noise to target policy
+        action = actor_output_td[1].get("action")
         noise = torch.normal(
-            mean=torch.zeros(actor_output_td[1]["action"].shape),
-            std=torch.ones(actor_output_td[1]["action"].shape) * self.policy_noise,
-        ).to(actor_output_td[1].device)
+            mean=torch.zeros(action.shape),
+            std=torch.full(action.shape, self.policy_noise),
+            device=actor_output_td[1].device,
+        )
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
         next_action = (actor_output_td[1]["action"] + noise).clamp(
