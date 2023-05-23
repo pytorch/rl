@@ -205,15 +205,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sigma_init=1,
         sigma_end=1,
         mean=0,
-        std=0.01,
+        std=0.1,
     ).to(device)
 
     # Create TD3 loss
+    if cfg.loss == "double":
+        double = True
+    elif cfg.loss == "single":
+        double = False
+    else:
+        raise NotImplementedError
     loss_module = TD3Loss(
         actor_network=model[0],
         qvalue_network=model[1],
-        num_qvalue_nets=2,
-        loss_function="smooth_l1",
+        num_qvalue_nets=2 if double else 1,
+        loss_function=cfg.loss_function,
     )
     loss_module.make_value_estimator(gamma=cfg.gamma)
 

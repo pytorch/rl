@@ -53,7 +53,7 @@ class TD3Loss(LossModule):
             ``"l1"``, Default is ``"smooth_l1"``.
         delay_actor (bool, optional): whether to separate the target actor
             networks from the actor networks used for
-            data collection. Default is ``False``.
+            data collection. Default is ``True``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
             for data collection. Default is ``True``.
