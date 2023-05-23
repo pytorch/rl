@@ -69,18 +69,13 @@ class DQNLoss(LossModule):
     ) -> None:
 
         super().__init__()
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "action_value_key": "action_value",
             "action_key": "action",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
@@ -265,20 +260,15 @@ class DistributionalDQNLoss(LossModule):
         priority_key: str = None,
     ):
         super().__init__()
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "action_value_key": "action_value",
             "action_key": "action",
             "reward_key": "reward",
             "done_key": "done",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value

@@ -96,25 +96,16 @@ class A2CLoss(LossModule):
             policy_params = None
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
 
-        self.tensordict_keys = {
+        tensordict_keys = {
             "advantage_key": "advantage",
             "value_target_key": "value_target",
             "value_key": "state_value",
             "action_key": "action",
         }
-        if advantage_key is not None:
-            warnings.warn(
-                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["advantage_key"] = advantage_key
-        if value_target_key is not None:
-            warnings.warn(
-                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["value_target_key"] = value_target_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(
+            advantage_key=advantage_key, value_target_key=value_target_key
+        )
 
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef

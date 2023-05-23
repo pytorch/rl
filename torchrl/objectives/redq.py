@@ -104,20 +104,15 @@ class REDQLoss(LossModule):
 
         super().__init__()
 
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "action_key": "action",
             "value_key": "state_value",
             "sample_log_prob_key": "sample_log_prob",
             "state_action_value_key": "state_action_value",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
             actor_network,

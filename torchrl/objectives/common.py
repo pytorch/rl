@@ -75,7 +75,32 @@ class LossModule(nn.Module):
         # self.register_forward_pre_hook(_parameters_to_tensordict)
         self.tensordict_keys = {}
 
+    def _set_default_tensordict_keys(self, tensordict_keys):
+        """Specify which tensordict keys should be used and can be configured by this loss."""
+        self.tensordict_keys = tensordict_keys
+        self.set_keys(**self.tensordict_keys)
+
+    def _set_deprecated_ctor_keys(self, **kwargs):
+        """Helper function setting a tensordict key and creating a warning for using a deprecated argument."""
+        for key, value in kwargs.items():
+            if value is not None:
+                warnings.warn(
+                    f"Setting '{key}' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                    category=DeprecationWarning,
+                )
+                self.tensordict_keys[key] = value
+        self.set_keys(**self.tensordict_keys)
+
     def set_keys(self, **kwargs):
+        """Specify tensordict key for given argument.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+        """
         for key, value in kwargs.items():
             if key not in self.tensordict_keys.keys():
                 raise ValueError(f"{key} not a valid tensordict key")

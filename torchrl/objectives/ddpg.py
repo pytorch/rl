@@ -53,11 +53,11 @@ class DDPGLoss(LossModule):
     ) -> None:
         super().__init__()
 
-        self.tensordict_keys = {
+        tensordict_keys = {
             "state_action_value_key": "state_action_value",
             "priority_key": "td_error",
         }
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
 
         self.delay_actor = delay_actor
         self.delay_value = delay_value

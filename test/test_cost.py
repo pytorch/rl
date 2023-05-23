@@ -223,6 +223,16 @@ class TestLossModuleBase:
             "sample_log_prob_key": "sample_log_prob",
             "state_action_value_key": "state_action_value",
         },
+        DreamerModelLoss: {
+            "reward_key": "reward",
+            "true_reward_key": "true_reward",
+            "prior_mean_key": "prior_mean",
+            "prior_std_key": "prior_std",
+            "posterior_mean_key": "posterior_mean",
+            "posterior_std_key": "posterior_std",
+            "pixels_key": "pixels",
+            "reco_pixels_key": "reco_pixels",
+        },
         DreamerActorLoss: {
             "belief_key": "belief",
             "reward_key": "reward",
@@ -437,6 +447,81 @@ class TestLossModuleBase:
             value_model(td)
         return value_model
 
+    def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+        default_dict = {
+            "state": UnboundedContinuousTensorSpec(state_dim),
+            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
+        }
+        mock_env.append_transform(
+            TensorDictPrimer(random=False, default_value=0, **default_dict)
+        )
+
+        obs_encoder = ObsEncoder()
+        obs_decoder = ObsDecoder()
+
+        rssm_prior = RSSMPrior(
+            hidden_dim=rssm_hidden_dim,
+            rnn_hidden_dim=rssm_hidden_dim,
+            state_dim=state_dim,
+            action_spec=mock_env.action_spec,
+        )
+        rssm_posterior = RSSMPosterior(hidden_dim=rssm_hidden_dim, state_dim=state_dim)
+
+        # World Model and reward model
+        rssm_rollout = RSSMRollout(
+            SafeModule(
+                rssm_prior,
+                in_keys=["state", "belief", "action"],
+                out_keys=[
+                    ("next", "prior_mean"),
+                    ("next", "prior_std"),
+                    "_",
+                    ("next", "belief"),
+                ],
+            ),
+            SafeModule(
+                rssm_posterior,
+                in_keys=[("next", "belief"), ("next", "encoded_latents")],
+                out_keys=[
+                    ("next", "posterior_mean"),
+                    ("next", "posterior_std"),
+                    ("next", "state"),
+                ],
+            ),
+        )
+        reward_module = MLP(
+            out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
+        )
+        # World Model and reward model
+        world_modeler = SafeSequential(
+            SafeModule(
+                obs_encoder,
+                in_keys=[("next", "pixels")],
+                out_keys=[("next", "encoded_latents")],
+            ),
+            rssm_rollout,
+            SafeModule(
+                obs_decoder,
+                in_keys=[("next", "state"), ("next", "belief")],
+                out_keys=[("next", "reco_pixels")],
+            ),
+        )
+        reward_module = SafeModule(
+            reward_module,
+            in_keys=[("next", "state"), ("next", "belief")],
+            out_keys=[("next", "reward")],
+        )
+        world_model = WorldModelWrapper(world_modeler, reward_module)
+
+        with torch.no_grad():
+            td = mock_env.rollout(10)
+            td = td.unsqueeze(0).to_tensordict()
+            td["state"] = torch.zeros((1, 10, state_dim))
+            td["belief"] = torch.zeros((1, 10, rssm_hidden_dim))
+            world_model(td)
+        return world_model
+
     def _construct_loss(self, loss_module, **kwargs):
         print(f"{loss_module = }")
         if loss_module in [
@@ -466,6 +551,9 @@ class TestLossModuleBase:
             actor = self._create_mock_actor(action_spec_type="one_hot")
             qvalue = self._create_mock_qvalue()
             return loss_module(actor, qvalue, actor.spec["action"].space.n, **kwargs)
+        elif loss_module in [DreamerModelLoss]:
+            world_model = self._create_world_model_model(10, 5)
+            return DreamerModelLoss(world_model)
         elif loss_module in [DreamerActorLoss]:
             mb_env = self._create_mb_env(10, 5)
             actor_model = self._create_actor_model(10, 5)
@@ -497,6 +585,7 @@ class TestLossModuleBase:
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_tensordict_keys_unknown_key(self, loss_module):
+        """Test that exception is raised if an unknown key is set via .set_keys()"""
         loss_fn = self._construct_loss(loss_module)
 
         with pytest.raises(ValueError):
@@ -512,6 +601,7 @@ class TestLossModuleBase:
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_tensordict_set_keys(self, loss_module):
+        """Test setting of tensordict keys via .set_keys()"""
         default_keys = self.DEFAULT_KEYS[loss_module]
 
         loss_fn = self._construct_loss(loss_module)
@@ -529,6 +619,7 @@ class TestLossModuleBase:
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_tensordict_deprecated_ctor(self, loss_module):
+        """Test that a warning is raised if a deprecated tensordict key is set via the ctor."""
         try:
             dep_keys = self.DEPRECATED_CTOR_KEYS[loss_module]
         except KeyError:
@@ -545,6 +636,15 @@ class TestLossModuleBase:
                 for def_key, def_value in default_keys.items():
                     if def_key != key:
                         assert getattr(loss_fn, def_key) == def_value
+
+    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
+    def test_tensordict_all_keys_tested(self, loss_module):
+        """Check that DEFAULT_KEYS contains all available tensordict keys from each loss module."""
+        tested_keys = set(self.DEFAULT_KEYS[loss_module].keys())
+
+        loss_fn = self._construct_loss(loss_module)
+        avail_keys = set(loss_fn.tensordict_keys.keys())
+        assert avail_keys.difference(tested_keys) == set()
 
 
 class TestDQN:

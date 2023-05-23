@@ -75,20 +75,15 @@ class IQLLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "log_prob_key": "_log_prob",
             "action_key": "action",
             "state_action_value_key": "state_action_value",
             "value_key": "state_value",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # IQL parameter
         self.temperature = temperature

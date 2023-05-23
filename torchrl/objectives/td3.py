@@ -82,12 +82,12 @@ class TD3Loss(LossModule):
 
         super().__init__()
 
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "state_action_value_key": "state_action_value",
             "action_key": "action",
         }
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
 
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue

@@ -112,7 +112,7 @@ class SACLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "state_value_key": "state_value",
             "state_action_value_key": "state_action_value",
@@ -120,13 +120,8 @@ class SACLoss(LossModule):
             "sample_log_prob_key": "sample_log_prob",
             "log_prob_key": "_log_prob",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         # Actor
         self.delay_actor = delay_actor
@@ -312,7 +307,7 @@ class SACLoss(LossModule):
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q.set("action", a_reparm)
+        td_q.set(self.action_key, a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
@@ -541,18 +536,13 @@ class DiscreteSACLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        self.tensordict_keys = {
+        tensordict_keys = {
             "priority_key": "td_error",
             "state_value_key": "state_value",
             "action_key": "action",
         }
-        if priority_key is not None:
-            warnings.warn(
-                "Setting 'priority_key' via ctor is deprecated, use .set_keys(priotity_key='some_key') instead.",
-                category=DeprecationWarning,
-            )
-            self.tensordict_keys["priority_key"] = priority_key
-        self.set_keys(**self.tensordict_keys)
+        self._set_default_tensordict_keys(tensordict_keys)
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
             actor_network,
