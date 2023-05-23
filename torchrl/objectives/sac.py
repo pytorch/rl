@@ -79,10 +79,10 @@ class SACLoss(LossModule):
             Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
@@ -104,8 +104,8 @@ class SACLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
-        delay_value: bool = False,
+        delay_qvalue: bool = True,
+        delay_value: bool = True,
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
