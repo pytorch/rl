@@ -742,6 +742,7 @@ class SyncDataCollector(DataCollectorBase):
                     key for key in tensordict_out.keys() if key.startswith("_")
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+            torch.cuda.synchronize()
             if self.return_same_td:
                 yield tensordict_out
             else:
@@ -1645,6 +1646,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 if excluded_keys:
                     out = out.exclude(*excluded_keys)
+            torch.cuda.synchronize()
             yield out
             del out
 

@@ -852,6 +852,7 @@ class ParallelEnv(_BatchedEnv):
             else:
                 out = (cmd_out, None)
             channel.send(out)
+        torch.cuda.synchronize()
 
         for i, channel in enumerate(self.parent_channels):
             if not _reset[i].any():
