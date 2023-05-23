@@ -55,4 +55,4 @@ mode: online
 batch_transform: 1
 buffer_prefetch: 64
 norm_stats: 1
-device: "cpu"
+device: cuda:0
