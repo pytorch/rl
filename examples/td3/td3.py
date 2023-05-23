@@ -110,7 +110,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.seed)
 
     parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name, device=device))
+        cfg.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env_name, device=device)),
     )
     parallel_env.set_seed(cfg.seed)
 
@@ -124,7 +125,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name, device=device))
+            cfg.env_per_collector,
+            EnvCreator(lambda: env_maker(task=cfg.env_name, device=device)),
         ),
         train_env.transform.clone(),
     )
@@ -296,11 +298,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
 
                 optimizer_critic.zero_grad()
-                q_loss.backward(retain_graph=True)
+                update_actor = i % cfg.policy_update_delay == 0
+                q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
-                if i % cfg.policy_update_delay == 0:
+                if update_actor:
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()

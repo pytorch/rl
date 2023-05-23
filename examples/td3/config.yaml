@@ -1,9 +1,6 @@
 # Environment
 env_name: HalfCheetah-v4
-env_task: ""
 exp_name: "debugging"
-env_library: gym
-record_video: 0
 total_frames: 1000000
 frames_per_batch: 200
 max_frames_per_traj: 1000
