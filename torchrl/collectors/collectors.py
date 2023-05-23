@@ -1605,6 +1605,8 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
+            self.event.record()
+            self.event.synchronize()
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
                 traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
@@ -1646,8 +1648,6 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 excluded_keys = [key for key in out.keys() if key.startswith("_")]
                 if excluded_keys:
                     out = out.exclude(*excluded_keys)
-            self.event.record()
-            self.event.synchronize()
             yield out
             del out
 
