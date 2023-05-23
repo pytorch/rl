@@ -743,6 +743,8 @@ class SyncDataCollector(DataCollectorBase):
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             if self.return_same_td:
+                # This is used with multiprocessed collectors to use the buffers
+                # stored in the tensordict.
                 yield tensordict_out
             else:
                 # we must clone the values, as the tensordict is updated in-place.
