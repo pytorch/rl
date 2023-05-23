@@ -13,7 +13,7 @@ import tqdm
 from tensordict.nn import InteractionType
 
 from torch import nn, optim
-from torchrl.collectors import MultiSyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
