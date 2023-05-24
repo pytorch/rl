@@ -56,7 +56,7 @@ class DQNLoss(LossModule):
 
     """
 
-    default_value_estimator = ValueEstimators.TDLambda
+    default_value_estimator = ValueEstimators.TD0
 
     def __init__(
         self,

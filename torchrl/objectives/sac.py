@@ -82,10 +82,10 @@ class SACLoss(LossModule):
             Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -105,8 +105,8 @@ class SACLoss(LossModule):
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
-        delay_value: bool = False,
+        delay_qvalue: bool = True,
+        delay_value: bool = True,
         gamma: float = None,
     ) -> None:
         if not _has_functorch:
@@ -373,17 +373,18 @@ class SACLoss(LossModule):
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
-                dist = self.actor_network.get_dist(tensordict, params=actor_params)
-                tensordict.set("action", dist.rsample())
+                next_tensordict = step_mdp(tensordict)
+                dist = self.actor_network.get_dist(next_tensordict, params=actor_params)
+                next_tensordict.set("action", dist.rsample())
                 log_prob = dist.log_prob(tensordict.get("action"))
-                tensordict.set("sample_log_prob", log_prob)
-            sample_log_prob = tensordict.get("sample_log_prob")
+                next_tensordict.set("sample_log_prob", log_prob)
+            sample_log_prob = next_tensordict.get("sample_log_prob")
 
             # get q-values
-            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
-                tensordict, qval_params
+            next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+                next_tensordict, qval_params
             )
-            state_action_value = tensordict_expand.get("state_action_value")
+            state_action_value = next_tensordict_expand.get("state_action_value")
             if (
                 state_action_value.shape[-len(sample_log_prob.shape) :]
                 != sample_log_prob.shape
@@ -392,12 +393,7 @@ class SACLoss(LossModule):
             state_value = state_action_value - _alpha * sample_log_prob
             state_value = state_value.min(0)[0]
             tensordict.set(("next", self.value_estimator.value_key), state_value)
-            target_value = self.value_estimator.value_estimate(
-                tensordict,
-                _alpha=self._alpha,
-                actor_params=self.target_actor_network_params,
-                qval_params=self.target_qvalue_network_params,
-            ).squeeze(-1)
+            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
     def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
