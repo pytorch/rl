@@ -103,7 +103,7 @@ class SafeTanhTransform(D.TanhTransform):
             eps = torch.finfo(y.dtype).eps
         else:
             raise NotImplementedError("No inverse tanh for integer inputs.")
-        y = y.clamp(-1 + eps, 1 - eps)
+        y.data.clamp_(-1 + eps, 1 - eps)
         x = super()._inverse(y)
         return x
 
