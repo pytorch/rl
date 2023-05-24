@@ -375,10 +375,9 @@ class SACLoss(LossModule):
             with set_exploration_type(ExplorationType.RANDOM):
                 next_tensordict = step_mdp(tensordict)
                 dist = self.actor_network.get_dist(next_tensordict, params=actor_params)
-                next_tensordict.set("action", dist.rsample())
-                log_prob = dist.log_prob(tensordict.get("action"))
-                next_tensordict.set("sample_log_prob", log_prob)
-            sample_log_prob = next_tensordict.get("sample_log_prob")
+                next_action = dist.rsample()
+                next_tensordict.set("action", next_action)
+                sample_log_prob = dist.log_prob(next_action)
 
             # get q-values
             next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
