@@ -103,6 +103,7 @@ class REDQLoss(LossModule):
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
 
         super().__init__()
+        self.set_keys()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -157,9 +158,7 @@ class REDQLoss(LossModule):
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            target_entropy = -float(
-                np.prod(actor_network.spec[self.loss_key("action_key")].shape)
-            )
+            target_entropy = -float(np.prod(actor_network.spec[self.action_key].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -168,15 +167,24 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @staticmethod
-    def default_loss_keys():
-        return {
-            "priority_key": "td_error",
-            "action_key": "action",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "state_action_value_key": "state_action_value",
-        }
+    def set_keys(
+        self,
+        priority_key="td_error",
+        action_key="action",
+        value_key="state_value",
+        sample_log_prob_key="sample_log_prob",
+        state_action_value_key="state_action_value",
+    ):
+        self.priority_key = priority_key
+        self.action_key = action_key
+        self.state_action_value_key = state_action_value_key
+        self.value_key = value_key
+        self.sample_log_prob_key = sample_log_prob_key
+
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value_key=value_key,
+            )
 
     @property
     def alpha(self):
@@ -188,7 +196,7 @@ class REDQLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
-            "next", *obs_keys, self.loss_key("action_key")
+            "next", *obs_keys, self.action_key
         )
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
@@ -220,18 +228,18 @@ class REDQLoss(LossModule):
                 actor_params,
             )
             if isinstance(self.actor_network, TensorDictSequential):
-                sample_key = self.loss_key("action_key")
+                sample_key = self.action_key
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             else:
-                sample_key = self.loss_key("action_key")
+                sample_key = self.action_key
                 tensordict_actor_dist = self.actor_network.build_dist_from_params(
                     td_params
                 )
             tensordict_actor.set(sample_key, tensordict_actor_dist.rsample())
             tensordict_actor.set(
-                self.loss_key("sample_log_prob_key"),
+                self.sample_log_prob_key,
                 tensordict_actor_dist.log_prob(tensordict_actor.get(sample_key)),
             )
 
@@ -269,9 +277,9 @@ class REDQLoss(LossModule):
             qvalue_params,
         )
 
-        state_action_value = tensordict_qval.get(
-            self.loss_key("state_action_value_key")
-        ).squeeze(-1)
+        state_action_value = tensordict_qval.get(self.state_action_value_key).squeeze(
+            -1
+        )
         (
             state_action_value_actor,
             next_state_action_value_qvalue,
@@ -280,9 +288,7 @@ class REDQLoss(LossModule):
             [self.num_qvalue_nets, self.sub_sample_len, self.num_qvalue_nets],
             dim=0,
         )
-        sample_log_prob = tensordict_actor.get(
-            self.loss_key("sample_log_prob_key")
-        ).squeeze(-1)
+        sample_log_prob = tensordict_actor.get(self.sample_log_prob_key).squeeze(-1)
         (
             action_log_prob_actor,
             next_action_log_prob_qvalue,
@@ -297,9 +303,7 @@ class REDQLoss(LossModule):
         )
         next_state_value = next_state_value.min(0)[0]
 
-        tensordict_select.set(
-            ("next", self.loss_key("value_key")), next_state_value.unsqueeze(-1)
-        )
+        tensordict_select.set(("next", self.value_key), next_state_value.unsqueeze(-1))
         target_value = self.value_estimator.value_estimate(tensordict_select).squeeze(
             -1
         )
@@ -312,7 +316,7 @@ class REDQLoss(LossModule):
             loss_function=self.loss_function,
         ).mean(0)
 
-        tensordict.set(self.loss_key("priority_key"), td_error.detach().max(0)[0])
+        tensordict.set(self.priority_key, td_error.detach().max(0)[0])
 
         loss_alpha = self._loss_alpha(sample_log_prob)
         if not loss_qval.shape == loss_actor.shape:
@@ -357,7 +361,7 @@ class REDQLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.loss_key("value_key")
+        value_key = self.value_key
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(

@@ -15,7 +15,6 @@ import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NestedKey
 from torch import nn, Tensor
 from torch.nn import Parameter
 
@@ -73,15 +72,8 @@ class LossModule(nn.Module, ABC):
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = False
-        self._loss_keys = self.default_loss_keys()
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
-
-    @staticmethod
-    @abstractmethod
-    def default_loss_keys(self) -> dict[str, NestedKey]:
-        """Defines the default tensordict keys."""
-        ...
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         """Helper function setting a loss key and creating a warning for using a deprecated argument."""
@@ -91,11 +83,9 @@ class LossModule(nn.Module, ABC):
                     f"Setting '{key}' via ctor is deprecated, use .set_keys({key}='some_key') instead.",
                     category=DeprecationWarning,
                 )
-            self.set_keys(**{key: value})
+                setattr(self, key, value)
 
-    def loss_key(self, name: str) -> NestedKey:
-        return self._loss_keys[name]
-
+    @abstractmethod
     def set_keys(self, **kwargs) -> None:
         """Specify tensordict key for given argument.
 
@@ -106,11 +96,7 @@ class LossModule(nn.Module, ABC):
             >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
         """
-        for key, value in kwargs.items():
-            if key not in self.default_loss_keys().keys():
-                raise ValueError(f"{key} not a valid tensordict key")
-            set_value = value if value is not None else self.default_loss_keys()[key]
-            self._loss_keys[key] = set_value
+        ...
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".

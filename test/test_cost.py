@@ -590,7 +590,7 @@ class TestLossModuleBase:
         """Test that exception is raised if an unknown key is set via .set_keys()"""
         loss_fn = self._construct_loss(loss_module)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             loss_fn.set_keys(unknown_key="test2")
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
@@ -599,7 +599,7 @@ class TestLossModuleBase:
         loss_fn = self._construct_loss(loss_module)
 
         for key, value in default_keys.items():
-            assert loss_fn.loss_key(key) == value
+            assert getattr(loss_fn, key) == value
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_tensordict_set_keys(self, loss_module):
@@ -611,13 +611,13 @@ class TestLossModuleBase:
         new_key = "test1"
         for key, _ in default_keys.items():
             loss_fn.set_keys(**{key: new_key})
-            assert loss_fn.loss_key(key) == new_key
+            assert getattr(loss_fn, key) == new_key
 
         loss_fn = self._construct_loss(loss_module)
         loss_fn.set_keys(**{key: new_key for key, _ in default_keys.items()})
 
         for key, _ in default_keys.items():
-            assert loss_fn.loss_key(key) == new_key
+            assert getattr(loss_fn, key) == new_key
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_tensordict_deprecated_ctor(self, loss_module):
@@ -633,20 +633,11 @@ class TestLossModuleBase:
             new_key = "test3"
             with pytest.deprecated_call():
                 loss_fn = self._construct_loss(loss_module, **{key: new_key})
-                assert loss_fn.loss_key(key) == new_key
+                assert getattr(loss_fn, key) == new_key
 
                 for def_key, def_value in default_keys.items():
                     if def_key != key:
-                        assert loss_fn.loss_key(def_key) == def_value
-
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_tensordict_all_keys_tested(self, loss_module):
-        """Check that DEFAULT_KEYS contains all available tensordict keys from each loss module."""
-        tested_keys = set(self.DEFAULT_KEYS[loss_module].keys())
-
-        loss_fn = self._construct_loss(loss_module)
-        avail_keys = set(loss_fn.default_loss_keys().keys())
-        assert avail_keys.difference(tested_keys) == set()
+                        assert getattr(loss_fn, def_key) == def_value
 
 
 class TestDQN:
@@ -846,7 +837,7 @@ class TestDQN:
             loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -887,7 +878,7 @@ class TestDQN:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             loss = loss_fn(td)
@@ -949,7 +940,7 @@ class TestDQN:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -1424,7 +1415,7 @@ class TestTD3:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -1651,7 +1642,7 @@ class TestSAC:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -1808,7 +1799,7 @@ class TestSAC:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2058,7 +2049,7 @@ class TestDiscreteSAC:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -2166,7 +2157,7 @@ class TestDiscreteSAC:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2401,7 +2392,7 @@ class TestREDQ:
             loss = loss_fn(td)
 
         # check td is left untouched
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -2526,7 +2517,7 @@ class TestREDQ:
             loss_fn.zero_grad()
 
         # check td is left untouched
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
@@ -2649,7 +2640,7 @@ class TestREDQ:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -3338,7 +3329,7 @@ class TestA2C:
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
-        td = td.exclude(loss_fn.loss_key("value_target_key"))
+        td = td.exclude(loss_fn.value_target_key)
         if advantage is not None:
             advantage(td)
         elif td_est is not None:
@@ -4141,7 +4132,7 @@ class TestIQL:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.loss_key("priority_key") in td.keys()
+        assert loss_fn.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -4262,7 +4253,7 @@ class TestIQL:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.loss_key("priority_key") in ms_td.keys()
+        assert loss_fn.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -4400,8 +4391,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                     target.data += 10
 
         @staticmethod
-        def default_loss_keys():
-            return {}
+        def set_keys():
+            pass
 
     module = custom_module(delay_module=False)
     with pytest.raises(RuntimeError, match="The target and source data are identical"):
@@ -5643,9 +5634,8 @@ def test_shared_params(dest, expected_dtype, expected_device):
                 compare_against=list(actor_network.parameters()),
             )
 
-        @staticmethod
-        def default_loss_keys():
-            return {}
+        def set_keys():
+            pass
 
     actor_network = td_module.get_policy_operator()
     value_network = td_module.get_value_operator()
@@ -5885,9 +5875,8 @@ class TestBase:
                     expand_dim=expand_dim,
                 )
 
-            @staticmethod
-            def default_loss_keys():
-                return {}
+            def set_keys():
+                pass
 
         loss_module = MyLoss(compare_against=compare_against, expand_dim=expand_dim)
 

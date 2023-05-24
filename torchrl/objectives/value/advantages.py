@@ -134,6 +134,16 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         self.out_keys = [self.advantage_key, self.value_target_key]
 
+    def set_keys(
+        self,
+        advantage_key="advantage",
+        value_target_key="value_target",
+        value_key="state_value",
+    ):
+        self.advantage_key = advantage_key
+        self.value_target_key = value_target_key
+        self.value_key = value_key
+
     def value_estimate(
         self,
         tensordict,

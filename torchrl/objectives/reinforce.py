@@ -81,6 +81,7 @@ class ReinforceLoss(LossModule):
         value_target_key: str = None,
     ) -> None:
         super().__init__()
+        self.set_keys()
         self._set_deprecated_ctor_keys(
             advantage_key=advantage_key, value_target_key=value_target_key
         )
@@ -107,24 +108,32 @@ class ReinforceLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @staticmethod
-    def default_loss_keys():
-        return {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-        }
+    def set_keys(
+        self,
+        advantage_key="advantage",
+        value_target_key="value_target",
+        value_key="state_value",
+        sample_log_prob_key="sample_log_prob",
+    ):
+        self.advantage_key = advantage_key
+        self.value_target_key = value_target_key
+        self.value_key = value_key
+        self.sample_log_prob_key = sample_log_prob_key
+
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value_key=value_key,
+            )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        advantage = tensordict.get(self.loss_key("advantage_key"), None)
+        advantage = tensordict.get(self.advantage_key, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.loss_key("advantage_key"))
+            advantage = tensordict.get(self.advantage_key)
 
         # compute log-prob
         tensordict = self.actor_network(
@@ -132,7 +141,7 @@ class ReinforceLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = tensordict.get(self.loss_key("sample_log_prob_key"))
+        log_prob = tensordict.get(self.sample_log_prob_key)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])
@@ -143,12 +152,12 @@ class ReinforceLoss(LossModule):
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         try:
-            target_return = tensordict.get(self.loss_key("value_target_key"))
+            target_return = tensordict.get(self.value_target_key)
             tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get(self.loss_key("value_key"))
+            ).get(self.value_key)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -172,7 +181,7 @@ class ReinforceLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.loss_key("value_key")
+        value_key = self.value_key
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic, value_key=value_key, **hp

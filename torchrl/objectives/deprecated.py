@@ -102,6 +102,7 @@ class REDQLoss_deprecated(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
+        self.set_keys()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -166,11 +167,11 @@ class REDQLoss_deprecated(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @staticmethod
-    def default_loss_keys():
-        return {
-            "priority_key": "td_error",
-        }
+    def set_keys(
+        self,
+        priority_key="td_error",
+    ):
+        self.priority_key = priority_key
 
     @property
     def alpha(self):
