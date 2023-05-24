@@ -15,13 +15,16 @@ DEFAULT_VOCAB_SIZE = 50_304
 def forward_wrap(out_forward=GPT2LMHeadModel.forward):
     """Return a wrapped instance method"""
 
-    def forward(self, *args):
-        if len(args) == 2:
-            return_value = out_forward(self, input_ids=args[0], labels=args[1])
-            return return_value.logits, return_value.loss
-        else:
-            return_value = out_forward(self, input_ids=args[0])
+    def forward(self, *args, **kwargs):
+        for arg, kw in zip(args, ("input_ids", "labels")):
+            kwargs[kw] = arg
+
+        return_value = out_forward(self, **kwargs)
+        if not len(args):
+            return return_value
+        if kwargs.get("labels", None) is None:
             return return_value.logits
+        return return_value.logits, return_value.loss
 
     return forward
 
@@ -34,6 +37,7 @@ def init_transformer(config, as_tensordictmodule=True, skip_compilation=False):
         "resid_pdrop": config["dropout"],
         "embd_pdrop": config["dropout"],
         "attn_pdrop": config["dropout"],
+        "n_positions": 1024,
     }
     assert config["base_model"].startswith("gpt2")
 

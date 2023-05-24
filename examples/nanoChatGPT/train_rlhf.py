@@ -33,13 +33,12 @@ def evaluate_agent(actor, env, episode_length=50, logger=None):
     reward = td.get(("next", "reward"))[-1, -1].item()
     if logger:
         string_to_write = (
-            "First query: \n"
-            f"{enc.decode(td.get(('next', 'prompt'))[-1, 0].tolist())},"
-            f"reward={td.get(('next', 'reward'))[-1, 0].item(): 4.4f}"
-            f"\n====================================================\n"
-            f"Last query: \n"
-            f"{enc.decode(td.get(('next', 'prompt'))[-1, -1].tolist())},"
-            f"reward={reward: 4.4f}"
+            "Query: \n"
+            f"{enc.decode(td.get(('next', 'prompt'))[-1, -1, :-episode_length].tolist())},\n"
+            f"Response: \n"
+            f"{enc.decode(td.get(('next', 'prompt'))[-1, -1, -episode_length:].tolist())},\n"
+            f"reward={reward: 4.4f}\n"
+            f"====================================================\n"
         )
         logger.debug(string_to_write)
     return reward
@@ -57,6 +56,9 @@ def main():
     actor, critic, critic_head = init_actor_critic(config)
     actor.eval()  # deactivate dropout on all modules
     critic.eval()
+    actor2 = deepcopy(actor)
+    actor2.eval()
+    actor2.requires_grad_(False)
 
     reward_model = init_reward_model(config)
     reward_model.requires_grad_(False)
@@ -102,7 +104,7 @@ def main():
     train_loader, _ = get_prompt_dataloaders(config)
 
     # Environment
-    env = RLHFEnv(reward_model=reward_model, config=config, dataloader=train_loader)
+    env = RLHFEnv(reward_model=reward_model, config=config, dataloader=train_loader, ref_model=actor2)
 
     # Test Environment
     test_config = deepcopy(config)
@@ -110,7 +112,7 @@ def main():
     test_config["episode_length"] = 50
     train_loader_test, _ = get_prompt_dataloaders(test_config)
     test_env = RLHFEnv(
-        reward_model=reward_model, config=test_config, dataloader=train_loader_test
+        reward_model=reward_model, config=test_config, dataloader=train_loader_test, ref_model=actor2
     )
 
     # ######## TRAINING LOOP ########
