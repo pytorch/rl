@@ -257,13 +257,13 @@ class SACLoss(LossModule):
         device = self.device
         td_device = tensordict_reshape.to(device)
 
-        loss_actor = self._loss_actor(td_device)
         if self._version == 1:
             loss_qvalue, priority = self._loss_qvalue_v1(td_device)
             loss_value = self._loss_value(td_device)
         else:
             loss_qvalue, priority = self._loss_qvalue_v2(td_device)
             loss_value = None
+        loss_actor = self._loss_actor(td_device)
         loss_alpha = self._loss_alpha(td_device)
         tensordict_reshape.set(self.priority_key, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
@@ -286,7 +286,6 @@ class SACLoss(LossModule):
         return TensorDict(out, [])
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
-        # KL lossa
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
                 tensordict,
