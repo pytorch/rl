@@ -300,7 +300,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set("action", a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.qvalue_network_params.detach()
+            td_q, self.qvalue_network_params.detach().clone()
         )
         min_q_logprob = td_q.get("state_action_value").min(0)[0].squeeze(-1)
 
