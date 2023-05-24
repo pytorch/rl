@@ -93,7 +93,9 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        y = safetanh(x)
+        y = x.tanh()
+        if x.requires_grad:
+            y.data.copy_(safetanh(x.data))
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
