@@ -74,7 +74,7 @@ class DreamerModelLoss(LossModule):
         self.global_average = global_average
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "reward_key": "reward",
             "true_reward_key": "true_reward",
@@ -89,19 +89,20 @@ class DreamerModelLoss(LossModule):
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
         tensordict.rename_key_(
-            ("next", self.reward_key), ("next", self.true_reward_key)
+            ("next", self.loss_key("reward_key")),
+            ("next", self.loss_key("true_reward_key")),
         )
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
-            tensordict.get(("next", self.prior_mean_key)),
-            tensordict.get(("next", self.prior_std_key)),
-            tensordict.get(("next", self.posterior_mean_key)),
-            tensordict.get(("next", self.posterior_std_key)),
+            tensordict.get(("next", self.loss_key("prior_mean_key"))),
+            tensordict.get(("next", self.loss_key("prior_std_key"))),
+            tensordict.get(("next", self.loss_key("posterior_mean_key"))),
+            tensordict.get(("next", self.loss_key("posterior_std_key"))),
         ).unsqueeze(-1)
         reco_loss = distance_loss(
-            tensordict.get(("next", self.pixels_key)),
-            tensordict.get(("next", self.reco_pixels_key)),
+            tensordict.get(("next", self.loss_key("pixels_key"))),
+            tensordict.get(("next", self.loss_key("reco_pixels_key"))),
             self.reco_loss,
         )
         if not self.global_average:
@@ -109,8 +110,8 @@ class DreamerModelLoss(LossModule):
         reco_loss = reco_loss.mean().unsqueeze(-1)
 
         reward_loss = distance_loss(
-            tensordict.get(("next", self.true_reward_key)),
-            tensordict.get(("next", self.reward_key)),
+            tensordict.get(("next", self.loss_key("true_reward_key"))),
+            tensordict.get(("next", self.loss_key("reward_key"))),
             self.reward_loss,
         )
         if not self.global_average:
@@ -198,7 +199,7 @@ class DreamerActorLoss(LossModule):
             self.lmbda = lmbda
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "belief_key": "belief",
             "reward_key": "reward",
@@ -208,7 +209,7 @@ class DreamerActorLoss(LossModule):
 
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
-            tensordict = tensordict.select("state", self.belief_key)
+            tensordict = tensordict.select("state", self.loss_key("belief_key"))
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_type(
@@ -229,8 +230,8 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = fake_data.get(("next", self.reward_key))
-        next_value = next_tensordict.get(self.value_key)
+        reward = fake_data.get(("next", self.loss_key("reward_key")))
+        next_value = next_tensordict.get(self.loss_key("value_key"))
         lambda_target = self.lambda_target(reward, next_value)
         fake_data.set("lambda_target", lambda_target)
 
@@ -249,9 +250,9 @@ class DreamerActorLoss(LossModule):
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         input_tensordict = TensorDict(
             {
-                ("next", self.reward_key): reward,
-                ("next", self.value_key): value,
-                ("next", self.done_key): done,
+                ("next", self.loss_key("reward_key")): reward,
+                ("next", self.loss_key("value_key")): value,
+                ("next", self.loss_key("done_key")): done,
             },
             [],
         )
@@ -262,7 +263,7 @@ class DreamerActorLoss(LossModule):
             value_type = self.default_value_estimator
         self.value_type = value_type
         value_net = None
-        value_key = self.value_key
+        value_key = self.loss_key("value_key")
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
@@ -332,7 +333,7 @@ class DreamerValueLoss(LossModule):
         self.discount_loss = discount_loss
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "value_key": "state_value",
         }
@@ -351,7 +352,7 @@ class DreamerValueLoss(LossModule):
                 (
                     discount
                     * distance_loss(
-                        tensordict_select.get(self.value_key),
+                        tensordict_select.get(self.loss_key("value_key")),
                         lambda_target,
                         self.value_loss,
                     )
@@ -362,7 +363,7 @@ class DreamerValueLoss(LossModule):
         else:
             value_loss = (
                 distance_loss(
-                    tensordict_select.get(self.value_key),
+                    tensordict_select.get(self.loss_key("value_key")),
                     lambda_target,
                     self.value_loss,
                 )

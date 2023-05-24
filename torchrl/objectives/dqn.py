@@ -112,7 +112,7 @@ class DQNLoss(LossModule):
             self.gamma = gamma
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "priority_key": "td_error",
             "action_value_key": "action_value",
@@ -195,8 +195,8 @@ class DQNLoss(LossModule):
             params=self.value_network_params,
         )
 
-        action = tensordict.get(self.action_key)
-        pred_val = td_copy.get(self.action_value_key)
+        action = tensordict.get(self.loss_key("action_key"))
+        pred_val = td_copy.get(self.loss_key("action_value_key"))
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -217,7 +217,7 @@ class DQNLoss(LossModule):
             priority_tensor = priority_tensor.to(input_tensordict.device)
 
         input_tensordict.set(
-            self.priority_key,
+            self.loss_key("priority_key"),
             priority_tensor,
             inplace=True,
         )
@@ -280,7 +280,7 @@ class DistributionalDQNLoss(LossModule):
         self.action_space = self.value_network.action_space
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "priority_key": "td_error",
             "action_value_key": "action_value",
@@ -327,11 +327,11 @@ class DistributionalDQNLoss(LossModule):
         Vmax = support.max().item()
         delta_z = (Vmax - Vmin) / (atoms - 1)
 
-        action = tensordict.get(self.action_key)
-        reward = tensordict.get(("next", self.reward_key))
-        done = tensordict.get(("next", self.done_key))
+        action = tensordict.get(self.loss_key("action_key"))
+        reward = tensordict.get(("next", self.loss_key("reward_key")))
+        done = tensordict.get(("next", self.loss_key("done_key")))
 
-        steps_to_next_obs = tensordict.get(self.steps_to_next_obs_key, 1)
+        steps_to_next_obs = tensordict.get(self.loss_key("steps_to_next_obs_key"), 1)
         discount = self.gamma**steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already
@@ -341,7 +341,7 @@ class DistributionalDQNLoss(LossModule):
             td_clone,
             params=self.value_network_params,
         )  # Log probabilities log p(s_t, ·; θonline)
-        action_log_softmax = td_clone.get(self.action_value_key)
+        action_log_softmax = td_clone.get(self.loss_key("action_value_key"))
 
         if self.action_space == "categorical":
             log_ps_a = self._log_ps_a_categorical(action, action_log_softmax)
@@ -358,7 +358,7 @@ class DistributionalDQNLoss(LossModule):
                 params=self.value_network_params,
             )  # Probabilities p(s_t+n, ·; θonline)
 
-            next_td_action = next_td.get(self.action_key)
+            next_td_action = next_td.get(self.loss_key("action_key"))
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
@@ -368,7 +368,7 @@ class DistributionalDQNLoss(LossModule):
                 next_td,
                 params=self.target_value_network_params,
             )  # Probabilities p(s_t+n, ·; θtarget)
-            pns = next_td.get(self.action_value_key).exp()
+            pns = next_td.get(self.loss_key("action_value_key")).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
             pns_a = pns[range(batch_size), :, argmax_indices_ns]
@@ -422,7 +422,7 @@ class DistributionalDQNLoss(LossModule):
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
         loss = -torch.sum(m.to(device) * log_ps_a, 1)
         input_tensordict.set(
-            self.priority_key,
+            self.loss_key("priority_key"),
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )

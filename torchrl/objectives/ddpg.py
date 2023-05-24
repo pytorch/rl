@@ -85,7 +85,7 @@ class DDPGLoss(LossModule):
             self.gamma = gamma
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "state_action_value_key": "state_action_value",
             "priority_key": "td_error",
@@ -113,7 +113,7 @@ class DDPGLoss(LossModule):
         if input_tensordict.device is not None:
             td_error = td_error.to(input_tensordict.device)
         input_tensordict.set(
-            self.priority_key,
+            self.loss_key("priority_key"),
             td_error,
             inplace=True,
         )
@@ -144,7 +144,7 @@ class DDPGLoss(LossModule):
                 td_copy,
                 params=params,
             )
-        return -td_copy.get(self.state_action_value_key)
+        return -td_copy.get(self.loss_key("state_action_value_key"))
 
     def _loss_value(
         self,
@@ -156,7 +156,7 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get(self.state_action_value_key).squeeze(-1)
+        pred_val = td_copy.get(self.loss_key("state_action_value_key")).squeeze(-1)
 
         target_params = TensorDict(
             {
@@ -187,7 +187,7 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.state_action_value_key
+        value_key = self.loss_key("state_action_value_key")
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp

@@ -167,7 +167,7 @@ class REDQLoss_deprecated(LossModule):
             self.gamma = gamma
 
     @staticmethod
-    def default_tensordict_keys():
+    def default_loss_keys():
         return {
             "priority_key": "td_error",
         }

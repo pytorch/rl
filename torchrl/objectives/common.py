@@ -15,6 +15,7 @@ import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn, Tensor
 from torch.nn import Parameter
 
@@ -72,18 +73,18 @@ class LossModule(nn.Module, ABC):
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = False
+        self._loss_keys = self.default_loss_keys()
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
-        self.set_keys(**self.default_tensordict_keys())
 
     @staticmethod
     @abstractmethod
-    def default_tensordict_keys(self):
+    def default_loss_keys(self) -> dict[str, NestedKey]:
         """Defines the default tensordict keys."""
         ...
 
-    def _set_deprecated_ctor_keys(self, **kwargs):
-        """Helper function setting a tensordict key and creating a warning for using a deprecated argument."""
+    def _set_deprecated_ctor_keys(self, **kwargs) -> None:
+        """Helper function setting a loss key and creating a warning for using a deprecated argument."""
         for key, value in kwargs.items():
             if value is not None:
                 warnings.warn(
@@ -92,7 +93,10 @@ class LossModule(nn.Module, ABC):
                 )
             self.set_keys(**{key: value})
 
-    def set_keys(self, **kwargs):
+    def loss_key(self, name: str) -> NestedKey:
+        return self._loss_keys[name]
+
+    def set_keys(self, **kwargs) -> None:
         """Specify tensordict key for given argument.
 
         Examples:
@@ -103,12 +107,10 @@ class LossModule(nn.Module, ABC):
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
         """
         for key, value in kwargs.items():
-            if key not in self.default_tensordict_keys().keys():
+            if key not in self.default_loss_keys().keys():
                 raise ValueError(f"{key} not a valid tensordict key")
-            set_value = (
-                value if value is not None else self.default_tensordict_keys()[key]
-            )
-            setattr(self, key, set_value)
+            set_value = value if value is not None else self.default_loss_keys()[key]
+            self._loss_keys[key] = set_value
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
