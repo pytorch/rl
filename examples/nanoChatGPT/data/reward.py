@@ -56,6 +56,8 @@ class PairwiseDataset:
         # memory map without ever having to hold the whole thing in memory
         indices_to_skip = set()
         for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
+            if idx >= 1000:
+                break
             if len(sample["chosen"].split()) < 5 or len(sample["rejected"].split()) < 5:
                 indices_to_skip.add(idx)
                 continue
@@ -64,22 +66,24 @@ class PairwiseDataset:
 
             if chosen == rejected:
                 indices_to_skip.add(idx)
-            
-            if idx >= 1000:
-                break
 
         data = cls(
             chosen=MemmapTensor(
-                len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+                # len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+                1000, max_length, dtype=torch.int32
             ),
             rejected=MemmapTensor(
-                len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+                # len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
+                1000, max_length, dtype=torch.int32
             ),
-            batch_size=[len(dataset)],
+            # batch_size=[len(dataset)],
+            batch_size=[1000],
         )
         i = 0
 
         for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
+            if idx >= 1000:
+                break
             if idx in indices_to_skip:
                 continue
 
@@ -87,17 +91,14 @@ class PairwiseDataset:
 
             data[i] = cls(
                 chosen=F.pad(
-                    torch.Tensor(chosen), (max_length - len(chosen), 0), value=0
+                    torch.Tensor(chosen), (0, max_length - len(chosen)), value=50256
                 ),
                 rejected=F.pad(
-                    torch.Tensor(rejected), (max_length - len(rejected), 0), value=0
+                    torch.Tensor(rejected), (0, max_length - len(rejected)), value=50256
                 ),
                 batch_size=[],
             )
             i += 1
-            if idx >= 1000:
-                break
-
         return data
 
 

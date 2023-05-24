@@ -32,7 +32,7 @@ def _step(self, tensordict):
         reward = self.reward_model(next_prompt)
         done = torch.ones_like(reward, dtype=torch.bool)
     else:
-        reward = torch.zeros((*tensordict.batch_size, 1))
+        reward = torch.zeros((*tensordict.batch_size, 1)).to(prompt.device)
         done = torch.zeros_like(reward, dtype=torch.bool)
     assert self.reward_spec.shape == reward.shape, (
         self.batch_size,
@@ -40,6 +40,15 @@ def _step(self, tensordict):
         reward.dtype,
     )
     assert self.done_spec.shape == done.shape, (self.batch_size, done.shape, done.dtype)
+
+    # compute KL divergence component to avoid diverging too much from original model
+    if self.ref_model:
+        logits = tensordict.get("sample_log_prob")
+        ref_logits = self.ref_model(prompt)
+        kl_penalty = self.kl_th * (logits - ref_logits).mean(-1).unsqueeze(-1)
+    
+    reward -= kl_penalty 
+
 
     out = TensorDict(
         {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
@@ -102,7 +111,7 @@ def _set_seed(self, seed: Optional[int]):
 class RLHFEnv(EnvBase):
     batch_locked = False
 
-    def __init__(self, reward_model=None, config=None, dataloader=None, seed=None):
+    def __init__(self, reward_model=None, config=None, dataloader=None, seed=None, ref_model=None):
         # if td_params is None:
         #     td_params = self.gen_params()
         batch_size = config["batch_size"]
@@ -118,6 +127,9 @@ class RLHFEnv(EnvBase):
         if seed is None:
             seed = torch.empty((), dtype=torch.int64).random_().item()
         self.step_num = 0
+        self.ref_model = ref_model
+        self.ref_model.select_out_keys(["sample_log_prob"])
+        self.kl_th = 1
         # self.set_seed(seed)
 
     # Helpers: _make_step and gen_params

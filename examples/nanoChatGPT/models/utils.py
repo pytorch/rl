@@ -33,11 +33,9 @@ def crop_block_size(model, block_size):
     # model surgery to decrease the block size if necessary
     # e.g. we may load the GPT2 pretrained model checkpoint (block size 1024)
     # but want to use a smaller block size for some smaller, simpler model
-    model.config.n_positions = block_size
-    model.config.n_ctx = block_size
-    model.transformer.wpe.weight = nn.Parameter(
-        model.transformer.wpe.weight[:block_size]
-    )
+    # model.transformer.wpe.weight = nn.Parameter(
+    #     model.transformer.wpe.weight[:block_size]
+    # )
     for block in model.transformer.h:
         if hasattr(block.attn, "bias"):
             block.attn.bias = block.attn.bias[:, :, :block_size, :block_size]

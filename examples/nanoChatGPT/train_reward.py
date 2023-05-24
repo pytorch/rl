@@ -63,6 +63,7 @@ def main():
         # evaluate the loss
         reward_chosen = model(batch.chosen)
         reward_rejected = model(batch.rejected)
+        aaaaa
         loss = -torch.log(torch.sigmoid(reward_chosen - reward_rejected)).mean()
 
         optimizer.zero_grad(set_to_none=True)
