@@ -8,6 +8,8 @@ from typing import Union
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
+
+from tensordict.nn import dispatch
 from torchrl.data.tensor_specs import TensorSpec
 
 from torchrl.envs.utils import step_mdp
@@ -149,22 +151,26 @@ class DQNLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    @dispatch(
+        source=['observation', ('next', 'observation'), 'action', ('next', 'reward'), ('next', 'done')],
+        dest=['loss'],
+    )
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
+            tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
                 the value network (observations, "done", "reward" in a "next" tensordict).
 
         Returns:
             a tensor containing the DQN loss.
 
         """
-        device = self.device if self.device is not None else input_tensordict.device
-        tensordict = input_tensordict.to(device)
+        device = self.device if self.device is not None else tensordict.device
+        tensordict = tensordict.to(device)
         if tensordict.device != device:
             raise RuntimeError(
                 f"device {device} was expected for "
@@ -204,10 +210,10 @@ class DQNLoss(LossModule):
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if input_tensordict.device is not None:
-            priority_tensor = priority_tensor.to(input_tensordict.device)
+        if tensordict.device is not None:
+            priority_tensor = priority_tensor.to(tensordict.device)
 
-        input_tensordict.set(
+        tensordict.set(
             self.priority_key,
             priority_tensor,
             inplace=True,
