@@ -83,7 +83,7 @@ class LossModule(nn.Module, ABC):
                     f"Setting '{key}' via ctor is deprecated, use .set_keys({key}='some_key') instead.",
                     category=DeprecationWarning,
                 )
-                setattr(self, key, value)
+                self.set_keys(**{key: value})
 
     @abstractmethod
     def set_keys(self, **kwargs) -> None:
