@@ -1717,7 +1717,13 @@ class TestDiscreteActionProjection(TransformBase):
             [10, 4],
         )
         rb.extend(td)
-        assert rb._storage._storage["action"].shape[-1] == 7
+
+        if rbclass is ReplayBuffer:
+            storage = rb._storage._storage
+        else:
+            storage = rb._storage._storage.get('_data')
+
+        assert storage["action"].shape[-1] == 7
         td = rb.sample(10)
         assert td["action"].shape[-1] == 10 if include_forward else 7
 
@@ -1916,10 +1922,14 @@ class TestDoubleToFloat(TransformBase):
         assert td["observation"].dtype is torch.double
         assert td["action"].dtype is torch.float
         rb.extend(td)
+        if rbclass is ReplayBuffer:
+            storage = rb._storage._storage
+        else:
+            storage = rb._storage._storage.get('_data')
         # observation is not part of in_keys_inv
-        assert rb._storage._storage["observation"].dtype is torch.double
+        assert storage["observation"].dtype is torch.double
         # action is part of in_keys_inv
-        assert rb._storage._storage["action"].dtype is torch.double
+        assert storage["action"].dtype is torch.double
         td = rb.sample(10)
         assert td["observation"].dtype is torch.float
         assert td["action"].dtype is torch.double
@@ -7069,7 +7079,11 @@ class TestRenameTransform(TransformBase):
         rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(t)
         rb.extend(tensordict)
-        assert "a" in rb._storage._storage.keys()
+
+        if rbclass is ReplayBuffer:
+            assert "a" in rb._storage._storage.keys()
+        else:
+            assert ("_data", "a") in rb._storage._storage.keys(True)
         sample = rb.sample(2)
         if create_copy:
             assert "a" in sample.keys()

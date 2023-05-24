@@ -706,11 +706,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
             stacked_td.set("_data", self._transform.inv(stacked_td.get("_data")))
 
         index = super()._extend(stacked_td)
-        # stacked_td.set(
-        #     "index",
-        #     torch.tensor(index, dtype=torch.int, device=stacked_td.device),
-        #     inplace=True,
-        # )
         self.update_tensordict_priority(stacked_td)
         return index
 
@@ -725,12 +720,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
         else:
             priority = self._get_priority(data)
-        # if the index shape does not match the priority shape, we have expanded it.
-        # we just take the first value
         index = data.get("index")
-        while index.shape != priority.shape:
-            # reduce index
-            index = index[..., 0]
         self.update_priority(index, priority)
 
     def sample(
