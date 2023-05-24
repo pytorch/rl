@@ -1721,7 +1721,7 @@ class TestDiscreteActionProjection(TransformBase):
         if rbclass is ReplayBuffer:
             storage = rb._storage._storage
         else:
-            storage = rb._storage._storage.get('_data')
+            storage = rb._storage._storage.get("_data")
 
         assert storage["action"].shape[-1] == 7
         td = rb.sample(10)
@@ -1925,7 +1925,7 @@ class TestDoubleToFloat(TransformBase):
         if rbclass is ReplayBuffer:
             storage = rb._storage._storage
         else:
-            storage = rb._storage._storage.get('_data')
+            storage = rb._storage._storage.get("_data")
         # observation is not part of in_keys_inv
         assert storage["observation"].dtype is torch.double
         # action is part of in_keys_inv
