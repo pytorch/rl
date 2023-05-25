@@ -410,12 +410,13 @@ class SACLoss(LossModule):
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
-                next_tensordict = step_mdp(tensordict)
-                dist = self.actor_network.get_dist(next_tensordict, params=actor_params)
-                next_tensordict.set(self.tensor_keys.action_key, dist.rsample())
-                log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action_key))
-                next_tensordict.set(self.tensor_keys.sample_log_prob_key, log_prob)
-            sample_log_prob = next_tensordict.get(self.tensor_keys.sample_log_prob_key)
+                next_tensordict = tensordict.get("next").clone(False)
+                next_dist = self.actor_network.get_dist(
+                    next_tensordict, params=actor_params
+                )
+                next_action = next_dist.rsample()
+                next_tensordict.set(self.tensor_keys.action_key, next_action)
+                next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
             next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
@@ -425,13 +426,13 @@ class SACLoss(LossModule):
                 self.tensor_keys.state_action_value_key
             )
             if (
-                state_action_value.shape[-len(sample_log_prob.shape) :]
-                != sample_log_prob.shape
+                state_action_value.shape[-len(next_sample_log_prob.shape) :]
+                != next_sample_log_prob.shape
             ):
-                sample_log_prob = sample_log_prob.unsqueeze(-1)
-            state_value = state_action_value - _alpha * sample_log_prob
-            state_value = state_value.min(0)[0]
-            tensordict.set(("next", self.value_estimator.value_key), state_value)
+                next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
+            next_state_value = state_action_value - _alpha * next_sample_log_prob
+            next_state_value = next_state_value.min(0)[0]
+            tensordict.set(("next", self.value_estimator.value_key), next_state_value)
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
