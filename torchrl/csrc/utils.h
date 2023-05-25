@@ -8,10 +8,27 @@
 
 #include <iostream>
 
+using namespace torch::autograd;
+
+class SafeTanh : public Function<SafeTanh> {
+ public:
+  static torch::Tensor forward(
+      AutogradContext *ctx, torch::Tensor input) {
+    auto out = torch::tanh(input);
+    out = out.clamp(-0.999999, 0.999999);
+    ctx->save_for_backward({out});
+    return out;
+  }
+
+  static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {
+    auto saved = ctx->get_saved_variables();
+    auto out = saved[0];
+    auto go = grad_outputs[0];
+    auto grad = go * (1 - out * out);
+    return {grad};
+  }
+};
+
 torch::Tensor safetanh(torch::Tensor input) {
-  auto out = torch::tanh(input);
-  torch::NoGradGuard no_grad;
-  auto data = out.detach();
-  data.clamp_(-0.999999, 0.999999);
-  return out;
+  return SafeTanh::apply(input);
 }
