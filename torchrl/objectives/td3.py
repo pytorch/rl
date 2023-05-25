@@ -138,7 +138,7 @@ class TD3Loss(LossModule):
 
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.value_key,
+                value_key=self._tensor_keys.state_action_value_key,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

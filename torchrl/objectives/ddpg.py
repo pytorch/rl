@@ -66,7 +66,6 @@ class DDPGLoss(LossModule):
         gamma: float = None,
     ) -> None:
         super().__init__()
-        self.set_keys()
 
         self.delay_actor = delay_actor
         self.delay_value = delay_value

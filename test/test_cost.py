@@ -139,575 +139,67 @@ def get_devices():
     return devices
 
 
-class TestLossModuleBase:
-    # tensordict keys and their default values used as input for the correspoinding loss module
-    DEFAULT_KEYS = {
-        PPOLoss: {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "action_key": "action",
-        },
-        ClipPPOLoss: {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "action_key": "action",
-        },
-        KLPENPPOLoss: {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "action_key": "action",
-        },
-        A2CLoss: {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "action_key": "action",
-        },
-        ReinforceLoss: {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-        },
-        DDPGLoss: {
-            "state_action_value_key": "state_action_value",
-            "priority_key": "td_error",
-        },
-        DQNLoss: {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
-        },
-        DistributionalDQNLoss: {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
-            "reward_key": "reward",
-            "done_key": "done",
-            "steps_to_next_obs_key": "steps_to_next_obs",
-        },
-        SACLoss: {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
-            "sample_log_prob_key": "sample_log_prob",
-            "log_prob_key": "_log_prob",
-        },
-        DiscreteSACLoss: {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "action_key": "action",
-        },
-        TD3Loss: {
-            "priority_key": "td_error",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
-        },
-        IQLLoss: {
-            "priority_key": "td_error",
-            "log_prob_key": "_log_prob",
-            "action_key": "action",
-            "state_action_value_key": "state_action_value",
-            "value_key": "state_value",
-        },
-        REDQLoss: {
-            "priority_key": "td_error",
-            "action_key": "action",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "state_action_value_key": "state_action_value",
-        },
-        DreamerModelLoss: {
-            "reward_key": "reward",
-            "true_reward_key": "true_reward",
-            "prior_mean_key": "prior_mean",
-            "prior_std_key": "prior_std",
-            "posterior_mean_key": "posterior_mean",
-            "posterior_std_key": "posterior_std",
-            "pixels_key": "pixels",
-            "reco_pixels_key": "reco_pixels",
-        },
-        DreamerActorLoss: {
-            "belief_key": "belief",
-            "reward_key": "reward",
-            "value_key": "state_value",
-            "done_key": "done",
-        },
-        DreamerValueLoss: {
-            "value_key": "state_value",
-        },
-    }
-    # loss modules which will be tested for setting tensordict keys
-    LOSS_MODULES = DEFAULT_KEYS.keys()
-
-    # deprecated ctor arguments of loss modules
-    DEPRECATED_CTOR_KEYS = {
-        PPOLoss: ["advantage_key", "value_target_key", "value_key"],
-        ClipPPOLoss: ["advantage_key", "value_target_key", "value_key"],
-        KLPENPPOLoss: ["advantage_key", "value_target_key", "value_key"],
-        A2CLoss: ["advantage_key", "value_target_key"],
-        ReinforceLoss: ["advantage_key", "value_target_key"],
-        SACLoss: ["priority_key"],
-        DiscreteSACLoss: ["priority_key"],
-        DQNLoss: ["priority_key"],
-        IQLLoss: ["priority_key"],
-        REDQLoss: ["priority_key"],
-        TD3Loss: ["priority_key"],
-    }
-
-    LOSS_ADVANTAGE_KEY_MAPPING = {
-        PPOLoss: {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
-        },
-        ClipPPOLoss: {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
-        },
-        KLPENPPOLoss: {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
-        },
-        A2CLoss: {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
-        },
-        DDPGLoss: {"state_action_value_key": "value_key"},
-        DreamerActorLoss: {"value_key": "value_key"},
-        ReinforceLoss: {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
-        },
-        SACLoss: {"value_key": "value_key"},
-        DiscreteSACLoss: {"value_key": "value_key"},
-        IQLLoss: {"value_key": "value_key"},
-        REDQLoss: {"value_key": "value_key"},
-    }
-
-    def _create_mock_actor(
-        self, action_spec_type="bounded", batch=2, obs_dim=3, action_dim=4
+class LossModuleTestBase:
+    def tensordict_keys_test(
+        self, loss_fn, default_keys, loss_advantage_key_mapping=None
     ):
-        if action_spec_type == "bounded":
-            action_spec = BoundedTensorSpec(
-                -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        self.tensordict_keys_unknown_key_test(loss_fn)
+        self.tensordict_keys_default_values_test(loss_fn, default_keys)
+        self.tensordict_set_keys_test(loss_fn, default_keys)
+        if loss_advantage_key_mapping is not None:
+            self.set_advantage_keys_through_loss_test(
+                loss_fn, loss_advantage_key_mapping
             )
-        elif action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
 
-        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-        actor = ProbabilisticActor(
-            module=module,
-            distribution_class=TanhNormal,
-            in_keys=["loc", "scale"],
-            spec=action_spec,
-        )
-        return actor
-
-    def _create_mock_qv_actor(
-        self,
-        action_spec_type="one_hot",
-        batch=2,
-        obs_dim=3,
-        action_dim=4,
-        is_nn_module=False,
-    ):
-        # Actor
-        if action_spec_type == "one_hot":
-            action_spec = OneHotDiscreteTensorSpec(action_dim)
-        elif action_spec_type == "categorical":
-            action_spec = DiscreteTensorSpec(action_dim)
-        else:
-            raise ValueError(f"Wrong {action_spec_type}")
-
-        module = nn.Linear(obs_dim, action_dim)
-        if is_nn_module:
-            return module
-        actor = QValueActor(
-            spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
-                chosen_action_value=None,
-                shape=[],
-            ),
-            action_space=action_spec_type,
-            module=module,
-        )
-        return actor
-
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, out_keys=None):
-        module = nn.Linear(obs_dim, 1)
-        value = ValueOperator(
-            module=module,
-            in_keys=["observation"],
-            out_keys=out_keys,
-        )
-        return value
-
-    def _create_mock_value_w_action(
-        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
-    ):
-        # Actor
-        class ValueClass(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(obs_dim + action_dim, 1)
-
-            def forward(self, obs, act):
-                return self.linear(torch.cat([obs, act], -1))
-
-        module = ValueClass()
-        value = ValueOperator(
-            module=module,
-            in_keys=["observation", "action"],
-        )
-        return value.to(device)
-
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4):
-        class ValueClass(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(obs_dim + action_dim, 1)
-
-            def forward(self, obs, act):
-                return self.linear(torch.cat([obs, act], -1))
-
-        module = ValueClass()
-        qvalue = ValueOperator(
-            module=module,
-            in_keys=["observation", "action"],
-        )
-        return qvalue
-
-    def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
-        default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
-        }
-        mock_env.append_transform(
-            TensorDictPrimer(random=False, default_value=0, **default_dict)
-        )
-
-        rssm_prior = RSSMPrior(
-            hidden_dim=rssm_hidden_dim,
-            rnn_hidden_dim=rssm_hidden_dim,
-            state_dim=state_dim,
-            action_spec=mock_env.action_spec,
-        )
-        reward_module = MLP(
-            out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
-        )
-        transition_model = SafeSequential(
-            SafeModule(
-                rssm_prior,
-                in_keys=["state", "belief", "action"],
-                out_keys=[
-                    "_",
-                    "_",
-                    "state",
-                    "belief",
-                ],
-            ),
-        )
-        reward_model = SafeModule(
-            reward_module,
-            in_keys=["state", "belief"],
-            out_keys=["reward"],
-        )
-        model_based_env = DreamerEnv(
-            world_model=WorldModelWrapper(
-                transition_model,
-                reward_model,
-            ),
-            prior_shape=torch.Size([state_dim]),
-            belief_shape=torch.Size([rssm_hidden_dim]),
-        )
-        model_based_env.set_specs_from_env(mock_env)
-        with torch.no_grad():
-            model_based_env.rollout(3)
-        return model_based_env
-
-    def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
-        default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
-        }
-        mock_env.append_transform(
-            TensorDictPrimer(random=False, default_value=0, **default_dict)
-        )
-
-        actor_module = DreamerActor(
-            out_features=mock_env.action_spec.shape[0],
-            depth=4,
-            num_cells=mlp_num_units,
-            activation_class=nn.ELU,
-        )
-        actor_model = SafeProbabilisticTensorDictSequential(
-            SafeModule(
-                actor_module,
-                in_keys=["state", "belief"],
-                out_keys=["loc", "scale"],
-            ),
-            SafeProbabilisticModule(
-                in_keys=["loc", "scale"],
-                out_keys="action",
-                default_interaction_type=InteractionType.RANDOM,
-                distribution_class=TanhNormal,
-            ),
-        )
-        with torch.no_grad():
-            td = TensorDict(
-                {
-                    "state": torch.randn(1, 2, state_dim),
-                    "belief": torch.randn(1, 2, rssm_hidden_dim),
-                },
-                batch_size=[1],
-            )
-            actor_model(td)
-        return actor_model
-
-    def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        value_model = SafeModule(
-            MLP(
-                out_features=1,
-                depth=3,
-                num_cells=mlp_num_units,
-                activation_class=nn.ELU,
-            ),
-            in_keys=["state", "belief"],
-            out_keys=["state_value"],
-        )
-        with torch.no_grad():
-            td = TensorDict(
-                {
-                    "state": torch.randn(1, 2, state_dim),
-                    "belief": torch.randn(1, 2, rssm_hidden_dim),
-                },
-                batch_size=[1],
-            )
-            value_model(td)
-        return value_model
-
-    def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
-        default_dict = {
-            "state": UnboundedContinuousTensorSpec(state_dim),
-            "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
-        }
-        mock_env.append_transform(
-            TensorDictPrimer(random=False, default_value=0, **default_dict)
-        )
-
-        obs_encoder = ObsEncoder()
-        obs_decoder = ObsDecoder()
-
-        rssm_prior = RSSMPrior(
-            hidden_dim=rssm_hidden_dim,
-            rnn_hidden_dim=rssm_hidden_dim,
-            state_dim=state_dim,
-            action_spec=mock_env.action_spec,
-        )
-        rssm_posterior = RSSMPosterior(hidden_dim=rssm_hidden_dim, state_dim=state_dim)
-
-        # World Model and reward model
-        rssm_rollout = RSSMRollout(
-            SafeModule(
-                rssm_prior,
-                in_keys=["state", "belief", "action"],
-                out_keys=[
-                    ("next", "prior_mean"),
-                    ("next", "prior_std"),
-                    "_",
-                    ("next", "belief"),
-                ],
-            ),
-            SafeModule(
-                rssm_posterior,
-                in_keys=[("next", "belief"), ("next", "encoded_latents")],
-                out_keys=[
-                    ("next", "posterior_mean"),
-                    ("next", "posterior_std"),
-                    ("next", "state"),
-                ],
-            ),
-        )
-        reward_module = MLP(
-            out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
-        )
-        # World Model and reward model
-        world_modeler = SafeSequential(
-            SafeModule(
-                obs_encoder,
-                in_keys=[("next", "pixels")],
-                out_keys=[("next", "encoded_latents")],
-            ),
-            rssm_rollout,
-            SafeModule(
-                obs_decoder,
-                in_keys=[("next", "state"), ("next", "belief")],
-                out_keys=[("next", "reco_pixels")],
-            ),
-        )
-        reward_module = SafeModule(
-            reward_module,
-            in_keys=[("next", "state"), ("next", "belief")],
-            out_keys=[("next", "reward")],
-        )
-        world_model = WorldModelWrapper(world_modeler, reward_module)
-
-        with torch.no_grad():
-            td = mock_env.rollout(10)
-            td = td.unsqueeze(0).to_tensordict()
-            td["state"] = torch.zeros((1, 10, state_dim))
-            td["belief"] = torch.zeros((1, 10, rssm_hidden_dim))
-            world_model(td)
-        return world_model
-
-    def _construct_loss(self, loss_module, **kwargs):
-        print(f"{loss_module = }")
-        if loss_module in [
-            PPOLoss,
-            ClipPPOLoss,
-            KLPENPPOLoss,
-            A2CLoss,
-            TD3Loss,
-            REDQLoss,
-        ]:
-            actor = self._create_mock_actor()
-            value = self._create_mock_value()
-            return loss_module(actor, value, **kwargs)
-        elif loss_module in [DDPGLoss]:
-            actor = self._create_mock_actor()
-            value = self._create_mock_value_w_action()
-            print(f"{value = }")
-            return loss_module(actor, value, **kwargs)
-        elif loss_module in [DQNLoss]:
-            actor = self._create_mock_qv_actor()
-            return loss_module(actor, **kwargs)
-        elif loss_module in [DistributionalDQNLoss]:
-            actor = self._create_mock_qv_actor()
-            return loss_module(actor, gamma=0.9, **kwargs)
-        elif loss_module in [SACLoss, IQLLoss]:
-            actor = self._create_mock_actor()
-            qvalue = self._create_mock_qvalue()
-            value = self._create_mock_value()
-            return loss_module(actor, qvalue, value, **kwargs)
-        elif loss_module in [DiscreteSACLoss]:
-            actor = self._create_mock_actor(action_spec_type="one_hot")
-            qvalue = self._create_mock_qvalue()
-            return loss_module(actor, qvalue, actor.spec["action"].space.n, **kwargs)
-        elif loss_module in [DreamerModelLoss]:
-            world_model = self._create_world_model_model(10, 5)
-            return DreamerModelLoss(world_model)
-        elif loss_module in [DreamerActorLoss]:
-            mb_env = self._create_mb_env(10, 5)
-            actor_model = self._create_actor_model(10, 5)
-            value_model = self._create_value_model(10, 5)
-            return DreamerActorLoss(actor_model, value_model, mb_env)
-        elif loss_module in [DreamerValueLoss]:
-            value_model = self._create_value_model(10, 5)
-            return DreamerValueLoss(value_model)
-        elif loss_module in [ReinforceLoss]:
-            n_obs = 3
-            n_act = 5
-            value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
-            net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-            module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
-            actor_net = ProbabilisticActor(
-                module,
-                distribution_class=TanhNormal,
-                return_log_prob=True,
-                in_keys=["loc", "scale"],
-                spec=UnboundedContinuousTensorSpec(n_act),
-            )
-            return ReinforceLoss(
-                actor_net,
-                critic=value_net,
-                **kwargs,
-            )
-        else:
-            raise ValueError("Unknown loss module")
-
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_tensordict_keys_unknown_key(self, loss_module):
+    def tensordict_keys_unknown_key_test(self, loss_fn):
         """Test that exception is raised if an unknown key is set via .set_keys()"""
-        loss_fn = self._construct_loss(loss_module)
+        test_fn = deepcopy(loss_fn)
 
         with pytest.raises(ValueError):
-            loss_fn.set_keys(unknown_key="test2")
+            test_fn.set_keys(unknown_key="test2")
 
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_tensordict_keys_default_values(self, loss_module):
-        default_keys = self.DEFAULT_KEYS[loss_module]
-        loss_fn = self._construct_loss(loss_module)
+    def tensordict_keys_default_values_test(self, loss_fn, default_keys):
+        test_fn = deepcopy(loss_fn)
 
         for key, value in default_keys.items():
-            assert getattr(loss_fn.tensor_keys, key) == value
+            assert getattr(test_fn.tensor_keys, key) == value
 
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_tensordict_set_keys(self, loss_module):
+    def tensordict_set_keys_test(self, loss_fn, default_keys):
         """Test setting of tensordict keys via .set_keys()"""
-        default_keys = self.DEFAULT_KEYS[loss_module]
-
-        loss_fn = self._construct_loss(loss_module)
+        test_fn = deepcopy(loss_fn)
 
         new_key = "test1"
         for key, _ in default_keys.items():
-            loss_fn.set_keys(**{key: new_key})
-            assert getattr(loss_fn.tensor_keys, key) == new_key
+            test_fn.set_keys(**{key: new_key})
+            assert getattr(test_fn.tensor_keys, key) == new_key
 
-        loss_fn = self._construct_loss(loss_module)
-        loss_fn.set_keys(**{key: new_key for key, _ in default_keys.items()})
+        test_fn = deepcopy(loss_fn)
+        test_fn.set_keys(**{key: new_key for key, _ in default_keys.items()})
 
         for key, _ in default_keys.items():
-            assert getattr(loss_fn.tensor_keys, key) == new_key
+            assert getattr(test_fn.tensor_keys, key) == new_key
 
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_tensordict_deprecated_ctor(self, loss_module):
-        """Test that a warning is raised if a deprecated tensordict key is set via the ctor."""
-        try:
-            dep_keys = self.DEPRECATED_CTOR_KEYS[loss_module]
-        except KeyError:
-            return
+    def set_advantage_keys_through_loss_test(self, loss_fn, loss_advantage_key_mapping):
+        test_fn = deepcopy(loss_fn)
 
-        default_keys = self.DEFAULT_KEYS[loss_module]
+        key_mapping = loss_advantage_key_mapping
+        for loss_key, advantage_key in key_mapping.items():
+            test_fn.set_keys(**{loss_key: "test1"})
+            assert getattr(test_fn.value_estimator, advantage_key) == "test1"
 
-        for key in dep_keys:
-            new_key = "test3"
-            with pytest.deprecated_call():
-                loss_fn = self._construct_loss(loss_module, **{key: new_key})
-                assert getattr(loss_fn.tensor_keys, key) == new_key
-
-                for def_key, def_value in default_keys.items():
-                    if def_key != key:
-                        assert getattr(loss_fn.tensor_keys, def_key) == def_value
-
-    @pytest.mark.parametrize("loss_module", LOSS_MODULES)
-    def test_set_keys_advantage(self, loss_module):
-        if loss_module in self.LOSS_ADVANTAGE_KEY_MAPPING:
-            loss_fn = self._construct_loss(loss_module)
-            loss_fn.make_value_estimator()
-            key_mapping = self.LOSS_ADVANTAGE_KEY_MAPPING[loss_module]
-            for loss_key, advantage_key in key_mapping.items():
-                loss_fn.set_keys(**{loss_key: "test1"})
-                assert getattr(loss_fn.value_estimator, advantage_key) == "test1"
+    # TODO test
+    # loss = Loss(...)
+    # loss.set_keys()
+    # loss.make_value_estimator()
+    #
+    # vs
+    #
+    # loss = Loss(...)
+    # loss.make_value_estimator()
+    # loss.set_keys()
 
 
-class TestDQN:
+class TestDQN(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(
@@ -978,6 +470,20 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    def test_dqn_tensordict_keys(self):
+        torch.manual_seed(self.seed)
+        action_spec_type = "one_hot"
+        actor = self._create_mock_actor(action_spec_type=action_spec_type)
+        loss_fn = DQNLoss(actor)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+        }
+
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_devices())
@@ -1031,8 +537,30 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    def test_distributional_dqn_tensordict_keys(self):
+        torch.manual_seed(self.seed)
+        action_spec_type = "one_hot"
+        atoms = 2
+        gamma = 0.9
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type, atoms=atoms
+        )
 
-class TestDDPG:
+        loss_fn = DistributionalDQNLoss(actor, gamma=gamma)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+            "reward_key": "reward",
+            "done_key": "done",
+            "steps_to_next_obs_key": "steps_to_next_obs",
+        }
+
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+
+class TestDDPG(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -1269,8 +797,32 @@ class TestDDPG:
         for p in parameters:
             assert p.grad.norm() > 0.0
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_ddpg_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+        )
 
-class TestTD3:
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "state_action_value_key": "state_action_value",
+            "priority_key": "td_error",
+        }
+        key_mapping = {"state_action_value_key": "value_key"}
+
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
+
+class TestTD3(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -1543,9 +1095,33 @@ class TestTD3:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_td3_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        td = self._create_mock_data_td3()
+        loss_fn = TD3Loss(
+            actor,
+            value,
+        )
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+        }
+        key_mapping = {"state_action_value_key": "value_key"}
+
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
 
 @pytest.mark.parametrize("version", [1, 2])
-class TestSAC:
+class TestSAC(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -1958,8 +1534,45 @@ class TestSAC:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_sac_tensordict_keys(self, td_est, version):
+        td = self._create_mock_data_sac()
 
-class TestDiscreteSAC:
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        if version == 1:
+            value = self._create_mock_value()
+        else:
+            value = None
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=2,
+            loss_function="l2",
+        )
+
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+            "sample_log_prob_key": "sample_log_prob",
+            "log_prob_key": "_log_prob",
+        }
+        key_mapping = {"value_key": "value_key"}
+
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
+
+class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -2293,11 +1906,37 @@ class TestDiscreteSAC:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_discrete_sac_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            loss_function="l2",
+        )
+
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "action_key": "action",
+        }
+        key_mapping = {"value_key": "value_key"}
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
 
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
-class TestREDQ:
+class TestREDQ(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -2767,8 +2406,34 @@ class TestREDQ:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_redq_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
 
-class TestPPO:
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+        )
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "action_key": "action",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "state_action_value_key": "state_action_value",
+        }
+        key_mapping = {"value_key": "value_key"}
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
+
+class TestPPO(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -3209,6 +2874,39 @@ class TestPPO:
             param.grad = None
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize(
+        "td_est",
+        [
+            ValueEstimators.TD1,
+            ValueEstimators.TD0,
+            ValueEstimators.GAE,
+            ValueEstimators.TDLambda,
+        ],
+    )
+    def test_ppo_tensordict_keys(self, loss_class, td_est):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "action_key": "action",
+        }
+        key_mapping = {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        }
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("device", get_available_devices())
     def test_ppo_tensordict_keys_run(self, loss_class, device):
         """Test PPO loss module with non-default rensordict keys."""
@@ -3282,7 +2980,7 @@ class TestPPO:
         actor.zero_grad()
 
 
-class TestA2C:
+class TestA2C(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -3495,6 +3193,37 @@ class TestA2C:
         for param in params:
             param.grad = None
 
+    @pytest.mark.parametrize(
+        "td_est",
+        [
+            ValueEstimators.TD1,
+            ValueEstimators.TD0,
+            ValueEstimators.GAE,
+            ValueEstimators.TDLambda,
+        ],
+    )
+    def test_a2c_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "action_key": "action",
+        }
+        key_mapping = {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        }
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_tensordict_keys_run(self, device):
         """Test A2C loss module with non-default tensordict keys."""
@@ -3558,7 +3287,7 @@ class TestA2C:
         loss_fn.reset()
 
 
-class TestReinforce:
+class TestReinforce(LossModuleTestBase):
     @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
     @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda", None])
@@ -3653,9 +3382,53 @@ class TestReinforce:
                 allow_unused=False,
             )
 
+    @pytest.mark.parametrize(
+        "td_est",
+        [
+            ValueEstimators.TD1,
+            ValueEstimators.TD0,
+            ValueEstimators.GAE,
+            ValueEstimators.TDLambda,
+        ],
+    )
+    def test_reinforce_tensordict_keys(self, td_est):
+        n_obs = 3
+        n_act = 5
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        actor_net = ProbabilisticActor(
+            module,
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            in_keys=["loc", "scale"],
+            spec=UnboundedContinuousTensorSpec(n_act),
+        )
+
+        loss_fn = ReinforceLoss(
+            actor_net,
+            critic=value_net,
+        )
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+        }
+        key_mapping = {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        }
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
 
 @pytest.mark.parametrize("device", get_available_devices())
-class TestDreamer:
+class TestDreamer(LossModuleTestBase):
     def _create_world_model_data(
         self, batch_size, temporal_length, rssm_hidden_dim, state_dim
     ):
@@ -4050,8 +3823,58 @@ class TestDreamer:
             raise ValueError("Gradients are zero")
         loss_module.zero_grad()
 
+    def test_dreamer_model_tensordict_keys(self, device):
+        world_model = self._create_world_model_model(10, 5)
+        loss_fn = DreamerModelLoss(world_model)
 
-class TestIQL:
+        default_keys = {
+            "reward_key": "reward",
+            "true_reward_key": "true_reward",
+            "prior_mean_key": "prior_mean",
+            "prior_std_key": "prior_std",
+            "posterior_mean_key": "posterior_mean",
+            "posterior_std_key": "posterior_std",
+            "pixels_key": "pixels",
+            "reco_pixels_key": "reco_pixels",
+        }
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_dreamer_actor_tensordict_keys(self, td_est, device):
+        mb_env = self._create_mb_env(10, 5)
+        actor_model = self._create_actor_model(10, 5)
+        value_model = self._create_value_model(10, 5)
+        loss_fn = DreamerActorLoss(
+            actor_model,
+            value_model,
+            mb_env,
+        )
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "belief_key": "belief",
+            "reward_key": "reward",
+            "value_key": "state_value",
+            "done_key": "done",
+        }
+        key_mapping = {"value_key": "value_key"}
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
+
+    def test_dreamer_value_tensordict_keys(self, device):
+        value_model = self._create_value_model(10, 5)
+        loss_fn = DreamerValueLoss(value_model)
+
+        default_keys = {
+            "value_key": "state_value",
+        }
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+
+class TestIQL(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -4370,6 +4193,34 @@ class TestIQL:
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_iql_tensordict_keys(self, td_est):
+        actor = self._create_mock_actor()
+        qvalue = self._create_mock_qvalue()
+        value = self._create_mock_value()
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+        )
+        loss_fn.make_value_estimator(td_est)
+
+        default_keys = {
+            "priority_key": "td_error",
+            "log_prob_key": "_log_prob",
+            "action_key": "action",
+            "state_action_value_key": "state_action_value",
+            "value_key": "state_value",
+        }
+        key_mapping = {"value_key": "value_key"}
+        self.tensordict_keys_test(
+            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+        )
 
 
 def test_hold_out():
