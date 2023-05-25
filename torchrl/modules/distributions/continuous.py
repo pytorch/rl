@@ -4,12 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 from numbers import Number
-from typing import Dict, Optional, Sequence, Tuple, Union, Any
+from typing import  Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
+from torchrl._torchrl import safetanh
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
@@ -19,7 +20,6 @@ from torchrl.modules.distributions.utils import (
     FasterTransformedDistribution,
 )
 from torchrl.modules.utils import mappings
-from torchrl._torchrl import safetanh
 
 __all__ = [
     "NormalParamWrapper",
@@ -87,6 +87,7 @@ class IndependentNormal(D.Independent):
     @property
     def mode(self):
         return self.base_dist.mean
+
 
 class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
