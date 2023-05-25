@@ -117,7 +117,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_network: TensorDictModule,
         differentiable: bool = False,
         tensor_keys: Dict[str, Union[str, Tuple]] = None,
-        # TODO make deprecated
         skip_existing: Optional[bool] = None,
         advantage_key: Union[str, Tuple] = None,
         value_target_key: Union[str, Tuple] = None,
@@ -168,7 +167,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         try:
             self.in_keys = (
                 self.value_network.in_keys
-                + [("next", self.tensor_keys.reward_key), ("next", self.tensor_keys_done_key)]
+                + [("next", self.tensor_keys.reward_key), ("next", self.tensor_keys.done_key)]
                 + [("next", in_key) for in_key in self.value_network.in_keys]
             )
         except AttributeError:
