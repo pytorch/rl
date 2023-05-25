@@ -14,8 +14,8 @@ class SafeTanh : public Function<SafeTanh> {
  public:
   static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input) {
     auto out = torch::tanh(input);
-    out = out.clamp(-0.999999, 0.999999);
     ctx->save_for_backward({out});
+    out = out.clamp(-0.999999, 0.999999);
     return out;
   }
 
