@@ -185,7 +185,7 @@ class LossModuleTestBase:
         key_mapping = loss_advantage_key_mapping
         for loss_key, advantage_key in key_mapping.items():
             test_fn.set_keys(**{loss_key: "test1"})
-            assert getattr(test_fn.value_estimator, advantage_key) == "test1"
+            assert getattr(test_fn.value_estimator.tensor_keys, advantage_key) == "test1"
 
     # TODO test
     # loss = Loss(...)
@@ -2597,23 +2597,35 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
+    @pytest.mark.parametrize("tensor_keys", [None, {key: value + '_test' for key, value in PPOLoss._AcceptedKeys.__dict__.items() if key.endswith('_key')}])
+    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est, tensor_keys):
         torch.manual_seed(self.seed)
-        td = self._create_seq_mock_data_ppo(device=device)
+        if tensor_keys is None:
+            td = self._create_seq_mock_data_ppo(device=device)
+        else:
+            td = self._create_seq_mock_data_ppo(device=device, sample_log_prob_key=tensor_keys['sample_log_prob_key'], action_key=tensor_keys['action_key'])
 
         actor = self._create_mock_actor(device=device)
-        value = self._create_mock_value(device=device)
+        if tensor_keys is not None:
+            value = self._create_mock_value(device=device, out_keys=[tensor_keys['value_key']])
+        else:
+            value = self._create_mock_value(device=device)
+
+        if tensor_keys is not None:
+            adv_key = {key: value for key, value in tensor_keys.items() if key in GAE._AcceptedKeys.__dict__}
+        else:
+            adv_key = None
         if advantage == "gae":
             advantage = GAE(
-                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode, tensor_keys=adv_key
             )
         elif advantage == "td":
             advantage = TD1Estimator(
-                gamma=0.9, value_network=value, differentiable=gradient_mode
+                gamma=0.9, value_network=value, differentiable=gradient_mode, tensor_keys=adv_key
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimator(
-                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+                gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode, tensor_keys=adv_key
             )
         elif advantage is None:
             pass
@@ -2621,6 +2633,8 @@ class TestPPO(LossModuleTestBase):
             raise NotImplementedError
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        if tensor_keys is not None:
+            loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
             advantage(td)
         else:
@@ -2628,6 +2642,7 @@ class TestPPO(LossModuleTestBase):
                 loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
+
         loss_critic = loss["loss_critic"]
         loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
         loss_critic.backward(retain_graph=True)
@@ -2923,7 +2938,6 @@ class TestPPO(LossModuleTestBase):
             sample_log_prob_key=sample_log_prob_key,
             action_key=action_key,
         )
-
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device, out_keys=[value_key])
 
@@ -2932,9 +2946,11 @@ class TestPPO(LossModuleTestBase):
             lmbda=0.9,
             value_network=value,
             differentiable=gradient_mode,
-            advantage_key=advantage_key,
-            value_target_key=value_target_key,
-            value_key=value_key,
+            tensor_keys = dict(
+                advantage_key=advantage_key,
+                value_target_key=value_target_key,
+                value_key=value_key,
+            )
         )
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")

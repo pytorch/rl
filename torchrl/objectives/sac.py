@@ -217,10 +217,13 @@ class SACLoss(LossModule):
 
     def set_keys(self, **kwargs) -> None:
         """TODO"""
-        for key, _ in kwargs.items():
+        for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dict__:
                 raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
+            if value is not None:
+                setattr(self.tensor_keys, key, value)
+            else:
+                setattr(self.tensor_keys, key, self.default_keys.key)
 
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
@@ -243,19 +246,22 @@ class SACLoss(LossModule):
         value_key = self.tensor_keys.value_key
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
+
+        tensor_keys = {
+            "value_key": self.tensor_keys.value_key,
+            "value_target_key": "value_target"
+        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -265,8 +271,7 @@ class SACLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -432,7 +437,7 @@ class SACLoss(LossModule):
                 next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
             next_state_value = state_action_value - _alpha * next_sample_log_prob
             next_state_value = next_state_value.min(0)[0]
-            tensordict.set(("next", self.value_estimator.value_key), next_state_value)
+            tensordict.set(("next", self.value_estimator.tensor_keys.value_key), next_state_value)
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
@@ -748,7 +753,7 @@ class DiscreteSACLoss(LossModule):
             * (next_state_action_value_qvalue.min(0)[0] - self.alpha * logp_pi[1])
         ).sum(dim=-1, keepdim=True)
 
-        tensordict_select.set(("next", self.value_estimator.value_key), pred_next_val)
+        tensordict_select.set(("next", self.value_estimator.tensor_keys.value_key), pred_next_val)
         target_value = self.value_estimator.value_estimate(tensordict_select).squeeze(
             -1
         )
@@ -822,20 +827,21 @@ class DiscreteSACLoss(LossModule):
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
-        value_key = self.tensor_keys.value_key
+        tensor_keys = {
+            "value_key": self.tensor_keys.value_key,
+            "value_target_key": "value_target"
+        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -845,8 +851,7 @@ class DiscreteSACLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
