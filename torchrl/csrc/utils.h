@@ -10,6 +10,7 @@
 
 torch::Tensor safetanh(torch::Tensor input) {
   auto out = torch::tanh(input);
+  torch::NoGradGuard no_grad;
   auto data = out.detach();
   data.clamp_(-0.999999, 0.999999);
   return out;

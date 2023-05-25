@@ -319,7 +319,7 @@ class TanhNormal(FasterTransformedDistribution):
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
         event_dims: int = 1,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
