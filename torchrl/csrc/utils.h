@@ -10,9 +10,7 @@
 
 torch::Tensor safetanh(torch::Tensor input) {
   auto out = torch::tanh(input);
-  auto data = out.data_ptr<float>();
-  for (int64_t i = 0; i < out.numel(); ++i) {
-    data[i] = std::clamp(data[i], -0.999999f, 0.999999f);
-  }
+  auto data = out.detach();
+  data.clamp_(-0.999999, 0.999999);
   return out;
 }
