@@ -229,29 +229,15 @@ class DQNLoss(LossModule):
 
         """
         device = self.device if self.device is not None else tensordict.device
-        tensordict = tensordict.to(device)
-        if tensordict.device != device:
-            raise RuntimeError(
-                f"device {device} was expected for "
-                f"{tensordict.__class__.__name__} but {tensordict.device} was found"
-            )
+        tddevice = tensordict.to(device)
 
-        for k, t in tensordict.items():
-            if t.device != device:
-                raise RuntimeError(
-                    f"found key value pair {k}-{t.shape} "
-                    f"with device {t.device} when {device} was required"
-                )
-
-        td_copy = tensordict.clone()
-        if td_copy.device != tensordict.device:
-            raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
+        td_copy = tddevice.clone(False)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
 
-        action = tensordict.get("action")
+        action = tddevice.get("action")
         pred_val = td_copy.get("action_value")
 
         if self.action_space == "categorical":
@@ -264,13 +250,13 @@ class DQNLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1)
 
         target_value = self.value_estimator.value_estimate(
-            tensordict.clone(False), target_params=self.target_value_network_params
+            tddevice.clone(False), target_params=self.target_value_network_params
         ).squeeze(-1)
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if tensordict.device is not None:
-            priority_tensor = priority_tensor.to(tensordict.device)
+        if tddevice.device is not None:
+            priority_tensor = priority_tensor.to(tddevice.device)
 
         tensordict.set(
             self.priority_key,
