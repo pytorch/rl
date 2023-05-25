@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import warnings
+from dataclasses import dataclass
 from numbers import Number
 from typing import Tuple, Union
 
@@ -13,6 +14,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import (
@@ -78,8 +80,18 @@ class REDQLoss_deprecated(LossModule):
             ``"td_error"``.
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        priority_key: NestedKey = "td_error"
+
+    default_keys = _AcceptedKeys()
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._tensor_keys = cls._AcceptedKeys()
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -102,7 +114,6 @@ class REDQLoss_deprecated(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
-        self.set_keys()
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -124,7 +135,6 @@ class REDQLoss_deprecated(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:
@@ -167,11 +177,16 @@ class REDQLoss_deprecated(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def set_keys(
-        self,
-        priority_key="td_error",
-    ):
-        self.priority_key = priority_key
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def set_keys(self, **kwargs) -> None:
+        """TODO"""
+        for key, _ in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+        self._tensor_keys = self._AcceptedKeys(**kwargs)
 
     @property
     def alpha(self):

@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import warnings
 from copy import deepcopy
-
+from dataclasses import dataclass
 from typing import Tuple
 
 import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
@@ -39,7 +40,20 @@ class DDPGLoss(LossModule):
             data collection. Default is ``True``.
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        # advantage_key: NestedKey = "advantage"
+        # value_target_key: NestedKey = "value_target"
+        state_action_value_key: NestedKey = "state_action_value"
+        priority_key: NestedKey = "td_error"
+
+    default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._tensor_keys = cls._AcceptedKeys()
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -74,6 +88,7 @@ class DDPGLoss(LossModule):
             create_target_params=self.delay_value,
             compare_against=list(actor_network.parameters()),
         )
+        print(f"{self.value_network = }")
         self.actor_critic.module[0] = self.actor_network
         self.actor_critic.module[1] = self.value_network
 
@@ -85,17 +100,20 @@ class DDPGLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def set_keys(
-        self,
-        state_action_value_key="state_action_value",
-        priority_key="td_error",
-    ):
-        self.state_action_value_key = state_action_value_key
-        self.priority_key = priority_key
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def set_keys(self, **kwargs) -> None:
+        """TODO"""
+        for key, _ in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+        self._tensor_keys = self._AcceptedKeys(**kwargs)
 
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=state_action_value_key,
+                value_key=self._tensor_keys.state_action_value_key,
             )
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
@@ -120,7 +138,7 @@ class DDPGLoss(LossModule):
         if input_tensordict.device is not None:
             td_error = td_error.to(input_tensordict.device)
         input_tensordict.set(
-            self.priority_key,
+            self.tensor_keys.priority_key,
             td_error,
             inplace=True,
         )
@@ -151,7 +169,7 @@ class DDPGLoss(LossModule):
                 td_copy,
                 params=params,
             )
-        return -td_copy.get(self.state_action_value_key)
+        return -td_copy.get(self.tensor_keys.state_action_value_key)
 
     def _loss_value(
         self,
@@ -163,7 +181,7 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get(self.state_action_value_key).squeeze(-1)
+        pred_val = td_copy.get(self.tensor_keys.state_action_value_key).squeeze(-1)
 
         target_params = TensorDict(
             {
@@ -194,7 +212,7 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.state_action_value_key
+        value_key = self.tensor_keys.state_action_value_key
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.actor_critic, value_key=value_key, **hp

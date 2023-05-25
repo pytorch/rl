@@ -149,100 +149,100 @@ class TestLossModuleBase:
             "sample_log_prob_key": "sample_log_prob",
             "action_key": "action",
         },
-        # ClipPPOLoss: {
-        #    "advantage_key": "advantage",
-        #    "value_target_key": "value_target",
-        #    "value_key": "state_value",
-        #    "sample_log_prob_key": "sample_log_prob",
-        #    "action_key": "action",
-        # },
-        # KLPENPPOLoss: {
-        #    "advantage_key": "advantage",
-        #    "value_target_key": "value_target",
-        #    "value_key": "state_value",
-        #    "sample_log_prob_key": "sample_log_prob",
-        #    "action_key": "action",
-        # },
-        # A2CLoss: {
-        #    "advantage_key": "advantage",
-        #    "value_target_key": "value_target",
-        #    "value_key": "state_value",
-        #    "action_key": "action",
-        # },
-        # ReinforceLoss: {
-        #    "advantage_key": "advantage",
-        #    "value_target_key": "value_target",
-        #    "value_key": "state_value",
-        #    "sample_log_prob_key": "sample_log_prob",
-        # },
-        # DDPGLoss: {
-        #    "state_action_value_key": "state_action_value",
-        #    "priority_key": "td_error",
-        # },
-        # DQNLoss: {
-        #    "priority_key": "td_error",
-        #    "action_value_key": "action_value",
-        #    "action_key": "action",
-        # },
-        # DistributionalDQNLoss: {
-        #    "priority_key": "td_error",
-        #    "action_value_key": "action_value",
-        #    "action_key": "action",
-        #    "reward_key": "reward",
-        #    "done_key": "done",
-        #    "steps_to_next_obs_key": "steps_to_next_obs",
-        # },
-        # SACLoss: {
-        #    "priority_key": "td_error",
-        #    "value_key": "state_value",
-        #    "state_action_value_key": "state_action_value",
-        #    "action_key": "action",
-        #    "sample_log_prob_key": "sample_log_prob",
-        #    "log_prob_key": "_log_prob",
-        # },
-        # DiscreteSACLoss: {
-        #    "priority_key": "td_error",
-        #    "value_key": "state_value",
-        #    "action_key": "action",
-        # },
-        # TD3Loss: {
-        #    "priority_key": "td_error",
-        #    "state_action_value_key": "state_action_value",
-        #    "action_key": "action",
-        # },
-        # IQLLoss: {
-        #    "priority_key": "td_error",
-        #    "log_prob_key": "_log_prob",
-        #    "action_key": "action",
-        #    "state_action_value_key": "state_action_value",
-        #    "value_key": "state_value",
-        # },
-        # REDQLoss: {
-        #    "priority_key": "td_error",
-        #    "action_key": "action",
-        #    "value_key": "state_value",
-        #    "sample_log_prob_key": "sample_log_prob",
-        #    "state_action_value_key": "state_action_value",
-        # },
-        # DreamerModelLoss: {
-        #    "reward_key": "reward",
-        #    "true_reward_key": "true_reward",
-        #    "prior_mean_key": "prior_mean",
-        #    "prior_std_key": "prior_std",
-        #    "posterior_mean_key": "posterior_mean",
-        #    "posterior_std_key": "posterior_std",
-        #    "pixels_key": "pixels",
-        #    "reco_pixels_key": "reco_pixels",
-        # },
-        # DreamerActorLoss: {
-        #    "belief_key": "belief",
-        #    "reward_key": "reward",
-        #    "value_key": "state_value",
-        #    "done_key": "done",
-        # },
-        # DreamerValueLoss: {
-        #    "value_key": "state_value",
-        # },
+        ClipPPOLoss: {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "action_key": "action",
+        },
+        KLPENPPOLoss: {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "action_key": "action",
+        },
+        A2CLoss: {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "action_key": "action",
+        },
+        ReinforceLoss: {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+        },
+        DDPGLoss: {
+            "state_action_value_key": "state_action_value",
+            "priority_key": "td_error",
+        },
+        DQNLoss: {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+        },
+        DistributionalDQNLoss: {
+            "priority_key": "td_error",
+            "action_value_key": "action_value",
+            "action_key": "action",
+            "reward_key": "reward",
+            "done_key": "done",
+            "steps_to_next_obs_key": "steps_to_next_obs",
+        },
+        SACLoss: {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+            "sample_log_prob_key": "sample_log_prob",
+            "log_prob_key": "_log_prob",
+        },
+        DiscreteSACLoss: {
+            "priority_key": "td_error",
+            "value_key": "state_value",
+            "action_key": "action",
+        },
+        TD3Loss: {
+            "priority_key": "td_error",
+            "state_action_value_key": "state_action_value",
+            "action_key": "action",
+        },
+        IQLLoss: {
+            "priority_key": "td_error",
+            "log_prob_key": "_log_prob",
+            "action_key": "action",
+            "state_action_value_key": "state_action_value",
+            "value_key": "state_value",
+        },
+        REDQLoss: {
+            "priority_key": "td_error",
+            "action_key": "action",
+            "value_key": "state_value",
+            "sample_log_prob_key": "sample_log_prob",
+            "state_action_value_key": "state_action_value",
+        },
+        DreamerModelLoss: {
+            "reward_key": "reward",
+            "true_reward_key": "true_reward",
+            "prior_mean_key": "prior_mean",
+            "prior_std_key": "prior_std",
+            "posterior_mean_key": "posterior_mean",
+            "posterior_std_key": "posterior_std",
+            "pixels_key": "pixels",
+            "reco_pixels_key": "reco_pixels",
+        },
+        DreamerActorLoss: {
+            "belief_key": "belief",
+            "reward_key": "reward",
+            "value_key": "state_value",
+            "done_key": "done",
+        },
+        DreamerValueLoss: {
+            "value_key": "state_value",
+        },
     }
     # loss modules which will be tested for setting tensordict keys
     LOSS_MODULES = DEFAULT_KEYS.keys()
@@ -262,7 +262,39 @@ class TestLossModuleBase:
         TD3Loss: ["priority_key"],
     }
 
-    LOSS_ADVANTAGE_KEY_MAPPING = {}
+    LOSS_ADVANTAGE_KEY_MAPPING = {
+        PPOLoss: {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        },
+        ClipPPOLoss: {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        },
+        KLPENPPOLoss: {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        },
+        A2CLoss: {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        },
+        DDPGLoss: {"state_action_value_key": "value_key"},
+        DreamerActorLoss: {"value_key": "value_key"},
+        ReinforceLoss: {
+            "advantage_key": "advantage_key",
+            "value_target_key": "value_target_key",
+            "value_key": "value_key",
+        },
+        SACLoss: {"value_key": "value_key"},
+        DiscreteSACLoss: {"value_key": "value_key"},
+        IQLLoss: {"value_key": "value_key"},
+        REDQLoss: {"value_key": "value_key"},
+    }
 
     def _create_mock_actor(
         self, action_spec_type="bounded", batch=2, obs_dim=3, action_dim=4
@@ -323,6 +355,25 @@ class TestLossModuleBase:
             out_keys=out_keys,
         )
         return value
+
+    def _create_mock_value_w_action(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Actor
+        class ValueClass(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(obs_dim + action_dim, 1)
+
+            def forward(self, obs, act):
+                return self.linear(torch.cat([obs, act], -1))
+
+        module = ValueClass()
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation", "action"],
+        )
+        return value.to(device)
 
     def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4):
         class ValueClass(nn.Module):
@@ -533,12 +584,16 @@ class TestLossModuleBase:
             ClipPPOLoss,
             KLPENPPOLoss,
             A2CLoss,
-            DDPGLoss,
             TD3Loss,
             REDQLoss,
         ]:
             actor = self._create_mock_actor()
             value = self._create_mock_value()
+            return loss_module(actor, value, **kwargs)
+        elif loss_module in [DDPGLoss]:
+            actor = self._create_mock_actor()
+            value = self._create_mock_value_w_action()
+            print(f"{value = }")
             return loss_module(actor, value, **kwargs)
         elif loss_module in [DQNLoss]:
             actor = self._create_mock_qv_actor()
@@ -643,19 +698,13 @@ class TestLossModuleBase:
 
     @pytest.mark.parametrize("loss_module", LOSS_MODULES)
     def test_set_keys_advantage(self, loss_module):
-        default_keys = self.DEFAULT_KEYS[loss_module]
-
-        loss_fn = self._construct_loss(loss_module)
-        loss_fn.make_value_estimator()
-
-        for advantage_key in ["advantage_key", "value_target_key", "value_key"]:
-            if loss_module in self.LOSS_ADVANTAGE_KEY_MAPPING:
-                loss_key = self.LOSS_ADVANTAGE_KEY_MAPPING[loss_module][advantage_key]
-            else:
-                loss_key = advantage_key
-
-            loss_fn.set_keys(**{loss_key: "test1"})
-            assert getattr(loss_fn.value_estimator, advantage_key) == "test1"
+        if loss_module in self.LOSS_ADVANTAGE_KEY_MAPPING:
+            loss_fn = self._construct_loss(loss_module)
+            loss_fn.make_value_estimator()
+            key_mapping = self.LOSS_ADVANTAGE_KEY_MAPPING[loss_module]
+            for loss_key, advantage_key in key_mapping.items():
+                loss_fn.set_keys(**{loss_key: "test1"})
+                assert getattr(loss_fn.value_estimator, advantage_key) == "test1"
 
 
 class TestDQN:
@@ -855,7 +904,7 @@ class TestDQN:
             loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -896,7 +945,7 @@ class TestDQN:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             loss = loss_fn(td)
@@ -958,7 +1007,7 @@ class TestDQN:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -1433,7 +1482,7 @@ class TestTD3:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -1660,7 +1709,7 @@ class TestSAC:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -1817,7 +1866,7 @@ class TestSAC:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2067,7 +2116,7 @@ class TestDiscreteSAC:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -2175,7 +2224,7 @@ class TestDiscreteSAC:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2410,7 +2459,7 @@ class TestREDQ:
             loss = loss_fn(td)
 
         # check td is left untouched
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -2535,7 +2584,7 @@ class TestREDQ:
             loss_fn.zero_grad()
 
         # check td is left untouched
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
@@ -2658,7 +2707,7 @@ class TestREDQ:
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -3347,7 +3396,7 @@ class TestA2C:
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
-        td = td.exclude(loss_fn.value_target_key)
+        td = td.exclude(loss_fn.tensor_keys.value_target_key)
         if advantage is not None:
             advantage(td)
         elif td_est is not None:
@@ -4150,7 +4199,7 @@ class TestIQL:
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority_key in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -4271,7 +4320,7 @@ class TestIQL:
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action

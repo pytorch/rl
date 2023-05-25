@@ -10,6 +10,7 @@ from typing import Tuple
 import torch
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.utils import (
@@ -120,14 +121,13 @@ class PPOLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        advantage_key: str = "advantage"
-        value_target_key: str = "value_target"
-        value_key: str = "state_value"
-        sample_log_prob_key: str = "sample_log_prob"
-        action_key: str = "action"
+        advantage_key: NestedKey = "advantage"
+        value_target_key: NestedKey = "value_target"
+        value_key: NestedKey = "state_value"
+        sample_log_prob_key: NestedKey = "sample_log_prob"
+        action_key: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
-
     default_value_estimator = ValueEstimators.GAE
 
     @classmethod
@@ -187,10 +187,11 @@ class PPOLoss(LossModule):
             self.gamma = gamma
 
     @property
-    def tensor_keys(self):
+    def tensor_keys(self) -> _AcceptedKeys:
         return self._tensor_keys
 
-    def set_keys(self, **kwargs):
+    def set_keys(self, **kwargs) -> None:
+        """TODO"""
         for key, _ in kwargs.items():
             if key not in self._AcceptedKeys.__dict__:
                 raise ValueError(f"{key} it not an accepted tensordict key")
@@ -313,7 +314,6 @@ class PPOLoss(LossModule):
             "value_key": self.tensor_keys.value_key,
             "value_target_key": self.tensor_keys.value_target_key,
         }
-
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(**ve_args, **hp)
         elif value_type == ValueEstimators.TD0:

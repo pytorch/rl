@@ -100,6 +100,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         *,
         value_network: TensorDictModule,
         differentiable: bool = False,
+        # TODO make deprecated
         advantage_key: Union[str, Tuple] = "advantage",
         value_target_key: Union[str, Tuple] = "value_target",
         value_key: Union[str, Tuple] = "state_value",
@@ -140,6 +141,15 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_target_key="value_target",
         value_key="state_value",
     ):
+        """Change the tensordict keys where data is expected to be written.
+
+        advantage_key (str, optional): The input tensordict key where the advantage is
+            expected to be written. Defaults to ``"advantage"``.
+        value_target_key (str, optional): The input tensordict key where the target state
+            value is expected to be written. Defaults to ``"value_target"``.
+        value_key (str, optional): The input tensordict key where the state
+            value is expected to be written. Defaults to ``"state_value"``.
+        """
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.value_key = value_key

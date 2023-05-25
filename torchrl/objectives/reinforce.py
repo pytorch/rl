@@ -3,12 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
 
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -67,7 +69,20 @@ class ReinforceLoss(LossModule):
 
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        advantage_key: NestedKey = "advantage"
+        value_target_key: NestedKey = "value_target"
+        value_key: NestedKey = "state_value"
+        sample_log_prob_key: NestedKey = "sample_log_prob"
+
+    default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
+
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._tensor_keys = cls._AcceptedKeys()
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -81,7 +96,6 @@ class ReinforceLoss(LossModule):
         value_target_key: str = None,
     ) -> None:
         super().__init__()
-        self.set_keys()
         self._set_deprecated_ctor_keys(
             advantage_key=advantage_key, value_target_key=value_target_key
         )
@@ -108,32 +122,33 @@ class ReinforceLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    def set_keys(
-        self,
-        advantage_key="advantage",
-        value_target_key="value_target",
-        value_key="state_value",
-        sample_log_prob_key="sample_log_prob",
-    ):
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
-        self.value_key = value_key
-        self.sample_log_prob_key = sample_log_prob_key
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def set_keys(self, **kwargs) -> None:
+        """TODO"""
+        for key, _ in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+        self._tensor_keys = self._AcceptedKeys(**kwargs)
 
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=value_key,
+                advantage_key=self._tensor_keys.advantage_key,
+                value_target_key=self._tensor_keys.value_target_key,
+                value_key=self._tensor_keys.value_key,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        advantage = tensordict.get(self.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage_key)
 
         # compute log-prob
         tensordict = self.actor_network(
@@ -141,7 +156,7 @@ class ReinforceLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = tensordict.get(self.sample_log_prob_key)
+        log_prob = tensordict.get(self.tensor_keys.sample_log_prob_key)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])
@@ -152,12 +167,12 @@ class ReinforceLoss(LossModule):
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         try:
-            target_return = tensordict.get(self.value_target_key)
+            target_return = tensordict.get(self.tensor_keys.value_target_key)
             tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get(self.value_key)
+            ).get(self.tensor_keys.value_key)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -165,7 +180,7 @@ class ReinforceLoss(LossModule):
             )
         except KeyError:
             raise KeyError(
-                f"the key {self.loss_key('value_target_key')} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.loss_key('value_target_key')} was not found in the input tensordict. "
                 f"Make sure you provided the right key and the value_target (i.e. the target "
                 f"return) has been retrieved accordingly. Advantage classes such as GAE, "
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
@@ -181,22 +196,19 @@ class ReinforceLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.value_key
+        ve_args = {
+            "value_network": self.critic,
+            "advantage_key": self.tensor_keys.advantage_key,
+            "value_key": self.tensor_keys.value_key,
+            "value_target_key": self.tensor_keys.value_target_key,
+        }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic, value_key=value_key, **hp
-            )
+            self._value_estimator = TD1Estimator(**ve_args, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic, value_key=value_key, **hp
-            )
+            self._value_estimator = TD0Estimator(**ve_args, **hp)
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(
-                value_network=self.critic, value_key=value_key, **hp
-            )
+            self._value_estimator = GAE(**ve_args, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic, value_key=value_key, **hp
-            )
+            self._value_estimator = TDLambdaEstimator(**ve_args, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
