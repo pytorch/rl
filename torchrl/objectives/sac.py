@@ -102,11 +102,6 @@ class SACLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -211,20 +206,7 @@ class SACLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, value in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-            if value is not None:
-                setattr(self.tensor_keys, key, value)
-            else:
-                setattr(self.tensor_keys, key, self.default_keys.key)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value_key=self._tensor_keys.value_key,
@@ -243,13 +225,12 @@ class SACLoss(LossModule):
             # unreachable
             raise NotImplementedError
 
-        value_key = self.tensor_keys.value_key
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
 
         tensor_keys = {
             "value_key": self.tensor_keys.value_key,
-            "value_target_key": "value_target"
+            "value_target_key": "value_target",
         }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
@@ -437,7 +418,9 @@ class SACLoss(LossModule):
                 next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
             next_state_value = state_action_value - _alpha * next_sample_log_prob
             next_state_value = next_state_value.min(0)[0]
-            tensordict.set(("next", self.value_estimator.tensor_keys.value_key), next_state_value)
+            tensordict.set(
+                ("next", self.value_estimator.tensor_keys.value_key), next_state_value
+            )
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
@@ -559,11 +542,6 @@ class DiscreteSACLoss(LossModule):
     default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -634,27 +612,17 @@ class DiscreteSACLoss(LossModule):
         )
 
     @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
-        if self._value_estimator is not None:
-            self._value_estimator.set_keys(
-                value_key=self._tensor_keys.value_key,
-            )
-
-    @property
     def alpha(self):
         self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value_key=self._tensor_keys.value_key,
+            )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
@@ -753,7 +721,9 @@ class DiscreteSACLoss(LossModule):
             * (next_state_action_value_qvalue.min(0)[0] - self.alpha * logp_pi[1])
         ).sum(dim=-1, keepdim=True)
 
-        tensordict_select.set(("next", self.value_estimator.tensor_keys.value_key), pred_next_val)
+        tensordict_select.set(
+            ("next", self.value_estimator.tensor_keys.value_key), pred_next_val
+        )
         target_value = self.value_estimator.value_estimate(tensordict_select).squeeze(
             -1
         )
@@ -829,7 +799,7 @@ class DiscreteSACLoss(LossModule):
             hp["gamma"] = self.gamma
         tensor_keys = {
             "value_key": self.tensor_keys.value_key,
-            "value_target_key": "value_target"
+            "value_target_key": "value_target",
         }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(

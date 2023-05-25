@@ -5,9 +5,9 @@
 import abc
 import functools
 import warnings
-from functools import wraps
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union, Dict
+from functools import wraps
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from tensordict.nn import (
@@ -65,6 +65,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     should be used instead.
 
     """
+
     @dataclass
     class _AcceptedKeys:
         advantage_key: NestedKey = "advantage"
@@ -129,22 +130,23 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         if advantage_key is not None:
             warnings.warn(
-                f"Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
                 category=DeprecationWarning,
             )
-            self.tensor_keys.advantage_key=advantage_key
+            self.tensor_keys.advantage_key = advantage_key
         if value_target_key is not None:
             warnings.warn(
-                f"Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
                 category=DeprecationWarning,
             )
-            self.tensor_keys.value_target_key=value_target_key
+            self.tensor_keys.value_target_key = value_target_key
         if value_key is not None:
             warnings.warn(
-                f"Setting 'value_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                "Setting 'value_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
                 category=DeprecationWarning,
             )
-            self.tensor_keys.value_key=value_key
+            self.tensor_keys.value_key = value_key
+
         if tensor_keys is not None:
             self.set_keys(**tensor_keys)
 
@@ -167,7 +169,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
         try:
             self.in_keys = (
                 self.value_network.in_keys
-                + [("next", self.tensor_keys.reward_key), ("next", self.tensor_keys.done_key)]
+                + [
+                    ("next", self.tensor_keys.reward_key),
+                    ("next", self.tensor_keys.done_key),
+                ]
                 + [("next", in_key) for in_key in self.value_network.in_keys]
             )
         except AttributeError:
@@ -176,7 +181,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
             pass
 
     def _set_out_keys(self) -> None:
-        self.out_keys = [self.tensor_keys.advantage_key, self.tensor_keys.value_target_key]
+        self.out_keys = [
+            self.tensor_keys.advantage_key,
+            self.tensor_keys.value_target_key,
+        ]
 
     def set_keys(self, **kwargs) -> None:
         """Change the tensordict keys where data is expected to be written.
@@ -290,7 +298,7 @@ class TD0Estimator(ValueEstimatorBase):
             value_target_key=value_target_key,
             value_key=value_key,
             skip_existing=skip_existing,
-            tensor_keys=tensor_keys
+            tensor_keys=tensor_keys,
         )
         try:
             device = next(value_network.parameters()).device
@@ -453,7 +461,7 @@ class TD1Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        tensor_keys = None,
+        tensor_keys=None,
         skip_existing: Optional[bool] = None,
         advantage_key: Union[str, Tuple] = None,
         value_target_key: Union[str, Tuple] = None,

@@ -79,11 +79,6 @@ class A2CLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor: ProbabilisticTensorDictSequential,
@@ -128,17 +123,7 @@ class A2CLoss(LossModule):
             self.gamma = gamma
         self.loss_critic_type = loss_critic_type
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 advantage_key=self._tensor_keys.advantage_key,

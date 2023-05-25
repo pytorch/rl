@@ -92,11 +92,6 @@ class REDQLoss(LossModule):
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_network: TensorDictModule,
@@ -184,17 +179,7 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value_key=self._tensor_keys.value_key,
@@ -379,15 +364,15 @@ class REDQLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.tensor_keys.value_key
+        tensor_keys = {"value_key": self.tensor_keys.value_key}
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
-                value_network=None, value_key=value_key, **hp
+                value_network=None, tensor_keys=tensor_keys, **hp
             )
         elif value_type == ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
-                value_network=None, value_key=value_key, **hp
+                value_network=None, tensor_keys=tensor_keys, **hp
             )
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
@@ -395,7 +380,7 @@ class REDQLoss(LossModule):
             )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                value_network=None, value_key=value_key, **hp
+                value_network=None, tensor_keys=tensor_keys, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")

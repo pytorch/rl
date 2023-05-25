@@ -42,18 +42,11 @@ class DDPGLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        # advantage_key: NestedKey = "advantage"
-        # value_target_key: NestedKey = "value_target"
         state_action_value_key: NestedKey = "state_action_value"
         priority_key: NestedKey = "td_error"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
-
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
 
     def __init__(
         self,
@@ -87,7 +80,6 @@ class DDPGLoss(LossModule):
             create_target_params=self.delay_value,
             compare_against=list(actor_network.parameters()),
         )
-        print(f"{self.value_network = }")
         self.actor_critic.module[0] = self.actor_network
         self.actor_critic.module[1] = self.value_network
 
@@ -99,17 +91,7 @@ class DDPGLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value_key=self._tensor_keys.state_action_value_key,
@@ -211,14 +193,14 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.tensor_keys.state_action_value_key
+        tensor_keys = {"value_key": self.tensor_keys.state_action_value_key}
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
+                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
             )
         elif value_type == ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
+                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
             )
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
@@ -226,7 +208,7 @@ class DDPGLoss(LossModule):
             )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
+                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")

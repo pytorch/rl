@@ -64,11 +64,6 @@ class DreamerModelLoss(LossModule):
 
     default_keys = _AcceptedKeys()
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         world_model: TensorDictModule,
@@ -93,16 +88,8 @@ class DreamerModelLoss(LossModule):
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
@@ -199,11 +186,6 @@ class DreamerActorLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TDLambda
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_model: TensorDictModule,
@@ -228,17 +210,7 @@ class DreamerActorLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value_key=self._tensor_keys.value_key,
@@ -304,20 +276,21 @@ class DreamerActorLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = self.tensor_keys.value_key
+        tensor_keys = {
+            "value_key": self.tensor_keys.value_key,
+            "value_target_key": "value_target",
+        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.GAE:
             if hasattr(self, "lmbda"):
@@ -331,8 +304,7 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -362,11 +334,6 @@ class DreamerValueLoss(LossModule):
 
     default_keys = _AcceptedKeys()
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         value_model: TensorDictModule,
@@ -380,16 +347,8 @@ class DreamerValueLoss(LossModule):
         self.gamma = gamma
         self.discount_loss = discount_loss
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")

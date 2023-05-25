@@ -70,11 +70,6 @@ class IQLLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_network: ProbabilisticActor,
@@ -139,23 +134,13 @@ class IQLLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
         """Loss function for iql expectile value difference."""
         weight = torch.where(diff > 0, expectile, (1 - expectile))
         return weight * (diff**2)
 
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value_key=self._tensor_keys.value_key,
@@ -285,24 +270,25 @@ class IQLLoss(LossModule):
         self.value_type = value_type
         value_net = self.value_network
 
-        value_key = self.tensor_keys.value_key
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
+        tensor_keys = {
+            "value_target_key": "value_target",
+            "value_key": self.tensor_keys.value_key,
+        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -312,8 +298,7 @@ class IQLLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
+                tensor_keys=tensor_keys,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")

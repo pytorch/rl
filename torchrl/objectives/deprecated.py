@@ -88,11 +88,6 @@ class REDQLoss_deprecated(LossModule):
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor_network: TensorDictModule,
@@ -178,23 +173,15 @@ class REDQLoss_deprecated(LossModule):
             self.gamma = gamma
 
     @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
-
-    @property
     def alpha(self):
         # keep alpha is a reasonable range
         self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         loss_actor, sample_log_prob = self._actor_loss(tensordict)

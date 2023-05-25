@@ -130,11 +130,6 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         actor: ProbabilisticTensorDictSequential,
@@ -185,20 +180,7 @@ class PPOLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, value in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-            if value is not None:
-                setattr(self.tensor_keys, key, value)
-            else:
-                setattr(self.tensor_keys, key, self.default_keys.key)
-
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 advantage_key=self._tensor_keys.advantage_key,
@@ -316,13 +298,21 @@ class PPOLoss(LossModule):
             "value_target_key": self.tensor_keys.value_target_key,
         }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.critic, **hp, tensor_keys=tensor_keys)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic, **hp, tensor_keys=tensor_keys
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.critic, **hp, tensor_keys=tensor_keys)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic, **hp, tensor_keys=tensor_keys
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic, **hp, tensor_keys=tensor_keys)
+            self._value_estimator = GAE(
+                value_network=self.critic, **hp, tensor_keys=tensor_keys
+            )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp, tensor_keys=tensor_keys)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic, **hp, tensor_keys=tensor_keys
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 

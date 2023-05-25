@@ -66,11 +66,6 @@ class DQNLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         value_network: Union[QValueActor, nn.Module],
@@ -124,16 +119,8 @@ class DQNLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
@@ -143,21 +130,18 @@ class DQNLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
+        tensor_keys = {
+            "advantage_key": "advantage",
+            "value_target_key": "value_target",
+            "value_key": "chosen_action_value",
+        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=self.value_network,
-                advantage_key="advantage",
-                value_target_key="value_target",
-                value_key="chosen_action_value",
+                **hp, value_network=self.value_network, tensor_keys=tensor_keys
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=self.value_network,
-                advantage_key="advantage",
-                value_target_key="value_target",
-                value_key="chosen_action_value",
+                **hp, value_network=self.value_network, tensor_keys=tensor_keys
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -165,11 +149,7 @@ class DQNLoss(LossModule):
             )
         elif value_type is ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=self.value_network,
-                advantage_key="advantage",
-                value_target_key="value_target",
-                value_key="chosen_action_value",
+                **hp, value_network=self.value_network, tensor_keys=tensor_keys
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
@@ -283,11 +263,6 @@ class DistributionalDQNLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
-
     def __init__(
         self,
         value_network: Union[DistributionalQValueActor, nn.Module],
@@ -313,16 +288,8 @@ class DistributionalDQNLoss(LossModule):
         )
         self.action_space = self.value_network.action_space
 
-    @property
-    def tensor_keys(self) -> _AcceptedKeys:
-        return self._tensor_keys
-
-    def set_keys(self, **kwargs) -> None:
-        """TODO"""
-        for key, _ in kwargs.items():
-            if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
-        self._tensor_keys = self._AcceptedKeys(**kwargs)
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     @staticmethod
     def _log_ps_a_default(action, action_log_softmax, batch_size, atoms):

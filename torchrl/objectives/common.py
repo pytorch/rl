@@ -8,6 +8,7 @@ from __future__ import annotations
 import warnings
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
@@ -60,11 +61,20 @@ class LossModule(nn.Module, ABC):
     gh :class:`torchrl.envs.ExplorationType.MODE`
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        pass
+
     default_value_estimator: ValueEstimators = None
     SEP = "_sep_"
 
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
     def __new__(cls, *args, **kwargs):
         cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        cls._tensor_keys = cls._AcceptedKeys()
         return super().__new__(cls)
 
     def __init__(self):
@@ -74,6 +84,11 @@ class LossModule(nn.Module, ABC):
         self._has_update_associated = False
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
+
+    @abstractmethod
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        """Forward changed tensordit key names to the underying value estimator."""
+        ...
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         """Helper function setting a loss key and creating a warning for using a deprecated argument."""
@@ -85,7 +100,6 @@ class LossModule(nn.Module, ABC):
                 )
                 self.set_keys(**{key: value})
 
-    @abstractmethod
     def set_keys(self, **kwargs) -> None:
         """Specify tensordict key for given argument.
 
@@ -96,7 +110,15 @@ class LossModule(nn.Module, ABC):
             >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
             >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
         """
-        ...
+        for key, value in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+            if value is not None:
+                setattr(self.tensor_keys, key, value)
+            else:
+                setattr(self.tensor_keys, key, self.default_keys.key)
+
+        self._forward_value_estimator_keys(**kwargs)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
