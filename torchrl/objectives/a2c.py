@@ -213,19 +213,26 @@ class A2CLoss(LossModule):
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
-        ve_args = {
-            "value_network": self.critic,
+        tensor_keys = {
             "advantage_key": self.tensor_keys.advantage_key,
             "value_key": self.tensor_keys.value_key,
             "value_target_key": self.tensor_keys.value_target_key,
         }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(**ve_args, **hp)
+            self._value_estimator = TD1Estimator(
+                value_network=self.critic, tensor_keys=tensor_keys, **hp
+            )
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(**ve_args, **hp)
+            self._value_estimator = TD0Estimator(
+                value_network=self.critic, tensor_keys=tensor_keys, **hp
+            )
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(**ve_args, **hp)
+            self._value_estimator = GAE(
+                value_network=self.critic, tensor_keys=tensor_keys, **hp
+            )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(**ve_args, **hp)
+            self._value_estimator = TDLambdaEstimator(
+                value_network=self.critic, tensor_keys=tensor_keys, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
