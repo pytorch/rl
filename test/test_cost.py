@@ -467,7 +467,7 @@ class TestDQN:
         n_obs = 3
         n_action = 4
         action_spec = OneHotDiscreteTensorSpec(n_action)
-        value_network = nn.Linear(n_obs, n_action) # a simple value model
+        value_network = nn.Linear(n_obs, n_action)  # a simple value model
         dqn_loss = DQNLoss(value_network, action_space=action_spec)
         # define data
         observation = torch.randn(n_obs)
@@ -480,15 +480,21 @@ class TestDQN:
             next_observation=next_observation,
             next_reward=next_reward,
             next_done=next_done,
-            action=action)
-        loss_val_td = dqn_loss(
-            TensorDict({'observation': observation,
-            'next_observation': next_observation,
-            'next_reward': next_reward,
-            'next_done': next_done,
-            'action': action}, []).unflatten_keys('_')
+            action=action,
         )
-        torch.testing.assert_close(loss_val_td.get('loss'), loss_val)
+        loss_val_td = dqn_loss(
+            TensorDict(
+                {
+                    "observation": observation,
+                    "next_observation": next_observation,
+                    "next_reward": next_reward,
+                    "next_done": next_done,
+                    "action": action,
+                },
+                [],
+            ).unflatten_keys("_")
+        )
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
 
 
 class TestDDPG:
