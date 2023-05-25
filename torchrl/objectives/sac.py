@@ -67,9 +67,9 @@ class SACLoss(LossModule):
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
         min_alpha (float, optional): min value of alpha.
-            Default is 0.1.
+            Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
-            Default is 10.0.
+            Default is None (no maximum value).
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
@@ -100,8 +100,8 @@ class SACLoss(LossModule):
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = 0.1,
-        max_alpha: float = 10.0,
+        min_alpha: float = None,
+        max_alpha: float = None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -157,12 +157,23 @@ class SACLoss(LossModule):
         except AttributeError:
             device = torch.device("cpu")
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
-        self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
-        )
-        self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
-        )
+        if bool(min_alpha) ^ bool(max_alpha):
+            min_alpha = min_alpha if min_alpha else 0.0
+            if max_alpha == 0:
+                raise ValueError("max_alpha must be either None or greater than 0.")
+            max_alpha = max_alpha if max_alpha else 1e9
+        if min_alpha:
+            self.register_buffer(
+                "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            )
+        else:
+            self.min_log_alpha = None
+        if max_alpha:
+            self.register_buffer(
+                "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            )
+        else:
+            self.max_log_alpha = None
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -465,7 +476,8 @@ class SACLoss(LossModule):
 
     @property
     def _alpha(self):
-        # self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        if self.min_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
@@ -486,9 +498,9 @@ class DiscreteSACLoss(LossModule):
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
         min_alpha (float, optional): min value of alpha.
-            Default is 0.1.
+            Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
-            Default is 10.0.
+            Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (float, optional): weight for the target entropy term.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
@@ -510,8 +522,8 @@ class DiscreteSACLoss(LossModule):
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = 0.1,
-        max_alpha: float = 10.0,
+        min_alpha: float = None,
+        max_alpha: float = None,
         fixed_alpha: bool = False,
         target_entropy_weight: float = 0.98,
         target_entropy: Union[str, Number] = "auto",
@@ -545,12 +557,23 @@ class DiscreteSACLoss(LossModule):
             device = torch.device("cpu")
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
-        self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
-        )
-        self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
-        )
+        if bool(min_alpha) ^ bool(max_alpha):
+            min_alpha = min_alpha if min_alpha else 0.0
+            if max_alpha == 0:
+                raise ValueError("max_alpha must be either None or greater than 0.")
+            max_alpha = max_alpha if max_alpha else 1e9
+        if min_alpha:
+            self.register_buffer(
+                "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            )
+        else:
+            self.min_log_alpha = None
+        if max_alpha:
+            self.register_buffer(
+                "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            )
+        else:
+            self.max_log_alpha = None
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -570,7 +593,8 @@ class DiscreteSACLoss(LossModule):
 
     @property
     def alpha(self):
-        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        if self.min_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
