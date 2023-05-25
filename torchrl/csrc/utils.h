@@ -12,15 +12,14 @@ using namespace torch::autograd;
 
 class SafeTanh : public Function<SafeTanh> {
  public:
-  static torch::Tensor forward(
-      AutogradContext *ctx, torch::Tensor input) {
+  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input) {
     auto out = torch::tanh(input);
     out = out.clamp(-0.999999, 0.999999);
     ctx->save_for_backward({out});
     return out;
   }
 
-  static tensor_list backward(AutogradContext *ctx, tensor_list grad_outputs) {
+  static tensor_list backward(AutogradContext* ctx, tensor_list grad_outputs) {
     auto saved = ctx->get_saved_variables();
     auto out = saved[0];
     auto go = grad_outputs[0];
@@ -29,6 +28,4 @@ class SafeTanh : public Function<SafeTanh> {
   }
 };
 
-torch::Tensor safetanh(torch::Tensor input) {
-  return SafeTanh::apply(input);
-}
+torch::Tensor safetanh(torch::Tensor input) { return SafeTanh::apply(input); }
