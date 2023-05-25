@@ -16,8 +16,6 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       docker-image: "pytorch/manylinux-cuda117"
-      # gpu-arch-type: "cuda"
-      # gpu-arch-version: "11.7"
       timeout: 120
       script: |
         set -euo pipefail
