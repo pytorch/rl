@@ -2354,9 +2354,7 @@ class TestPPO:
     @pytest.mark.parametrize("kl_coef", (0.0, 1.0))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo(
-        self, loss_class, device, gradient_mode, advantage, td_est, kl_coef
-    ):
+    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est, kl_coef):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2379,9 +2377,7 @@ class TestPPO:
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(
-            actor, value, loss_critic_type="l2", kl_coef=kl_coef
-        )
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", kl_coef=kl_coef)
         if advantage is not None:
             advantage(td)
         else:

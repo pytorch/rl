@@ -263,7 +263,7 @@ class PPOLoss(LossModule):
 
     def _kl_init(self, current_dist, tensordict):
         init_dist = self.actor.get_dist(tensordict, params=self.initial_actor_params)
-        kl_val = _kl(init_dist, current_dist, self.samples_mc_entropy)
+        kl_val = _kl(current_dist, init_dist, self.samples_mc_entropy, reparam=True)
         kl_val = kl_val.mean()
         return kl_val
 
@@ -732,11 +732,14 @@ class KLPENPPOLoss(PPOLoss):
         self.beta = self._beta_init
 
 
-def _kl(p, q, samples_mc_kl=None):
+def _kl(p, q, samples_mc_kl=None, reparam=False):
     if _has_kl(p, q):
         kl = torch.distributions.kl.kl_divergence(p, q)
     else:
-        x = p.sample((samples_mc_kl,))
+        if reparam:
+            x = p.rsample((samples_mc_kl,))
+        else:
+            x = p.sample((samples_mc_kl,))
         kl = (p.log_prob(x) - q.log_prob(x)).mean(0)
     return kl
 
