@@ -12,7 +12,8 @@ using namespace torch::autograd;
 
 class SafeTanh : public Function<SafeTanh> {
  public:
-  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input, float eps=1e-6) {
+  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input,
+                               float eps = 1e-6) {
     auto out = torch::tanh(input);
     auto lim = 1.0 - eps;
     out = out.clamp(-lim, lim);
@@ -29,11 +30,14 @@ class SafeTanh : public Function<SafeTanh> {
   }
 };
 
-torch::Tensor safetanh(torch::Tensor input, float eps=1e-6) { return SafeTanh::apply(input, eps); }
+torch::Tensor safetanh(torch::Tensor input, float eps = 1e-6) {
+  return SafeTanh::apply(input, eps);
+}
 
 class SafeInvTanh : public Function<SafeInvTanh> {
  public:
-  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input, float eps=1e-6) {
+  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input,
+                               float eps = 1e-6) {
     auto lim = 1.0 - eps;
     auto out = input.clamp(-lim, lim);
     out = torch::atanh(out);
@@ -50,4 +54,6 @@ class SafeInvTanh : public Function<SafeInvTanh> {
   }
 };
 
-torch::Tensor safeatanh(torch::Tensor input, float eps=1e-6) { return SafeInvTanh::apply(input, eps); }
+torch::Tensor safeatanh(torch::Tensor input, float eps = 1e-6) {
+  return SafeInvTanh::apply(input, eps);
+}
