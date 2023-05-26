@@ -26,14 +26,13 @@ Using Replay Buffers
 # For these reasons, TorchRL's replay buffers are fully composable: although
 # they come with "batteries included", requiring a minimal effort to be built,
 # they also support many customizations such as storage type,
-# sampling strategy or data tranforms.
+# sampling strategy or data transforms.
 #
 #
 # In this tutorial, you will learn:
 # - How to build a Replay Buffer (RB) and use it with any datatype;
 # - How to use RBs with TensorDict;
-# - How to sample from or iterate over a replay buffer, and how to define the
-#   sampling strategy;
+# - How to sample from or iterate over a replay buffer, and how to define the sampling strategy;
 # - How to use prioritized replay buffers;
 # - How to transform data coming in and out from the buffer;
 # - How to store trajectories in the buffer.

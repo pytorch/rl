@@ -7,6 +7,8 @@ from typing import Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
+
+from tensordict.nn import dispatch
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
 
@@ -17,17 +19,17 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 
-from ..modules.utils.utils import _find_action_space
+from torchrl.modules.utils.utils import _find_action_space
 
-from .common import LossModule
-from .utils import (
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
-from .value import TDLambdaEstimator
-from .value.advantages import TD0Estimator, TD1Estimator
+from torchrl.objectives.value import TDLambdaEstimator
+from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 
 
 class DQNLoss(LossModule):
@@ -53,6 +55,59 @@ class DQNLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
+
+    Examples:
+        >>> from torchrl.modules import MLP
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> n_obs, n_act = 4, 3
+        >>> value_net = MLP(in_features=n_obs, out_features=n_act)
+        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> actor = QValueActor(value_net, in_keys=["observation"], action_space=spec)
+        >>> loss = DQNLoss(actor, action_space=spec)
+        >>> batch = [10,]
+        >>> data = TensorDict({
+        ...     "observation": torch.randn(*batch, n_obs),
+        ...     "action": spec.rand(batch),
+        ...     ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     ("next", "reward"): torch.randn(*batch, 1)
+        ... }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                loss: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["observation", "next_observation", "action", "next_reward", "next_done"]``,
+    and a single loss value is returned.
+
+    Examples:
+        >>> from torchrl.objectives import DQNLoss
+        >>> from torchrl.data import OneHotDiscreteTensorSpec
+        >>> from torch import nn
+        >>> import torch
+        >>> n_obs = 3
+        >>> n_action = 4
+        >>> action_spec = OneHotDiscreteTensorSpec(n_action)
+        >>> value_network = nn.Linear(n_obs, n_action) # a simple value model
+        >>> dqn_loss = DQNLoss(value_network, action_space=action_spec)
+        >>> # define data
+        >>> observation = torch.randn(n_obs)
+        >>> next_observation = torch.randn(n_obs)
+        >>> action = action_spec.rand()
+        >>> next_reward = torch.randn(1)
+        >>> next_done = torch.zeros(1, dtype=torch.bool)
+        >>> loss_val = dqn_loss(
+        ...     observation=observation,
+        ...     next_observation=next_observation,
+        ...     next_reward=next_reward,
+        ...     next_done=next_done,
+        ...     action=action)
 
     """
 
@@ -149,44 +204,40 @@ class DQNLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    @dispatch(
+        source=[
+            "observation",
+            ("next", "observation"),
+            "action",
+            ("next", "reward"),
+            ("next", "done"),
+        ],
+        dest=["loss"],
+    )
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
+            tensordict (TensorDictBase): a tensordict with keys ["action"] and the in_keys of
                 the value network (observations, "done", "reward" in a "next" tensordict).
 
         Returns:
             a tensor containing the DQN loss.
 
         """
-        device = self.device if self.device is not None else input_tensordict.device
-        tensordict = input_tensordict.to(device)
-        if tensordict.device != device:
-            raise RuntimeError(
-                f"device {device} was expected for "
-                f"{tensordict.__class__.__name__} but {tensordict.device} was found"
-            )
+        device = self.device if self.device is not None else tensordict.device
+        tddevice = tensordict.to(device)
 
-        for k, t in tensordict.items():
-            if t.device != device:
-                raise RuntimeError(
-                    f"found key value pair {k}-{t.shape} "
-                    f"with device {t.device} when {device} was required"
-                )
-
-        td_copy = tensordict.clone()
-        if td_copy.device != tensordict.device:
-            raise RuntimeError(f"{tensordict} and {td_copy} have different devices")
+        td_copy = tddevice.clone(False)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
 
-        action = tensordict.get("action")
+        action = tddevice.get("action")
         pred_val = td_copy.get("action_value")
 
         if self.action_space == "categorical":
@@ -199,15 +250,15 @@ class DQNLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1)
 
         target_value = self.value_estimator.value_estimate(
-            tensordict.clone(False), target_params=self.target_value_network_params
+            tddevice.clone(False), target_params=self.target_value_network_params
         ).squeeze(-1)
 
         priority_tensor = (pred_val_index - target_value).pow(2)
         priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if input_tensordict.device is not None:
-            priority_tensor = priority_tensor.to(input_tensordict.device)
+        if tddevice.device is not None:
+            priority_tensor = priority_tensor.to(tddevice.device)
 
-        input_tensordict.set(
+        tensordict.set(
             self.priority_key,
             priority_tensor,
             inplace=True,
