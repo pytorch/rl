@@ -39,9 +39,9 @@ class SafeInvTanh : public Function<SafeInvTanh> {
   static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input,
                                float eps = 1e-6) {
     auto lim = 1.0 - eps;
-    auto out = input.clamp(-lim, lim);
-    out = torch::atanh(out);
-    ctx->save_for_backward({input});
+    auto intermediate = input.clamp(-lim, lim);
+    ctx->save_for_backward({intermediate});
+    auto out = torch::atanh(intermediate);
     return out;
   }
 
