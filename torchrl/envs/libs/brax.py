@@ -193,7 +193,7 @@ class BraxWrapper(_EnvWrapper):
         tensordict_out = TensorDict(
             source={
                 "observation": state.get("obs"),
-                "reward": reward,
+                # "reward": reward,
                 "done": done,
                 "state": state,
             },
