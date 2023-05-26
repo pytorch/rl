@@ -7,7 +7,7 @@ import functools
 import warnings
 from dataclasses import dataclass
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import torch
 from tensordict.nn import (
@@ -68,6 +68,33 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @dataclass
     class _AcceptedKeys:
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        advantage_key : NestedKey
+            The input tensordict key where the advantage is written to.
+            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+        value_target_key : NestedKey
+            The input tensordict key where the target state value is written to.
+            Will be used for the underlying value estimator Defaults to ``"value_target"``.
+        value_key : NestedKey
+            The input tensordict key where the state value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+        reward_key : NestedKey
+            The input tensordict key where the reward is written to.
+            Defaults to ``"state_value"``.
+        done_key : NestedKey
+            The input tensordict key where the flag if a trajectory is done is expected.
+            Defaults to ``"state_value"``.
+        steps_to_next_obs_key : NestedKey
+            The input tensordict key where the stpes_to_next_obs is expected.
+            Defaults to ``"state_value"``.
+        """
+
         advantage_key: NestedKey = "advantage"
         value_target_key: NestedKey = "value_target"
         value_key: NestedKey = "state_value"
@@ -77,7 +104,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
-    value_key: Union[Tuple[str], str]
 
     @abc.abstractmethod
     def forward(
@@ -117,11 +143,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
         *,
         value_network: TensorDictModule,
         differentiable: bool = False,
-        tensor_keys: Dict[str, Union[str, Tuple]] = None,
+        tensor_keys: Dict[str, NestedKey] = None,
         skip_existing: Optional[bool] = None,
-        advantage_key: Union[str, Tuple] = None,
-        value_target_key: Union[str, Tuple] = None,
-        value_key: Union[str, Tuple] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__()
         self.differentiable = differentiable
@@ -187,15 +213,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         ]
 
     def set_keys(self, **kwargs) -> None:
-        """Change the tensordict keys where data is expected to be written.
-
-        advantage_key (str, optional): The input tensordict key where the advantage is
-            expected to be written. Defaults to ``"advantage"``.
-        value_target_key (str, optional): The input tensordict key where the target state
-            value is expected to be written. Defaults to ``"value_target"``.
-        value_key (str, optional): The input tensordict key where the state
-            value is expected to be written. Defaults to ``"state_value"``.
-        """
+        """Set tensordict key names."""
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dict__:
                 raise ValueError(f"{key} it not an accepted tensordict key")
@@ -265,16 +283,18 @@ class TD0Estimator(ValueEstimatorBase):
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
 
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
+            all keys specified in _AcceptedKeys.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "advantage".
+        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "value_target".
+        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
+            Defaults to "state_value".
 
     """
 
@@ -285,10 +305,10 @@ class TD0Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        tensor_keys: Dict[str, Union[str, Tuple]] = None,
-        advantage_key: Union[str, Tuple] = None,
-        value_target_key: Union[str, Tuple] = None,
-        value_key: Union[str, Tuple] = None,
+        tensor_keys: Dict[str, NestedKey] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
         skip_existing: Optional[bool] = None,
     ):
         super().__init__(
@@ -441,16 +461,18 @@ class TD1Estimator(ValueEstimatorBase):
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
 
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
+            all keys specified in _AcceptedKeys.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "advantage".
+        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "value_target".
+        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
+            Defaults to "state_value".
 
     """
 
@@ -461,11 +483,11 @@ class TD1Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        tensor_keys=None,
         skip_existing: Optional[bool] = None,
-        advantage_key: Union[str, Tuple] = None,
-        value_target_key: Union[str, Tuple] = None,
-        value_key: Union[str, Tuple] = None,
+        tensor_keys: Dict[str, NestedKey] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -621,16 +643,18 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
+            all keys specified in _AcceptedKeys.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "advantage".
+        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
+            Defaults to "value_target".
+        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
+            Defaults to "state_value".
 
     """
 
@@ -643,11 +667,11 @@ class TDLambdaEstimator(ValueEstimatorBase):
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        tensor_keys=None,
-        advantage_key: Union[str, Tuple] = None,
-        value_target_key: Union[str, Tuple] = None,
-        value_key: Union[str, Tuple] = None,
         skip_existing: Optional[bool] = None,
+        tensor_keys: Dict[str, NestedKey] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -822,6 +846,8 @@ class GAE(ValueEstimatorBase):
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
+        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
+            all keys specified in _AcceptedKeys.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
@@ -850,11 +876,11 @@ class GAE(ValueEstimatorBase):
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        tensor_keys: Dict[str, Union[str, Tuple]] = None,
         skip_existing: Optional[bool] = None,
-        advantage_key: Union[str, Tuple] = None,
-        value_target_key: Union[str, Tuple] = None,
-        value_key: Union[str, Tuple] = None,
+        tensor_keys: Dict[str, NestedKey] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,

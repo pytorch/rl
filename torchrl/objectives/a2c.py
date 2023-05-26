@@ -53,7 +53,7 @@ class A2CLoss(LossModule):
             parameters for both policy and critic losses.
         advantage_key (str): [Deprecated, use set_keys(advantage_key=advantage_key) instead]
             The input tensordict key where the advantage is expected to be written.  default: "advantage"
-            value_target_key (str): [Deprecated, use set_keys() instead] the input
+        value_target_key (str): [Deprecated, use set_keys() instead] the input
             tensordict key where the target state value is expected to be written. Defaults to ``"value_target"``.
 
     .. note:
@@ -109,7 +109,6 @@ class A2CLoss(LossModule):
         else:
             policy_params = None
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
-
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
         self.register_buffer(

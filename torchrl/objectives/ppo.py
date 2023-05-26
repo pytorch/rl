@@ -121,11 +121,35 @@ class PPOLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        advantage_key: NestedKey = "advantage"
-        value_target_key: NestedKey = "value_target"
-        value_key: NestedKey = "state_value"
-        sample_log_prob_key: NestedKey = "sample_log_prob"
-        action_key: NestedKey = "action"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        advantage : NestedKey
+            The input tensordict key where the advantage is expected.
+            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+        value_target : NestedKey
+            The input tensordict key where the target state value is expected.
+            Will be used for the underlying value estimator Defaults to ``"value_target"``.
+        value : NestedKey
+            The input tensordict key where the state value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+        sample_log_prob : NestedKey
+            The input tensordict key where the sample log probability is expected.
+            Defaults to ``"state_value"``.
+        action : NestedKey
+            The input tensordict key where the action is expected.
+            Defaults to ``"state_value"``.
+        """
+
+        advantage: NestedKey = "advantage"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "state_value"
+        sample_log_prob: NestedKey = "sample_log_prob"
+        action: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -149,9 +173,9 @@ class PPOLoss(LossModule):
     ):
         super().__init__()
         self._set_deprecated_ctor_keys(
-            advantage_key=advantage_key,
-            value_target_key=value_target_key,
-            value_key=value_key,
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
         )
 
         self.convert_to_functional(
@@ -183,9 +207,9 @@ class PPOLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage_key=self._tensor_keys.advantage_key,
-                value_target_key=self._tensor_keys.value_target_key,
-                value_key=self._tensor_keys.value_key,
+                advantage_key=self._tensor_keys.advantage,
+                value_target_key=self._tensor_keys.value_target,
+                value_key=self._tensor_keys.value,
             )
 
     def reset(self) -> None:
@@ -203,19 +227,19 @@ class PPOLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
-        action = tensordict.get(self.tensor_keys.action_key)
+        action = tensordict.get(self.tensor_keys.action)
         if action.requires_grad:
             raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action_key} requires grad."
+                f"tensordict stored {self.tensor_keys.action} requires grad."
             )
 
         dist = self.actor.get_dist(tensordict, params=self.actor_params)
         log_prob = dist.log_prob(action)
 
-        prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob_key)
+        prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if prev_log_prob.requires_grad:
             raise RuntimeError(
-                f"tensordict {self.tensor_keys.sample_log_prob_key} requires grad."
+                f"tensordict {self.tensor_keys.sample_log_prob} requires grad."
             )
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
@@ -227,10 +251,10 @@ class PPOLoss(LossModule):
         if self.separate_losses:
             tensordict = tensordict.detach()
         try:
-            target_return = tensordict.get(self.tensor_keys.value_target_key)
+            target_return = tensordict.get(self.tensor_keys.value_target)
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.value_target_key} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
                 f"Make sure you provided the right key and the value_target (i.e. the target "
                 f"return) has been retrieved accordingly. Advantage classes such as GAE, "
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
@@ -243,10 +267,10 @@ class PPOLoss(LossModule):
         )
 
         try:
-            state_value = state_value_td.get(self.tensor_keys.value_key)
+            state_value = state_value_td.get(self.tensor_keys.value)
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.value_key} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value} was not found in the input tensordict. "
                 f"Make sure that the value_key passed to PPO is accurate."
             )
 
@@ -259,14 +283,14 @@ class PPOLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
@@ -293,9 +317,9 @@ class PPOLoss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         tensor_keys = {
-            "advantage_key": self.tensor_keys.advantage_key,
-            "value_key": self.tensor_keys.value_key,
-            "value_target_key": self.tensor_keys.value_target_key,
+            "advantage_key": self.tensor_keys.advantage,
+            "value_key": self.tensor_keys.value,
+            "value_target_key": self.tensor_keys.value_target,
         }
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
@@ -443,14 +467,14 @@ class ClipPPOLoss(PPOLoss):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()
@@ -638,14 +662,14 @@ class KLPENPPOLoss(PPOLoss):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage)
         if self.normalize_advantage and advantage.numel() > 1:
             loc = advantage.mean().item()
             scale = advantage.std().clamp_min(1e-6).item()

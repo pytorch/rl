@@ -63,6 +63,12 @@ class LossModule(nn.Module, ABC):
 
     @dataclass
     class _AcceptedKeys:
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+        """
+
         pass
 
     default_value_estimator: ValueEstimators = None
@@ -87,11 +93,11 @@ class LossModule(nn.Module, ABC):
 
     @abstractmethod
     def _forward_value_estimator_keys(self, **kwargs) -> None:
-        """Forward changed tensordit key names to the underying value estimator."""
+        """Forward changed tensordict key names to the underying value estimator."""
         ...
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function setting a loss key and creating a warning for using a deprecated argument."""
+        """Helper function setting to set a tensordict key from a ctor and raising a warning at the same time."""
         for key, value in kwargs.items():
             if value is not None:
                 warnings.warn(
@@ -101,7 +107,7 @@ class LossModule(nn.Module, ABC):
                 self.set_keys(**{key: value})
 
     def set_keys(self, **kwargs) -> None:
-        """Specify tensordict key for given argument.
+        """Set tensordict key names.
 
         Examples:
             >>> from torchrl.objectives import DQNLoss
