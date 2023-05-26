@@ -71,6 +71,27 @@ class A2CLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        advantage : NestedKey
+            The input tensordict key where the advantage is expected.
+            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+        value_target : NestedKey
+            The input tensordict key where the target state value is expected.
+            Will be used for the underlying value estimator Defaults to ``"value_target"``.
+        value : NestedKey
+            The input tensordict key where the state value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+        action : NestedKey
+            The input tensordict key where the action is expected.
+            Defaults to ``"state_value"``.
+        """
+
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
