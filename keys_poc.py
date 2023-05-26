@@ -13,9 +13,18 @@ class GAE(TensorDictModuleBase):
         value: NestedKey = "state_value"
         reward: NestedKey = "reward"
 
-    def __init__(self):
+    def __init__(self, value_network):
         super().__init__()
         self.key_list = self._AcceptedKeys()
+        # here all keys have default values, which means one cannot rely here on the tensordict keys used there
+        # the following code (from the actual ValueEstimatorBase) would raise always an exception
+        if (
+            hasattr(value_network, "out_keys")
+            and self.keys.value_key not in value_network.out_keys
+        ):
+            raise KeyError(
+                f"value key '{self.keys.value_key}' not found in value network out_keys."
+            )
 
     @property
     def keys(self):
