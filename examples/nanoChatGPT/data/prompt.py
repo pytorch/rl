@@ -6,25 +6,11 @@ from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 from tensordict import tensorclass
 from torch.utils.data import Dataset
 
-from .openai_summarize_tldr import create_tldr_memmaps
-from .utils import create_infinite_dataloader
 
 HERE = Path(__file__).parent
-
-
-class Collate(nn.Module):
-    def __init__(self, device="cpu"):
-        super().__init__()
-        self.device = torch.device(device)
-
-    def __call__(self, batch):
-        if self.device.type == "cuda":
-            batch = batch.pin_memory()
-        return batch.to(self.device)
 
 
 @tensorclass
@@ -59,35 +45,3 @@ class PromptDataset(Dataset):
         # the final block_size positions. so it's just the length of the overall
         # sequence minus the block_size
         return len(self._memmap) - self.block_size
-
-
-def create_datasets(config):
-    if config["dataset"] == "shakespeare":
-        data_dir = HERE.parent / "models" / "nanoGPT" / "data" / config["dataset"]
-        if not (data_dir / "train.bin").exists():
-            raise RuntimeError(
-                "Shakespeare data has not be prepared. Run "
-                "python models/nanoGPT/data/shakespeare/prepare.py"
-            )
-    elif config["dataset"] == "tldr":
-        data_dir = HERE / "tldr"
-        if not (data_dir / "train.bin").exists():
-            create_tldr_memmaps()
-    else:
-        raise ValueError(f"Dataset {config['dataset']} is not recognised")
-
-    train_data = PromptDataset(data_dir / "train.bin", block_size=config["block_size"])
-    val_data = PromptDataset(data_dir / "val.bin", block_size=config["block_size"])
-
-    return train_data, val_data
-
-
-def get_prompt_dataloaders(config):
-    train_data, val_data = create_datasets(config)
-
-    train_loader = create_infinite_dataloader(
-        train_data, config, Collate(config["device"])
-    )
-    val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
-
-    return train_loader, val_loader

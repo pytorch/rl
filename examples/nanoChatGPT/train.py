@@ -12,7 +12,7 @@ from pathlib import Path
 
 import torch
 
-from data import get_prompt_dataloaders
+from data.openai_summarize_tldr import get_prompt_dataloaders
 from models.transformer import init_transformer
 from utils import create_lr_scheduler, load_and_update_config, setup
 
@@ -35,9 +35,8 @@ def create_loss_estimator(config, ctx):
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
-        loss = losses.mean()
         model.train()
-        return loss
+        return losses.mean()
 
     return estimate_loss
 

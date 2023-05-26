@@ -46,9 +46,8 @@ def _step(self, tensordict):
         logits = tensordict.get("sample_log_prob")
         ref_logits = self.ref_model(prompt)
         kl_penalty = self.kl_th * (logits - ref_logits).mean(-1).unsqueeze(-1)
-    
-    reward -= kl_penalty 
 
+    reward -= kl_penalty
 
     out = TensorDict(
         {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
@@ -111,7 +110,9 @@ def _set_seed(self, seed: Optional[int]):
 class RLHFEnv(EnvBase):
     batch_locked = False
 
-    def __init__(self, reward_model=None, config=None, dataloader=None, seed=None, ref_model=None):
+    def __init__(
+        self, reward_model=None, config=None, dataloader=None, seed=None, ref_model=None
+    ):
         # if td_params is None:
         #     td_params = self.gen_params()
         batch_size = config["batch_size"]
