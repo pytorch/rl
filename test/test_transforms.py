@@ -36,6 +36,7 @@ from torchrl.data import (
     CompositeSpec,
     LazyTensorStorage,
     ReplayBuffer,
+    TensorDictReplayBuffer,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -7152,18 +7153,20 @@ class TestKLRewardTransform(TransformBase):
         actor = self._make_actor()
         transform = KLRewardTransform(actor, out_keys=out_key)
         return Compose(
-        TensorDictPrimer(
-            primers={
-                "sample_log_prob": UnboundedContinuousTensorSpec(
-                    shape=base_env.action_spec.shape[:-1]
-                )
-            }
-        ),
-        transform,
-    )
+            TensorDictPrimer(
+                primers={
+                    "sample_log_prob": UnboundedContinuousTensorSpec(
+                        shape=base_env.action_spec.shape[:-1]
+                    )
+                }
+            ),
+            transform,
+        )
 
-    @pytest.mark.parametrize("in_key", [None, "some_stuff", ["some_stuff"], ['a', 'b']])
-    @pytest.mark.parametrize("out_key", [None, "some_stuff", ["some_stuff"], ['a', 'b']])
+    @pytest.mark.parametrize("in_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]])
+    @pytest.mark.parametrize(
+        "out_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]]
+    )
     def test_transform_no_env(self, in_key, out_key):
         actor = self._make_actor()
         if any(isinstance(key, list) and len(key) > 1 for key in (in_key, out_key)):
@@ -7172,30 +7175,43 @@ class TestKLRewardTransform(TransformBase):
             return
         t = KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
         batch = [2, 3]
-        tensordict = TensorDict({
-            "action": torch.randn(*batch, 7),
-            "observation": torch.randn(*batch, 7),
-            "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-            "sample_log_prob": torch.randn(*batch)
-        }, batch)
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
         t._step(tensordict)
-        assert (tensordict.get('next').get(t.out_keys[0]) != 0).all()
+        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
 
     def test_transform_compose(self):
         actor = self._make_actor()
         t = Compose(KLRewardTransform(actor))
         batch = [2, 3]
-        tensordict = TensorDict({
-            "action": torch.randn(*batch, 7),
-            "observation": torch.randn(*batch, 7),
-            "next": {t[0].in_keys[0]: torch.zeros(*batch, 1)},
-            "sample_log_prob": torch.randn(*batch)
-        }, batch)
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t[0].in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
         t(tensordict)
-        assert (tensordict.get('next').get("reward") != 0).all()
+        assert (tensordict.get("next").get("reward") != 0).all()
 
     @torch.no_grad()
-    @pytest.mark.parametrize("out_key", [None, "some_stuff", ["some_stuff"], ])
+    @pytest.mark.parametrize(
+        "out_key",
+        [
+            None,
+            "some_stuff",
+            ["some_stuff"],
+        ],
+    )
     def test_transform_env(self, out_key):
         base_env = self.envclass()
         actor = self._make_actor()
@@ -7203,20 +7219,28 @@ class TestKLRewardTransform(TransformBase):
         env = TransformedEnv(
             base_env,
             Compose(
-                RewardScaling(0.0, 0.0), # make reward 0 to check the effect of kl
-                KLRewardTransform(actor, out_keys=out_key)
+                RewardScaling(0.0, 0.0),  # make reward 0 to check the effect of kl
+                KLRewardTransform(actor, out_keys=out_key),
             ),
         )
         actor = self._make_actor()
         td1 = env.rollout(3, actor)
         tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")
-        assert (tdparams == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))).all()
+        assert (
+            tdparams
+            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
+        ).all()
+
         def update(x):
             x.data += 1
             return x
+
         tdparams.apply_(update)
         td2 = env.rollout(3, actor)
-        assert not (tdparams == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))).any()
+        assert not (
+            tdparams
+            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
+        ).any()
         out_key = env.transform[-1].out_keys[0]
         assert (td1.get("next").get(out_key) != td2.get("next").get(out_key)).all()
 
@@ -7224,28 +7248,26 @@ class TestKLRewardTransform(TransformBase):
     def test_single_trans_env_check(self, out_key):
         base_env = self.envclass()
         # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
-        env = TransformedEnv(
-            base_env, self._make_transform_env(out_key, base_env)
-        )
+        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
         check_env_specs(env)
 
     def test_serial_trans_env_check(self):
         out_key = "reward"
+
         def make_env():
             base_env = self.envclass()
-            return TransformedEnv(
-            base_env, self._make_transform_env(out_key, base_env)
-        )
+            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+
         env = SerialEnv(2, make_env)
         check_env_specs(env)
 
     def test_parallel_trans_env_check(self):
         out_key = "reward"
+
         def make_env():
             base_env = self.envclass()
-            return TransformedEnv(
-            base_env, self._make_transform_env(out_key, base_env)
-        )
+            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
 
@@ -7265,26 +7287,37 @@ class TestKLRewardTransform(TransformBase):
         actor = self._make_actor()
         t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
         batch = [2, 3]
-        tensordict = TensorDict({
-            "action": torch.randn(*batch, 7),
-            "observation": torch.randn(*batch, 7),
-            "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-            "sample_log_prob": torch.randn(*batch)
-        }, batch)
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
         t = TensorDictSequential(t)
         t(tensordict)
-        assert (tensordict.get('next').get(t.out_keys[0]) != 0).all()
+        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         actor = self._make_actor()
         t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
         batch = [2, 3]
-        tensordict = TensorDict({
-            "action": torch.randn(*batch, 7),
-            "observation": torch.randn(*batch, 7),
-            "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
-            "sample_log_prob": torch.randn(*batch)
-        }, batch)
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
+        rb = rbclass(storage=LazyTensorStorage(100), transform=t)
+        rb.extend(tensordict)
+        sample = rb.sample(3)
+        assert (sample.get(("next", "reward")) != 0).all()
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
