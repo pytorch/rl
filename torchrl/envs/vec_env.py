@@ -450,6 +450,7 @@ class _BatchedEnv(EnvBase):
 
         self.input_spec = None
         self.output_spec = None
+        self.event = None
 
         self._shutdown_workers()
         self.is_closed = True
