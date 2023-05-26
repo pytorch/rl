@@ -63,10 +63,10 @@ class LossModule(nn.Module, ABC):
 
     @dataclass
     class _AcceptedKeys:
-        """Stores default values for all configurable tensordict keys.
+        """Maintains default values for all configurable tensordict keys.
 
-        This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and their default values.
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
         """
 
         pass
@@ -93,11 +93,11 @@ class LossModule(nn.Module, ABC):
 
     @abstractmethod
     def _forward_value_estimator_keys(self, **kwargs) -> None:
-        """Forward changed tensordict key names to the underying value estimator."""
+        """Passes updated tensordict keys to the underlying value estimator."""
         ...
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function setting to set a tensordict key from a ctor and raising a warning at the same time."""
+        """Helper function to set a tensordict key from a ctor and raise a warning simultaneously."""
         for key, value in kwargs.items():
             if value is not None:
                 warnings.warn(

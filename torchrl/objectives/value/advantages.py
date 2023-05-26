@@ -68,10 +68,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @dataclass
     class _AcceptedKeys:
-        """Stores default values for all configurable tensordict keys.
+        """Maintains default values for all configurable tensordict keys.
 
-        This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and the corresponding default values.
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
 
         Attributes:
         ------------
@@ -88,10 +88,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
             The input tensordict key where the reward is written to.
             Defaults to ``"reward"``.
         done_key : NestedKey
-            The input tensordict key where the flag if a trajectory is done is expected.
+            The key in the input TensorDict that indicates whether a trajectory is done.
             Defaults to ``"done"``.
         steps_to_next_obs_key : NestedKey
-            The input tensordict key where the steps_to_next_obs is expected.
+            The key in the input tensordict that indicates the number of steps to the next observation.
             Defaults to ``"steps_to_next_obs"``.
         """
 
@@ -178,7 +178,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     @tensor_keys.setter
     def tensor_keys(self, value):
         if not isinstance(value, type(self._AcceptedKeys)):
-            raise ValueError
+            raise ValueError("value must be an instance of _AcceptedKeys")
         self._keys = value
 
     @property
@@ -210,7 +210,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         for key, value in kwargs.items():
             if not isinstance(value, (str, tuple)):
                 raise ValueError(
-                    "key name must be of type NestedKey (Union[str, Tuple[str]])"
+                    f"key name must be of type NestedKey (Union[str, Tuple[str]]) but got {type(value)}"
                 )
             if value is None:
                 raise ValueError("tensordict keys cannot be None")

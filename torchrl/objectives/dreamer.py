@@ -53,10 +53,10 @@ class DreamerModelLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Stores default values for all configurable tensordict keys.
+        """Maintains default values for all configurable tensordict keys.
 
-        This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and the corresponding default values.
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
 
         Attributes:
         ------------
@@ -203,10 +203,10 @@ class DreamerActorLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Stores default values for all configurable tensordict keys.
+        """Maintains default values for all configurable tensordict keys.
 
-        This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and the corresponding default values.
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
 
         Attributes:
         ------------
@@ -372,10 +372,10 @@ class DreamerValueLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        """Stores default values for all configurable tensordict keys.
+        """Maintains default values for all configurable tensordict keys.
 
-        This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and the corresponding default values.
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
 
         Attributes:
         ------------
