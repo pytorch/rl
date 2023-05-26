@@ -62,7 +62,7 @@ class DQNLoss(LossModule):
         """Stores default values for all configurable tensordict keys.
 
         This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and their default values.
+        via `.set_keys(key_name=key_value) and the corresponding default values.
 
         Attributes:
         ------------
@@ -268,7 +268,7 @@ class DistributionalDQNLoss(LossModule):
         """Stores default values for all configurable tensordict keys.
 
         This class is used to define and store which tensordict keys are configurable
-        via `.set_keys(key_name=key_value) and their default values.
+        via `.set_keys(key_name=key_value) and the corresponding default values.
 
         Attributes:
         ------------

@@ -63,9 +63,25 @@ class TD3Loss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        priority: NestedKey = "td_error"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and the corresponding default values.
+
+        Attributes:
+        ------------
+        action : NestedKey
+            The input tensordict key where the action is expected. Defaults to ``"advantage"``.
+        state_action_value : NestedKey
+            The input tensordict key where the state action value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_action_value"``.
+        priority : NestedKey
+            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+        """
+
         action: NestedKey = "action"
         state_action_value: NestedKey = "state_action_value"
+        priority: NestedKey = "td_error"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
