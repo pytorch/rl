@@ -86,13 +86,13 @@ class ValueEstimatorBase(TensorDictModuleBase):
             Will be used for the underlying value estimator. Defaults to ``"state_value"``.
         reward_key : NestedKey
             The input tensordict key where the reward is written to.
-            Defaults to ``"state_value"``.
+            Defaults to ``"reward"``.
         done_key : NestedKey
             The input tensordict key where the flag if a trajectory is done is expected.
-            Defaults to ``"state_value"``.
+            Defaults to ``"done"``.
         steps_to_next_obs_key : NestedKey
-            The input tensordict key where the stpes_to_next_obs is expected.
-            Defaults to ``"state_value"``.
+            The input tensordict key where the steps_to_next_obs is expected.
+            Defaults to ``"steps_to_next_obs"``.
         """
 
         advantage_key: NestedKey = "advantage"
