@@ -71,10 +71,31 @@ class ReinforceLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        advantage_key: NestedKey = "advantage"
-        value_target_key: NestedKey = "value_target"
-        value_key: NestedKey = "state_value"
-        sample_log_prob_key: NestedKey = "sample_log_prob"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        advantage : NestedKey
+            The input tensordict key where the advantage is expected.
+            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+        value_target : NestedKey
+            The input tensordict key where the target state value is expected.
+            Will be used for the underlying value estimator Defaults to ``"value_target"``.
+        value : NestedKey
+            The input tensordict key where the state value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+        sample_log_prob : NestedKey
+            The input tensordict key where the sample log probability is expected.
+            Defaults to ``"sample_log_prob"``.
+        """
+
+        advantage: NestedKey = "advantage"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "state_value"
+        sample_log_prob: NestedKey = "sample_log_prob"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -97,7 +118,7 @@ class ReinforceLoss(LossModule):
     ) -> None:
         super().__init__()
         self._set_deprecated_ctor_keys(
-            advantage_key=advantage_key, value_target_key=value_target_key
+            advantage=advantage_key, value_target=value_target_key
         )
 
         self.delay_value = delay_value
@@ -125,20 +146,20 @@ class ReinforceLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage_key=self._tensor_keys.advantage_key,
-                value_target_key=self._tensor_keys.value_target_key,
-                value_key=self._tensor_keys.value_key,
+                advantage=self._tensor_keys.advantage,
+                value_target=self._tensor_keys.value_target,
+                value=self._tensor_keys.value,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage)
 
         # compute log-prob
         tensordict = self.actor_network(
@@ -146,7 +167,7 @@ class ReinforceLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = tensordict.get(self.tensor_keys.sample_log_prob_key)
+        log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])
@@ -157,12 +178,12 @@ class ReinforceLoss(LossModule):
 
     def loss_critic(self, tensordict: TensorDictBase) -> torch.Tensor:
         try:
-            target_return = tensordict.get(self.tensor_keys.value_target_key)
+            target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get(self.tensor_keys.value_key)
+            ).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -170,7 +191,7 @@ class ReinforceLoss(LossModule):
             )
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.loss_key('value_target_key')} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
                 f"Make sure you provided the right key and the value_target (i.e. the target "
                 f"return) has been retrieved accordingly. Advantage classes such as GAE, "
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
@@ -186,26 +207,20 @@ class ReinforceLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {
-            "advantage_key": self.tensor_keys.advantage_key,
-            "value_key": self.tensor_keys.value_key,
-            "value_target_key": self.tensor_keys.value_target_key,
-        }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "advantage": self.tensor_keys.advantage,
+            "value": self.tensor_keys.value,
+            "value_target": self.tensor_keys.value_target,
+        }
+        self._value_estimator.set_keys(**tensor_keys)

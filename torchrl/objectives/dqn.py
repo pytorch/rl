@@ -144,29 +144,27 @@ class DQNLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "chosen_action_value",
-        }
         if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp, value_network=self.value_network, tensor_keys=tensor_keys
-            )
+            self._value_estimator = TD1Estimator(**hp, value_network=self.value_network)
         elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp, value_network=self.value_network, tensor_keys=tensor_keys
-            )
+            self._value_estimator = TD0Estimator(**hp, value_network=self.value_network)
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type is ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                **hp, value_network=self.value_network, tensor_keys=tensor_keys
+                **hp, value_network=self.value_network
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "value": "chosen_action_value",
+        }
+        self._value_estimator.set_keys(**tensor_keys)
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DQN loss given a tensordict sampled from the replay buffer.

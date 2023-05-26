@@ -63,9 +63,9 @@ class TD3Loss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        priority_key: NestedKey = "td_error"
-        action_key: NestedKey = "action"
-        state_action_value_key: NestedKey = "state_action_value"
+        priority: NestedKey = "td_error"
+        action: NestedKey = "action"
+        state_action_value: NestedKey = "state_action_value"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -90,7 +90,7 @@ class TD3Loss(LossModule):
             )
 
         super().__init__()
-        self._set_deprecated_ctor_keys(priority_key=priority_key)
+        self._set_deprecated_ctor_keys(priority=priority_key)
 
         self.delay_actor = delay_actor
         self.delay_qvalue = delay_qvalue
@@ -114,7 +114,7 @@ class TD3Loss(LossModule):
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.max_action = (
-            actor_network.spec[self.tensor_keys.action_key].space.maximum.max().item()
+            actor_network.spec[self.tensor_keys.action].space.maximum.max().item()
         )
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -123,7 +123,7 @@ class TD3Loss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.state_action_value_key,
+                value=self._tensor_keys.state_action_value,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -149,20 +149,20 @@ class TD3Loss(LossModule):
             actor_params,
         )
         # add noise to target policy
-        action = actor_output_td[1].get(self.tensor_keys.action_key)
+        action = actor_output_td[1].get(self.tensor_keys.action)
         noise = torch.normal(
             mean=torch.zeros(action.shape),
             std=torch.full(action.shape, self.policy_noise),
         ).to(action.device)
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
-        next_action = (actor_output_td[1][self.tensor_keys.action_key] + noise).clamp(
+        next_action = (actor_output_td[1][self.tensor_keys.action] + noise).clamp(
             -self.max_action, self.max_action
         )
-        actor_output_td[1].set(self.tensor_keys.action_key, next_action, inplace=True)
+        actor_output_td[1].set(self.tensor_keys.action, next_action, inplace=True)
         tensordict_actor.set(
-            self.tensor_keys.action_key,
-            actor_output_td.get(self.tensor_keys.action_key),
+            self.tensor_keys.action,
+            actor_output_td.get(self.tensor_keys.action),
         )
 
         # repeat tensordict_actor to match the qvalue size
@@ -205,7 +205,7 @@ class TD3Loss(LossModule):
         )
 
         state_action_value = tensordict_qval.get(
-            self.tensor_keys.state_action_value_key
+            self.tensor_keys.state_action_value
         ).squeeze(-1)
         (
             state_action_value_actor,
@@ -220,7 +220,7 @@ class TD3Loss(LossModule):
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
         tensordict.set(
-            ("next", self.tensor_keys.state_action_value_key),
+            ("next", self.tensor_keys.state_action_value),
             next_state_value.unsqueeze(-1),
         )
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
@@ -237,7 +237,7 @@ class TD3Loss(LossModule):
             * 0.5
         )
 
-        tensordict_save.set(self.tensor_keys.priority_key, td_error.detach().max(0)[0])
+        tensordict_save.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
 
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
@@ -266,22 +266,18 @@ class TD3Loss(LossModule):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
         # we do not need a value network bc the next state value is already passed
-        tensor_keys = {"value_key": self.tensor_keys.state_action_value_key}
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=None, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=None, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=None, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=None, **hp)
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=None, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TDLambdaEstimator(value_network=None, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {"value": self.tensor_keys.state_action_value}
+        self._value_estimator.set_keys(**tensor_keys)

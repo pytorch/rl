@@ -8,6 +8,7 @@ import functools
 import operator
 import warnings
 from copy import deepcopy
+from dataclasses import asdict
 
 from packaging import version as pack_version
 from tensordict.nn import InteractionType
@@ -874,13 +875,14 @@ class TestDDPG(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "priority": "td_error",
         }
-        key_mapping = {"state_action_value": "value_key"}
+        # TODO value needs state_action_value as out key for this test
+        # key_mapping = {"state_action_value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
     @pytest.mark.parametrize(
@@ -1198,17 +1200,18 @@ class TestTD3(LossModuleTestBase):
         )
 
         default_keys = {
-            "priority_key": "td_error",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
+            "priority": "td_error",
+            "state_action_value": "state_action_value",
+            "action": "action",
         }
-        key_mapping = {"state_action_value_key": "value_key"}
+        # TODO value needs state_action_value as out key for this test
+        # key_mapping = {"state_action_value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -1377,7 +1380,7 @@ class TestSAC(LossModuleTestBase):
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -1534,7 +1537,7 @@ class TestSAC(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -1648,20 +1651,19 @@ class TestSAC(LossModuleTestBase):
         )
 
         default_keys = {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "state_action_value_key": "state_action_value",
-            "action_key": "action",
-            "sample_log_prob_key": "sample_log_prob",
-            "log_prob_key": "_log_prob",
+            "priority": "td_error",
+            "value": "state_value",
+            "state_action_value": "state_action_value",
+            "action": "action",
+            "log_prob": "_log_prob",
         }
-        key_mapping = {"value_key": "value_key"}
+        # key_mapping = {"value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -1822,7 +1824,7 @@ class TestDiscreteSAC(LossModuleTestBase):
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -1930,7 +1932,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2014,16 +2016,16 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
 
         default_keys = {
-            "priority_key": "td_error",
-            "value_key": "state_value",
-            "action_key": "action",
+            "priority": "td_error",
+            "value": "state_value",
+            "action": "action",
         }
-        key_mapping = {"value_key": "value_key"}
+        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -2520,12 +2522,12 @@ class TestREDQ(LossModuleTestBase):
             "sample_log_prob": "sample_log_prob",
             "state_action_value": "state_action_value",
         }
-        key_mapping = {"value": "value_key"}
+        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -2993,9 +2995,9 @@ class TestPPO(LossModuleTestBase):
             "action": "action",
         }
         key_mapping = {
-            "advantage": "advantage_key",
-            "value_target": "value_target_key",
-            "value": "value_key",
+            "advantage": "advantage",
+            "value_target": "value_target",
+            # "value": "value",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -3027,9 +3029,9 @@ class TestPPO(LossModuleTestBase):
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
 
         adv_keys = {
-            f"{key}_key": value
+            key: value
             for key, value in tensor_keys.items()
-            if f"{key}_key" in GAE._AcceptedKeys().__dict__
+            if key in asdict(GAE._AcceptedKeys()).keys()
         }
 
         if advantage == "gae":
@@ -3038,14 +3040,12 @@ class TestPPO(LossModuleTestBase):
                 lmbda=0.9,
                 value_network=value,
                 differentiable=gradient_mode,
-                tensor_keys=adv_keys,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
                 gamma=0.9,
                 value_network=value,
                 differentiable=gradient_mode,
-                tensor_keys=adv_keys,
             )
         elif advantage == "td_lambda":
             advantage = TDLambdaEstimator(
@@ -3053,7 +3053,6 @@ class TestPPO(LossModuleTestBase):
                 lmbda=0.9,
                 value_network=value,
                 differentiable=gradient_mode,
-                tensor_keys=adv_keys,
             )
         elif advantage is None:
             pass
@@ -3063,6 +3062,7 @@ class TestPPO(LossModuleTestBase):
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
+            advantage.set_keys(**adv_keys)
             advantage(td)
         else:
             if td_est is not None:
@@ -3216,7 +3216,7 @@ class TestA2C(LossModuleTestBase):
             _ = loss_fn._log_probs(td)
         td["action"].requires_grad = False
 
-        td = td.exclude(loss_fn.tensor_keys.value_target_key)
+        td = td.exclude(loss_fn.tensor_keys.value_target)
         if advantage is not None:
             advantage(td)
         elif td_est is not None:
@@ -3331,15 +3331,15 @@ class TestA2C(LossModuleTestBase):
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
 
         default_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "action_key": "action",
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "value": "state_value",
+            "action": "action",
         }
         key_mapping = {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
+            "advantage": "advantage",
+            "value_target": "value_target",
+            # "value": "value",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -3367,16 +3367,18 @@ class TestA2C(LossModuleTestBase):
             lmbda=0.9,
             value_network=value,
             differentiable=gradient_mode,
-            advantage_key=advantage_key,
-            value_target_key=value_target_key,
-            value_key=value_key,
+        )
+        advantage.set_keys(
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
         )
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(
-            advantage_key=advantage_key,
-            value_target_key=value_target_key,
-            value_key=value_key,
-            action_key=action_key,
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
+            action=action_key,
         )
 
         advantage(td)
@@ -3535,15 +3537,15 @@ class TestReinforce(LossModuleTestBase):
         )
 
         default_keys = {
-            "advantage_key": "advantage",
-            "value_target_key": "value_target",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "value": "state_value",
+            "sample_log_prob": "sample_log_prob",
         }
         key_mapping = {
-            "advantage_key": "advantage_key",
-            "value_target_key": "value_target_key",
-            "value_key": "value_key",
+            "advantage": "advantage",
+            "value_target": "value_target",
+            # "value": "value",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -3984,12 +3986,12 @@ class TestDreamer(LossModuleTestBase):
             "value": "state_value",
             "done": "done",
         }
-        key_mapping = {"value": "value_key"}
+        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
     def test_dreamer_value_tensordict_keys(self, device):
@@ -4344,12 +4346,12 @@ class TestIQL(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "value": "state_value",
         }
-        key_mapping = {"value": "value_key"}
+        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
+            # loss_advantage_key_mapping=key_mapping,
         )
 
 

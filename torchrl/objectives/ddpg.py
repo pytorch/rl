@@ -107,7 +107,7 @@ class DDPGLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.state_action_value,
+                value=self._tensor_keys.state_action_value,
             )
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
@@ -206,22 +206,20 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {"value_key": self.tensor_keys.state_action_value}
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                value_network=self.actor_critic, tensor_keys=tensor_keys, **hp
+                value_network=self.actor_critic, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {"value": self.tensor_keys.state_action_value}
+        self._value_estimator.set_keys(**tensor_keys)

@@ -164,7 +164,7 @@ class IQLLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.value,
+                value=self._tensor_keys.value,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -295,21 +295,15 @@ class IQLLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {
-            "value_target_key": "value_target",
-            "value_key": self.tensor_keys.value,
-        }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                tensor_keys=tensor_keys,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -319,7 +313,12 @@ class IQLLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                tensor_keys=tensor_keys,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "value_target": "value_target",
+            "value": self.tensor_keys.value,
+        }
+        self._value_estimator.set_keys(**tensor_keys)

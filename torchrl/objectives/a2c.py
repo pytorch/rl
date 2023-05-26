@@ -71,10 +71,10 @@ class A2CLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        advantage_key: NestedKey = "advantage"
-        value_target_key: NestedKey = "value_target"
-        value_key: NestedKey = "state_value"
-        action_key: NestedKey = "action"
+        advantage: NestedKey = "advantage"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "state_value"
+        action: NestedKey = "action"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
@@ -96,7 +96,7 @@ class A2CLoss(LossModule):
     ):
         super().__init__()
         self._set_deprecated_ctor_keys(
-            advantage_key=advantage_key, value_target_key=value_target_key
+            advantage=advantage_key, value_target=value_target_key
         )
 
         self.convert_to_functional(
@@ -125,9 +125,9 @@ class A2CLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage_key=self._tensor_keys.advantage_key,
-                value_target_key=self._tensor_keys.value_target_key,
-                value_key=self._tensor_keys.value_key,
+                advantage=self._tensor_keys.advantage,
+                value_target=self._tensor_keys.value_target,
+                value=self._tensor_keys.value,
             )
 
     def reset(self) -> None:
@@ -145,10 +145,10 @@ class A2CLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[torch.Tensor, d.Distribution]:
         # current log_prob of actions
-        action = tensordict.get(self.tensor_keys.action_key)
+        action = tensordict.get(self.tensor_keys.action)
         if action.requires_grad:
             raise RuntimeError(
-                f"tensordict stored {self.tensor_keys.action_key} require grad."
+                f"tensordict stored {self.tensor_keys.action} require grad."
             )
         tensordict_clone = tensordict.select(*self.actor.in_keys).clone()
 
@@ -161,12 +161,12 @@ class A2CLoss(LossModule):
         try:
             # TODO: if the advantage is gathered by forward, this introduces an
             # overhead that we could easily reduce.
-            target_return = tensordict.get(self.tensor_keys.value_target_key)
+            target_return = tensordict.get(self.tensor_keys.value_target)
             tensordict_select = tensordict.select(*self.critic.in_keys)
             state_value = self.critic(
                 tensordict_select,
                 params=self.critic_params,
-            ).get(self.tensor_keys.value_key)
+            ).get(self.tensor_keys.value)
             loss_value = distance_loss(
                 target_return,
                 state_value,
@@ -174,7 +174,7 @@ class A2CLoss(LossModule):
             )
         except KeyError:
             raise KeyError(
-                f"the key {self.tensor_keys.value_target_key} was not found in the input tensordict. "
+                f"the key {self.tensor_keys.value_target} was not found in the input tensordict. "
                 f"Make sure you provided the right key and the value_target (i.e. the target "
                 f"return) has been retrieved accordingly. Advantage classes such as GAE, "
                 f"TDLambdaEstimate and TDEstimate all return a 'value_target' entry that "
@@ -184,14 +184,14 @@ class A2CLoss(LossModule):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        advantage = tensordict.get(self.tensor_keys.advantage_key, None)
+        advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),
                 target_params=self.target_critic_params,
             )
-            advantage = tensordict.get(self.tensor_keys.advantage_key)
+            advantage = tensordict.get(self.tensor_keys.advantage)
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
         td_out = TensorDict({"loss_objective": loss.mean()}, [])
@@ -212,26 +212,20 @@ class A2CLoss(LossModule):
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
-        tensor_keys = {
-            "advantage_key": self.tensor_keys.advantage_key,
-            "value_key": self.tensor_keys.value_key,
-            "value_target_key": self.tensor_keys.value_target_key,
-        }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic, tensor_keys=tensor_keys, **hp
-            )
+            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "advantage": self.tensor_keys.advantage,
+            "value": self.tensor_keys.value,
+            "value_target": self.tensor_keys.value_target,
+        }
+        self._value_estimator.set_keys(**tensor_keys)

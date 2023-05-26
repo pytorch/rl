@@ -207,9 +207,9 @@ class PPOLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage_key=self._tensor_keys.advantage,
-                value_target_key=self._tensor_keys.value_target,
-                value_key=self._tensor_keys.value,
+                advantage=self._tensor_keys.advantage,
+                value_target=self._tensor_keys.value_target,
+                value=self._tensor_keys.value,
             )
 
     def reset(self) -> None:
@@ -316,29 +316,23 @@ class PPOLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {
-            "advantage_key": self.tensor_keys.advantage,
-            "value_key": self.tensor_keys.value,
-            "value_target_key": self.tensor_keys.value_target,
-        }
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic, **hp, tensor_keys=tensor_keys
-            )
+            self._value_estimator = TD1Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic, **hp, tensor_keys=tensor_keys
-            )
+            self._value_estimator = TD0Estimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(
-                value_network=self.critic, **hp, tensor_keys=tensor_keys
-            )
+            self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic, **hp, tensor_keys=tensor_keys
-            )
+            self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "advantage": self.tensor_keys.advantage,
+            "value": self.tensor_keys.value,
+            "value_target": self.tensor_keys.value_target,
+        }
+        self._value_estimator.set_keys(**tensor_keys)
 
 
 class ClipPPOLoss(PPOLoss):
