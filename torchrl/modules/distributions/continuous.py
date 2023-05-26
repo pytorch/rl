@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
-from torchrl._torchrl import safetanh
+from torchrl._torchrl import safetanh, safeatanh
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
@@ -104,8 +104,7 @@ class SafeTanhTransform(D.TanhTransform):
             eps = torch.finfo(y.dtype).resolution
         else:
             raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
-        y.data.clamp_(-1 + eps, 1 - eps)
-        x = super()._inverse(y)
+        x = safeatanh(y, eps)
         return x
 
 

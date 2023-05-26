@@ -25,8 +25,29 @@ class SafeTanh : public Function<SafeTanh> {
     auto out = saved[0];
     auto go = grad_outputs[0];
     auto grad = go * (1 - out * out);
-    return {grad};
+    return {grad, torch::Tensor()};
   }
 };
 
-torch::Tensor safetanh(torch::Tensor input) { return SafeTanh::apply(input); }
+torch::Tensor safetanh(torch::Tensor input, float eps=1e-6) { return SafeTanh::apply(input, eps); }
+
+class SafeInvTanh : public Function<SafeInvTanh> {
+ public:
+  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input, float eps=1e-6) {
+    auto lim = 1.0 - eps;
+    auto out = input.clamp(-lim, lim);
+    out = torch::atanh(out);
+    ctx->save_for_backward({input});
+    return out;
+  }
+
+  static tensor_list backward(AutogradContext* ctx, tensor_list grad_outputs) {
+    auto saved = ctx->get_saved_variables();
+    auto input = saved[0];
+    auto go = grad_outputs[0];
+    auto grad = go / (1 - input * input);
+    return {grad, torch::Tensor()};
+  }
+};
+
+torch::Tensor safeatanh(torch::Tensor input, float eps=1e-6) { return SafeInvTanh::apply(input, eps); }
