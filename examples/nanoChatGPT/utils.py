@@ -68,7 +68,6 @@ def setup(config):
 
 
 def create_lr_scheduler(config):
-
     # learning rate decay scheduler (cosine with warmup)
     def scheduler(it):
         # 1) linear warmup for warmup_iters steps

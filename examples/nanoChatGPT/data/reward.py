@@ -1,14 +1,36 @@
+from pathlib import Path
 from typing import Optional
 
-import tiktoken
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from datasets import load_dataset
-from tensordict import MemmapTensor, tensorclass
+from torch.utils.data import Dataset
+from datasets import load_dataset, Dataset as HFDataset
+from tensordict import tensorclass
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 from .utils import create_infinite_dataloader
+
+NUM_PROC = 8
+HERE = Path(__file__).parent
+DATASET = "CarperAI/openai_summarize_comparisons"
+
+
+@tensorclass
+class BatchedRewardData:
+    chosen_ids: torch.Tensor
+    chosen_mask: torch.Tensor
+    rejected_ids: torch.Tensor
+    rejected_mask: torch.Tensor
+    chosen_end_scores: Optional[torch.Tensor] = None
+    rejected_end_scores: Optional[torch.Tensor] = None
+
+
+@tensorclass
+class RewardData:
+    batched: BatchedRewardData
+    loss: Optional[torch.Tensor] = None
 
 
 class Collate(nn.Module):
@@ -22,105 +44,126 @@ class Collate(nn.Module):
         return batch.to(self.device)
 
 
-@tensorclass
-class PairwiseDataset:
-    chosen: torch.Tensor
-    rejected: torch.Tensor
-    reward: Optional[torch.Tensor] = None
-
-    @staticmethod
-    def _encode(sample, max_length):
-        enc = tiktoken.get_encoding("gpt2")
-
-        prompt = sample["prompt"]
-        chosen = sample["chosen"]
-        rejected = sample["rejected"]
-
-        chosen = "\n".join([prompt, chosen])
-        rejected = "\n".join([prompt, rejected])
-
-        chosen = enc.encode(
-            "<|startoftext|>" + chosen + "<|endoftext|>", allowed_special="all"
-        )[-max_length:]
-        rejected = enc.encode(
-            "<|startoftext|>" + rejected + "<|endoftext|>", allowed_special="all"
-        )[-max_length:]
-        return chosen, rejected
-
-    @classmethod
-    def from_dataset(cls, dataset, max_length):
-        # we perform two passes over the dataset. during the first we determine which
-        # datapoints to skip. during the second we load the unskipped examples into
-        # a pre-allocated memory map. while we do end up paying the cost of iteration
-        # and encoding twice, it means we are able to load the full dataset into the
-        # memory map without ever having to hold the whole thing in memory
-        indices_to_skip = set()
-        for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
-            if idx >= 1000:
-                break
-            if len(sample["chosen"].split()) < 5 or len(sample["rejected"].split()) < 5:
-                indices_to_skip.add(idx)
-                continue
-
-            chosen, rejected = cls._encode(sample, max_length)
-
-            if chosen == rejected:
-                indices_to_skip.add(idx)
-
-        data = cls(
-            chosen=MemmapTensor(
-                # len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
-                1000, max_length, dtype=torch.int32
-            ),
-            rejected=MemmapTensor(
-                # len(dataset) - len(indices_to_skip), max_length, dtype=torch.int32
-                1000, max_length, dtype=torch.int32
-            ),
-            # batch_size=[len(dataset)],
-            batch_size=[1000],
+def make_process_fn(tokenizer, max_length):
+    def process(example):
+        return tokenizer(
+            example["text"],
+            max_length=max_length,
+            padding="max_length",
+            truncation=True,
         )
-        i = 0
 
-        for idx, sample in tqdm(enumerate(dataset), total=len(dataset)):
-            if idx >= 1000:
-                break
-            if idx in indices_to_skip:
-                continue
+    return process
 
-            chosen, rejected = cls._encode(sample, max_length)
 
-            data[i] = cls(
-                chosen=F.pad(
-                    torch.Tensor(chosen), (0, max_length - len(chosen)), value=50256
-                ),
-                rejected=F.pad(
-                    torch.Tensor(rejected), (0, max_length - len(rejected)), value=50256
-                ),
-                batch_size=[],
-            )
-            i += 1
-        return data
+def create_comparisons_dataset(split="train"):
+    dataset = load_dataset(DATASET, split=split)
+    if split.startswith("valid"):
+        # reduce size of validation dataset
+        dataset = dataset.select(range(2_000))
+
+    chosen = []
+    rejected = []
+    for sample in tqdm(dataset):
+        prompt = sample["prompt"]
+        chosen_summary = sample["chosen"]
+        rejected_summary = sample["rejected"]
+        if chosen_summary == rejected_summary:
+            continue
+        if len(chosen_summary.split()) < 5 or len(rejected_summary.split()) < 5:
+            continue
+        chosen.append({"text": prompt + "\n" + chosen_summary})
+        rejected.append({"text": prompt + "\n" + rejected_summary})
+    return HFDataset.from_list(chosen + rejected)
+
+
+def create_comparisons_memmaps(split, max_length):
+    dataset = create_comparisons_dataset(split)
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.pad_token = tokenizer.eos_token
+    # tokenize the dataset
+    tokenized = dataset.map(
+        make_process_fn(tokenizer, max_length=max_length),
+        remove_columns=["text"],
+        desc=f"Tokenizing {split} data",
+        num_proc=NUM_PROC,
+        batched=True,
+    )
+    tokenized.set_format("torch", columns=["input_ids", "attention_mask"])
+
+    # concatenate all the ids in each dataset into one large file we can use for training
+    n_examples = len(tokenized)
+
+    data_dir = HERE / "comparisons"
+    if not data_dir.exists():
+        data_dir.mkdir()
+    ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
+    mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
+
+    dtype = np.int32  # (can do since enc.max_token_value == 50256 is < 2**16)
+    ids_arr = np.memmap(
+        ids_filename, dtype=dtype, mode="w+", shape=(n_examples, max_length)
+    )
+    mask_arr = np.memmap(
+        mask_filename, dtype=dtype, mode="w+", shape=(n_examples, max_length)
+    )
+
+    print(f"writing {ids_filename} and {mask_filename}...")
+    for idx, example in tqdm(enumerate(tokenized), total=len(tokenized)):
+        ids_arr[idx] = example["input_ids"]
+        mask_arr[idx] = example["attention_mask"]
+    ids_arr.flush()
+    mask_arr.flush()
+
+
+class PairwiseDataset(Dataset):
+    def __init__(self, split, max_length=550):
+        data_dir = HERE / "comparisons"
+        ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
+        mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
+        if not all(
+            (data_dir / file).exists() for file in (ids_filename, mask_filename)
+        ):
+            create_comparisons_memmaps(split, max_length)
+
+        self.input_ids = np.memmap(ids_filename, dtype=np.int32, mode="r+")
+        self.mask = np.memmap(mask_filename, dtype=np.int32, mode="r+")
+
+        self.input_ids = self.input_ids.reshape(
+            (self.input_ids.shape[0] // max_length, max_length)
+        )
+        self.mask = self.mask.reshape((self.mask.shape[0] // max_length, max_length))
+
+    def __len__(self):
+        return len(self.input_ids) // 2
+
+    def __getitems__(self, idx):
+        ridx = [i + self.__len__() for i in idx]
+        chosen_ids = torch.from_numpy(self.input_ids[idx])
+        rejected_ids = torch.from_numpy(self.input_ids[ridx])
+        chosen_mask = torch.from_numpy(self.mask[idx])
+        rejected_mask = torch.from_numpy(self.mask[ridx])
+        batch_size = chosen_ids.shape[0]
+        batched_data = BatchedRewardData(
+            chosen_ids=chosen_ids,
+            rejected_ids=rejected_ids,
+            chosen_mask=chosen_mask,
+            rejected_mask=rejected_mask,
+            batch_size=[batch_size],
+        )
+        return RewardData(batched=batched_data, batch_size=[])
 
 
 def create_datasets(config):
-    # Make pairwise datasets for training
-    print("Creating pairwise datasets")
-    assert config["dataset"] == "openai_summarize_comparisons"
-    data_path = "CarperAI/openai_summarize_comparisons"
-    train_data = PairwiseDataset.from_dataset(
-        load_dataset(data_path, split="train"), max_length=config["block_size"]
-    )
-    val_data = PairwiseDataset.from_dataset(
-        load_dataset(data_path, split="test"), max_length=config["block_size"]
-    )
+    train_data = PairwiseDataset("train", max_length=config["block_size"])
+    val_data = PairwiseDataset("valid1", max_length=config["block_size"])
 
     return train_data, val_data
 
 
 def get_reward_dataloaders(config):
     train_data, val_data = create_datasets(config)
-    train_data.memmap_()
-    val_data.memmap_()
 
     train_loader = create_infinite_dataloader(
         train_data, config, Collate(config["device"])

@@ -6,7 +6,7 @@ To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
 
-import tqdm 
+import tqdm
 from pathlib import Path
 from data import get_reward_dataloaders
 from models.reward import init_reward_model
@@ -15,9 +15,7 @@ from utils import load_and_update_config
 HERE = Path(__file__).parent
 
 
-
 def main():
-    
     config = load_and_update_config("config/train_reward.yaml")
     config["block_size"] = 512
     # ######## INIT MODELS ########

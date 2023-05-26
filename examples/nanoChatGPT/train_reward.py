@@ -11,18 +11,19 @@ from utils import load_and_update_config, create_lr_scheduler, setup
 HERE = Path(__file__).parent
 
 
+# TODO: eliminate redundant repeated definition
 # helps estimate an arbitrarily accurate loss over either split using many batches
 def create_loss_estimator(config, ctx):
     @torch.no_grad()
     def estimate_loss(model, dataloader):
+        model.eval()
         losses = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
             with ctx:
-                reward_chosen = model(batch.chosen)
-                reward_rejected = model(batch.rejected)
-                loss = -torch.log(torch.sigmoid(reward_chosen - reward_rejected)).mean()
-            losses[k] = loss.item()
+                model(batch)
+            losses[k] = batch.loss.item()
+        model.train()
         return losses.mean()
 
     return estimate_loss
@@ -34,6 +35,13 @@ def main():
 
     # ######## INIT MODELS ########
     model = init_reward_model(config)
+
+    # Freeze the first 70% of the hidden layers of the reward model backbone
+    layers = model.transformer.h
+    num_layers = len(layers)
+    num_unfrozen = int(0.3 * num_layers)
+    for layer in layers[:-num_unfrozen]:
+        layer.requires_grad_(False)
 
     # ######## INIT TRAINING FUNCTIONS ########
 
@@ -60,14 +68,9 @@ def main():
 
         # TODO: check why is different from std model (missing micro gradients)
 
-        # evaluate the loss
-        reward_chosen = model(batch.chosen)
-        reward_rejected = model(batch.rejected)
-        aaaaa
-        loss = -torch.log(torch.sigmoid(reward_chosen - reward_rejected)).mean()
-
+        model(batch)
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
+        batch.loss.backward()
         optimizer.step()
 
         # ########### EVALUATE MODEL AND CHECKPOINT ###############

@@ -104,7 +104,12 @@ def main():
     train_loader, _ = get_prompt_dataloaders(config)
 
     # Environment
-    env = RLHFEnv(reward_model=reward_model, config=config, dataloader=train_loader, ref_model=actor2)
+    env = RLHFEnv(
+        reward_model=reward_model,
+        config=config,
+        dataloader=train_loader,
+        ref_model=actor2,
+    )
 
     # Test Environment
     test_config = deepcopy(config)
@@ -112,7 +117,10 @@ def main():
     test_config["episode_length"] = 50
     train_loader_test, _ = get_prompt_dataloaders(test_config)
     test_env = RLHFEnv(
-        reward_model=reward_model, config=test_config, dataloader=train_loader_test, ref_model=actor2
+        reward_model=reward_model,
+        config=test_config,
+        dataloader=train_loader_test,
+        ref_model=actor2,
     )
 
     # ######## TRAINING LOOP ########

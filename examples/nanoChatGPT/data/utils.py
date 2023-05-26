@@ -7,11 +7,7 @@ def create_infinite_dataloader(data, config, collate_fn):
     batches whenever we like with next.
     """
     dl = DataLoader(
-        data,
-        batch_size=config["batch_size"],
-        shuffle=True,
-        collate_fn=collate_fn,
-        drop_last=True,
+        data, batch_size=config["batch_size"], collate_fn=collate_fn, drop_last=True
     )
     while True:
         yield from dl
