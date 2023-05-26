@@ -567,6 +567,39 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    def test_dqn_notensordict(self):
+        n_obs = 3
+        n_action = 4
+        action_spec = OneHotDiscreteTensorSpec(n_action)
+        value_network = nn.Linear(n_obs, n_action)  # a simple value model
+        dqn_loss = DQNLoss(value_network, action_space=action_spec)
+        # define data
+        observation = torch.randn(n_obs)
+        next_observation = torch.randn(n_obs)
+        action = action_spec.rand()
+        next_reward = torch.randn(1)
+        next_done = torch.zeros(1, dtype=torch.bool)
+        loss_val = dqn_loss(
+            observation=observation,
+            next_observation=next_observation,
+            next_reward=next_reward,
+            next_done=next_done,
+            action=action,
+        )
+        loss_val_td = dqn_loss(
+            TensorDict(
+                {
+                    "observation": observation,
+                    "next_observation": next_observation,
+                    "next_reward": next_reward,
+                    "next_done": next_done,
+                    "action": action,
+                },
+                [],
+            ).unflatten_keys("_")
+        )
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+
     def test_distributional_dqn_tensordict_keys(self):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
