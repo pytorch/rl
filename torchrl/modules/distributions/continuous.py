@@ -97,14 +97,14 @@ class SafeTanhTransform(D.TanhTransform):
             eps = torch.finfo(x.dtype).resolution
         else:
             raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
-        return safetanh(x, eps)
+        return (x * (1 - eps)).tanh()
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
         if y.dtype.is_floating_point:
             eps = torch.finfo(y.dtype).resolution
         else:
             raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
-        x = safeatanh(y, eps)
+        x = y.atanh() / (1 - eps)
         return x
 
 
@@ -185,8 +185,8 @@ class TruncatedNormal(D.Independent):
 
         min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
-        tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw value
-            is kept.
+        tanh_loc (bool, optional): if ``True``, the above formula is used for
+            the location scaling, otherwise the raw value is kept.
             Default is :obj:`True`;
     """
 
