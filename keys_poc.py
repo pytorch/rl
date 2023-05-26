@@ -58,11 +58,16 @@ class PPOLoss(LossModule):
         value: NestedKey = "state_value"
         other: NestedKey = "other"
 
-    def __init__(self, advantage_key=None):
+    def __init__(self, advantage_key=None, value_key=None):
         super().__init__()
+        key_kw = {}
         if advantage_key is not None:
             warnings.warn("deprecated", category=DeprecationWarning)
-            self.set_keys(advantage=advantage_key)
+            key_kw["advantage"] = advantage_key
+        if value_key is not None:
+            warnings.warn("deprecated", category=DeprecationWarning)
+            key_kw["value"] = value_key
+        self._key_kw_deprec = key_kw
 
     def make_value_estimator(
         self,
@@ -79,6 +84,9 @@ class PPOLoss(LossModule):
 
     @property
     def keys(self):
+        if self._keys is None:
+            # run auto setter. If there is a mismatch an exception will be raised
+            self.set_keys(**self._key_kw_deprec)
         return self._keys
 
     @keys.setter
