@@ -63,7 +63,7 @@ jobs:
         pip3 install git+https://github.com/pytorch-labs/tensordict.git --quiet --root-user-action=ignore
     - name: Install TorchRL
       run: |
-        python setup.py develop
+        python3 setup.py develop
     - name: Install requirements
       run: |
         pip3 install -r docs/requirements.txt --quiet --root-user-action=ignore
