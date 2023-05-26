@@ -12,9 +12,10 @@ using namespace torch::autograd;
 
 class SafeTanh : public Function<SafeTanh> {
  public:
-  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input) {
+  static torch::Tensor forward(AutogradContext* ctx, torch::Tensor input, float eps=1e-6) {
     auto out = torch::tanh(input);
-    out = out.clamp(-0.999999, 0.999999);
+    auto lim = 1.0 - eps;
+    out = out.clamp(-lim, lim);
     ctx->save_for_backward({out});
     return out;
   }
