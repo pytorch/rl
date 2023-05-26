@@ -42,8 +42,22 @@ class DDPGLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        state_action_value_key: NestedKey = "state_action_value"
-        priority_key: NestedKey = "td_error"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        state_action_value : NestedKey
+            The input tensordict key where the state action value is expected.
+            Will be used for the underlying value estimator as value key. Defaults to ``"state_action_value"``.
+        priority : NestedKey
+            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+        """
+
+        state_action_value: NestedKey = "state_action_value"
+        priority: NestedKey = "td_error"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
@@ -59,7 +73,6 @@ class DDPGLoss(LossModule):
         gamma: float = None,
     ) -> None:
         super().__init__()
-
         self.delay_actor = delay_actor
         self.delay_value = delay_value
 
@@ -94,7 +107,7 @@ class DDPGLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.state_action_value_key,
+                value_key=self._tensor_keys.state_action_value,
             )
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
@@ -119,7 +132,7 @@ class DDPGLoss(LossModule):
         if input_tensordict.device is not None:
             td_error = td_error.to(input_tensordict.device)
         input_tensordict.set(
-            self.tensor_keys.priority_key,
+            self.tensor_keys.priority,
             td_error,
             inplace=True,
         )
@@ -150,7 +163,7 @@ class DDPGLoss(LossModule):
                 td_copy,
                 params=params,
             )
-        return -td_copy.get(self.tensor_keys.state_action_value_key)
+        return -td_copy.get(self.tensor_keys.state_action_value)
 
     def _loss_value(
         self,
@@ -162,7 +175,7 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get(self.tensor_keys.state_action_value_key).squeeze(-1)
+        pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_params = TensorDict(
             {
@@ -193,7 +206,7 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        tensor_keys = {"value_key": self.tensor_keys.state_action_value_key}
+        tensor_keys = {"value_key": self.tensor_keys.state_action_value}
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.actor_critic, tensor_keys=tensor_keys, **hp

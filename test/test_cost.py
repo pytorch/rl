@@ -141,14 +141,14 @@ def get_devices():
 
 class LossModuleTestBase:
     def tensordict_keys_test(
-        self, loss_fn, default_keys, loss_advantage_key_mapping=None
+        self, loss_fn, default_keys, td_est=None, loss_advantage_key_mapping=None
     ):
         self.tensordict_keys_unknown_key_test(loss_fn)
         self.tensordict_keys_default_values_test(loss_fn, default_keys)
         self.tensordict_set_keys_test(loss_fn, default_keys)
         if loss_advantage_key_mapping is not None:
             self.set_advantage_keys_through_loss_test(
-                loss_fn, loss_advantage_key_mapping
+                loss_fn, td_est, loss_advantage_key_mapping
             )
 
     def tensordict_keys_unknown_key_test(self, loss_fn):
@@ -179,26 +179,18 @@ class LossModuleTestBase:
         for key, _ in default_keys.items():
             assert getattr(test_fn.tensor_keys, key) == new_key
 
-    def set_advantage_keys_through_loss_test(self, loss_fn, loss_advantage_key_mapping):
-        test_fn = deepcopy(loss_fn)
-
+    def set_advantage_keys_through_loss_test(
+        self, loss_fn, td_est, loss_advantage_key_mapping
+    ):
         key_mapping = loss_advantage_key_mapping
+        test_fn = deepcopy(loss_fn)
+        test_fn.make_value_estimator(td_est)
+
         for loss_key, advantage_key in key_mapping.items():
             test_fn.set_keys(**{loss_key: "test1"})
             assert (
                 getattr(test_fn.value_estimator.tensor_keys, advantage_key) == "test1"
             )
-
-    # TODO test
-    # loss = Loss(...)
-    # loss.set_keys()
-    # loss.make_value_estimator()
-    #
-    # vs
-    #
-    # loss = Loss(...)
-    # loss.make_value_estimator()
-    # loss.set_keys()
 
 
 class TestDQN(LossModuleTestBase):
@@ -577,7 +569,9 @@ class TestDDPG(LossModuleTestBase):
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu", out_keys=None
+    ):
         # Actor
         class ValueClass(nn.Module):
             def __init__(self):
@@ -589,8 +583,7 @@ class TestDDPG(LossModuleTestBase):
 
         module = ValueClass()
         value = ValueOperator(
-            module=module,
-            in_keys=["observation", "action"],
+            module=module, in_keys=["observation", "action"], out_keys=out_keys
         )
         return value.to(device)
 
@@ -811,17 +804,46 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
         )
 
-        loss_fn.make_value_estimator(td_est)
-
         default_keys = {
-            "state_action_value_key": "state_action_value",
-            "priority_key": "td_error",
+            "state_action_value": "state_action_value",
+            "priority": "td_error",
         }
-        key_mapping = {"state_action_value_key": "value_key"}
+        key_mapping = {"state_action_value": "value_key"}
 
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
+
+    @pytest.mark.parametrize(
+        "td_est",
+        [ValueEstimators.TD0, ValueEstimators.TD1, ValueEstimators.TDLambda, None],
+    )
+    def test_ddpg_tensordict_run(self, td_est):
+        """Test DDPG loss module with non-default tensordict keys."""
+        torch.manual_seed(self.seed)
+        tensor_keys = {
+            "state_action_value": "state_action_value_test",
+            "priority": "td_error_test",
+        }
+
+        actor = self._create_mock_actor()
+        value = self._create_mock_value(out_keys=[tensor_keys["state_action_value"]])
+        td = self._create_mock_data_ddpg()
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+        )
+        loss_fn.set_keys(**tensor_keys)
+
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+
+        with _check_td_steady(td):
+            _ = loss_fn(td)
 
 
 class TestTD3(LossModuleTestBase):
@@ -1108,7 +1130,6 @@ class TestTD3(LossModuleTestBase):
             actor,
             value,
         )
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "priority_key": "td_error",
@@ -1118,7 +1139,10 @@ class TestTD3(LossModuleTestBase):
         key_mapping = {"state_action_value_key": "value_key"}
 
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -1557,8 +1581,6 @@ class TestSAC(LossModuleTestBase):
             loss_function="l2",
         )
 
-        loss_fn.make_value_estimator(td_est)
-
         default_keys = {
             "priority_key": "td_error",
             "value_key": "state_value",
@@ -1570,7 +1592,10 @@ class TestSAC(LossModuleTestBase):
         key_mapping = {"value_key": "value_key"}
 
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -1922,8 +1947,6 @@ class TestDiscreteSAC(LossModuleTestBase):
             loss_function="l2",
         )
 
-        loss_fn.make_value_estimator(td_est)
-
         default_keys = {
             "priority_key": "td_error",
             "value_key": "state_value",
@@ -1931,7 +1954,10 @@ class TestDiscreteSAC(LossModuleTestBase):
         }
         key_mapping = {"value_key": "value_key"}
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -2420,7 +2446,6 @@ class TestREDQ(LossModuleTestBase):
             qvalue_network=qvalue,
             loss_function="l2",
         )
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "priority_key": "td_error",
@@ -2431,7 +2456,10 @@ class TestREDQ(LossModuleTestBase):
         }
         key_mapping = {"value_key": "value_key"}
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -2890,7 +2918,6 @@ class TestPPO(LossModuleTestBase):
         value = self._create_mock_value()
 
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "advantage": "advantage",
@@ -2905,7 +2932,10 @@ class TestPPO(LossModuleTestBase):
             "value": "value_key",
         }
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
@@ -3233,7 +3263,6 @@ class TestA2C(LossModuleTestBase):
         value = self._create_mock_value()
 
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "advantage_key": "advantage",
@@ -3247,7 +3276,10 @@ class TestA2C(LossModuleTestBase):
             "value_key": "value_key",
         }
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
     @pytest.mark.parametrize("device", get_available_devices())
@@ -3435,7 +3467,6 @@ class TestReinforce(LossModuleTestBase):
             actor_net,
             critic=value_net,
         )
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "advantage_key": "advantage",
@@ -3449,7 +3480,10 @@ class TestReinforce(LossModuleTestBase):
             "value_key": "value_key",
         }
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
@@ -3877,7 +3911,6 @@ class TestDreamer(LossModuleTestBase):
             value_model,
             mb_env,
         )
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "belief_key": "belief",
@@ -3887,7 +3920,10 @@ class TestDreamer(LossModuleTestBase):
         }
         key_mapping = {"value_key": "value_key"}
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
     def test_dreamer_value_tensordict_keys(self, device):
@@ -4234,7 +4270,6 @@ class TestIQL(LossModuleTestBase):
             value_network=value,
             loss_function="l2",
         )
-        loss_fn.make_value_estimator(td_est)
 
         default_keys = {
             "priority_key": "td_error",
@@ -4245,7 +4280,10 @@ class TestIQL(LossModuleTestBase):
         }
         key_mapping = {"value_key": "value_key"}
         self.tensordict_keys_test(
-            loss_fn, default_keys=default_keys, loss_advantage_key_mapping=key_mapping
+            loss_fn,
+            default_keys=default_keys,
+            td_est=td_est,
+            loss_advantage_key_mapping=key_mapping,
         )
 
 
