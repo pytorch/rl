@@ -94,14 +94,14 @@ class SafeTanhTransform(D.TanhTransform):
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
         if x.dtype.is_floating_point:
-            eps = torch.finfo(x.dtype).resolution * 10
+            eps = torch.finfo(x.dtype).resolution
         else:
             raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
         return safetanh(x, eps)
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
         if y.dtype.is_floating_point:
-            eps = torch.finfo(y.dtype).resolution * 10
+            eps = torch.finfo(y.dtype).resolution
         else:
             raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
         x = safeatanh(y, eps)
