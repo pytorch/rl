@@ -139,10 +139,10 @@ class PPOLoss(LossModule):
             Will be used for the underlying value estimator. Defaults to ``"state_value"``.
         sample_log_prob : NestedKey
             The input tensordict key where the sample log probability is expected.
-            Defaults to ``"state_value"``.
+            Defaults to ``"sample_log_prob"``.
         action : NestedKey
             The input tensordict key where the action is expected.
-            Defaults to ``"state_value"``.
+            Defaults to ``"action"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -187,7 +187,6 @@ class PPOLoss(LossModule):
             policy_params = list(actor.parameters())
         else:
             policy_params = None
-
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
@@ -238,9 +237,7 @@ class PPOLoss(LossModule):
 
         prev_log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
         if prev_log_prob.requires_grad:
-            raise RuntimeError(
-                f"tensordict {self.tensor_keys.sample_log_prob} requires grad."
-            )
+            raise RuntimeError("tensordict prev_log_prob requires grad.")
 
         log_weight = (log_prob - prev_log_prob).unsqueeze(-1)
         return log_weight, dist

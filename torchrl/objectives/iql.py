@@ -260,7 +260,6 @@ class IQLLoss(LossModule):
 
     def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
-        # TODO (refactor key usage): what to do with dynamically generated keys
         tensordict = tensordict.select("next", *obs_keys, self.tensor_keys.action)
 
         target_value = self.value_estimator.value_estimate(

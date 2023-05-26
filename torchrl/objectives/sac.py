@@ -560,7 +560,7 @@ class DiscreteSACLoss(LossModule):
         Attributes:
         ------------
         action : NestedKey
-            The input tensordict key where the action is expected. Defaults to ``"advantage"``.
+            The input tensordict key where the action is expected. Defaults to ``"action"``.
         value : NestedKey
             The input tensordict key where the state value is expected.
             Will be used for the underlying value estimator. Defaults to ``"state_value"``.

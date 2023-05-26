@@ -211,7 +211,7 @@ class DreamerActorLoss(LossModule):
         Attributes:
         ------------
         belief : NestedKey
-            The input tensordict key where the belief is expected. Defaults to ``"done"``.
+            The input tensordict key where the belief is expected. Defaults to ``"belief"``.
         reward : NestedKey
             The reward is expected to be in the tensordict key ("next", reward). Defaults to ``"reward"``.
         value : NestedKey
@@ -319,7 +319,6 @@ class DreamerActorLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,

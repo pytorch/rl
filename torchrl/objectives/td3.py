@@ -71,7 +71,7 @@ class TD3Loss(LossModule):
         Attributes:
         ------------
         action : NestedKey
-            The input tensordict key where the action is expected. Defaults to ``"advantage"``.
+            The input tensordict key where the action is expected. Defaults to ``"action"``.
         state_action_value : NestedKey
             The input tensordict key where the state action value is expected.
             Will be used for the underlying value estimator. Defaults to ``"state_action_value"``.

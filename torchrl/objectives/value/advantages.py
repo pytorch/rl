@@ -208,11 +208,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names."""
         for key, value in kwargs.items():
-            # instance does not work with Generics
-            # if not isinstance(value, NestedKey):
-            #   raise ValueError("key name must be of type NestedKey (Union[str, Tuple[str]])")
+            if not isinstance(value, (str, tuple)):
+                raise ValueError(
+                    "key name must be of type NestedKey (Union[str, Tuple[str]])"
+                )
             if value is None:
-                raise ValueError("key names cannot be None")
+                raise ValueError("tensordict keys cannot be None")
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
                     f"{key} it not an accepted tensordict key for advantages"
@@ -848,8 +849,6 @@ class GAE(ValueEstimatorBase):
             Defaults to "value_target".
         value_key (str or tuple of str, optional): the value key to read from the input tensordict.
             Defaults to "state_value".
-        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in _AcceptedKeys.
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
@@ -970,7 +969,6 @@ class GAE(ValueEstimatorBase):
                 "Expected input tensordict to have at least one dimensions, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)

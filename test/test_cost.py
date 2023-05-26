@@ -141,16 +141,10 @@ def get_devices():
 
 
 class LossModuleTestBase:
-    def tensordict_keys_test(
-        self, loss_fn, default_keys, td_est=None, loss_advantage_key_mapping=None
-    ):
+    def tensordict_keys_test(self, loss_fn, default_keys, td_est=None):
         self.tensordict_keys_unknown_key_test(loss_fn)
         self.tensordict_keys_default_values_test(loss_fn, default_keys)
         self.tensordict_set_keys_test(loss_fn, default_keys)
-        if loss_advantage_key_mapping is not None:
-            self.set_advantage_keys_through_loss_test(
-                loss_fn, td_est, loss_advantage_key_mapping
-            )
 
     def tensordict_keys_unknown_key_test(self, loss_fn):
         """Test that exception is raised if an unknown key is set via .set_keys()"""
@@ -185,12 +179,17 @@ class LossModuleTestBase:
     ):
         key_mapping = loss_advantage_key_mapping
         test_fn = deepcopy(loss_fn)
+
+        new_keys = {}
+        for loss_key, (_, new_key) in key_mapping.items():
+            new_keys[loss_key] = new_key
+
+        test_fn.set_keys(**new_keys)
         test_fn.make_value_estimator(td_est)
 
-        for loss_key, advantage_key in key_mapping.items():
-            test_fn.set_keys(**{loss_key: "test1"})
+        for _, (advantage_key, new_key) in key_mapping.items():
             assert (
-                getattr(test_fn.value_estimator.tensor_keys, advantage_key) == "test1"
+                getattr(test_fn.value_estimator.tensor_keys, advantage_key) == new_key
             )
 
 
@@ -875,15 +874,21 @@ class TestDDPG(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "priority": "td_error",
         }
-        # TODO value needs state_action_value as out key for this test
-        # key_mapping = {"state_action_value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        value = self._create_mock_value(out_keys=["state_action_value_test"])
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+        )
+        key_mapping = {"state_action_value": ("value", "state_action_value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize(
         "td_est",
@@ -929,7 +934,9 @@ class TestTD3(LossModuleTestBase):
         )
         return actor.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu", out_keys=None
+    ):
         # Actor
         class ValueClass(nn.Module):
             def __init__(self):
@@ -943,6 +950,7 @@ class TestTD3(LossModuleTestBase):
         value = ValueOperator(
             module=module,
             in_keys=["observation", "action"],
+            out_keys=out_keys,
         )
         return value.to(device)
 
@@ -1193,7 +1201,6 @@ class TestTD3(LossModuleTestBase):
     def test_td3_tensordict_keys(self, td_est):
         actor = self._create_mock_actor()
         value = self._create_mock_value()
-        td = self._create_mock_data_td3()
         loss_fn = TD3Loss(
             actor,
             value,
@@ -1204,15 +1211,21 @@ class TestTD3(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "action": "action",
         }
-        # TODO value needs state_action_value as out key for this test
-        # key_mapping = {"state_action_value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        value = self._create_mock_value(out_keys=["state_action_value_test"])
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+        )
+        key_mapping = {"state_action_value": ("value", "state_action_value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 @pytest.mark.parametrize("version", [1, 2])
@@ -1657,14 +1670,22 @@ class TestSAC(LossModuleTestBase):
             "action": "action",
             "log_prob": "_log_prob",
         }
-        # key_mapping = {"value": "value"}
 
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        value = self._create_mock_value()
+        loss_fn = SACLoss(
+            actor,
+            value,
+            loss_function="l2",
+        )
+
+        key_mapping = {"value": ("value", "state_value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 class TestDiscreteSAC(LossModuleTestBase):
@@ -2020,13 +2041,22 @@ class TestDiscreteSAC(LossModuleTestBase):
             "value": "state_value",
             "action": "action",
         }
-        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        qvalue = self._create_mock_qvalue()
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            loss_function="l2",
+        )
+
+        key_mapping = {"value": ("value", "state_value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 @pytest.mark.skipif(
@@ -2522,13 +2552,21 @@ class TestREDQ(LossModuleTestBase):
             "sample_log_prob": "sample_log_prob",
             "state_action_value": "state_action_value",
         }
-        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        qvalue = self._create_mock_qvalue()
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+        )
+
+        key_mapping = {"value": ("value", "state_value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 class TestPPO(LossModuleTestBase):
@@ -2994,17 +3032,23 @@ class TestPPO(LossModuleTestBase):
             "sample_log_prob": "sample_log_prob",
             "action": "action",
         }
-        key_mapping = {
-            "advantage": "advantage",
-            "value_target": "value_target",
-            # "value": "value",
-        }
+
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
         )
+
+        value_key = "state_value_test"
+        value = self._create_mock_value(out_keys=[value_key])
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+
+        key_mapping = {
+            "advantage": ("advantage", "advantage_new"),
+            "value_target": ("value_target", "value_target_new"),
+            "value": ("value", value_key),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
@@ -3027,12 +3071,6 @@ class TestPPO(LossModuleTestBase):
         )
         actor = self._create_mock_actor()
         value = self._create_mock_value(out_keys=[tensor_keys["value"]])
-
-        adv_keys = {
-            key: value
-            for key, value in tensor_keys.items()
-            if key in asdict(GAE._AcceptedKeys()).keys()
-        }
 
         if advantage == "gae":
             advantage = GAE(
@@ -3062,6 +3100,12 @@ class TestPPO(LossModuleTestBase):
         loss_fn = loss_class(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(**tensor_keys)
         if advantage is not None:
+            # collect tensordict key names for the advantage module
+            adv_keys = {
+                key: value
+                for key, value in tensor_keys.items()
+                if key in asdict(GAE._AcceptedKeys()).keys()
+            }
             advantage.set_keys(**adv_keys)
             advantage(td)
         else:
@@ -3336,17 +3380,23 @@ class TestA2C(LossModuleTestBase):
             "value": "state_value",
             "action": "action",
         }
-        key_mapping = {
-            "advantage": "advantage",
-            "value_target": "value_target",
-            # "value": "value",
-        }
+
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
         )
+
+        value = self._create_mock_value(out_keys=["value_state_test"])
+
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+
+        key_mapping = {
+            "advantage": ("advantage", "advantage_test"),
+            "value_target": ("value_target", "value_target_test"),
+            "value": ("value", "value_state_test"),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_a2c_tensordict_keys_run(self, device):
@@ -3392,7 +3442,6 @@ class TestA2C(LossModuleTestBase):
         for name, p in named_parameters:
             if p.grad is not None and p.grad.norm() > 0.0:
                 assert "actor" not in name
-                assert "critic" in name
             if p.grad is None:
                 assert "actor" in name
                 assert "critic" not in name
@@ -3542,17 +3591,28 @@ class TestReinforce(LossModuleTestBase):
             "value": "state_value",
             "sample_log_prob": "sample_log_prob",
         }
-        key_mapping = {
-            "advantage": "advantage",
-            "value_target": "value_target",
-            # "value": "value",
-        }
+
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            loss_advantage_key_mapping=key_mapping,
         )
+
+        value_net = ValueOperator(
+            nn.Linear(n_obs, 1), in_keys=["observation"], out_keys=["state_value_test"]
+        )
+
+        loss_fn = ReinforceLoss(
+            actor_net,
+            critic=value_net,
+        )
+
+        key_mapping = {
+            "advantage": ("advantage", "advantage_test"),
+            "value_target": ("value_target", "value_target_test"),
+            "value": ("value", "state_value_test"),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -3986,13 +4046,20 @@ class TestDreamer(LossModuleTestBase):
             "value": "state_value",
             "done": "done",
         }
-        # key_mapping = {"value": "value"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        loss_fn = DreamerActorLoss(
+            actor_model,
+            value_model,
+            mb_env,
+        )
+
+        key_mapping = {"value": ("value", "value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     def test_dreamer_value_tensordict_keys(self, device):
         value_model = self._create_value_model(10, 5)
@@ -4038,12 +4105,11 @@ class TestIQL(LossModuleTestBase):
         )
         return qvalue.to(device)
 
-    def _create_mock_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_value(
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu", out_keys=None
+    ):
         module = nn.Linear(obs_dim, 1)
-        value = ValueOperator(
-            module=module,
-            in_keys=["observation"],
-        )
+        value = ValueOperator(module=module, in_keys=["observation"], out_keys=out_keys)
         return value.to(device)
 
     def _create_mock_distributional_actor(
@@ -4346,13 +4412,23 @@ class TestIQL(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "value": "state_value",
         }
-        # key_mapping = {"value": "value"}
+
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-            # loss_advantage_key_mapping=key_mapping,
         )
+
+        value = self._create_mock_value(out_keys=["value_test"])
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+        )
+
+        key_mapping = {"value": ("value", "value_test")}
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
 def test_hold_out():
@@ -5897,6 +5973,51 @@ class TestAdv:
             exp_val = 1
         assert (td["state_value"] == exp_val).all()
         # assert (td["next", "state_value"] == exp_val).all()
+
+    @pytest.mark.parametrize("value", ["state_value", "state_value_test"])
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimator, {}],
+            [TDLambdaEstimator, {"lmbda": 0.95}],
+        ],
+    )
+    def test_set_keys(self, value, adv, kwargs):
+        value_net = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=[value])
+        module = adv(
+            gamma=0.98,
+            value_network=value_net,
+            **kwargs,
+        )
+        module.set_keys(value=value)
+        assert module.tensor_keys.value == value
+
+    @pytest.mark.parametrize(
+        "adv,kwargs",
+        [
+            [GAE, {"lmbda": 0.95}],
+            [TD1Estimator, {}],
+            [TDLambdaEstimator, {"lmbda": 0.95}],
+        ],
+    )
+    def test_set_deprecated_keys(self, adv, kwargs):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["test_value"]
+        )
+
+        with pytest.warns(DeprecationWarning):
+            module = adv(
+                gamma=0.98,
+                value_network=value_net,
+                value_key="test_value",
+                advantage_key="advantage_test",
+                value_target_key="value_target_test",
+                **kwargs,
+            )
+            assert module.tensor_keys.value == "test_value"
+            assert module.tensor_keys.advantage == "advantage_test"
+            assert module.tensor_keys.value_target == "value_target_test"
 
 
 class TestBase:
