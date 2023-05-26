@@ -1124,7 +1124,7 @@ class TestTD3(LossModuleTestBase):
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2192,7 +2192,7 @@ class TestREDQ(LossModuleTestBase):
             loss = loss_fn(td)
 
         # check td is left untouched
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -2317,7 +2317,7 @@ class TestREDQ(LossModuleTestBase):
             loss_fn.zero_grad()
 
         # check td is left untouched
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         named_parameters = list(loss_fn.named_parameters())
@@ -2440,7 +2440,7 @@ class TestREDQ(LossModuleTestBase):
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -2514,13 +2514,13 @@ class TestREDQ(LossModuleTestBase):
         )
 
         default_keys = {
-            "priority_key": "td_error",
-            "action_key": "action",
-            "value_key": "state_value",
-            "sample_log_prob_key": "sample_log_prob",
-            "state_action_value_key": "state_action_value",
+            "priority": "td_error",
+            "action": "action",
+            "value": "state_value",
+            "sample_log_prob": "sample_log_prob",
+            "state_action_value": "state_action_value",
         }
-        key_mapping = {"value_key": "value_key"}
+        key_mapping = {"value": "value_key"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
@@ -4150,7 +4150,7 @@ class TestIQL(LossModuleTestBase):
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         # check that losses are independent
         for k in loss.keys():
@@ -4271,7 +4271,7 @@ class TestIQL(LossModuleTestBase):
         np.random.seed(0)
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             torch.manual_seed(0)  # log-prob is computed with a random action
@@ -4338,13 +4338,13 @@ class TestIQL(LossModuleTestBase):
         )
 
         default_keys = {
-            "priority_key": "td_error",
-            "log_prob_key": "_log_prob",
-            "action_key": "action",
-            "state_action_value_key": "state_action_value",
-            "value_key": "state_value",
+            "priority": "td_error",
+            "log_prob": "_log_prob",
+            "action": "action",
+            "state_action_value": "state_action_value",
+            "value": "state_value",
         }
-        key_mapping = {"value_key": "value_key"}
+        key_mapping = {"value": "value_key"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,

@@ -61,11 +61,32 @@ class IQLLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        priority_key: NestedKey = "td_error"
-        log_prob_key: NestedKey = "_log_prob"
-        action_key: NestedKey = "action"
-        state_action_value_key: NestedKey = "state_action_value"
-        value_key: NestedKey = "state_value"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        value : NestedKey
+            The input tensordict key where the state value is expected.
+            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+        action : NestedKey
+            The input tensordict key where the action is expected. Defaults to ``"action"``.
+        log_prob : NestedKey
+            The input tensordict key where the log probability is expected. Defaults to ``"_log_prob"``.
+        priority : NestedKey
+            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+        state_action_value : NestedKey
+            The input tensordict key where the state action value is expected.
+            Will be used for the underlying value estimator as value key. Defaults to ``"state_action_value"``.
+        """
+
+        value: NestedKey = "state_value"
+        action: NestedKey = "action"
+        log_prob: NestedKey = "_log_prob"
+        priority: NestedKey = "td_error"
+        state_action_value: NestedKey = "state_action_value"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -86,7 +107,7 @@ class IQLLoss(LossModule):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
-        self._set_deprecated_ctor_keys(priority_key=priority_key)
+        self._set_deprecated_ctor_keys(priority=priority_key)
 
         # IQL parameter
         self.temperature = temperature
@@ -143,7 +164,7 @@ class IQLLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                value_key=self._tensor_keys.value_key,
+                value_key=self._tensor_keys.value,
             )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -161,7 +182,7 @@ class IQLLoss(LossModule):
         loss_qvalue, priority = self._loss_qvalue(td_device)
         loss_value = self._loss_value(td_device)
 
-        tensordict_reshape.set(self.tensor_keys.priority_key, priority)
+        tensordict_reshape.set(self.tensor_keys.priority, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
         ):
@@ -174,7 +195,7 @@ class IQLLoss(LossModule):
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_value": loss_value.mean(),
-            "entropy": -td_device.get(self.tensor_keys.log_prob_key).mean().detach(),
+            "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
         }
 
         return TensorDict(
@@ -189,14 +210,14 @@ class IQLLoss(LossModule):
             params=self.actor_network_params,
         )
 
-        log_prob = dist.log_prob(tensordict[self.tensor_keys.action_key])
+        log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
-        min_q = td_q.get(self.tensor_keys.state_action_value_key).min(0)[0].squeeze(-1)
+        min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
             raise RuntimeError(
@@ -209,7 +230,7 @@ class IQLLoss(LossModule):
                 td_copy,
                 params=self.value_network_params,
             )
-            value = td_copy.get(self.tensor_keys.value_key).squeeze(
+            value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
             )  # assert has no gradient
 
@@ -217,7 +238,7 @@ class IQLLoss(LossModule):
         exp_a = torch.min(exp_a, torch.FloatTensor([100.0]).to(self.device))
 
         # write log_prob in tensordict for alpha loss
-        tensordict.set(self.tensor_keys.log_prob_key, log_prob.detach())
+        tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         return -(exp_a * log_prob).mean()
 
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -226,21 +247,21 @@ class IQLLoss(LossModule):
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
-        min_q = td_q.get(self.tensor_keys.state_action_value_key).min(0)[0].squeeze(-1)
+        min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
-        value = td_copy.get(self.tensor_keys.value_key).squeeze(-1)
+        value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile).mean()
         return value_loss
 
     def _loss_qvalue(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         # TODO (refactor key usage): what to do with dynamically generated keys
-        tensordict = tensordict.select("next", *obs_keys, self.tensor_keys.action_key)
+        tensordict = tensordict.select("next", *obs_keys, self.tensor_keys.action)
 
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params
@@ -249,9 +270,9 @@ class IQLLoss(LossModule):
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
-        pred_val = tensordict_expand.get(
-            self.tensor_keys.state_action_value_key
-        ).squeeze(-1)
+        pred_val = tensordict_expand.get(self.tensor_keys.state_action_value).squeeze(
+            -1
+        )
         td_error = abs(pred_val - target_value)
         loss_qval = (
             distance_loss(
@@ -276,7 +297,7 @@ class IQLLoss(LossModule):
         hp.update(hyperparams)
         tensor_keys = {
             "value_target_key": "value_target",
-            "value_key": self.tensor_keys.value_key,
+            "value_key": self.tensor_keys.value,
         }
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
