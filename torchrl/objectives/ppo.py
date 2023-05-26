@@ -7,9 +7,11 @@ import warnings
 from typing import Tuple
 
 import torch
+
 from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
+from torch.distributions.kl import _dispatch_kl
 
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
@@ -71,6 +73,19 @@ class PPOLoss(LossModule):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        kl_coef (scalar, optional): A coefficient for the KL-divergence
+            between the current actor configuration and the initial one.
+            If ``kl_coef > 0``, a ``initial_actor_params`` attribute
+            will be available and contain the initial configuration of the
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
+            differentiable entry in the output loss TensorDict that can be used
+            to constrain the policy to stay close to its original configuration.
+            Defaults to 0 (i.e., no KL component in the loss).
+            .. note::
+              if this KL has to be registered but not used for training, the
+              resulting ``"loss_kl_to_init"`` can be detached after loss
+              computation.
+
 
     .. note::
       The advantage (typically GAE) can be computed by the loss function or
@@ -133,6 +148,7 @@ class PPOLoss(LossModule):
         normalize_advantage: bool = False,
         gamma: float = None,
         separate_losses: bool = False,
+        kl_coef: float = 0.0,
     ):
         super().__init__()
         self.convert_to_functional(
@@ -144,7 +160,13 @@ class PPOLoss(LossModule):
             policy_params = list(actor.parameters())
         else:
             policy_params = None
-        self.convert_to_functional(critic, "critic", compare_against=policy_params)
+        self.kl_coef = kl_coef
+        self.convert_to_functional(
+            critic,
+            "critic",
+            compare_against=policy_params,
+            create_target_params=kl_coef > 0,
+        )
         self.advantage_key = advantage_key
         self.value_target_key = value_target_key
         self.value_key = value_key
@@ -162,6 +184,17 @@ class PPOLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @property
+    def initial_actor_params(self):
+        """The initial configuration of the actor parameters.
+
+        Raises an exception if kl_coef=0."""
+        if self.kl_coef > 0:
+            return self.target_actor_params
+        raise RuntimeError(
+            "The initial actor parameters cannot be retrieved when kl_coef is 0."
+        )
 
     def reset(self) -> None:
         pass
@@ -228,6 +261,12 @@ class PPOLoss(LossModule):
         )
         return self.critic_coef * loss_value
 
+    def _kl_init(self, current_dist, tensordict):
+        init_dist = self.actor.get_dist(tensordict, params=self.initial_actor_params)
+        kl_val = _kl(current_dist, init_dist, self.samples_mc_entropy, reparam=True)
+        kl_val = kl_val.mean()
+        return kl_val
+
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.advantage_key, None)
@@ -253,6 +292,10 @@ class PPOLoss(LossModule):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
             td_out.set("loss_critic", loss_critic.mean())
+        if self.kl_coef:
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
+
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -323,6 +366,18 @@ class ClipPPOLoss(PPOLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        kl_coef (scalar, optional): A coefficient for the KL-divergence
+            between the current actor configuration and the initial one.
+            If ``kl_coef > 0``, a ``initial_actor_params`` attribute
+            will be available and contain the initial configuration of the
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
+            differentiable entry in the output loss TensorDict that can be used
+            to constrain the policy to stay close to its original configuration.
+            Defaults to 0 (i.e., no KL component in the loss).
+            .. note::
+              if this KL has to be registered but not used for training, the
+              resulting ``"loss_kl_to_init"`` can be detached after loss
+              computation.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -383,6 +438,7 @@ class ClipPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        kl_coef: float = 0.0,
         **kwargs,
     ):
         super(ClipPPOLoss, self).__init__(
@@ -398,6 +454,7 @@ class ClipPPOLoss(PPOLoss):
             normalize_advantage=normalize_advantage,
             gamma=gamma,
             separate_losses=separate_losses,
+            kl_coef=kl_coef,
             **kwargs,
         )
         self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon))
@@ -454,6 +511,9 @@ class ClipPPOLoss(PPOLoss):
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
+        if self.kl_coef:
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
         td_out.set("ESS", ess.mean() / batch)
         return td_out
 
@@ -506,6 +566,18 @@ class KLPENPPOLoss(PPOLoss):
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
             parameters for both policy and critic losses.
+        kl_coef (scalar, optional): A coefficient for the KL-divergence
+            between the current actor configuration and the initial one.
+            If ``kl_coef > 0``, a ``initial_actor_params`` attribute
+            will be available and contain the initial configuration of the
+            parameters for the actor. These will be used to return a ``"loss_kl_to_init"``
+            differentiable entry in the output loss TensorDict that can be used
+            to constrain the policy to stay close to its original configuration.
+            Defaults to 0 (i.e., no loss).
+            .. note::
+              if this KL has to be registered but not used for training, the
+              resulting ``"loss_kl_to_init"`` can be detached after loss
+              computation.
 
 
     .. note:
@@ -571,6 +643,7 @@ class KLPENPPOLoss(PPOLoss):
         normalize_advantage: bool = True,
         gamma: float = None,
         separate_losses: bool = False,
+        kl_coef: float = 0.0,
         **kwargs,
     ):
         super(KLPENPPOLoss, self).__init__(
@@ -586,6 +659,7 @@ class KLPENPPOLoss(PPOLoss):
             gamma=gamma,
             separate_losses=separate_losses,
             value_key=value_key,
+            kl_coef=kl_coef,
             **kwargs,
         )
 
@@ -624,21 +698,17 @@ class KLPENPPOLoss(PPOLoss):
 
         previous_dist = self.actor.build_dist_from_params(tensordict)
         current_dist = self.actor.get_dist(tensordict, params=self.actor_params)
-        try:
-            kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
-        except NotImplementedError:
-            x = previous_dist.sample((self.samples_mc_kl,))
-            kl = (previous_dist.log_prob(x) - current_dist.log_prob(x)).mean(0)
-        kl = kl.unsqueeze(-1)
-        neg_loss = neg_loss - self.beta * kl
-        if kl.mean() > self.dtarg * 1.5:
+        kl_val = _kl(previous_dist, current_dist, self.samples_mc_kl)
+        kl_val = kl_val.unsqueeze(-1)
+        neg_loss = neg_loss - self.beta * kl_val
+        if kl_val.mean() > self.dtarg * 1.5:
             self.beta.data *= self.increment
-        elif kl.mean() < self.dtarg / 1.5:
+        elif kl_val.mean() < self.dtarg / 1.5:
             self.beta.data *= self.decrement
         td_out = TensorDict(
             {
                 "loss_objective": -neg_loss.mean(),
-                "kl": kl.detach().mean(),
+                "kl_to_prev": kl_val.detach().mean(),
             },
             [],
         )
@@ -652,7 +722,37 @@ class KLPENPPOLoss(PPOLoss):
             loss_critic = self.loss_critic(tensordict)
             td_out.set("loss_critic", loss_critic.mean())
 
+        if self.kl_coef:
+            loss_kl_to_init = self.kl_coef * self._kl_init(dist, tensordict)
+            td_out.set("loss_kl_to_init", loss_kl_to_init.mean())
+
         return td_out
 
     def reset(self) -> None:
         self.beta = self._beta_init
+
+
+def _kl(p, q, samples_mc_kl=None, reparam=False):
+    if _has_kl(p, q):
+        kl = torch.distributions.kl.kl_divergence(p, q)
+    else:
+        if reparam:
+            x = p.rsample((samples_mc_kl,))
+        else:
+            x = p.sample((samples_mc_kl,))
+        kl = (p.log_prob(x) - q.log_prob(x)).mean(0)
+    return kl
+
+
+# our own memo: see torch.distributions.kl implementation for context
+_KL_MEMO = {}
+
+
+def _has_kl(p, q):
+    types = type(p), type(q)
+    res = _KL_MEMO.get(types, None)
+    if res is None:
+        fun = _dispatch_kl(*types)
+        res = fun is not NotImplemented
+        _KL_MEMO[types] = res
+    return res
