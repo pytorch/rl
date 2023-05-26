@@ -59,9 +59,24 @@ class DQNLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        priority_key: NestedKey = "td_error"
-        action_value_key: NestedKey = "action_value"
-        action_key: NestedKey = "action"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        state_action_value : NestedKey
+            The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
+        action : NestedKey
+            The input tensordict key where the action is expected. Defaults to ``"action"``.
+        priority : NestedKey
+            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+        """
+
+        action_value: NestedKey = "action_value"
+        action: NestedKey = "action"
+        priority: NestedKey = "td_error"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -78,8 +93,7 @@ class DQNLoss(LossModule):
     ) -> None:
 
         super().__init__()
-        self._set_deprecated_ctor_keys(priority_key=priority_key)
-
+        self._set_deprecated_ctor_keys(priority=priority_key)
         self.delay_value = delay_value
         value_network = ensure_tensordict_compatible(
             module=value_network,
@@ -191,8 +205,8 @@ class DQNLoss(LossModule):
             params=self.value_network_params,
         )
 
-        action = tensordict.get(self.tensor_keys.action_key)
-        pred_val = td_copy.get(self.tensor_keys.action_value_key)
+        action = tensordict.get(self.tensor_keys.action)
+        pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
             if action.shape != pred_val.shape:
@@ -213,7 +227,7 @@ class DQNLoss(LossModule):
             priority_tensor = priority_tensor.to(input_tensordict.device)
 
         input_tensordict.set(
-            self.tensor_keys.priority_key,
+            self.tensor_keys.priority,
             priority_tensor,
             inplace=True,
         )
@@ -253,12 +267,33 @@ class DistributionalDQNLoss(LossModule):
 
     @dataclass
     class _AcceptedKeys:
-        priority_key: NestedKey = "td_error"
-        action_value_key: NestedKey = "action_value"
-        action_key: NestedKey = "action"
-        reward_key: NestedKey = "reward"
-        done_key: NestedKey = "done"
-        steps_to_next_obs_key: NestedKey = "steps_to_next_obs"
+        """Stores default values for all configurable tensordict keys.
+
+        This class is used to define and store which tensordict keys are configurable
+        via `.set_keys(key_name=key_value) and their default values.
+
+        Attributes:
+        ------------
+        state_action_value : NestedKey
+            The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
+        action : NestedKey
+            The input tensordict key where the action is expected. Defaults to ``"action"``.
+        priority : NestedKey
+            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+        reward : NestedKey
+            The input tensordict key where the reward is expected. Defaults to ``"reward"``.
+        done : NestedKey
+            The input tensordict key where the the flag if a trajectory is done is expected. Defaults to ``"done"``.
+        steps_to_next_obs : NestedKey
+            The input tensordict key where the steps_to_next_obs is exptected. Defaults to ``"steps_to_next_obs"``.
+        """
+
+        action_value: NestedKey = "action_value"
+        action: NestedKey = "action"
+        priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        steps_to_next_obs: NestedKey = "steps_to_next_obs"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -271,9 +306,7 @@ class DistributionalDQNLoss(LossModule):
         priority_key: str = None,
     ):
         super().__init__()
-        self.set_keys()
-        self._set_deprecated_ctor_keys(priority_key=priority_key)
-
+        self._set_deprecated_ctor_keys(priority=priority_key)
         self.register_buffer("gamma", torch.tensor(gamma))
         self.delay_value = delay_value
 
@@ -328,11 +361,11 @@ class DistributionalDQNLoss(LossModule):
         Vmax = support.max().item()
         delta_z = (Vmax - Vmin) / (atoms - 1)
 
-        action = tensordict.get(self.tensor_keys.action_key)
-        reward = tensordict.get(("next", self.tensor_keys.reward_key))
-        done = tensordict.get(("next", self.tensor_keys.done_key))
+        action = tensordict.get(self.tensor_keys.action)
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        done = tensordict.get(("next", self.tensor_keys.done))
 
-        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs_key, 1)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, 1)
         discount = self.gamma**steps_to_next_obs
 
         # Calculate current state probabilities (online network noise already
@@ -342,7 +375,7 @@ class DistributionalDQNLoss(LossModule):
             td_clone,
             params=self.value_network_params,
         )  # Log probabilities log p(s_t, ·; θonline)
-        action_log_softmax = td_clone.get(self.tensor_keys.action_value_key)
+        action_log_softmax = td_clone.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
             log_ps_a = self._log_ps_a_categorical(action, action_log_softmax)
@@ -359,7 +392,7 @@ class DistributionalDQNLoss(LossModule):
                 params=self.value_network_params,
             )  # Probabilities p(s_t+n, ·; θonline)
 
-            next_td_action = next_td.get(self.tensor_keys.action_key)
+            next_td_action = next_td.get(self.tensor_keys.action)
             if self.action_space == "categorical":
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
@@ -369,7 +402,7 @@ class DistributionalDQNLoss(LossModule):
                 next_td,
                 params=self.target_value_network_params,
             )  # Probabilities p(s_t+n, ·; θtarget)
-            pns = next_td.get(self.tensor_keys.action_value_key).exp()
+            pns = next_td.get(self.tensor_keys.action_value).exp()
             # Double-Q probabilities
             # p(s_t+n, argmax_a[(z, p(s_t+n, a; θonline))]; θtarget)
             pns_a = pns[range(batch_size), :, argmax_indices_ns]
@@ -423,7 +456,7 @@ class DistributionalDQNLoss(LossModule):
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
         loss = -torch.sum(m.to(device) * log_ps_a, 1)
         input_tensordict.set(
-            self.tensor_keys.priority_key,
+            self.tensor_keys.priority,
             loss.detach().unsqueeze(1).to(input_tensordict.device),
             inplace=True,
         )

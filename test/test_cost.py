@@ -204,6 +204,7 @@ class TestDQN(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         is_nn_module=False,
+        action_value_key=None,
     ):
         # Actor
         if action_spec_type == "one_hot":
@@ -229,6 +230,7 @@ class TestDQN(LossModuleTestBase):
             ),
             action_space=action_spec_type,
             module=module,
+            action_value_key=action_value_key,
         ).to(device)
         return actor
 
@@ -242,6 +244,7 @@ class TestDQN(LossModuleTestBase):
         vmin=1,
         vmax=5,
         is_nn_module=False,
+        action_value_key="action_value",
     ):
         # Actor
         var_nums = None
@@ -273,6 +276,7 @@ class TestDQN(LossModuleTestBase):
             support=support,
             action_space=action_spec_type,
             var_nums=var_nums,
+            action_value_key=action_value_key,
         )
         return actor
 
@@ -284,6 +288,8 @@ class TestDQN(LossModuleTestBase):
         action_dim=4,
         atoms=None,
         device="cpu",
+        action_key="action",
+        action_value_key="action_value",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim)
@@ -311,8 +317,8 @@ class TestDQN(LossModuleTestBase):
                     "done": done,
                     "reward": reward,
                 },
-                "action": action,
-                "action_value": action_value,
+                action_key: action,
+                action_value_key: action_value,
             },
             device=device,
         )
@@ -390,7 +396,7 @@ class TestDQN(LossModuleTestBase):
             loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -431,7 +437,7 @@ class TestDQN(LossModuleTestBase):
 
         with _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority_key in ms_td.keys()
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
 
         with torch.no_grad():
             loss = loss_fn(td)
@@ -471,12 +477,42 @@ class TestDQN(LossModuleTestBase):
         loss_fn = DQNLoss(actor)
 
         default_keys = {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
+            "priority": "td_error",
+            "action_value": "action_value",
+            "action": "action",
         }
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+    @pytest.mark.parametrize("action_spec_type", ("categorical", "one_hot"))
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_dqn_tensordict_run(self, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        tensor_keys = {
+            "action_value": "action_value_test",
+            "action": "action_test",
+            "priority": "priority_test",
+        }
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type,
+            action_value_key=tensor_keys["action_value"],
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type,
+            action_key=tensor_keys["action"],
+            action_value_key=tensor_keys["action_value"],
+        )
+
+        loss_fn = DQNLoss(actor, loss_function="l2")
+        loss_fn.set_keys(**tensor_keys)
+
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with _check_td_steady(td):
+            _ = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
 
     @pytest.mark.parametrize("atoms", range(4, 10))
     @pytest.mark.parametrize("delay_value", (False, True))
@@ -507,7 +543,7 @@ class TestDQN(LossModuleTestBase):
 
         with _check_td_steady(td):
             loss = loss_fn(td)
-        assert loss_fn.tensor_keys.priority_key in td.keys()
+        assert loss_fn.tensor_keys.priority in td.keys()
 
         sum([item for _, item in loss.items()]).backward()
         assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
@@ -543,15 +579,45 @@ class TestDQN(LossModuleTestBase):
         loss_fn = DistributionalDQNLoss(actor, gamma=gamma)
 
         default_keys = {
-            "priority_key": "td_error",
-            "action_value_key": "action_value",
-            "action_key": "action",
-            "reward_key": "reward",
-            "done_key": "done",
-            "steps_to_next_obs_key": "steps_to_next_obs",
+            "priority": "td_error",
+            "action_value": "action_value",
+            "action": "action",
+            "reward": "reward",
+            "done": "done",
+            "steps_to_next_obs": "steps_to_next_obs",
         }
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+    @pytest.mark.parametrize("action_spec_type", ("categorical", "one_hot"))
+    @pytest.mark.parametrize("td_est", [ValueEstimators.TD0])
+    def test_distributional_dqn_tensordict_run(self, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        atoms = 4
+        tensor_keys = {
+            "action_value": "action_value_test",
+            "action": "action_test",
+            "priority": "priority_test",
+        }
+        actor = self._create_mock_distributional_actor(
+            action_spec_type=action_spec_type,
+            atoms=atoms,
+            action_value_key=tensor_keys["action_value"],
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type,
+            atoms=atoms,
+            action_key=tensor_keys["action"],
+            action_value_key=tensor_keys["action_value"],
+        )
+        loss_fn = DistributionalDQNLoss(actor, gamma=0.9)
+        loss_fn.set_keys(**tensor_keys)
+
+        loss_fn.make_value_estimator(td_est)
+
+        with _check_td_steady(td):
+            _ = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
 
 
 class TestDDPG(LossModuleTestBase):
