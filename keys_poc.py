@@ -15,19 +15,15 @@ class GAE(TensorDictModuleBase):
 
     def __init__(self, value_network):
         super().__init__()
+        self.value_network = value_network
         self.key_list = self._AcceptedKeys()
-        # here all keys have default values, which means one cannot rely here on the tensordict keys used there
-        # the following code (from the actual ValueEstimatorBase) would raise always an exception
-        if (
-            hasattr(value_network, "out_keys")
-            and self.keys.value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{self.keys.value_key}' not found in value network out_keys."
-            )
+        self._keys = None
 
     @property
     def keys(self):
+        if self._keys is None:
+            # run auto setter. If there is a mismatch an exception will be raised
+            self.set_keys()
         return self._keys
 
     @keys.setter
@@ -40,6 +36,8 @@ class GAE(TensorDictModuleBase):
         for key, val in kw.items():
             if not isinstance(val, NestedKey):
                 raise ValueError
+            if key == "value" and key not in self.value_network.out_keys:
+                raise ValueError(f"Call set_keys with the proper 'value' key name. Available key names are: {self.value_network.out_keys}")
         conf = asdict(self.keys)
         conf.update(kw)
         self._keys = self._AcceptedKeys(**conf)
