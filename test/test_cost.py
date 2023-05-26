@@ -3954,14 +3954,14 @@ class TestDreamer(LossModuleTestBase):
         loss_fn = DreamerModelLoss(world_model)
 
         default_keys = {
-            "reward_key": "reward",
-            "true_reward_key": "true_reward",
-            "prior_mean_key": "prior_mean",
-            "prior_std_key": "prior_std",
-            "posterior_mean_key": "posterior_mean",
-            "posterior_std_key": "posterior_std",
-            "pixels_key": "pixels",
-            "reco_pixels_key": "reco_pixels",
+            "reward": "reward",
+            "true_reward": "true_reward",
+            "prior_mean": "prior_mean",
+            "prior_std": "prior_std",
+            "posterior_mean": "posterior_mean",
+            "posterior_std": "posterior_std",
+            "pixels": "pixels",
+            "reco_pixels": "reco_pixels",
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
@@ -3979,12 +3979,12 @@ class TestDreamer(LossModuleTestBase):
         )
 
         default_keys = {
-            "belief_key": "belief",
-            "reward_key": "reward",
-            "value_key": "state_value",
-            "done_key": "done",
+            "belief": "belief",
+            "reward": "reward",
+            "value": "state_value",
+            "done": "done",
         }
-        key_mapping = {"value_key": "value_key"}
+        key_mapping = {"value": "value_key"}
         self.tensordict_keys_test(
             loss_fn,
             default_keys=default_keys,
@@ -3997,7 +3997,7 @@ class TestDreamer(LossModuleTestBase):
         loss_fn = DreamerValueLoss(value_model)
 
         default_keys = {
-            "value_key": "state_value",
+            "value": "state_value",
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
