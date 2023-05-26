@@ -187,13 +187,13 @@ class BraxWrapper(_EnvWrapper):
         state = _object_to_tensordict(state, self.device, self.batch_size)
 
         # build result
-        state["reward"] = reward = state.get("reward").view(*self.reward_spec.shape)
+        state["reward"] = state.get("reward").view(*self.reward_spec.shape)
         state["done"] = state.get("done").view(*self.reward_spec.shape)
         done = state["done"].bool()
         tensordict_out = TensorDict(
             source={
                 "observation": state.get("obs"),
-                "reward": reward,
+                # "reward": reward,
                 "done": done,
                 "state": state,
             },
