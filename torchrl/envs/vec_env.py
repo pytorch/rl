@@ -221,7 +221,7 @@ class _BatchedEnv(EnvBase):
             meta_data = get_env_metadata(create_env_fn[0], create_env_kwargs[0])
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
-            ).clone()
+            )
         else:
             n_tasks = len(create_env_fn)
             self.meta_data = []
@@ -459,6 +459,7 @@ class _BatchedEnv(EnvBase):
         self.__dict__["_input_spec"] = None
         self.__dict__["_output_spec"] = None
         self._properties_set = False
+        self.event = None
 
         self._shutdown_workers()
         self.is_closed = True
