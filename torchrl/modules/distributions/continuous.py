@@ -10,8 +10,8 @@ import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
+from torchrl._torchrl import safeatanh, safetanh
 
-from torchrl._torchrl import safetanh
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
@@ -93,16 +93,18 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        y = safetanh(x)
-        return y
+        if x.dtype.is_floating_point:
+            eps = torch.finfo(x.dtype).resolution
+        else:
+            raise NotImplementedError(f"No tanh transform for {x.dtype} inputs.")
+        return safetanh(x, eps)
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
         if y.dtype.is_floating_point:
-            eps = torch.finfo(y.dtype).eps
+            eps = torch.finfo(y.dtype).resolution
         else:
-            raise NotImplementedError("No inverse tanh for integer inputs.")
-        y = y.clamp(-1 + eps, 1 - eps)
-        x = super()._inverse(y)
+            raise NotImplementedError(f"No inverse tanh for {y.dtype} inputs.")
+        x = safeatanh(y, eps)
         return x
 
 
@@ -183,8 +185,8 @@ class TruncatedNormal(D.Independent):
 
         min (torch.Tensor or number, optional): minimum value of the distribution. Default = -1.0;
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
-        tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw value
-            is kept.
+        tanh_loc (bool, optional): if ``True``, the above formula is used for
+            the location scaling, otherwise the raw value is kept.
             Default is :obj:`True`;
     """
 
@@ -320,7 +322,7 @@ class TanhNormal(FasterTransformedDistribution):
         min: Union[torch.Tensor, Number] = -1.0,
         max: Union[torch.Tensor, Number] = 1.0,
         event_dims: int = 1,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
