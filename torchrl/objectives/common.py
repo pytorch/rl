@@ -97,11 +97,11 @@ class LossModule(nn.Module, ABC):
         ...
 
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
-        """Helper function to set a tensordict key from a ctor and raise a warning simultaneously."""
+        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
         for key, value in kwargs.items():
             if value is not None:
                 warnings.warn(
-                    f"Setting '{key}' via ctor is deprecated, use .set_keys({key}='some_key') instead.",
+                    f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
                     category=DeprecationWarning,
                 )
                 self.set_keys(**{key: value})

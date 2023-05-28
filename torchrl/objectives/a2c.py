@@ -77,9 +77,7 @@ class A2CLoss(LossModule):
         default values.
 
         Attributes:
-        ------------
-        advantage : NestedKey
-            The input tensordict key where the advantage is expected.
+            advantage (NestedKey): The input tensordict key where the advantage is expected.
             Will be used for the underlying value estimator. Defaults to ``"advantage"``.
         value_target : NestedKey
             The input tensordict key where the target state value is expected.
