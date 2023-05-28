@@ -45,15 +45,14 @@ class DDPGLoss(LossModule):
         """Maintains default values for all configurable tensordict keys.
 
         This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
-        default values
+        default values.
 
         Attributes:
-        ------------
-        state_action_value : NestedKey
-            The input tensordict key where the state action value is expected.
-            Will be used for the underlying value estimator as value key. Defaults to ``"state_action_value"``.
-        priority : NestedKey
-            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+            state_action_value (NestedKey): The input tensordict key where the
+                state action value is expected.  Will be used for the underlying
+                value estimator as value key. Defaults to ``"state_action_value"``.
+            priority (NestedKey): The input tensordict key where the target
+                priority is written to. Defaults to ``"td_error"``.
         """
 
         state_action_value: NestedKey = "state_action_value"

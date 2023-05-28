@@ -77,19 +77,14 @@ class ReinforceLoss(LossModule):
         default values.
 
         Attributes:
-        ------------
-        advantage : NestedKey
-            The input tensordict key where the advantage is expected.
-            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
-        value_target : NestedKey
-            The input tensordict key where the target state value is expected.
-            Will be used for the underlying value estimator Defaults to ``"value_target"``.
-        value : NestedKey
-            The input tensordict key where the state value is expected.
-            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-        sample_log_prob : NestedKey
-            The input tensordict key where the sample log probability is expected.
-            Defaults to ``"sample_log_prob"``.
+            advantage (NestedKey): he input tensordict key where the advantage is expected.
+                Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+            value_target (NestedKey): The input tensordict key where the target state value is expected.
+                Will be used for the underlying value estimator Defaults to ``"value_target"``.
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
+                Defaults to ``"sample_log_prob"``.
         """
 
         advantage: NestedKey = "advantage"

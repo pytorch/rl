@@ -78,16 +78,13 @@ class A2CLoss(LossModule):
 
         Attributes:
             advantage (NestedKey): The input tensordict key where the advantage is expected.
-            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
-        value_target : NestedKey
-            The input tensordict key where the target state value is expected.
-            Will be used for the underlying value estimator Defaults to ``"value_target"``.
-        value : NestedKey
-            The input tensordict key where the state value is expected.
-            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-        action : NestedKey
-            The input tensordict key where the action is expected.
-            Defaults to ``"state_value"``.
+                Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+            value_target (NestedKey): The input tensordict key where the target state value is expected.
+                Will be used for the underlying value estimator Defaults to ``"value_target"``.
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
         """
 
         advantage: NestedKey = "advantage"

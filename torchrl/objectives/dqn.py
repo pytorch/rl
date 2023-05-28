@@ -119,13 +119,9 @@ class DQNLoss(LossModule):
         default values.
 
         Attributes:
-        ------------
-        state_action_value : NestedKey
-            The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
-        action : NestedKey
-            The input tensordict key where the action is expected. Defaults to ``"action"``.
-        priority : NestedKey
-            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+            state_action_value (NestedKey): The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
+            action (NestedKey): The input tensordict key where the action is expected. Defaults to ``"action"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
         """
 
         action_value: NestedKey = "action_value"
@@ -321,19 +317,18 @@ class DistributionalDQNLoss(LossModule):
         default values
 
         Attributes:
-        ------------
-        state_action_value : NestedKey
-            The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
-        action : NestedKey
-            The input tensordict key where the action is expected. Defaults to ``"action"``.
-        priority : NestedKey
-            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
-        reward : NestedKey
-            The input tensordict key where the reward is expected. Defaults to ``"reward"``.
-        done : NestedKey
-            The input tensordict key where the the flag if a trajectory is done is expected. Defaults to ``"done"``.
-        steps_to_next_obs : NestedKey
-            The input tensordict key where the steps_to_next_obs is exptected. Defaults to ``"steps_to_next_obs"``.
+            state_action_value (NestedKey): The input tensordict key where the state action value is expected.
+                Defaults to ``"state_action_value"``.
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to.
+                Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Defaults to ``"reward"``.
+            done (NestedKey): The input tensordict key where the the flag if a trajectory is done is expected.
+                Defaults to ``"done"``.
+            steps_to_next_obs (NestedKey): The input tensordict key where the steps_to_next_obs is exptected.
+                Defaults to ``"steps_to_next_obs"``.
         """
 
         action_value: NestedKey = "action_value"

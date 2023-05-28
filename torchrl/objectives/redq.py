@@ -88,18 +88,12 @@ class REDQLoss(LossModule):
         default values
 
         Attributes:
-        ------------
-        value : NestedKey
-            The input tensordict key where the state value is expected.
-            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-        action : NestedKey
-            The input tensordict key where the action is expected. Defaults to ``"action"``.
-        sample_log_prob : NestedKey
-            The input tensordict key where the sample log probability is expected. Defaults to ``"sample_log_prob"``.
-        priority : NestedKey
-            The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
-        state_action_value : NestedKey
-            The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            action (NestedKey): The input tensordict key where the action is expected. Defaults to ``"action"``.
+            sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected. Defaults to ``"sample_log_prob"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+            state_action_value (NestedKey): The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
         """
 
         action: NestedKey = "action"

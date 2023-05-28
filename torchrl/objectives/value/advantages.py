@@ -74,25 +74,19 @@ class ValueEstimatorBase(TensorDictModuleBase):
         default values.
 
         Attributes:
-        ------------
-        advantage : NestedKey
-            The input tensordict key where the advantage is written to.
-            Will be used for the underlying value estimator. Defaults to ``"advantage"``.
-        value_target : NestedKey
-            The input tensordict key where the target state value is written to.
-            Will be used for the underlying value estimator Defaults to ``"value_target"``.
-        value_key : NestedKey
-            The input tensordict key where the state value is expected.
-            Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-        reward_key : NestedKey
-            The input tensordict key where the reward is written to.
-            Defaults to ``"reward"``.
-        done_key : NestedKey
-            The key in the input TensorDict that indicates whether a trajectory is done.
-            Defaults to ``"done"``.
-        steps_to_next_obs_key : NestedKey
-            The key in the input tensordict that indicates the number of steps to the next observation.
-            Defaults to ``"steps_to_next_obs"``.
+            advantage (NestedKey): The input tensordict key where the advantage is written to.
+                Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+            value_target (NestedKey): The input tensordict key where the target state value is written to.
+                Will be used for the underlying value estimator Defaults to ``"value_target"``.
+            value_key (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            reward_key (NestedKey): The input tensordict key where the reward is written to.
+                Defaults to ``"reward"``.
+            done_key (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done.  Defaults to ``"done"``.
+            steps_to_next_obs_key (NestedKey): The key in the input tensordict
+                that indicates the number of steps to the next observation.
+                Defaults to ``"steps_to_next_obs"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -297,13 +291,13 @@ class TD0Estimator(ValueEstimatorBase):
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in _AcceptedKeys.
+            all keys specified in :class:`~._AcceptedKeys`.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "advantage".
+            Defaults to ``"advantage"``.
         value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "value_target".
+            Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
-            Defaults to "state_value".
+            Defaults to ``"state_value"``.
 
     """
 
@@ -473,7 +467,7 @@ class TD1Estimator(ValueEstimatorBase):
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in _AcceptedKeys.
+            all keys specified in :class:`~._AcceptedKeys`.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
@@ -653,7 +647,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
         tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in _AcceptedKeys.
+            all keys specified in :class:`~._AcceptedKeys`.
         advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
             Defaults to "advantage".
         value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
