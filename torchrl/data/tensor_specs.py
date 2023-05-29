@@ -3088,12 +3088,21 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def __len__(self):
         pass
 
-    def values(self):
-        for key in self.keys():
+    def values(self,
+               include_nested: bool = False,
+               leaves_only: bool = False,
+               ):
+       for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield self[key]
 
-    def items(self):
-        for key in self.keys():
+    def items(self,
+              include_nested: bool = False,
+              leaves_only: bool = False,
+              ):
+        for key in self.keys(
+            include_nested=include_nested,
+            leaves_only=leaves_only
+            ):
             yield key, self[key]
 
     def keys(

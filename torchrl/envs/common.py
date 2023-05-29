@@ -1035,13 +1035,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         shape = torch.Size([])
-        if tensordict is None:
-            tensordict = TensorDict(
-                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
-            )
-
-        if not self.batch_locked and not self.batch_size:
+        if not self.batch_locked and not self.batch_size and tensordict is not None:
             shape = tensordict.shape
+        elif not self.batch_locked and not self.batch_size:
+            shape = torch.Size([])
         elif not self.batch_locked and tensordict.shape != self.batch_size:
             raise RuntimeError(
                 "The input tensordict and the env have a different batch size: "
@@ -1049,8 +1046,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Non batch-locked environment require the env batch-size to be either empty or to"
                 f" match the tensordict one."
             )
-        action = self.action_spec.rand(shape)
-        tensordict.set("action", action)
+        r = self.input_spec['_action_spec'].rand(shape)
+        if tensordict is None:
+            tensordict = r.select()
+        print(r, type(r))
+        print(tensordict, type(tensordict))
+        tensordict.update(r)
         return tensordict
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
