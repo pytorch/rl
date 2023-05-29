@@ -1,6 +1,6 @@
 import torch
 from tensordict.nn import InteractionType
-from torch import nn
+from torch import nn, optim
 from torchrl.collectors import MultiSyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -210,3 +210,14 @@ def make_loss_module(cfg, model):
     # Define Target Network Updater
     target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
     return loss_module, target_net_updater
+
+
+def make_optimizer(cfg, loss_module):
+    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+
+    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    optimizer_critic = optim.Adam(
+        critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
+    )
+    return optimizer_actor, optimizer_critic

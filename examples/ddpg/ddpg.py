@@ -17,7 +17,6 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from torch import optim
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
@@ -25,6 +24,7 @@ from utils import (
     make_ddpg_agent,
     make_environment,
     make_loss_module,
+    make_optimizer,
     make_replay_buffer,
 )
 
@@ -65,13 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Make Optimizers
-    critic_params = list(loss_module.value_network_params.flatten_keys().values())
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
-
-    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
-    optimizer_critic = optim.Adam(
-        critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
 
     rewards = []
     rewards_eval = []

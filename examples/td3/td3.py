@@ -18,8 +18,6 @@ import torch
 import torch.cuda
 import tqdm
 
-from torch import optim
-
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -27,6 +25,7 @@ from utils import (
     make_collector,
     make_environment,
     make_loss_module,
+    make_optimizer,
     make_replay_buffer,
     make_td3_agent,
 )
@@ -67,14 +66,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
     )
 
-    # Optimizers
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
-
-    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
-    optimizer_critic = optim.Adam(
-        critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    # Make Optimizers
+    optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
 
     rewards = []
     rewards_eval = []

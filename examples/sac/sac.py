@@ -2,7 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""SAC Example.
 
+This is a simple self-contained example of a SAC training script.
+
+It supports state environments like MuJoCo.
+
+The helper functions are coded in the utils.py associated with this script.
+"""
 
 import hydra
 
