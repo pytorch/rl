@@ -281,14 +281,14 @@ class TruncatedNormal(D.Independent):
 class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
-    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
-    leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
-    In practice, the location is computed according to
+    Location scaling prevents the location to be "too far" from 0 when a
+    ``TanhTransform`` is applied, but ultimately
+    leads to numerically unstable samples and poor gradient computation
+    (e.g. gradient explosion).
+    In practice, with location scaling the location is computed according to
 
         .. math::
             loc = tanh(loc / upscale) * upscale.
-
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
