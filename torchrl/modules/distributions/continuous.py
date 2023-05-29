@@ -281,14 +281,12 @@ class TruncatedNormal(D.Independent):
 class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
-    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
+    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, but ultimately
     leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
-    In practice, the location is computed according to
+    In practice, with location scaling the location is computed according to
 
         .. math::
             loc = tanh(loc / upscale) * upscale.
-
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -304,7 +302,7 @@ class TanhNormal(FasterTransformedDistribution):
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
         tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
-            value is kept. Default is :obj:`True`;
+            value is kept. Default is :obj:`False`;
     """
 
     arg_constraints = {
@@ -345,7 +343,8 @@ class TanhNormal(FasterTransformedDistribution):
         else:
             self.non_trivial_min = min != -1.0
 
-        self.tanh_loc = tanh_loc
+        self.
+        = tanh_loc
         self._event_dims = event_dims
 
         self.device = loc.device
