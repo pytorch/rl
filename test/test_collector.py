@@ -1338,10 +1338,8 @@ class TestUpdateParams:
         def __init__(self, device, batch_size=[]):  # noqa: B006
             super().__init__(batch_size=batch_size, device=device)
             self.state = torch.zeros(self.batch_size, device=device)
-            self.output_spec = CompositeSpec(
-                observation=CompositeSpec(
-                    state=UnboundedContinuousTensorSpec(shape=(), device=device)
-                )
+            self.observation_spec = CompositeSpec(
+                state=UnboundedContinuousTensorSpec(shape=(), device=device)
             )
             self.action_spec = UnboundedContinuousTensorSpec(
                 shape=batch_size, device=device

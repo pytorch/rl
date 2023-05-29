@@ -724,8 +724,7 @@ def make_ddpg_actor(
     proof_environment.transform[2].init_stats(3)
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[-1]
+    out_features = proof_environment.action_spec.shape[-1]
 
     actor_net = DdpgMlpActor(
         action_dim=out_features,
@@ -744,7 +743,7 @@ def make_ddpg_actor(
         actor,
         distribution_class=TanhDelta,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        spec=CompositeSpec(action=proof_environment.action_spec),
     ).to(device)
 
     q_net = DdpgMlpQNet()

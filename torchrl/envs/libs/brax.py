@@ -122,17 +122,14 @@ class BraxWrapper(_EnvWrapper):
         return state_spec
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
-        self.input_spec = CompositeSpec(
-            action=BoundedTensorSpec(
-                minimum=-1,
-                maximum=1,
-                shape=(
-                    *self.batch_size,
-                    env.action_size,
-                ),
-                device=self.device,
+        self.action_spec = BoundedTensorSpec(
+            minimum=-1,
+            maximum=1,
+            shape=(
+                *self.batch_size,
+                env.action_size,
             ),
-            shape=self.batch_size,
+            device=self.device,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=[
@@ -152,9 +149,9 @@ class BraxWrapper(_EnvWrapper):
             shape=self.batch_size,
         )
         # extract state spec from instance
-        self.state_spec = self._make_state_spec(env)
-        self.input_spec["state"] = self.state_spec
-        self.observation_spec["state"] = self.state_spec.clone()
+        state_spec = self._make_state_spec(env)
+        self.state_spec["state"] = state_spec
+        self.observation_spec["state"] = state_spec.clone()
 
     def _make_state_example(self):
         key = jax.random.PRNGKey(0)

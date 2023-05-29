@@ -10,6 +10,7 @@ import logging
 import os
 from collections import OrderedDict
 from copy import deepcopy
+from functools import wraps
 from multiprocessing import connection
 from multiprocessing.synchronize import Lock as MpLock
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
@@ -80,6 +81,23 @@ class _dispatch_caller_serial:
 
     def __call__(self, *args, **kwargs):
         return [_callable(*args, **kwargs) for _callable in self.list_callable]
+
+
+def lazy_property(prop: property):
+    """Converts a property in a lazy property, that will call _set_properties when queried the first time."""
+    return property(fget=lazy(prop.fget), fset=prop.fset)
+
+
+def lazy(fun):
+    """Converts a fun in a lazy fun, that will call _set_properties when queried the first time."""
+
+    @wraps(fun)
+    def new_fun(self, *args, **kwargs):
+        if not self._properties_set:
+            self._set_properties()
+        return fun(self, *args, **kwargs)
+
+    return new_fun
 
 
 class _BatchedEnv(EnvBase):
@@ -186,12 +204,13 @@ class _BatchedEnv(EnvBase):
                 "memmap and shared memory are mutually exclusive features."
             )
         self._batch_size = None
-        self.__dict__["_output_spec"] = None
-        self.__dict__["_input_spec"] = None
         self._device = None
         self._dummy_env_str = None
         self._seeds = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_output_spec"] = None
         # self._prepare_dummy_env(create_env_fn, create_env_kwargs)
+        self._properties_set = False
         self._get_metadata(create_env_fn, create_env_kwargs)
 
     def _get_metadata(
@@ -208,7 +227,7 @@ class _BatchedEnv(EnvBase):
             self.meta_data = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i])
+                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
                 )
         self._set_properties()
 
@@ -237,44 +256,58 @@ class _BatchedEnv(EnvBase):
 
     def _set_properties(self):
         meta_data = self.meta_data
+        self._properties_set = True
         if self._single_task:
             self._batch_size = meta_data.batch_size
+            device = self._device = meta_data.device
 
-            input_spec = meta_data.specs["input_spec"]
-            self.input_spec = input_spec
-            output_spec = meta_data.specs["output_spec"]
-            self.output_spec = output_spec
+            input_spec = meta_data.specs["input_spec"].to(device)
+            output_spec = meta_data.specs["output_spec"].to(device)
+
+            self.action_spec = input_spec["_action_spec"]
+            self.state_spec = input_spec["_state_spec"]
+            self.observation_spec = output_spec["_observation_spec"]
+            self.reward_spec = output_spec["_reward_spec"]
+            self.done_spec = output_spec["_done_spec"]
 
             self._dummy_env_str = meta_data.env_str
-            self._device = meta_data.device
             self._env_tensordict = meta_data.tensordict
             self._batch_locked = meta_data.batch_locked
         else:
             self._batch_size = torch.Size([self.num_workers, *meta_data[0].batch_size])
-            self._device = meta_data[0].device
+            device = self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
 
             _input_spec = {}
             for md in meta_data:
                 _input_spec.update(md.specs["input_spec"])
-            input_spec = CompositeSpec(_input_spec, shape=meta_data[0].batch_size)
-            input_spec = input_spec.expand(self.num_workers, *input_spec.shape)
-            self.input_spec = input_spec
+            input_spec = CompositeSpec(
+                _input_spec, shape=meta_data[0].batch_size, device=device
+            )
+            input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(
+                device
+            )
+            self.action_spec = input_spec["_action_spec"]
+            self.state_spec = input_spec["_state_spec"]
 
             _output_spec = {}
             for md in meta_data:
                 _output_spec.update(md.specs["output_spec"])
-            output_spec = CompositeSpec(_output_spec, shape=meta_data[0].batch_size)
-            output_spec = output_spec.expand(self.num_workers, *output_spec.shape)
-            self.output_spec = output_spec
+            output_spec = CompositeSpec(
+                _output_spec, shape=meta_data[0].batch_size, device=device
+            )
+            output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(
+                device
+            )
+            self.observation_spec = output_spec["_observation_spec"]
+            self.reward_spec = output_spec["_reward_spec"]
+            self.done_spec = output_spec["_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
-        self.output_spec = self.output_spec.to(self.device)
-        self.input_spec = self.input_spec.to(self.device)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -282,47 +315,10 @@ class _BatchedEnv(EnvBase):
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         raise NotImplementedError
 
-    @property
-    def batch_size(self) -> TensorSpec:
-        if "_batch_size" not in self.__dir__():
-            raise AttributeError("_batch_size is not initialized")
-        if self._batch_size is None:
-            self._set_properties()
-        return self._batch_size
-
-    @property
-    def device(self) -> torch.device:
-        if self._device is None:
-            self._set_properties()
-        return self._device
-
-    @device.setter
-    def device(self, value: DEVICE_TYPING) -> None:
-        self.to(value)
-
-    @property
-    def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self._set_properties()
-        return self._input_spec
-
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec) and value is not None:
-            raise TypeError("The type of an input_spec must be Composite.")
-        self.__dict__["_input_spec"] = value
-
-    @property
-    def output_spec(self) -> TensorSpec:
-        if self._output_spec is None:
-            self._set_properties()
-        return self._output_spec
-
-    @output_spec.setter
-    def output_spec(self, value: TensorSpec) -> None:
-        if not isinstance(value, CompositeSpec) and value is not None:
-            raise TypeError("The type of an output_spec must be Composite.")
-        self.__dict__["_output_spec"] = value
+    batch_size = lazy_property(EnvBase.batch_size)
+    device = lazy_property(EnvBase.device)
+    input_spec = lazy_property(EnvBase.input_spec)
+    output_spec = lazy_property(EnvBase.output_spec)
 
     def _create_td(self) -> None:
         """Creates self.shared_tensordict_parent, a TensorDict used to store the most recent observations."""
@@ -336,10 +332,14 @@ class _BatchedEnv(EnvBase):
             shared_tensordict_parent = self._env_tensordict.clone()
 
         if self._single_task:
-            self.env_input_keys = sorted(self.input_spec.keys(True), key=_sort_keys)
+            self.env_input_keys = sorted(
+                list(self.input_spec["_action_spec"].keys(True))
+                + list(self.state_spec.keys(True)),
+                key=_sort_keys,
+            )
             self.env_output_keys = []
             self.env_obs_keys = []
-            for key in self.output_spec["observation"].keys(True):
+            for key in self.output_spec["_observation_spec"].keys(True):
                 if isinstance(key, str):
                     key = (key,)
                 self.env_output_keys.append(("next", *key))
@@ -349,19 +349,27 @@ class _BatchedEnv(EnvBase):
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
+                if meta_data.specs["input_spec", "_state_spec"] is not None:
+                    env_input_keys = env_input_keys.union(
+                        meta_data.specs["input_spec", "_state_spec"].keys(True)
+                    )
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec"].keys(True)
+                    meta_data.specs["input_spec", "_action_spec"].keys(True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
+                        True
+                    )
                 )
                 env_output_keys = env_output_keys.union(
                     ("next", key) if isinstance(key, str) else ("next", *key)
-                    for key in meta_data.specs["output_spec"]["observation"].keys(True)
+                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
+                        True
+                    )
                 )
             env_output_keys = env_output_keys.union(
                 {("next", "reward"), ("next", "done")}
@@ -448,8 +456,9 @@ class _BatchedEnv(EnvBase):
         if self._verbose:
             print(f"closing {self.__class__.__name__}")
 
-        self.input_spec = None
-        self.output_spec = None
+        self.__dict__["_input_spec"] = None
+        self.__dict__["_output_spec"] = None
+        self._properties_set = False
         self.event = None
 
         self._shutdown_workers()
@@ -462,6 +471,7 @@ class _BatchedEnv(EnvBase):
         """This method is not used in batched envs."""
         pass
 
+    @lazy
     def start(self) -> None:
         if not self.is_closed:
             raise RuntimeError("trying to start a environment that is not closed.")
@@ -488,8 +498,10 @@ class _BatchedEnv(EnvBase):
             self.close()
             self.start()
         else:
-            self.input_spec = self.input_spec.to(device)
-            self.output_spec = self.output_spec.to(device)
+            if self.__dict__["_input_spec"] is not None:
+                self.__dict__["_input_spec"] = self.__dict__["_input_spec"].to(device)
+            if self.__dict__["_output_spec"] is not None:
+                self.__dict__["_output_spec"] = self.__dict__["_output_spec"].to(device)
         return self
 
 
@@ -1076,7 +1088,9 @@ def _run_worker_pipe_shared_mem(
                 else:
                     result = attr
             except Exception as err:
-                raise RuntimeError(f"querying {err_msg} resulted in an error.") from err
+                raise AttributeError(
+                    f"querying {err_msg} resulted in an error."
+                ) from err
             if cmd not in ("to"):
                 child_pipe.send(("_".join([cmd, "done"]), result))
             else:
@@ -1124,8 +1138,14 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     def _make_specs(
         self, env: "envpool.python.envpool.EnvPoolMixin"  # noqa: F821
     ) -> None:  # noqa: F821
-        self.input_spec = self._get_input_spec()
-        self.output_spec = self._get_output_spec()
+        from torchrl.envs.libs.gym import set_gym_backend
+
+        with set_gym_backend("gym"):
+            self.action_spec = self._get_action_spec()
+            output_spec = self._get_output_spec()
+            self.observation_spec = output_spec["_observation_spec"]
+            self.reward_spec = output_spec["_reward_spec"]
+            self.done_spec = output_spec["_done_spec"]
 
     def _init_env(self) -> Optional[int]:
         pass
@@ -1152,7 +1172,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out = self._transform_step_output(step_output)
         return tensordict_out.select().set("next", tensordict_out)
 
-    def _get_input_spec(self) -> TensorSpec:
+    def _get_action_spec(self) -> TensorSpec:
         # local import to avoid importing gym in the script
         from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
@@ -1166,17 +1186,15 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             categorical_action_encoding=True,
         )
         action_spec = self._add_shape_to_spec(action_spec)
-        return CompositeSpec(
-            action=action_spec,
-            shape=(self.num_workers,),
-        )
+        return action_spec
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(
-            observation=self._get_observation_spec(),
-            reward=self._get_reward_spec(),
-            done=self._get_done_spec(),
+            _observation_spec=self._get_observation_spec(),
+            _reward_spec=self._get_reward_spec(),
+            _done_spec=self._get_done_spec(),
             shape=(self.num_workers,),
+            device=self.device,
         )
 
     def _get_observation_spec(self) -> TensorSpec:
@@ -1195,6 +1213,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         return CompositeSpec(
             observation=observation_spec,
             shape=(self.num_workers,),
+            device=self.device,
         )
 
     def _add_shape_to_spec(self, spec: TensorSpec) -> TensorSpec:
