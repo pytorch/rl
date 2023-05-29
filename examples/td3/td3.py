@@ -2,7 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""TD3 Example.
 
+This is a simple self-contained example of a TD3 training script.
+
+It supports state environments like MuJoCo.
+
+The helper functions are coded in the utils.py associated with this script.
+"""
 
 import hydra
 
@@ -10,92 +17,23 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict.nn import InteractionType
 
-from torch import nn, optim
-from torchrl.collectors import MultiSyncDataCollector
-from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
+from torch import optim
 
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import (
-    Compose,
-    DoubleToFloat,
-    EnvCreator,
-    ObservationNorm,
-    ParallelEnv,
-    TransformedEnv,
-)
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import (
-    AdditiveGaussianWrapper,
-    MLP,
-    ProbabilisticActor,
-    SafeModule,
-    ValueOperator,
-)
-from torchrl.modules.distributions import TanhDelta
 
-from torchrl.objectives import SoftUpdate
-from torchrl.objectives.td3 import TD3Loss
 from torchrl.record.loggers import generate_exp_name, get_logger
-
-
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
-
-
-def apply_env_transforms(env, reward_scaling=1.0):
-    transformed_env = TransformedEnv(
-        env,
-        Compose(
-            RewardScaling(loc=0.0, scale=reward_scaling),
-            ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
-        ),
-    )
-    return transformed_env
-
-
-def make_replay_buffer(
-    batch_size,
-    prb=False,
-    buffer_size=1000000,
-    buffer_scratch_dir="/tmp/",
-    device="cpu",
-    prefetch=3,
-):
-    if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.5,
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    else:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    return replay_buffer
+from utils import (
+    make_collector,
+    make_environment,
+    make_loss_module,
+    make_replay_buffer,
+    make_td3_agent,
+)
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-
     device = torch.device(cfg.device)
 
     exp_name = generate_exp_name("TD3", cfg.exp_name)
@@ -109,130 +47,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
 
-    parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
-    )
-    parallel_env.set_seed(cfg.seed)
-
-    train_env = apply_env_transforms(parallel_env)
-
-    train_env.transform[1].init_stats(
-        num_iter=cfg.init_env_steps, reduce_dim=(0, 1), cat_dim=0
-    )
-    # check the shape of our summary stats
-    print("normalization constant shape:", train_env.transform[1].loc.shape)
-
-    eval_env = TransformedEnv(
-        ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
-        ),
-        train_env.transform.clone(),
-    )
-    assert (eval_env.transform[1].loc == train_env.transform[1].loc).all()
+    # Create Environments
+    train_env, eval_env = make_environment(cfg)
 
     # Create Agent
-
-    # Define Actor Network
-    in_keys = ["observation"]
-    action_spec = train_env.action_spec
-    actor_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": action_spec.shape[-1],
-        "activation_class": nn.ReLU,
-    }
-
-    actor_net = MLP(**actor_net_kwargs)
-
-    dist_class = TanhDelta
-    dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
-    }
-
-    in_keys_actor = in_keys
-    actor_module = SafeModule(
-        actor_net,
-        in_keys=in_keys_actor,
-        out_keys=[
-            "param",
-        ],
-    )
-    actor = ProbabilisticActor(
-        spec=action_spec,
-        in_keys=["param"],
-        module=actor_module,
-        distribution_class=dist_class,
-        distribution_kwargs=dist_kwargs,
-        default_interaction_type=InteractionType.RANDOM,
-        return_log_prob=False,
-    )
-
-    # Define Critic Network
-    qvalue_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": 1,
-        "activation_class": nn.ReLU,
-    }
-
-    qvalue_net = MLP(
-        **qvalue_net_kwargs,
-    )
-
-    qvalue = ValueOperator(
-        in_keys=["action"] + in_keys,
-        module=qvalue_net,
-    )
-
-    model = nn.ModuleList([actor, qvalue]).to(device)
-
-    # init nets
-    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = eval_env.reset()
-        td = td.to(device)
-        for net in model:
-            net(td)
-    del td
-    eval_env.close()
-
-    # Exploration wrappers:
-    # actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-    #     actor,
-    #     annealing_num_steps=1_000_000,
-    # ).to(device)
-
-    actor_model_explore = AdditiveGaussianWrapper(
-        actor,
-        sigma_init=1,
-        sigma_end=1,
-        mean=0,
-        std=0.01,
-    ).to(device)
+    model, exploration_policy = make_td3_agent(train_env, eval_env, device)
 
     # Create TD3 loss
-    loss_module = TD3Loss(
-        actor_network=model[0],
-        qvalue_network=model[1],
-        num_qvalue_nets=2,
-        loss_function="smooth_l1",
-    )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
-
-    # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    loss_module, target_net_updater = make_loss_module(cfg, model)
 
     # Make Off-Policy Collector
-    collector = MultiSyncDataCollector(
-        # we'll just run one ParallelEnvironment. Adding elements to the list would increase the number of envs run in parallel
-        [
-            train_env,
-        ],
-        actor_model_explore,
-        frames_per_batch=cfg.frames_per_batch,
-        max_frames_per_traj=cfg.max_frames_per_traj,
-        total_frames=cfg.total_frames,
-        device=cfg.collector_device,
-    )
-    collector.set_seed(cfg.seed)
+    collector = make_collector(cfg, train_env, exploration_policy)
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
@@ -261,7 +86,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     q_loss = None
 
     for i, tensordict in enumerate(collector):
-
         # update weights of the inference policy
         collector.update_policy_weights_()
 
@@ -269,14 +93,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
-        # extend the replay buffer with the new data
-        if ("collector", "mask") in tensordict.keys(True):
-            # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["collector", "mask"].sum()
-            tensordict = tensordict[tensordict.get(("collector", "mask")).squeeze(-1)]
-        else:
-            tensordict = tensordict.view(-1)
-            current_frames = tensordict.numel()
+        tensordict = tensordict.view(-1)
+        current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
@@ -286,7 +104,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_losses,
                 q_losses,
             ) = ([], [])
-            for i in range(
+            for j in range(
                 int(cfg.env_per_collector * cfg.frames_per_batch * cfg.utd_ratio)
             ):
                 # sample from replay buffer
@@ -302,7 +120,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
-                if i % cfg.policy_update_delay == 0:
+                if j % cfg.policy_update_delay == 0:
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()
@@ -331,17 +149,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
-
-        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
-            eval_rollout = eval_env.rollout(
-                cfg.max_frames_per_traj // cfg.frame_skip,
-                actor_model_explore,
-                auto_cast_to_device=True,
-            )
-            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-            rewards_eval.append((i, eval_reward))
-            eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
-            logger.log_scalar("test_reward", rewards_eval[-1][1], step=collected_frames)
+        if abs(collected_frames % 25000) < cfg.frames_per_batch * cfg.frame_skip:
+            with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+                eval_rollout = eval_env.rollout(
+                    cfg.max_frames_per_traj // cfg.frame_skip,
+                    exploration_policy,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                rewards_eval.append((i, eval_reward))
+                eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
+                logger.log_scalar(
+                    "evaluation_reward", rewards_eval[-1][1], step=collected_frames
+                )
         if len(rewards_eval):
             pbar.set_description(
                 f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
