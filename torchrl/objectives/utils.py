@@ -92,7 +92,7 @@ def distance_loss(
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
-            Default is :obj:`True`.
+            Default is ``True``.
 
     Returns:
          A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
