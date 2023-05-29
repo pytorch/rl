@@ -208,12 +208,12 @@ def make_loss_module(cfg, model):
     loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, tau=cfg.target_update_polyak)
     return loss_module, target_net_updater
 
 
 def make_optimizer(cfg, loss_module):
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    critic_params = list(loss_module.value_network_params.flatten_keys().values())
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)

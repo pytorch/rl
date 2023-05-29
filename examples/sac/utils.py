@@ -209,7 +209,7 @@ def make_loss_module(cfg, model):
     loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, tau=cfg.target_update_polyak)
     return loss_module, target_net_updater
 
 
