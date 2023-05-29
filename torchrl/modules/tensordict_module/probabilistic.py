@@ -210,7 +210,7 @@ class SafeProbabilisticTensorDictSequential(
             of the input keys. If so, the only module that will be executed are those
             who can be executed given the keys that are present. Also, if the input
             tensordict is a lazy stack of tensordicts AND if partial_tolerant is
-            :obj:`True` AND if the stack does not have the required keys, then
+            ``True`` AND if the stack does not have the required keys, then
             TensorDictSequential will scan through the sub-tensordicts looking for those
             that have the required keys, if any.
 
