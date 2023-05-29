@@ -93,7 +93,10 @@ class SafeTanhTransform(D.TanhTransform):
     """TanhTransform subclass that ensured that the transformation is numerically invertible."""
 
     def _call(self, x: torch.Tensor) -> torch.Tensor:
-        y = safetanh(x)
+        # y = safetanh(x)
+        y = x.tanh()
+        if x.requires_grad:
+            y.data.copy_(safetanh(x.data))
         return y
 
     def _inverse(self, y: torch.Tensor) -> torch.Tensor:
@@ -101,7 +104,8 @@ class SafeTanhTransform(D.TanhTransform):
             eps = torch.finfo(y.dtype).eps
         else:
             raise NotImplementedError("No inverse tanh for integer inputs.")
-        y = y.clamp(-1 + eps, 1 - eps)
+        # y = y.clamp(-1 + eps, 1 - eps)
+        y.data.clamp_(-1 + eps, 1 - eps)
         x = super()._inverse(y)
         return x
 

@@ -300,7 +300,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set("action", a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
+            td_q, self.qvalue_network_params.detach().clone()
         )
         min_q_logprob = td_q.get("state_action_value").min(0)[0].squeeze(-1)
 
@@ -370,18 +370,19 @@ class SACLoss(LossModule):
 
         """
         tensordict = tensordict.clone(False)
+        next_tensordict = step_mdp(tensordict)
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
-                dist = self.actor_network.get_dist(tensordict, params=actor_params)
-                tensordict.set("action", dist.rsample())
-                log_prob = dist.log_prob(tensordict.get("action"))
-                tensordict.set("sample_log_prob", log_prob)
-            sample_log_prob = tensordict.get("sample_log_prob")
+                dist = self.actor_network.get_dist(next_tensordict, params=actor_params)
+                next_tensordict.set("action", dist.sample())
+                log_prob = dist.log_prob(next_tensordict.get("action"))
+                next_tensordict.set("sample_log_prob", log_prob)
+            sample_log_prob = next_tensordict.get("sample_log_prob")
 
             # get q-values
             tensordict_expand = vmap(self.qvalue_network, (None, 0))(
-                tensordict, qval_params
+                next_tensordict, qval_params
             )
             state_action_value = tensordict_expand.get("state_action_value")
             if (
@@ -389,14 +390,10 @@ class SACLoss(LossModule):
                 != sample_log_prob.shape
             ):
                 sample_log_prob = sample_log_prob.unsqueeze(-1)
-            state_value = state_action_value - _alpha * sample_log_prob
-            state_value = state_value.min(0)[0]
+            state_value = state_action_value.min(0)[0] - _alpha * sample_log_prob
             tensordict.set(("next", self.value_estimator.value_key), state_value)
             target_value = self.value_estimator.value_estimate(
                 tensordict,
-                _alpha=self._alpha,
-                actor_params=self.target_actor_network_params,
-                qval_params=self.target_qvalue_network_params,
             ).squeeze(-1)
             return target_value
 
@@ -405,7 +402,7 @@ class SACLoss(LossModule):
         target_value = self._get_value_v2(
             tensordict,
             self._alpha,
-            self.target_actor_network_params,
+            self.actor_network_params,
             self.target_qvalue_network_params,
         )
 
@@ -463,7 +460,7 @@ class SACLoss(LossModule):
         log_pi = tensordict.get("_log_prob")
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
@@ -471,7 +468,7 @@ class SACLoss(LossModule):
 
     @property
     def _alpha(self):
-        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        # self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
