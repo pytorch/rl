@@ -67,9 +67,9 @@ class SACLoss(LossModule):
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
         min_alpha (float, optional): min value of alpha.
-            Default is 0.1.
+            Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
-            Default is 10.0.
+            Default is None (no maximum value).
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
@@ -82,10 +82,10 @@ class SACLoss(LossModule):
             Default is ``False``.
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
         delay_value (bool, optional): Whether to separate the target value
             networks from the value networks used for data collection.
-            Default is ``False``.
+            Default is ``True``.
     """
 
     default_value_estimator = ValueEstimators.TD0
@@ -100,13 +100,13 @@ class SACLoss(LossModule):
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = 0.1,
-        max_alpha: float = 10.0,
+        min_alpha: float = None,
+        max_alpha: float = None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
-        delay_qvalue: bool = False,
-        delay_value: bool = False,
+        delay_qvalue: bool = True,
+        delay_value: bool = True,
         gamma: float = None,
     ) -> None:
         if not _has_functorch:
@@ -157,12 +157,23 @@ class SACLoss(LossModule):
         except AttributeError:
             device = torch.device("cpu")
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
-        self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
-        )
-        self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
-        )
+        if bool(min_alpha) ^ bool(max_alpha):
+            min_alpha = min_alpha if min_alpha else 0.0
+            if max_alpha == 0:
+                raise ValueError("max_alpha must be either None or greater than 0.")
+            max_alpha = max_alpha if max_alpha else 1e9
+        if min_alpha:
+            self.register_buffer(
+                "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            )
+        else:
+            self.min_log_alpha = None
+        if max_alpha:
+            self.register_buffer(
+                "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            )
+        else:
+            self.max_log_alpha = None
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -257,13 +268,13 @@ class SACLoss(LossModule):
         device = self.device
         td_device = tensordict_reshape.to(device)
 
-        loss_actor = self._loss_actor(td_device)
         if self._version == 1:
             loss_qvalue, priority = self._loss_qvalue_v1(td_device)
             loss_value = self._loss_value(td_device)
         else:
             loss_qvalue, priority = self._loss_qvalue_v2(td_device)
             loss_value = None
+        loss_actor = self._loss_actor(td_device)
         loss_alpha = self._loss_alpha(td_device)
         tensordict_reshape.set(self.priority_key, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
@@ -286,15 +297,12 @@ class SACLoss(LossModule):
         return TensorDict(out, [])
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
-        # KL lossa
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
                 tensordict,
                 params=self.actor_network_params,
             )
             a_reparm = dist.rsample()
-        # if not self.actor_network.spec.is_in(a_reparm):
-        #     a_reparm.data.copy_(self.actor_network.spec.project(a_reparm.data))
         log_prob = dist.log_prob(a_reparm)
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
@@ -374,27 +382,28 @@ class SACLoss(LossModule):
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
-                dist = self.actor_network.get_dist(next_tensordict, params=actor_params)
-                next_tensordict.set("action", dist.sample())
-                log_prob = dist.log_prob(next_tensordict.get("action"))
-                next_tensordict.set("sample_log_prob", log_prob)
-            sample_log_prob = next_tensordict.get("sample_log_prob")
+                next_tensordict = tensordict.get("next").clone(False)
+                next_dist = self.actor_network.get_dist(
+                    next_tensordict, params=actor_params
+                )
+                next_action = next_dist.rsample()
+                next_tensordict.set("action", next_action)
+                next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
-            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+            next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
                 next_tensordict, qval_params
             )
-            state_action_value = tensordict_expand.get("state_action_value")
+            state_action_value = next_tensordict_expand.get("state_action_value")
             if (
-                state_action_value.shape[-len(sample_log_prob.shape) :]
-                != sample_log_prob.shape
+                state_action_value.shape[-len(next_sample_log_prob.shape) :]
+                != next_sample_log_prob.shape
             ):
-                sample_log_prob = sample_log_prob.unsqueeze(-1)
-            state_value = state_action_value.min(0)[0] - _alpha * sample_log_prob
-            tensordict.set(("next", self.value_estimator.value_key), state_value)
-            target_value = self.value_estimator.value_estimate(
-                tensordict,
-            ).squeeze(-1)
+                next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
+            next_state_value = state_action_value - _alpha * next_sample_log_prob
+            next_state_value = next_state_value.min(0)[0]
+            tensordict.set(("next", self.value_estimator.value_key), next_state_value)
+            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
     def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -468,7 +477,8 @@ class SACLoss(LossModule):
 
     @property
     def _alpha(self):
-        # self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        if self.min_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
@@ -489,9 +499,9 @@ class DiscreteSACLoss(LossModule):
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
         min_alpha (float, optional): min value of alpha.
-            Default is 0.1.
+            Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
-            Default is 10.0.
+            Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (float, optional): weight for the target entropy term.
         target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
@@ -513,8 +523,8 @@ class DiscreteSACLoss(LossModule):
         priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
-        min_alpha: float = 0.1,
-        max_alpha: float = 10.0,
+        min_alpha: float = None,
+        max_alpha: float = None,
         fixed_alpha: bool = False,
         target_entropy_weight: float = 0.98,
         target_entropy: Union[str, Number] = "auto",
@@ -548,12 +558,23 @@ class DiscreteSACLoss(LossModule):
             device = torch.device("cpu")
 
         self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
-        self.register_buffer(
-            "min_log_alpha", torch.tensor(min_alpha, device=device).log()
-        )
-        self.register_buffer(
-            "max_log_alpha", torch.tensor(max_alpha, device=device).log()
-        )
+        if bool(min_alpha) ^ bool(max_alpha):
+            min_alpha = min_alpha if min_alpha else 0.0
+            if max_alpha == 0:
+                raise ValueError("max_alpha must be either None or greater than 0.")
+            max_alpha = max_alpha if max_alpha else 1e9
+        if min_alpha:
+            self.register_buffer(
+                "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            )
+        else:
+            self.min_log_alpha = None
+        if max_alpha:
+            self.register_buffer(
+                "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            )
+        else:
+            self.max_log_alpha = None
         self.fixed_alpha = fixed_alpha
         if fixed_alpha:
             self.register_buffer(
@@ -573,7 +594,8 @@ class DiscreteSACLoss(LossModule):
 
     @property
     def alpha(self):
-        self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        if self.min_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
@@ -730,7 +752,7 @@ class DiscreteSACLoss(LossModule):
             )
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha.exp() * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)

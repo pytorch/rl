@@ -50,10 +50,12 @@ GymEnv.available_envs[:10]
 ###############################################################################
 # Env Specs
 # ------------------------------
+#
 # Like other frameworks, TorchRL envs have attributes that indicate what
 # space is for the observations, action, done and reward. Because it often happens
 # that more than one observation is retrieved, we expect the observation spec
-# to be of type ``CompositeSpec``. Reward and action do not have this restriction:
+# to be of type ``CompositeSpec``.
+# Reward and action do not have this restriction:
 
 print("Env observation_spec: \n", env.observation_spec)
 print("Env action_spec: \n", env.action_spec)
@@ -75,11 +77,14 @@ print("projected action: \n", env.action_spec.project(action))
 print("random action: \n", env.action_spec.rand())
 
 ###############################################################################
-# Envs are also packed with an ``env.input_spec`` attribute of type
-# ``CompositeSpec``. In brief, ``input_spec`` should contain all the specs
-# of the inputs that are required for an env to exectute a step. For stateful
-# envs (e.g. gym) this should include the action. With stateless environments
-# (e.g. Brax) this should also include a representation of the previous state.
+# Envs are also packed with an ``env.state_spec`` attribute of type
+# ``CompositeSpec`` which contains all the specs that are inputs to the env
+# but are not the action.
+# For stateful
+# envs (e.g. gym) this will be void most of the time.
+# With stateless environments
+# (e.g. Brax) this should also include a representation of the previous state,
+# or any other input to the environment (including inputs at reset time).
 #
 # Seeding, resetting and steps
 # ------------------------------

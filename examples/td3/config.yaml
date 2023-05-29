@@ -4,7 +4,7 @@ env_task: ""
 exp_name: "HalfCheetah-TD3"
 env_library: gym
 total_frames: 1000000
-frames_per_batch: 1000
+frames_per_batch: 200
 max_frames_per_traj: 1000
 frame_skip: 1
 seed: 1
