@@ -18,19 +18,11 @@ DATASET = "CarperAI/openai_summarize_comparisons"
 
 
 @tensorclass
-class BatchedRewardData:
-    chosen_ids: torch.Tensor
-    chosen_mask: torch.Tensor
-    rejected_ids: torch.Tensor
-    rejected_mask: torch.Tensor
-    chosen_end_scores: Optional[torch.Tensor] = None
-    rejected_end_scores: Optional[torch.Tensor] = None
-
-
-@tensorclass
 class RewardData:
-    batched: BatchedRewardData
-    loss: Optional[torch.Tensor] = None
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    rewards: Optional[torch.Tensor] = None
+    end_scores: Optional[torch.Tensor] = None
 
 
 class Collate(nn.Module):
@@ -38,10 +30,12 @@ class Collate(nn.Module):
         super().__init__()
         self.device = torch.device(device)
 
-    def __call__(self, batch):
+    def __call__(self, batches):
+        chosen_batch, rejected_batch = batches
         if self.device.type == "cuda":
-            batch = batch.pin_memory()
-        return batch.to(self.device)
+            chosen_batch = chosen_batch.pin_memory()
+            rejected_batch = rejected_batch.pin_memory()
+        return chosen_batch.to(self.device), rejected_batch.to(self.device)
 
 
 def make_process_fn(tokenizer, max_length):
@@ -145,14 +139,17 @@ class PairwiseDataset(Dataset):
         chosen_mask = torch.from_numpy(self.mask[idx])
         rejected_mask = torch.from_numpy(self.mask[ridx])
         batch_size = chosen_ids.shape[0]
-        batched_data = BatchedRewardData(
-            chosen_ids=chosen_ids,
-            rejected_ids=rejected_ids,
-            chosen_mask=chosen_mask,
-            rejected_mask=rejected_mask,
+        chosen_data = RewardData(
+            input_ids=chosen_ids,
+            attention_mask=chosen_mask,
             batch_size=[batch_size],
         )
-        return RewardData(batched=batched_data, batch_size=[])
+        rejected_data = RewardData(
+            input_ids=rejected_ids,
+            attention_mask=rejected_mask,
+            batch_size=[batch_size],
+        )
+        return chosen_data, rejected_data
 
 
 def create_datasets(config):

@@ -12,9 +12,10 @@ from utils import load_and_update_config, create_lr_scheduler, setup
 HERE = Path(__file__).parent
 
 
-def _accuracy(td):
-    brd = td.batched
-    return (sum(brd.chosen_end_scores > brd.rejected_end_scores) / len(brd.rejected_end_scores)).item()
+def _accuracy(chosen_end_scores, rejected_end_scores):
+    return (
+        sum(chosen_end_scores > rejected_end_scores) / len(rejected_end_scores)
+    ).item()
 
 
 # TODO: eliminate redundant repeated definition
@@ -26,11 +27,12 @@ def create_loss_estimator(config, ctx):
         losses = torch.zeros(config["eval_iters"])
         accs = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
-            batch = next(dataloader)
+            chosen_batch, rejected_batch = next(dataloader)
             with ctx:
-                model(batch)
-            losses[k] = batch.loss.item()
-            accs[k] = _accuracy(batch)
+                model(chosen_batch)
+                model(rejected_batch)
+            losses[k] = model.compute_reward_loss(chosen_batch, rejected_batch).item()
+            accs[k] = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
         model.train()
         return losses.mean(), accs.mean()
 
@@ -77,13 +79,15 @@ def main():
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
-        batch = next(train_loader)
+        chosen_batch, rejected_batch = next(train_loader)
 
         # TODO: check why is different from std model (missing micro gradients)
 
-        model(batch)
+        model(chosen_batch)
+        model(rejected_batch)
         optimizer.zero_grad(set_to_none=True)
-        batch.loss.backward()
+        loss = model.compute_reward_loss(chosen_batch, rejected_batch)
+        loss.backward()
         optimizer.step()
 
         # ########### EVALUATE MODEL AND CHECKPOINT ###############
@@ -98,7 +102,7 @@ def main():
             train_accs.append(train_acc)
             val_accs.append(val_acc)
             print(
-                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, "
                 f"train acc {train_acc:.4f}, val acc {val_acc:.4f}"
             )
             if val_loss < best_val_loss or config["always_save_checkpoint"]:
@@ -121,28 +125,49 @@ def main():
 
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
-            lossf = batch.loss.item()
+            lossf = loss.item()
             train_losses.append(lossf)
-            train_accs.append(_accuracy(batch))
-            print(f"iter {it}: train loss {lossf:.4f}, accuracy {train_accs[-1]:.4f} time {dt*1000:.2f}ms")
+            train_accs.append(
+                _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+            )
+            print(
+                f"iter {it}: train loss {lossf:.4f}, accuracy {train_accs[-1]:.4f} time {dt*1000:.2f}ms"
+            )
 
     import matplotlib.pyplot as plt
 
     f, ax = plt.subplots(figsize=(8, 6))
-    plt.title('Reward Model: Loss')
-    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
-    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_losses, label="valid loss")
+    plt.title("Reward Model: Loss")
+    ax.plot(
+        np.arange(0, config["max_iters"], config["log_interval"]),
+        train_losses,
+        label="train loss",
+    )
+    ax.plot(
+        np.arange(0, config["max_iters"], config["eval_interval"]),
+        val_losses,
+        label="valid loss",
+    )
     ax.legend()
 
     f.savefig("figures/reward_curve_loss.png", dpi=150)
 
     f, ax = plt.subplots(figsize=(8, 6))
-    plt.title('Reward Model: Accuracy')
-    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_accs, label="train accs")
-    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_accs, label="valid accs")
+    plt.title("Reward Model: Accuracy")
+    ax.plot(
+        np.arange(0, config["max_iters"], config["log_interval"]),
+        train_accs,
+        label="train accs",
+    )
+    ax.plot(
+        np.arange(0, config["max_iters"], config["eval_interval"]),
+        val_accs,
+        label="valid accs",
+    )
     ax.legend()
 
     f.savefig("figures/reward_curve_accuracy.png", dpi=150)
+
 
 if __name__ == "__main__":
     main()
