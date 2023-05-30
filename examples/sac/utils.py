@@ -2,7 +2,7 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import MultiSyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
@@ -60,11 +60,8 @@ def make_environment(cfg):
 
 def make_collector(cfg, train_env, actor_model_explore):
     """Make collector."""
-    collector = MultiSyncDataCollector(
-        # we'll just run one ParallelEnvironment. Adding elements to the list would increase the number of envs run in parallel
-        [
-            train_env,
-        ],
+    collector = SyncDataCollector(
+        train_env,
         actor_model_explore,
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
