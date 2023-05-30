@@ -597,7 +597,7 @@ class TestDDPG:
         not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
     )
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (False, True), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_ddpg(self, delay_actor, delay_value, device, td_est):
         torch.manual_seed(self.seed)
@@ -630,6 +630,28 @@ class TestDDPG:
             for p in loss_fn.actor_network_params.values(True, True)
         )
         # check that losses are independent
+        def upd(param):
+            param.data.copy_(param.data + 0.1)
+            return param
+
+        # We want to make sure that losses can be optimized independently
+        loss['loss_actor'].backward()
+        # try changing the actor params
+        loss_fn.actor_network_params.apply(upd)
+        loss['loss_value'].backward()
+
+        loss_fn.zero_grad()
+        loss = loss_fn(td)
+
+        loss['loss_value'].backward()
+        # try changing the actor params
+        loss_fn.value_network_params.apply(upd)
+        loss['loss_actor'].backward()
+
+        # check that grads are mutually exclusive
+        loss_fn.zero_grad()
+        loss = loss_fn(td)
+
         for k in loss.keys():
             if not k.startswith("loss"):
                 continue

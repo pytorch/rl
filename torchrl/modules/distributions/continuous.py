@@ -57,9 +57,9 @@ class IndependentNormal(D.Independent):
 
             Default is 5.0
 
-        tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw value
-            is kept.
-            Default is :obj:`True`;
+        tanh_loc (bool, optional): if ``False``, the above formula is used for
+            the location scaling, otherwise the raw value
+            is kept. Default is ``False``;
     """
 
     num_params: int = 2
@@ -69,7 +69,7 @@ class IndependentNormal(D.Independent):
         loc: torch.Tensor,
         scale: torch.Tensor,
         upscale: float = 5.0,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
         event_dim: int = 1,
         **kwargs,
     ):
@@ -187,7 +187,7 @@ class TruncatedNormal(D.Independent):
         max (torch.Tensor or number, optional): maximum value of the distribution. Default = 1.0;
         tanh_loc (bool, optional): if ``True``, the above formula is used for
             the location scaling, otherwise the raw value is kept.
-            Default is :obj:`True`;
+            Default is ``False``;
     """
 
     num_params: int = 2
@@ -204,7 +204,7 @@ class TruncatedNormal(D.Independent):
         upscale: Union[torch.Tensor, float] = 5.0,
         min: Union[torch.Tensor, float] = -1.0,
         max: Union[torch.Tensor, float] = 1.0,
-        tanh_loc: bool = True,
+        tanh_loc: bool = False,
     ):
         err_msg = "TanhNormal max values must be strictly greater than min values"
         if isinstance(max, torch.Tensor) or isinstance(min, torch.Tensor):
@@ -281,14 +281,14 @@ class TruncatedNormal(D.Independent):
 class TanhNormal(FasterTransformedDistribution):
     """Implements a TanhNormal distribution with location scaling.
 
-    Location scaling prevents the location to be "too far" from 0 when a TanhTransform is applied, which ultimately
-    leads to numerically unstable samples and poor gradient computation (e.g. gradient explosion).
-    In practice, the location is computed according to
+    Location scaling prevents the location to be "too far" from 0 when a
+    ``TanhTransform`` is applied, but ultimately
+    leads to numerically unstable samples and poor gradient computation
+    (e.g. gradient explosion).
+    In practice, with location scaling the location is computed according to
 
         .. math::
             loc = tanh(loc / upscale) * upscale.
-
-    This behaviour can be disabled by switching off the tanh_loc parameter (see below).
 
 
     Args:
@@ -304,7 +304,7 @@ class TanhNormal(FasterTransformedDistribution):
         event_dims (int, optional): number of dimensions describing the action.
             Default is 1;
         tanh_loc (bool, optional): if ``True``, the above formula is used for the location scaling, otherwise the raw
-            value is kept. Default is :obj:`True`;
+            value is kept. Default is ``False``;
     """
 
     arg_constraints = {
