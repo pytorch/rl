@@ -1415,21 +1415,21 @@ class TestOpenML:
 
 class TestRoboHive:
     @pytest.mark.parametrize("envname", RoboHiveEnv.env_list)
-    def test_robohive(self, envname):
-        if any(substr in envname for substr in ("_vr3m", "_vrrl" )):
-            pytest.skip("not testing envs with prebuilt rendering")
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_robohive(self, envname, from_pixels):
+        if any(substr in envname for substr in ("_vr3m", "_vrrl")):
+            raise pytest.skip("not testing envs with prebuilt rendering")
         if "Adroit" in envname:
-            pytest.skip("tcdm are broken")
-        print("env", envname)
+            raise pytest.skip("tcdm are broken")
         try:
             env = RoboHiveEnv(envname)
         except AttributeError as err:
             if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                pytest.skip("tcdm are broken")
+                raise pytest.skip("tcdm are broken")
             else:
                 raise err
-        print("has rollout\n", env.rollout(3))
-        print(RoboHiveEnv(envname, from_pixels=True).rollout(3))
+        if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
+            raise pytest.skip("no camera")
         check_env_specs(env)
 
 
