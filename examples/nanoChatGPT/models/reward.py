@@ -27,38 +27,37 @@ class RewardModel(nn.Module):
         self.lm_head = nn.Linear(self.config.n_embd, 1, bias=False)
         self.PAD_ID = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
 
-    def forward(
-        self, chosen_ids=None, chosen_mask=None, rejected_ids=None, rejected_mask=None
-    ):
-        chosen_outputs = self.transformer(
-            input_ids=chosen_ids, attention_mask=chosen_mask
-        )
-        chosen_hidden_states = chosen_outputs[0]
-        rejected_outputs = self.transformer(
-            input_ids=rejected_ids, attention_mask=rejected_mask
-        )
-        rejected_hidden_states = rejected_outputs[0]
+    def forward(self, input_ids=None, attention_mask=None):
+        outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
+        hidden_states = outputs[0]
+        rewards = self.lm_head(hidden_states).squeeze(-1)
+        end_scores = []
+        bs = input_ids.shape[0]
 
-        chosen_rewards = self.lm_head(chosen_hidden_states).squeeze(-1)
-        rejected_rewards = self.lm_head(rejected_hidden_states).squeeze(-1)
-        chosen_end_scores = []
-        rejected_end_scores = []
-
-        bs = chosen_ids.shape[0]
-        loss = 0
-        inference = False
         for i in range(bs):
-            if torch.all(torch.eq(chosen_ids[i], rejected_ids[i])).item():
-                c_inds = (chosen_ids[i] == self.PAD_ID).nonzero()
-                c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen_ids.shape[1]
-                chosen_end_scores.append(chosen_rewards[i, c_ind - 1])
-                inference = True
-                continue
+            pad_inds = (input_ids[i] == self.PAD_ID).nonzero()
+            first_pad_ind = (
+                pad_inds[0].item() if len(pad_inds) > 0 else input_ids.shape[1]
+            )
+            end_scores.append(rewards[i, first_pad_ind - 1])
 
+        return rewards, torch.stack(end_scores)
+
+    @staticmethod
+    def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
+        chosen_ids = chosen_batch.input_ids
+        rejected_ids = rejected_batch.input_ids
+        chosen_rewards = chosen_batch.rewards
+        rejected_rewards = rejected_batch.rewards
+
+        bs = chosen_rewards.shape[0]
+        loss = 0
+
+        for i in range(bs):
             # Check if there is any padding otherwise take length of sequence
-            c_inds = (chosen_ids[i] == self.PAD_ID).nonzero()
+            c_inds = (chosen_ids[i] == pad_token_id).nonzero()
             c_ind = c_inds[0].item() if len(c_inds) > 0 else chosen_ids.shape[1]
-            r_inds = (rejected_ids[i] == self.PAD_ID).nonzero()
+            r_inds = (rejected_ids[i] == pad_token_id).nonzero()
             r_ind = r_inds[0].item() if len(r_inds) > 0 else rejected_ids.shape[1]
             end_ind = max(c_ind, r_ind)
 
@@ -70,25 +69,10 @@ class RewardModel(nn.Module):
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
             r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
 
-            # Append the last rewards to the list of end scores
-            chosen_end_scores.append(c_truncated_reward[-1])
-            rejected_end_scores.append(r_truncated_reward[-1])
-
-            # Compute loss based on truncated rewards (ignore padding)
             loss += -torch.log(
                 torch.sigmoid(c_truncated_reward - r_truncated_reward)
             ).mean()
-        loss = loss / bs
-
-        if not inference:
-            chosen_end_scores = torch.stack(chosen_end_scores)
-            rejected_end_scores = torch.stack(rejected_end_scores)
-
-        if inference:
-            chosen_end_scores = torch.stack(chosen_end_scores)
-            return {"chosen_end_scores": chosen_end_scores}
-
-        return loss, chosen_end_scores, rejected_end_scores
+        return loss / bs
 
     @classmethod
     def from_pretrained(cls, path):
@@ -127,17 +111,8 @@ def init_reward_model(config):
 
     model = TensorDictModule(
         model,
-        in_keys=[
-            ("batched", "chosen_ids"),
-            ("batched", "chosen_mask"),
-            ("batched", "rejected_ids"),
-            ("batched", "rejected_mask"),
-        ],
-        out_keys=[
-            "loss",
-            ("batched", "chosen_end_scores"),
-            ("batched", "rejected_end_scores"),
-        ],
+        in_keys=["input_ids", "attention_mask"],
+        out_keys=["rewards", "end_scores"],
     )
     return model
 

@@ -3,7 +3,7 @@ from typing import Optional
 
 import torch
 
-from data import get_prompt_dataloaders
+from data.openai_summarize_tldr import get_prompt_dataloaders
 from models.reward import init_reward_model
 from models.transformer import DEFAULT_VOCAB_SIZE
 from tensordict.tensordict import TensorDict
@@ -16,37 +16,30 @@ from utils import load_and_update_config
 HERE = Path(__file__).parent
 
 
-def reward_fn(samples: List[str]):
-    # get humans summarizes
-    posts = [sample.split('TL;DR')] for sample in samples]
-    ref_samples = [post + 'TL;DR' + post_summ_dict[post] for post in post]
-    samples_encodings = reward_tokenizer(samples)
-    samples_scores = reward_model(**samples_encodings) # get scores from reward model for samples
-    ref_samples_encodings = reward_tokenizer(ref_samples) # get scores from reward model corresponding references samples
-    ref_samples_scores = reward_model(**ref_samples_encodings)
-    norms_rewards = samples_scores - ref_samples_scores
-    return norms_rewards
-
-
-
-
 @torch.no_grad()
 def _step(self, tensordict):
     self.step_num += 1
-    prompt = tensordict.get("prompt")
+    input_ids = tensordict.get("input_ids")
+    attention_mask = tensordict.get("attention_mask")
 
     # perform the action
     action = tensordict.get("action")
 
     # The output must be written in a ``"next"`` entry
-    next_prompt = torch.hstack((prompt, action.unsqueeze(-1)))[:, -self.block_size :]
+    next_input_ids = input_ids.clone()
+    idx = torch.arange(input_ids.shape[0], device=input_ids.device)
+    pad_index = attention_mask.argmin(dim=1)
+    next_input_ids[idx, pad_index] = action
+    next_attention_mask = attention_mask.clone()
+    next_attention_mask[idx, pad_index] = 1
 
     # compute the reward
     if self.step_num >= self.episode_length:
-        reward = self.reward_model(next_prompt)
+        _, reward = self.reward_model(next_input_ids, next_attention_mask)
+        reward = reward.unsqueeze(-1)
         done = torch.ones_like(reward, dtype=torch.bool)
     else:
-        reward = torch.zeros((*tensordict.batch_size, 1)).to(prompt.device)
+        reward = torch.zeros((*tensordict.batch_size, 1)).to(input_ids.device)
         done = torch.zeros_like(reward, dtype=torch.bool)
     assert self.reward_spec.shape == reward.shape, (
         self.batch_size,
@@ -58,13 +51,20 @@ def _step(self, tensordict):
     # compute KL divergence component to avoid diverging too much from original model
     if self.ref_model:
         logits = tensordict.get("sample_log_prob")
-        ref_logits = self.ref_model(prompt)
+        ref_logits = self.ref_model(input_ids, attention_mask)
         kl_penalty = self.kl_th * (logits - ref_logits).mean(-1).unsqueeze(-1)
 
-    reward -= kl_penalty
+    reward = reward - self.normalized_reward - kl_penalty
 
     out = TensorDict(
-        {"next": {"prompt": next_prompt, "reward": reward, "done": done}},
+        {
+            "next": {
+                "input_ids": next_input_ids,
+                "attention_mask": attention_mask,
+                "reward": reward,
+                "done": done,
+            }
+        },
         tensordict.shape,
     )
     return out
@@ -74,16 +74,20 @@ def _step(self, tensordict):
 def _reset(self, tensordict):
     self.step_num = 0
     batch = next(self.dataloader)
-
-    prompt = batch.prompt[:, -self.block_size :]
-
-    #######
-
+    masked_batch = batch.mask_label()
+    _, self.normalized_reward = self.reward_model(
+        masked_batch.transformer_data.input_ids,
+        masked_batch.transformer_data.attention_mask,
+    )
+    self.normalized_reward = self.normalized_reward.unsqueeze(-1)
 
     out = TensorDict(
         {
-            "prompt": prompt,
-            "done": torch.zeros((*prompt.shape[:-1], 1), dtype=torch.bool),
+            "input_ids": batch.transformer_data.input_ids,
+            "attention_mask": batch.transformer_data.attention_mask,
+            "done": torch.zeros(
+                (*batch.transformer_data.input_ids.shape[:-1], 1), dtype=torch.bool
+            ),
         },
         self.batch_size,
     )
@@ -93,9 +97,15 @@ def _reset(self, tensordict):
 def _make_spec(self):
     # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
-        prompt=BoundedTensorSpec(
+        input_ids=BoundedTensorSpec(
             minimum=0,
             maximum=DEFAULT_VOCAB_SIZE,
+            shape=(*self.batch_size, self.config["block_size"]),
+            dtype=torch.int64,
+        ),
+        attention_mask=BoundedTensorSpec(
+            minimum=0,
+            maximum=1,
             shape=(*self.batch_size, self.config["block_size"]),
             dtype=torch.int64,
         ),
@@ -147,7 +157,7 @@ class RLHFEnv(EnvBase):
             seed = torch.empty((), dtype=torch.int64).random_().item()
         self.step_num = 0
         self.ref_model = ref_model
-        self.ref_model.select_out_keys(["sample_log_prob"])
+        self.ref_model.select_out_keys("sample_log_prob")
         self.kl_th = 1
         # self.set_seed(seed)
 

@@ -6,7 +6,7 @@ import tiktoken
 import torch
 import tqdm
 
-from data import get_prompt_dataloaders
+from data.openai_summarize_tldr import get_prompt_dataloaders
 from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
@@ -32,12 +32,12 @@ def evaluate_agent(actor, env, episode_length=50, logger=None):
     actor.train(training)
     reward = td.get(("next", "reward"))[-1, -1].item()
     if logger:
+        input_ids = td.get(('next', 'input_ids'))
+        mask = td.get(('next', 'attention_mask'))[-1, -1] == 1
+        prompt = enc.decode(input_ids[-1, -1, mask][:-episode_length].tolist())
+        response = enc.decode(input_ids[-1, -1, mask][-episode_length:].tolist())
         string_to_write = (
-            "Query: \n"
-            f"{enc.decode(td.get(('next', 'prompt'))[-1, -1, :-episode_length].tolist())},\n"
-            f"Response: \n"
-            f"{enc.decode(td.get(('next', 'prompt'))[-1, -1, -episode_length:].tolist())},\n"
-            f"reward={reward: 4.4f}\n"
+            f"Query: \n{prompt},\nResponse: \n{response},\nreward={reward: 4.4f}\n"
             f"====================================================\n"
         )
         logger.debug(string_to_write)

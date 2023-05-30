@@ -20,18 +20,18 @@ __all__ = ["ActorCritic", "init_actor_critic"]
 class ActorCritic(ActorValueOperator):
     def __init__(self, base_model):
         base_model = copy.deepcopy(base_model)
-        n_embd = base_model.lm_head.in_features
+        n_embd = base_model.gpt2.lm_head.in_features
 
         # actor network
         # extract last layer to be reused by actor
-        actor_head = base_model.lm_head
-        base_model.lm_head = nn.Identity()
+        actor_head = base_model.gpt2.lm_head
+        base_model.gpt2.lm_head = nn.Identity()
 
         # critic network
         value_head = nn.Linear(n_embd, 1, bias=False)
 
         common = TensorDictSequential(
-            TensorDictModule(base_model, in_keys=["prompt"], out_keys=["x"]),
+            TensorDictModule(base_model, in_keys=["input_ids", "attention_mask"], out_keys=["x"]),
             TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
         )
 
