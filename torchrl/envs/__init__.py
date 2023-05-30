@@ -44,6 +44,7 @@ from .transforms import (
     Transform,
     TransformedEnv,
     UnsqueezeTransform,
+    VC1Transform,
     VecNorm,
     VIPRewardTransform,
     VIPTransform,

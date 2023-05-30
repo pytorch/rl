@@ -42,4 +42,5 @@ from .transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+from .vc1 import VC1Transform
 from .vip import VIPRewardTransform, VIPTransform

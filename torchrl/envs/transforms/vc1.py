@@ -3,8 +3,12 @@ from typing import Union
 
 import torch
 
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, \
-    TensorSpec, DEVICE_TYPING
+from torchrl.data import (
+    CompositeSpec,
+    DEVICE_TYPING,
+    TensorSpec,
+    UnboundedContinuousTensorSpec,
+)
 from torchrl.envs import Transform
 
 _has_vc = importlib.util.find_spec("vc_models")
@@ -39,8 +43,6 @@ class VC1Transform(Transform):
             "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
              "VC1_vec" is assumed.
-        size (int, optional): Size of the image to feed to resnet.
-            Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
              argument will be treaded separetely and each will be given a single,
              separated entry in the output tensordict. Defaults to ``True``.
@@ -74,9 +76,10 @@ class VC1Transform(Transform):
 
     def _init(self):
         from vc_models.models.vit import model_utils
+
         model, embd_size, model_transforms, model_info = model_utils.load_model(
-            model_utils.VC1_LARGE_NAME
-            )
+            self.model_name
+        )
         self.model = model
         self.embd_size = embd_size
         self.model_transforms = model_transforms
