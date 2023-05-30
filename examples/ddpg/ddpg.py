@@ -38,7 +38,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_type=cfg.logger,
         logger_name="ddpg_logging",
         experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.mode},
+        wandb_kwargs={"mode": cfg.mode, "config": cfg},
     )
 
     torch.manual_seed(cfg.seed)

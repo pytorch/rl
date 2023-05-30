@@ -40,7 +40,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger_type=cfg.logger,
         logger_name="td3_logging",
         experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.mode},
+        wandb_kwargs={"mode": cfg.mode, "config": cfg},
     )
 
     torch.manual_seed(cfg.seed)
@@ -109,8 +109,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
 
                 optimizer_critic.zero_grad()
-                update_actor = j % cfg.policy_update_delay == 0
-                q_loss.backward(retain_graph=update_actor)
+                # update_actor = j % cfg.policy_update_delay == 0
+                q_loss.backward(retain_graph=True)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 

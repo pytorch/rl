@@ -13,7 +13,6 @@ seed: 1
 # Collection
 init_random_frames: 10000
 init_env_steps: 1000
-record_frames: 1000
 async_collection: 1
 collector_device: cpu
 env_per_collector: 1
