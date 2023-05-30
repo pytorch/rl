@@ -186,7 +186,7 @@ def make_td3_agent(train_env, eval_env, device):
 
     # Exploration wrappers:
     actor_model_explore = AdditiveGaussianWrapper(
-        actor,
+        model[0],
         sigma_init=1,
         sigma_end=1,
         mean=0,

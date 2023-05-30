@@ -186,7 +186,7 @@ def make_ddpg_agent(train_env, eval_env, device):
 
     # Exploration wrappers:
     actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-        actor,
+        model[0],
         annealing_num_steps=1_000_000,
     ).to(device)
     return model, actor_model_explore
