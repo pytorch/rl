@@ -13,8 +13,8 @@ from tensordict.nn import (
     repopulate_module,
 )
 from tensordict.utils import _normalize_key, is_seq_of_nested_key
-from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import Transform
+from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.envs.transforms.transforms import Transform
 
 
 class KLRewardTransform(Transform):
