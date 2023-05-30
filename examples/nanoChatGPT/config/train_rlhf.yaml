@@ -1,22 +1,22 @@
 # training
 episode_length: 50
 # IO:
-out_dir: out
+out_dir: out_test
 out_dir_reward: out_reward_test # used if restoring multihead
 eval_interval: 10
 log_interval: 10
-eval_iters: 200
+eval_iters: 100
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
 base_model: gpt2  # gpt2*
 init_reward_from: resume # 'scratch' or 'resume'
-init_base_from: resume # scratch, pretrained or resume NOTE: valid only if init_from is NOT resume
+init_base_from: pretrained # scratch, pretrained or resume NOTE: valid only if init_from is NOT resume
 # data:
 dataset: openai_summarize_comparisons # 'openwebtext', 'shakespeare', 'tldr'
 gradient_accumulation_steps: 10 # used to simulate larger batch sizes
 batch_size: 6 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 1024
 # model:
-dropout: 0.2 # for pretraining 0 is good, for finetuning try 0.1+
+dropout: 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # optimizer
 learning_rate: 6.0e-4 # max learning rate
 max_iters: 3000 # total number of training iterations

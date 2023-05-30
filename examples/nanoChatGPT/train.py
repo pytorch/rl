@@ -10,11 +10,14 @@ import os
 import time
 from pathlib import Path
 
+import evaluate
 import torch
+import numpy as np
 
 from data.openai_summarize_tldr import get_prompt_dataloaders
 from models.transformer import init_transformer
 from utils import create_lr_scheduler, load_and_update_config, setup
+from transformers import AutoTokenizer
 
 HERE = Path(__file__).parent
 
@@ -24,18 +27,38 @@ def init_scaler(config):
     return torch.cuda.amp.GradScaler(enabled=(config["dtype"] == "float16"))
 
 
+def compute_rouge(batch_td, tokenizer, rouge_fn):
+    labels_ids = batch_td.transformer_data.labels[:, 1:]
+    pred_ids = batch_td.transformer_data.logits.argmax(dim=-1)[:, :-1]
+    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+    result = rouge_fn.compute(predictions=pred_str, references=label_str)
+    return result
+
+
 def create_loss_estimator(config, ctx):
     # helps estimate an arbitrarily accurate loss over either split using many batches
+    rouge_fn = evaluate.load("rouge")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer.pad_token = tokenizer.eos_token
+    
     @torch.no_grad()
-    def estimate_loss(model, dataloader):
+    def estimate_loss(model, dataloader, return_rouge=False):
         model.eval()
         losses = torch.zeros(config["eval_iters"])
+        if return_rouge:
+            rouge1 = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
+            if return_rouge:
+                rouge = compute_rouge(batch, tokenizer, rouge_fn)
+                rouge1[k] = rouge["rouge1"]
         model.train()
+        if return_rouge:
+            return losses.mean(), rouge1.mean()
         return losses.mean()
 
     return estimate_loss
@@ -67,6 +90,10 @@ def main():
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
 
+    train_losses = []
+    val_losses = []
+    train_rouges = []
+    val_rouges = []
     # ######## TRAINING LOOP ########
     t0 = time.time()
     next_batch = next(train_loader)  # fetch the very first batch
@@ -105,11 +132,24 @@ def main():
         t0 = t1
         if it % config["eval_interval"] == 0:
             # evaluate the loss on train/val sets and write checkpoints
-            val_loss = estimate_loss(model, val_loader)
-            train_loss = estimate_loss(model, train_loader)
-            print(
-                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
-            )
+            if False:  # return_rouge:
+                val_loss, val_rouge = estimate_loss(model, val_loader, return_rouge=True)
+                train_loss, train_rouge = estimate_loss(model, train_loader, return_rouge=True)
+                print(
+                    f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, "
+                    f"train rouge {train_rouge:.4f}, val rouge {val_rouge:.4f}"
+                )
+                train_rouges.append(train_rouge)
+                val_rouges.append(val_rouge)
+            else:
+                val_loss = estimate_loss(model, val_loader)
+                train_loss = estimate_loss(model, train_loader)
+                print(
+                    f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+                )
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+
             if val_loss < best_val_loss or config["always_save_checkpoint"]:
                 best_val_loss = val_loss
                 if it > 0:
@@ -124,11 +164,29 @@ def main():
                     torch.save(
                         checkpoint, os.path.join(config["out_dir"], "ckpt_status.pt")
                     )
+
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
+            train_losses.append(lossf)
             print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
+    import matplotlib.pyplot as plt
+
+    f, ax = plt.subplots(figsize=(8, 6))
+    plt.title('Supervised Fine Tuning: Loss')
+    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
+    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_losses, label="valid loss")
+    ax.legend()
+    f.savefig("figures/train_curve.png", dpi=150)
+
+    if False:
+        f, ax = plt.subplots(figsize=(8, 6))
+        plt.title('Supervised Fine Tuning: Rouge')
+        ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), train_rouges, label="train rouge")
+        ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_rouges, label="valid rouge")
+        ax.legend()
+        f.savefig("figures/train_curve_rouge.png", dpi=150)
 
 if __name__ == "__main__":
     main()
