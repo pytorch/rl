@@ -3214,7 +3214,9 @@ class TestDreamer:
         delayed_clamp,
         free_nats,
     ):
-        tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
+        tensordict = self._create_world_model_data(
+            batch_size=2, temporal_length=3, rssm_hidden_dim=10, state_dim=5
+        ).to(device)
         world_model = self._create_world_model_model(10, 5).to(device)
         loss_module = DreamerModelLoss(
             world_model,

@@ -266,8 +266,8 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     of an experiment and as such should be kept out of training scripts.
 
     """
-    torch.manual_seed(0)
-    env.set_seed(0)
+    torch.manual_seed(seed)
+    env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict().flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
@@ -329,6 +329,14 @@ def _check_isin(key, value, obs_spec, input_spec):
         for _key, _value in value.items():
             _check_isin(_key, _value, obs_spec, input_spec)
         return
+    elif key in input_spec["_action_spec"].keys(True):
+        if not input_spec["_action_spec"][key].is_in(value):
+            raise AssertionError(
+                f"action_spec.is_in failed for key {key}. "
+                f"Got action_spec={input_spec['_action_spec'][key]} and real={value}."
+            )
+        return
+
     elif key in input_spec.keys(True):
         if not input_spec[key].is_in(value):
             raise AssertionError(
