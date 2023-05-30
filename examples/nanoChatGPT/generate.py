@@ -15,6 +15,7 @@ def main():
     # config["block_size"] = 512
     # ######## INIT MODELS ########
     model = init_transformer(config)
+    model.eval()
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
@@ -25,7 +26,7 @@ def main():
     )
 
     dataset = load_dataset("CarperAI/openai_summarize_tldr", split="test")
-    example = dataset[1]
+    example = dataset[2]
     tokenized_prompt = tokenizer(example["prompt"], return_tensors="pt").to("cuda")
 
     res = model.module.generate(

@@ -1,8 +1,8 @@
 # I/O
-out_dir: out_test
-eval_interval: 20
-log_interval: 10
-eval_iters: 20
+out_dir: out
+eval_interval: 200
+log_interval: 50
+eval_iters: 100
 always_save_checkpoint: False  # if True, always save a checkpoint after each eval
 base_model: gpt2  # gpt2*
 init_base_from: pretrained  # scratch, pretrained or resume (will read last checkpoint in out_dir)
@@ -14,7 +14,7 @@ block_size: 550
 dropout: 0.0  # for pretraining 0 is good, for finetuning try 0.1+
 # optimizer
 learning_rate: 1.0e-5  # max learning rate
-max_iters: 5000  # total number of training iterations
+max_iters: 5001  # total number of training iterations
 weight_decay: 1.0e-1
 beta1: 0.9
 beta2: 0.95
@@ -22,7 +22,7 @@ grad_clip: 1.0  # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr: True  # whether to decay the learning rate
 warmup_iters: 100  # how many steps to warm up for
-lr_decay_iters: 5000  # should be ~= max_iters per Chinchilla
+lr_decay_iters: 5001  # should be ~= max_iters per Chinchilla
 min_lr: 1.0e-6  # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # system settings
 device: cuda  # examples: cpu, cuda, cuda:0, cuda:1 etc., or try mps on macbooks

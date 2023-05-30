@@ -1,22 +1,22 @@
 # I/O
-out_dir: out_test
-out_dir_reward: out_reward_test
+out_dir: out
+out_dir_reward: out_reward
 eval_interval: 200
 log_interval: 50
-eval_iters: 200
+eval_iters: 100
 always_save_checkpoint: False # if True, always save a checkpoint after each eval
 base_model: gpt2  # gpt2*
 init_reward_from: scratch # 'scratch' or 'resume'
-init_base_from: pretrained # scratch, pretrained or resume NOTE: valid only if init_from is NOT resume
+init_base_from: resume # scratch, pretrained or resume NOTE: valid only if init_from is NOT resume
 # data
-gradient_accumulation_steps: 4 # used to simulate larger batch sizes
-batch_size: 4 # if gradient_accumulation_steps > 1, this is the micro-batch size
+gradient_accumulation_steps: 1 # used to simulate larger batch sizes
+batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size: 550
 #model
 dropout: 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # optimizer
 learning_rate: 1.0e-5 # max learning rate
-max_iters: 10000 # total number of training iterations
+max_iters: 10001 # total number of training iterations
 weight_decay: 1.0e-1
 beta1: 0.9
 beta2: 0.95
@@ -24,7 +24,7 @@ grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr: False # whether to decay the learning rate
 warmup_iters: 50 # how many steps to warm up for
-lr_decay_iters: 100 # should be ~= max_iters per Chinchilla
+lr_decay_iters: 10001 # should be ~= max_iters per Chinchilla
 min_lr: 1.0e-6 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # system settings
 device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks

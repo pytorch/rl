@@ -16,6 +16,20 @@ from utils import load_and_update_config
 HERE = Path(__file__).parent
 
 
+def reward_fn(samples: List[str]):
+    # get humans summarizes
+    posts = [sample.split('TL;DR')] for sample in samples]
+    ref_samples = [post + 'TL;DR' + post_summ_dict[post] for post in post]
+    samples_encodings = reward_tokenizer(samples)
+    samples_scores = reward_model(**samples_encodings) # get scores from reward model for samples
+    ref_samples_encodings = reward_tokenizer(ref_samples) # get scores from reward model corresponding references samples
+    ref_samples_scores = reward_model(**ref_samples_encodings)
+    norms_rewards = samples_scores - ref_samples_scores
+    return norms_rewards
+
+
+
+
 @torch.no_grad()
 def _step(self, tensordict):
     self.step_num += 1
@@ -62,6 +76,10 @@ def _reset(self, tensordict):
     batch = next(self.dataloader)
 
     prompt = batch.prompt[:, -self.block_size :]
+
+    #######
+
+
     out = TensorDict(
         {
             "prompt": prompt,

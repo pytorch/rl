@@ -3,12 +3,18 @@ import time
 from pathlib import Path
 
 import torch
+import numpy as np
 
 from data import get_reward_dataloaders
 from models.reward import init_reward_model
 from utils import load_and_update_config, create_lr_scheduler, setup
 
 HERE = Path(__file__).parent
+
+
+def _accuracy(td):
+    brd = td.batched
+    return (sum(brd.chosen_end_scores > brd.rejected_end_scores) / len(brd.rejected_end_scores)).item()
 
 
 # TODO: eliminate redundant repeated definition
@@ -18,13 +24,15 @@ def create_loss_estimator(config, ctx):
     def estimate_loss(model, dataloader):
         model.eval()
         losses = torch.zeros(config["eval_iters"])
+        accs = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
+            accs[k] = _accuracy(batch)
         model.train()
-        return losses.mean()
+        return losses.mean(), accs.mean()
 
     return estimate_loss
 
@@ -56,6 +64,11 @@ def main():
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
 
+    train_losses = []
+    val_losses = []
+    train_accs = []
+    val_accs = []
+
     # ######## TRAINING LOOP ########
     t0 = time.time()
     for it in range(iter_num, config["max_iters"]):
@@ -80,10 +93,13 @@ def main():
         t0 = t1
         if it % config["eval_interval"] == 0:
             # evaluate the loss on train/val sets and write checkpoints
-            val_loss = estimate_loss(model, val_loader)
-            train_loss = estimate_loss(model, train_loader)
+            val_loss, val_acc = estimate_loss(model, val_loader)
+            train_loss, train_acc = estimate_loss(model, train_loader)
+            train_accs.append(train_acc)
+            val_accs.append(val_acc)
             print(
                 f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+                f"train acc {train_acc:.4f}, val acc {val_acc:.4f}"
             )
             if val_loss < best_val_loss or config["always_save_checkpoint"]:
                 best_val_loss = val_loss
@@ -100,11 +116,33 @@ def main():
                         checkpoint,
                         os.path.join(config["out_dir_reward"], "ckpt_status.pt"),
                     )
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
-            print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
+            train_losses.append(lossf)
+            train_accs.append(_accuracy(batch))
+            print(f"iter {it}: train loss {lossf:.4f}, accuracy {train_accs[-1]:.4f} time {dt*1000:.2f}ms")
 
+    import matplotlib.pyplot as plt
+
+    f, ax = plt.subplots(figsize=(8, 6))
+    plt.title('Reward Model: Loss')
+    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
+    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_losses, label="valid loss")
+    ax.legend()
+
+    f.savefig("figures/reward_curve_loss.png", dpi=150)
+
+    f, ax = plt.subplots(figsize=(8, 6))
+    plt.title('Reward Model: Accuracy')
+    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_accs, label="train accs")
+    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_accs, label="valid accs")
+    ax.legend()
+
+    f.savefig("figures/reward_curve_accuracy.png", dpi=150)
 
 if __name__ == "__main__":
     main()
