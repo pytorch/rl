@@ -33,24 +33,24 @@ from utils import (
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    device = torch.device(cfg.device)
+    device = torch.device(cfg.network.device)
 
-    exp_name = generate_exp_name("TD3", cfg.exp_name)
+    exp_name = generate_exp_name("TD3", cfg.env.exp_name)
     logger = get_logger(
-        logger_type=cfg.logger,
+        logger_type=cfg.logger.type,
         logger_name="td3_logging",
         experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.mode, "config": cfg},
+        wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
     )
 
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
 
     # Create Environments
     train_env, eval_env = make_environment(cfg)
 
     # Create Agent
-    model, exploration_policy = make_td3_agent(train_env, eval_env, device)
+    model, exploration_policy = make_td3_agent(cfg, train_env, eval_env, device)
 
     # Create TD3 loss
     loss_module, target_net_updater = make_loss_module(cfg, model)
@@ -60,9 +60,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Make Replay Buffer
     replay_buffer = make_replay_buffer(
-        batch_size=cfg.batch_size,
-        prb=cfg.prb,
-        buffer_size=cfg.buffer_size,
+        batch_size=cfg.optimization.batch_size,
+        prb=cfg.replay_buffer.prb,
+        buffer_size=cfg.replay_buffer.size,
         device=device,
     )
 
@@ -74,9 +74,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Main loop
     collected_frames = 0
-    pbar = tqdm.tqdm(total=cfg.total_frames)
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     r0 = None
     q_loss = None
+
+    init_random_frames = cfg.collector.init_random_frames
+    num_updates = int(
+        cfg.collector.env_per_collector
+        * cfg.collector.frames_per_batch
+        * cfg.optimization.utd_ratio
+    )
+    delayed_updates = cfg.optimization.policy_update_delay
+    prb = cfg.replay_buffer.prb
+    env_per_collector = cfg.collector.env_per_collector
+    eval_rollout_steps = cfg.collector.max_frames_per_traj // cfg.env.frame_skip
+    eval_iter = cfg.logger.eval_iter
+    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
 
     for i, tensordict in enumerate(collector):
         # update weights of the inference policy
@@ -92,16 +105,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += current_frames
 
         # optimization steps
-        if collected_frames >= cfg.init_random_frames:
+        if collected_frames >= init_random_frames:
             (
                 actor_losses,
                 q_losses,
             ) = ([], [])
-            for j in range(
-                int(cfg.env_per_collector * cfg.frames_per_batch * cfg.utd_ratio)
-            ):
+            for j in range(num_updates):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample(cfg.batch_size).clone()
+                sampled_tensordict = replay_buffer.sample().clone()
 
                 loss_td = loss_module(sampled_tensordict)
 
@@ -109,7 +120,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
 
                 optimizer_critic.zero_grad()
-                update_actor = j % cfg.policy_update_delay == 0
+                update_actor = j % delayed_updates == 0
                 q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
@@ -124,11 +135,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     target_net_updater.step()
 
                 # update priority
-                if cfg.prb:
+                if prb:
                     replay_buffer.update_priority(sampled_tensordict)
 
         rewards.append(
-            (i, tensordict["next", "reward"].sum().item() / cfg.env_per_collector)
+            (i, tensordict["next", "reward"].sum().item() / env_per_collector)
         )
         train_log = {
             "train_reward": rewards[-1][1],
@@ -143,13 +154,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
-        if (
-            abs(collected_frames % cfg.eval_iter)
-            < cfg.frames_per_batch * cfg.frame_skip
-        ):
+        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
             with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
                 eval_rollout = eval_env.rollout(
-                    cfg.max_frames_per_traj // cfg.frame_skip,
+                    eval_rollout_steps,
                     exploration_policy,
                     auto_cast_to_device=True,
                     break_when_any_done=True,
