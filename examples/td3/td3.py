@@ -109,12 +109,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
 
                 optimizer_critic.zero_grad()
-                # update_actor = j % cfg.policy_update_delay == 0
-                q_loss.backward(retain_graph=True)
+                update_actor = j % cfg.policy_update_delay == 0
+                q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
-                if j % cfg.policy_update_delay == 0:
+                if update_actor:
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()
