@@ -5,7 +5,7 @@
 import abc
 import argparse
 import itertools
-from copy import copy, deepcopy
+from copy import copy
 from functools import partial
 
 import numpy as np
@@ -1018,8 +1018,9 @@ class TestR3M(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, r3m)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
             + list(transformed_env.observation_spec.keys())
+            + ["action"]
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
@@ -1788,7 +1789,9 @@ class TestDoubleToFloat(TransformBase):
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            input_spec = CompositeSpec(action=action_spec)
+            input_spec = CompositeSpec(
+                _action_spec=CompositeSpec(action=action_spec), _state_spec=None
+            )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
 
@@ -1945,7 +1948,7 @@ class TestExcludeTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,
@@ -2110,7 +2113,7 @@ class TestSelectTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,
@@ -3126,8 +3129,6 @@ class TestObservationNorm(TransformBase):
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        # assert "observation_inv" in env.input_spec.keys()
-        # "observation_inv" should not appear in the tensordict
         assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)["action_inv"])
         assert torch.allclose((td["observation"] - 1) / 0.5, td["observation_out"])
 
@@ -4477,9 +4478,6 @@ class TestUnsqueezeTransform(TransformBase):
         td = env.rollout(3)
         assert env.action_spec.shape[-1] == 6
         assert td["action"].shape[-1] == 6
-        # inverse transforms are now hidden from outer scope
-        # assert env.input_spec["action_t"].shape[-1] == 1
-        # assert td["action_t"].shape[-1] == 1
 
 
 class TestSqueezeTransform(TransformBase):
@@ -5174,7 +5172,7 @@ class TestTensorDictPrimer(TransformBase):
             env = ContinuousActionVecMockEnv()
             env.set_seed(100)
             kwargs = {
-                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                key: spec.clone() if key != "action" else env.action_spec.clone()
                 # copy to avoid having the same spec for all keys
                 for key in default_keys
             }
@@ -5966,7 +5964,8 @@ class TestVIP(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, vip)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
+            + ["action"]
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
@@ -6500,10 +6499,11 @@ class TestTransforms:
         _ = env.reward_spec
 
         assert env._input_spec is not None
-        assert "action" in env._input_spec
-        assert env._input_spec["action"] is not None
-        assert env._output_spec["observation"] is not None
-        assert env._output_spec["reward"] is not None
+        assert "_action_spec" in env._input_spec
+        assert env._input_spec["_action_spec"] is not None
+        assert env._output_spec["_observation_spec"] is not None
+        assert env._output_spec["_reward_spec"] is not None
+        assert env._output_spec["_done_spec"] is not None
 
         env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
@@ -6568,38 +6568,14 @@ class TestTransforms:
         _ = copy(env.observation_spec)
         _ = copy(env.reward_spec)
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(-7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(4, "ffff")
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
 
 @pytest.mark.parametrize("device", get_available_devices())

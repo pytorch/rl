@@ -7,7 +7,8 @@ import argparse
 import tempfile
 
 import pytest
-from _utils_internal import PONG_VERSIONED
+
+from torchrl.envs.libs.gym import gym_backend
 
 
 def test_dm_control():
@@ -45,6 +46,8 @@ def test_gym():
     from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
 
     assert _has_gym
+    from _utils_internal import PONG_VERSIONED
+
     env = GymEnv(PONG_VERSIONED)
     env.reset()
 
