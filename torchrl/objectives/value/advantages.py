@@ -290,14 +290,12 @@ class TD0Estimator(ValueEstimatorBase):
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
-        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in :class:`~._AcceptedKeys`.
-        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to ``"advantage"``.
-        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to ``"value_target"``.
-        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
-            Defaults to ``"state_value"``.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -466,14 +464,12 @@ class TD1Estimator(ValueEstimatorBase):
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
-        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in :class:`~._AcceptedKeys`.
-        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
-            Defaults to "state_value".
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -646,14 +642,12 @@ class TDLambdaEstimator(ValueEstimatorBase):
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
-        tensor_keys: (Dict[str, str or tuple of str], optional) Specify tensordict key names for
-            all keys specified in :class:`~._AcceptedKeys`.
-        advantage_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): [Deprecated] the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): [Deprecated] the value key to read from the input tensordict.
-            Defaults to "state_value".
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -837,16 +831,17 @@ class GAE(ValueEstimatorBase):
 
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+            Defaults to "state_value".
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used

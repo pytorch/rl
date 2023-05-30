@@ -119,9 +119,12 @@ class DQNLoss(LossModule):
         default values.
 
         Attributes:
-            state_action_value (NestedKey): The input tensordict key where the state action value is expected. Defaults to ``"state_action_value"``.
-            action (NestedKey): The input tensordict key where the action is expected. Defaults to ``"action"``.
-            priority (NestedKey): The input tensordict key where the target priority is written to. Defaults to ``"td_error"``.
+            state_action_value (NestedKey): The input tensordict key where the state action value is expected.
+                Defaults to ``"state_action_value"``.
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to.
+                Defaults to ``"td_error"``.
         """
 
         action_value: NestedKey = "action_value"

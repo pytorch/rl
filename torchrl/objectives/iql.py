@@ -75,9 +75,9 @@ class IQLLoss(LossModule):
                 Defaults to ``"_log_prob"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
-            state_action_value (NestedKey): The input tensordict key where the state action value is expected.
-                Will be used for the underlying value estimator as value key.
-                Defaults to ``"state_action_value"``.
+            state_action_value (NestedKey): The input tensordict key where the
+                state action value is expected. Will be used for the underlying
+                value estimator as value key. Defaults to ``"state_action_value"``.
         """
 
         value: NestedKey = "state_value"

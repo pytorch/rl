@@ -59,22 +59,22 @@ class DreamerModelLoss(LossModule):
         default values
 
         Attributes:
-            reward (NestedKey): The reward is expected to be in the tensordict key ("next", reward).
-                Defaults to ``"reward"``.
-            true_reward (NestedKey): The `true_reward` will be stored in the tensordict key ("next", true_reward).
-                Defaults to ``"true_reward"``.
-            prior_mean (NestedKey): The prior mean is expected to be in the tensordict key ("next", prior_mean).
-                Defaults to ``"prior_mean"``.
-            prior_std (NestedKey): The prior mean is expected to be in the tensordict key ("next", prior_mean).
-                Defaults to ``"prior_mean"``.
-            posterior_mean (NestedKey): The posterior mean is expected to be in the tensordict key ("next", prior_mean).
-                Defaults to ``"posterior_mean"``.
-            posterior_std (NestedKey): The posterior std is expected to be in the tensordict key ("next", prior_mean).
-                Defaults to ``"posterior_std"``.
+            reward (NestedKey): The reward is expected to be in the tensordict
+                key ("next", reward). Defaults to ``"reward"``.
+            true_reward (NestedKey): The `true_reward` will be stored in the
+                tensordict key ("next", true_reward). Defaults to ``"true_reward"``.
+            prior_mean (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            prior_std (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            posterior_mean (NestedKey): The posterior mean is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_mean"``.
+            posterior_std (NestedKey): The posterior std is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_std"``.
             pixels (NestedKey): The pixels is expected to be in the tensordict key ("next", pixels).
                 Defaults to ``"pixels"``.
             reco_pixels (NestedKey): The reconstruction pixels is expected to be
-                in the tensordict key ("next", reco_pixels).  Defaults to ``"reco_pixels"``.
+                in the tensordict key ("next", reco_pixels). Defaults to ``"reco_pixels"``.
         """
 
         reward: NestedKey = "reward"
@@ -214,8 +214,8 @@ class DreamerActorLoss(LossModule):
                 Defaults to ``"reward"``.
             value (NestedKey): The reward is expected to be in the tensordict key ("next", value).
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            done (NestedKey): The input tensordict key where the flag if a trajectory is done is expected ("next", done).
-                Defaults to ``"done"``.
+            done (NestedKey): The input tensordict key where the flag if a
+                trajectory is done is expected ("next", done). Defaults to ``"done"``.
         """
 
         belief: NestedKey = "belief"

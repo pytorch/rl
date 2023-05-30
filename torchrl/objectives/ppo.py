@@ -133,8 +133,8 @@ class PPOLoss(LossModule):
                 Will be used for the underlying value estimator Defaults to ``"value_target"``.
             value (NestedKey): The input tensordict key where the state value is expected.
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
-                Defaults to ``"sample_log_prob"``.
+            sample_log_prob (NestedKey): The input tensordict key where the
+               sample log probability is expected.  Defaults to ``"sample_log_prob"``.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
         """
