@@ -4885,7 +4885,7 @@ class TestToTensorImage(TransformBase):
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
@@ -4894,7 +4894,10 @@ class TestToTensorImage(TransformBase):
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+                {
+                    key: BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
+                    for key in keys
+                }
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
@@ -4931,7 +4934,7 @@ class TestToTensorImage(TransformBase):
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
@@ -4940,7 +4943,10 @@ class TestToTensorImage(TransformBase):
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+                {
+                    key: BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
+                    for key in keys
+                }
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
@@ -5024,6 +5030,27 @@ class TestToTensorImage(TransformBase):
             obs = td["pixels"]
         assert obs.shape[-3] == 3
         assert obs.dtype is torch.float32
+
+    @pytest.mark.parametrize("from_int", [None, True, False])
+    @pytest.mark.parametrize("default_dtype", [torch.float32, torch.uint8])
+    def test_transform_scale(self, from_int, default_dtype):
+        totensorimage = ToTensorImage(in_keys=["pixels"], from_int=from_int)
+        fill_value = 150 if default_dtype == torch.uint8 else 0.5
+        td = TensorDict(
+            {"pixels": torch.full((21, 22, 3), fill_value, dtype=default_dtype)}, []
+        )
+        # Save whether or not the tensor is floating point before the transform changes it
+        # to floating point type.
+        is_floating_point = torch.is_floating_point(td["pixels"])
+        totensorimage(td)
+
+        if from_int is None:
+            expected_pixel_value = (
+                fill_value / 255 if not is_floating_point else fill_value
+            )
+        else:
+            expected_pixel_value = fill_value / 255 if from_int else fill_value
+        assert (td["pixels"] == expected_pixel_value).all()
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])

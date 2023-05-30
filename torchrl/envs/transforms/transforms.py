@@ -909,13 +909,19 @@ class Compose(Transform):
 
 
 class ToTensorImage(ObservationTransform):
-    """Transforms a numpy-like image (3 x W x H) to a pytorch image (3 x W x H).
+    """Transforms a numpy-like image (W x H x C) to a pytorch image (C x W x H).
 
-    Transforms an observation image from a (... x W x H x 3) 0..255 uint8
-    tensor to a single/double precision floating point (3 x W x H) tensor
-    with values between 0 and 1.
+    Transforms an observation image from a (... x W x H x C) tensor to a
+    (... x C x W x H) tensor. Optionally, scales the input tensor from the range
+    [0, 255] to the range [0.0, 1.0] (see ``from_int`` for more details).
+
+    In the other cases, tensors are returned without scaling.
 
     Args:
+        from_int (bool, optional): if ``True``, the tensor will be scaled from
+            the range [0, 255] to the range [0.0, 1.0]. if `False``, the tensor
+            will not be scaled. if `None`, the tensor will be scaled if
+            it's a floating-point tensor. default=None.
         unsqueeze (bool): if ``True``, the observation tensor is unsqueezed
             along the first dimension. default=False.
         dtype (torch.dtype, optional): dtype to use for the resulting
@@ -935,6 +941,7 @@ class ToTensorImage(ObservationTransform):
 
     def __init__(
         self,
+        from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
         in_keys: Optional[Sequence[str]] = None,
@@ -943,6 +950,7 @@ class ToTensorImage(ObservationTransform):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self.from_int = from_int
         self.unsqueeze = unsqueeze
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
 
@@ -950,7 +958,11 @@ class ToTensorImage(ObservationTransform):
         observation = observation.permute(
             *list(range(observation.ndimension() - 3)), -1, -3, -2
         )
-        observation = observation.div(255).to(self.dtype)
+        if self.from_int or (
+            self.from_int is None and not torch.is_floating_point(observation)
+        ):
+            observation = observation.div(255)
+        observation = observation.to(self.dtype)
         if self._should_unsqueeze(observation):
             observation = observation.unsqueeze(0)
         return observation
