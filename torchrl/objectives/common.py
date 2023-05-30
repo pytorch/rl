@@ -366,9 +366,7 @@ class LossModule(nn.Module):
                 return target_params
             else:
                 params = getattr(self, param_name)
-                # we must clone the params, otherwise backprop through one
-                # loss then the other will result in an error
-                return params.detach().clone()
+                return params.detach()
 
         else:
             raise RuntimeError(
