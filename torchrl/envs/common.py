@@ -1106,7 +1106,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             callback (callable, optional): function to be called at each iteration with the given TensorDict.
             auto_reset (bool, optional): if ``True``, resets automatically the environment
                 if it is in a done state when the rollout is initiated.
-                Default is :obj:`True`.
+                Default is ``True``.
             auto_cast_to_device (bool, optional): if ``True``, the device of the tensordict is automatically cast to the
                 policy device before the policy is used. Default is ``False``.
             break_when_any_done (bool): breaks if any of the done state is True. If False, a reset() is

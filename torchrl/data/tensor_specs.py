@@ -2389,7 +2389,7 @@ class CompositeSpec(TensorSpec):
             This is useful to build nested CompositeSpecs with tuple indices.
         **kwargs (key (str): value (TensorSpec)): dictionary of tensorspecs
             to be stored. Values can be None, in which case is_in will be assumed
-            to be :obj:`True` for the corresponding tensors, and :obj:`project()` will have no
+            to be ``True`` for the corresponding tensors, and :obj:`project()` will have no
             effect. `spec.encode` cannot be used with missing values.
 
     Examples:
