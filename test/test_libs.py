@@ -1433,6 +1433,7 @@ class TestRoboHive:
                 raise err
         if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
             print("no camera")
+            return
         check_env_specs(env)
 
 
