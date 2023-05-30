@@ -36,6 +36,7 @@ activation: relu
 # Logging
 logger: wandb
 mode: online
+eval_iter: 250000
 
 # Extra
 device: "cuda:0"

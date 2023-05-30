@@ -146,7 +146,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
-        if abs(collected_frames % 25000) < cfg.frames_per_batch * cfg.frame_skip:
+        if (
+            abs(collected_frames % cfg.eval_iter)
+            < cfg.frames_per_batch * cfg.frame_skip
+        ):
             with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
                 eval_rollout = eval_env.rollout(
                     cfg.max_frames_per_traj // cfg.frame_skip,
