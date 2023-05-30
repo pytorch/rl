@@ -463,6 +463,39 @@ class TestDQN:
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    def test_dqn_notensordict(self):
+        n_obs = 3
+        n_action = 4
+        action_spec = OneHotDiscreteTensorSpec(n_action)
+        value_network = nn.Linear(n_obs, n_action)  # a simple value model
+        dqn_loss = DQNLoss(value_network, action_space=action_spec)
+        # define data
+        observation = torch.randn(n_obs)
+        next_observation = torch.randn(n_obs)
+        action = action_spec.rand()
+        next_reward = torch.randn(1)
+        next_done = torch.zeros(1, dtype=torch.bool)
+        loss_val = dqn_loss(
+            observation=observation,
+            next_observation=next_observation,
+            next_reward=next_reward,
+            next_done=next_done,
+            action=action,
+        )
+        loss_val_td = dqn_loss(
+            TensorDict(
+                {
+                    "observation": observation,
+                    "next_observation": next_observation,
+                    "next_reward": next_reward,
+                    "next_done": next_done,
+                    "action": action,
+                },
+                [],
+            ).unflatten_keys("_")
+        )
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+
 
 class TestDDPG:
     seed = 0
@@ -1973,7 +2006,7 @@ class TestREDQ:
         )
 
         if delay_qvalue:
-            target_updater = SoftUpdate(loss_fn)
+            target_updater = SoftUpdate(loss_fn, tau=0.05)
 
         with _check_td_steady(td):
             loss = loss_fn(td)
@@ -3181,7 +3214,9 @@ class TestDreamer:
         delayed_clamp,
         free_nats,
     ):
-        tensordict = self._create_world_model_data(2, 3, 10, 5).to(device)
+        tensordict = self._create_world_model_data(
+            batch_size=2, temporal_length=3, rssm_hidden_dim=10, state_dim=5
+        ).to(device)
         world_model = self._create_world_model_model(10, 5).to(device)
         loss_module = DreamerModelLoss(
             world_model,
@@ -3709,15 +3744,19 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         RuntimeError, match="Your module seems to have a target tensor list "
     ):
         if mode == "hard":
-            upd = HardUpdate(module, value_network_update_interval)
+            upd = HardUpdate(
+                module, value_network_update_interval=value_network_update_interval
+            )
         elif mode == "soft":
-            upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
+            upd = SoftUpdate(module, eps=1 - 1 / value_network_update_interval)
 
     class custom_module(LossModule):
-        def __init__(self):
+        def __init__(self, delay_module=True):
             super().__init__()
             module1 = torch.nn.BatchNorm2d(10).eval()
-            self.convert_to_functional(module1, "module1", create_target_params=True)
+            self.convert_to_functional(
+                module1, "module1", create_target_params=delay_module
+            )
             module2 = torch.nn.BatchNorm2d(10).eval()
             self.module2 = module2
             iterator_params = self.target_module1_params.values(
@@ -3729,7 +3768,30 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 else:
                     target.data += 10
 
+    module = custom_module(delay_module=False)
+    with pytest.raises(RuntimeError, match="The target and source data are identical"):
+        if mode == "hard":
+            upd = HardUpdate(
+                module, value_network_update_interval=value_network_update_interval
+            )
+        elif mode == "soft":
+            upd = SoftUpdate(
+                module,
+                eps=1 - 1 / value_network_update_interval,
+            )
+        else:
+            raise NotImplementedError
+
     module = custom_module().to(device).to(dtype)
+
+    if mode == "soft":
+        with pytest.raises(ValueError, match="One and only one argument"):
+            upd = SoftUpdate(
+                module,
+                eps=1 - 1 / value_network_update_interval,
+                tau=0.1,
+            )
+
     _ = module.module1_params
     _ = module.target_module1_params
     if mode == "hard":
@@ -3737,7 +3799,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             module, value_network_update_interval=value_network_update_interval
         )
     elif mode == "soft":
-        upd = SoftUpdate(module, 1 - 1 / value_network_update_interval)
+        upd = SoftUpdate(module, eps=1 - 1 / value_network_update_interval)
     for _, _v in upd._targets.items(True, True):
         if _v.dtype is not torch.int64:
             _v.copy_(torch.randn_like(_v))
@@ -5346,14 +5408,20 @@ class TestUtils:
         assert (z2 == 2).all()
 
 
-@pytest.mark.parametrize("updater", [HardUpdate, SoftUpdate])
-def test_updater_warning(updater):
+@pytest.mark.parametrize(
+    "updater,kwarg",
+    [
+        (HardUpdate, {"value_network_update_interval": 1000}),
+        (SoftUpdate, {"eps": 0.99}),
+    ],
+)
+def test_updater_warning(updater, kwarg):
     with warnings.catch_warnings():
         dqn = DQNLoss(torch.nn.Linear(3, 4), delay_value=True, action_space="one_hot")
     with pytest.warns(UserWarning):
         dqn.target_value_network_params
     with warnings.catch_warnings():
-        updater(dqn)
+        updater(dqn, **kwarg)
     with warnings.catch_warnings():
         dqn.target_value_network_params
 

@@ -160,6 +160,28 @@ def generalized_advantage_estimate(
     return advantage, value_target
 
 
+def _geom_series_like(t, r, thr):
+    """Creates a geometric series of the form [1, gammalmbda, gammalmbda**2] with the shape of `t`.
+
+    Drops all elements which are smaller than `thr`.
+    """
+    if isinstance(r, torch.Tensor):
+        r = r.item()
+
+    if r == 0.0:
+        return torch.zeros_like(t)
+    elif r >= 1.0:
+        lim = t.numel()
+    else:
+        lim = int(math.log(thr) / math.log(r))
+
+    rs = torch.full_like(t[:lim], r)
+    rs[0] = 1.0
+    rs = rs.cumprod(0)
+    rs = rs.unsqueeze(-1)
+    return rs
+
+
 def _fast_vec_gae(
     reward: torch.Tensor,
     state_value: torch.Tensor,
@@ -202,16 +224,7 @@ def _fast_vec_gae(
     num_per_traj = _get_num_per_traj(done)
     td0_flat, mask = _split_and_pad_sequence(td0, num_per_traj, return_mask=True)
 
-    if not isinstance(gammalmbda, torch.Tensor):
-        gammalmbda_log = math.log(gammalmbda)
-    else:
-        gammalmbda_log = gammalmbda.log().item()
-    lim = int(math.log(thr) / gammalmbda_log)
-    gammalmbdas = torch.ones_like(td0_flat[0][:lim])
-
-    gammalmbdas[1:] = gammalmbda
-    gammalmbdas[1:] = gammalmbdas[1:].cumprod(0)
-    gammalmbdas = gammalmbdas.unsqueeze(-1)
+    gammalmbdas = _geom_series_like(td0_flat[0], gammalmbda, thr=thr)
 
     advantage = _custom_conv1d(td0_flat.unsqueeze(1), gammalmbdas)
     advantage = advantage.squeeze(1)
@@ -827,10 +840,7 @@ def _fast_td_lambda_return_estimate(
         t + v3 * gammalmbda, num_per_traj, return_mask=True
     )
 
-    # cutoff gammalmbdas as soon as is smaller than `thr`
-    lim = int(math.log(thr) / gammalmbda.log().item())
-    # create decay filter [1, g, g**2, g**3, ...]
-    gammalmbdas = gammalmbda.pow(torch.arange(lim, device=device)).unsqueeze(-1)
+    gammalmbdas = _geom_series_like(t_flat[0], gammalmbda, thr=thr)
 
     ret_flat = _custom_conv1d(t_flat.unsqueeze(1), gammalmbdas)
     ret = ret_flat.squeeze(1)[mask]
@@ -1100,10 +1110,7 @@ def reward2go(
 
     num_per_traj = _get_num_per_traj(done)
     td0_flat = _split_and_pad_sequence(reward, num_per_traj)
-    gammas = torch.ones_like(td0_flat[0])
-    gammas[1:] = gamma
-    gammas[1:] = gammas[1:].cumprod(0)
-    gammas = gammas.unsqueeze(-1)
+    gammas = _geom_series_like(td0_flat[0], gamma, thr=1e-7)
     cumsum = _custom_conv1d(td0_flat.unsqueeze(1), gammas)
     cumsum = cumsum.squeeze(1)
     cumsum = _inv_pad_sequence(cumsum, num_per_traj)

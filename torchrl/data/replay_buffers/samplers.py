@@ -88,7 +88,7 @@ class SamplerWithoutReplacement(Sampler):
 
     When the sampler reaches the end of the list of available indices, a new sample order
     will be generated and the resulting indices will be completed with this new draw, which
-    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to :obj:`True`.
+    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to ``True``.
 
     """
 

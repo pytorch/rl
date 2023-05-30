@@ -226,7 +226,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
 
     # Make Off-Policy Collector
     collector = MultiaSyncDataCollector(
@@ -266,7 +266,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     q_loss = None
 
     for i, tensordict in enumerate(collector):
-
         # update weights of the inference policy
         collector.update_policy_weights_()
 

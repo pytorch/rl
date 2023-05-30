@@ -157,12 +157,12 @@ def gym_backend(submodule=None):
     global DEFAULT_GYM
     if DEFAULT_GYM is None:
         try:
-            # rule of thumbs: gym precedes
-            import gym
+            # rule of thumbs: gymnasium precedes
+            import gymnasium as gym
         except ImportError as err:
             IMPORT_ERROR = err
             try:
-                import gymnasium as gym
+                import gym as gym
             except ImportError as err:
                 IMPORT_ERROR = err
                 gym = None

@@ -92,7 +92,7 @@ def distance_loss(
         v2 (Tensor): a tensor with a shape compatible with v1
         loss_function (str): One of "l2", "l1" or "smooth_l1" representing which loss function is to be used.
         strict_shape (bool): if False, v1 and v2 are allowed to have a different shape.
-            Default is :obj:`True`.
+            Default is ``True``.
 
     Returns:
          A tensor of the shape v1.view_as(v2) or v2.view_as(v1) with values equal to the distance loss between the
@@ -210,6 +210,8 @@ class TargetNetUpdater:
     def init_(self) -> None:
         if self.initialized:
             warnings.warn("Updated already initialized.")
+        found_distinct = False
+        self._distinct = {}
         for key, source in self._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
@@ -218,7 +220,18 @@ class TargetNetUpdater:
             # for p_source, p_target in zip(source, target):
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
+            self._distinct[key] = target.data_ptr() != source.data.data_ptr()
+            found_distinct = found_distinct or self._distinct[key]
             target.data.copy_(source.data)
+        if not found_distinct:
+            raise RuntimeError(
+                f"The target and source data are identical for all params. "
+                "Have you created proper target parameters? "
+                "If the loss has a ``delay_value`` kwarg, make sure to set it "
+                "to True if it is not done by default. "
+                f"If no target parameter is needed, do not use a target updater such as {type(self)}."
+            )
+
         self.initialized = True
 
     def step(self) -> None:
@@ -231,6 +244,8 @@ class TargetNetUpdater:
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
+            if not self._distinct[key]:
+                continue
             target = self._targets[key]
             if target.requires_grad:
                 raise RuntimeError("the target parameter is part of a graph.")
@@ -255,6 +270,8 @@ class SoftUpdate(TargetNetUpdater):
 
     This was proposed in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf
 
+    One and only one decay factor (tau or eps) must be specified.
+
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
         eps (scalar): epsilon in the update equation:
@@ -262,7 +279,8 @@ class SoftUpdate(TargetNetUpdater):
 
                 \theta_t = \theta_{t-1} * \epsilon + \theta_t * (1-\epsilon)
 
-            Defaults to 0.999
+            Exclusive with ``tau``.
+        tau (scalar): Polyak tau. It is equal to ``1-eps``, and exclusive with it.
     """
 
     def __init__(
@@ -274,8 +292,27 @@ class SoftUpdate(TargetNetUpdater):
             "REDQLoss",  # noqa: F821
             "TD3Loss",  # noqa: F821
         ],
-        eps: float = 0.999,
+        *,
+        eps: float = None,
+        tau: Optional[float] = None,
     ):
+        if eps is None and tau is None:
+            warnings.warn(
+                "Neither eps nor tau was provided. Taking the default value "
+                "eps=0.999. This behaviour will soon be deprecated.",
+                category=DeprecationWarning,
+            )
+            eps = 0.999
+        if (eps is None) ^ (tau is None):
+            if eps is None:
+                eps = 1 - tau
+        else:
+            raise ValueError("One and only one argument (tau or eps) can be specified.")
+        if eps < 0.5:
+            warnings.warn(
+                "Found an eps value < 0.5, which is unexpected. "
+                "You may want to use the `tau` keyword argument instead."
+            )
         if not (eps <= 1.0 and eps >= 0.0):
             raise ValueError(
                 f"Got eps = {eps} when it was supposed to be between 0 and 1."
@@ -295,6 +332,8 @@ class HardUpdate(TargetNetUpdater):
 
     Args:
         loss_module (DQNLoss or DDPGLoss): loss module where the target network should be updated.
+
+    Keyword Args:
         value_network_update_interval (scalar): how often the target network should be updated.
             default: 1000
     """
@@ -302,6 +341,7 @@ class HardUpdate(TargetNetUpdater):
     def __init__(
         self,
         loss_module: Union["DQNLoss", "DDPGLoss", "SACLoss", "TD3Loss"],  # noqa: F821
+        *,
         value_network_update_interval: float = 1000,
     ):
         super(HardUpdate, self).__init__(loss_module)

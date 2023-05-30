@@ -32,66 +32,19 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     Storage,
 )
-from torchrl.data.replay_buffers.utils import _to_numpy, _to_torch, INT_CLASSES
-from torchrl.data.replay_buffers.writers import RoundRobinWriter, Writer
+from torchrl.data.replay_buffers.utils import (
+    _to_numpy,
+    _to_torch,
+    INT_CLASSES,
+    pin_memory_output,
+)
+from torchrl.data.replay_buffers.writers import (
+    RoundRobinWriter,
+    TensorDictRoundRobinWriter,
+    Writer,
+)
 
 from torchrl.data.utils import DEVICE_TYPING
-
-
-def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
-    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
-
-    Args:
-        list_of_tensor_iterators (list): Sequence containing similar iterators,
-            where each element of the nested iterator is a tensor whose
-            shape match the tensor of other iterators that have the same index.
-
-    Returns:
-         Tuple of stacked tensors.
-
-    Examples:
-         >>> list_of_tensor_iterators = [[torch.ones(3), torch.zeros(1,2)]
-         ...     for _ in range(4)]
-         >>> stack_tensors(list_of_tensor_iterators)
-         (tensor([[1., 1., 1.],
-                 [1., 1., 1.],
-                 [1., 1., 1.],
-                 [1., 1., 1.]]), tensor([[[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]],
-         <BLANKLINE>
-                 [[0., 0.]]]))
-
-    """
-    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))
-
-
-def _pin_memory(output: Any) -> Any:
-    if hasattr(output, "pin_memory") and output.device == torch.device("cpu"):
-        return output.pin_memory()
-    else:
-        return output
-
-
-def pin_memory_output(fun) -> Callable:
-    """Calls pin_memory on outputs of decorated function if they have such method."""
-
-    def decorated_fun(self, *args, **kwargs):
-        output = fun(self, *args, **kwargs)
-        if self._pin_memory:
-            _tuple_out = True
-            if not isinstance(output, tuple):
-                _tuple_out = False
-                output = (output,)
-            output = tuple(_pin_memory(_output) for _output in output)
-            if _tuple_out:
-                return output
-            return output[0]
-        return output
-
-    return decorated_fun
 
 
 class ReplayBuffer:
@@ -300,8 +253,16 @@ class ReplayBuffer:
             self._sampler.add(index)
         return index
 
+    def _extend(self, data: Sequence) -> torch.Tensor:
+        with self._replay_lock:
+            index = self._writer.extend(data)
+            self._sampler.extend(index)
+        return index
+
     def extend(self, data: Sequence) -> torch.Tensor:
         """Extends the replay buffer with one or more elements contained in an iterable.
+
+        If present, the inverse transforms will be called.`
 
         Args:
             data (iterable): collection of data to be added to the replay
@@ -313,12 +274,8 @@ class ReplayBuffer:
         if self._transform is not None and is_tensor_collection(data):
             data = self._transform.inv(data)
         elif self._transform is not None and len(self._transform):
-            # Accepts transforms that act on "data" key
-            data = self._transform.inv(TensorDict({"data": data}, [])).get("data")
-        with self._replay_lock:
-            index = self._writer.extend(data)
-            self._sampler.extend(index)
-        return index
+            data = self._transform.inv(data)
+        return self._extend(data)
 
     def update_priority(
         self,
@@ -664,6 +621,9 @@ class TensorDictReplayBuffer(ReplayBuffer):
     """
 
     def __init__(self, *, priority_key: str = "td_error", **kw) -> None:
+        writer = kw.get("writer", None)
+        if writer is None:
+            kw["writer"] = TensorDictRoundRobinWriter()
 
         super().__init__(**kw)
         self.priority_key = priority_key
@@ -742,12 +702,15 @@ class TensorDictReplayBuffer(ReplayBuffer):
         else:
             stacked_td = tensordicts
 
-        index = super().extend(stacked_td)
-        stacked_td.set(
-            "index",
-            torch.tensor(index, dtype=torch.int, device=stacked_td.device),
-            inplace=True,
-        )
+        if self._transform is not None:
+            stacked_td.set("_data", self._transform.inv(stacked_td.get("_data")))
+
+        index = super()._extend(stacked_td)
+        # stacked_td.set(
+        #     "index",
+        #     torch.tensor(index, dtype=torch.int, device=stacked_td.device),
+        #     inplace=True,
+        # )
         self.update_tensordict_priority(stacked_td)
         return index
 
@@ -762,8 +725,6 @@ class TensorDictReplayBuffer(ReplayBuffer):
             )
         else:
             priority = self._get_priority(data)
-        # if the index shape does not match the priority shape, we have expanded it.
-        # we just take the first value
         index = data.get("index")
         while index.shape != priority.shape:
             # reduce index
@@ -1021,3 +982,33 @@ def _reduce(tensor: torch.Tensor, reduction: str):
     elif reduction == "median":
         return tensor.median().item()
     raise NotImplementedError(f"Unknown reduction method {reduction}")
+
+
+def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
+    """Zips a list of iterables containing tensor-like objects and stacks the resulting lists of tensors together.
+
+    Args:
+        list_of_tensor_iterators (list): Sequence containing similar iterators,
+            where each element of the nested iterator is a tensor whose
+            shape match the tensor of other iterators that have the same index.
+
+    Returns:
+         Tuple of stacked tensors.
+
+    Examples:
+         >>> list_of_tensor_iterators = [[torch.ones(3), torch.zeros(1,2)]
+         ...     for _ in range(4)]
+         >>> stack_tensors(list_of_tensor_iterators)
+         (tensor([[1., 1., 1.],
+                 [1., 1., 1.],
+                 [1., 1., 1.],
+                 [1., 1., 1.]]), tensor([[[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]],
+         <BLANKLINE>
+                 [[0., 0.]]]))
+
+    """
+    return tuple(torch.stack(tensors, 0) for tensors in zip(*list_of_tensor_iterators))

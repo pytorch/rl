@@ -23,4 +23,5 @@ PYBIND11_MODULE(_torchrl, m) {
   torchrl::DefineMinSegmentTree<double>("Fp64", m);
 
   m.def("safetanh", &safetanh, "Safe Tanh");
+  m.def("safeatanh", &safeatanh, "Safe Inverse Tanh");
 }
