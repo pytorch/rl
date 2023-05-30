@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
 from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
@@ -74,8 +75,12 @@ class RoboHiveEnv(GymEnv):
 
     @classmethod
     def register_envs(cls):
+
         if not _has_robohive:
             raise ImportError("Cannot load robohive.")
+        from robohive.utils.prompt_utils import Prompt, set_prompt_verbosity
+
+        set_prompt_verbosity(Prompt.WARN)
         with set_gym_backend("gym"):
             robo_envs = set(GymEnv.available_envs) - existing_envs
         cls.env_list += robo_envs
@@ -100,7 +105,6 @@ class RoboHiveEnv(GymEnv):
         pixels_only: bool = False,
         **kwargs,
     ) -> "gym.core.Env":
-
         if from_pixels:
             if "cameras" not in kwargs:
                 warnings.warn(
