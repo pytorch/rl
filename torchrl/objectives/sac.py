@@ -378,7 +378,6 @@ class SACLoss(LossModule):
 
         """
         tensordict = tensordict.clone(False)
-        next_tensordict = step_mdp(tensordict)
         # get actions and log-probs
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
