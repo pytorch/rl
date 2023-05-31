@@ -1591,9 +1591,10 @@ class TanhDeterministicModule(TensorDictModuleBase):
         high=None,
         clamp: bool = False,
     ):
+        super(TanhDeterministicModule, self).__init__()
         self.in_keys = in_keys
         if out_keys is None:
-            out_keys = ["action"]
+            out_keys = in_keys
         if len(out_keys) > 1:
             raise ValueError(
                 f"Class {type(self)} does not support multiple output keys."
@@ -1613,27 +1614,33 @@ class TanhDeterministicModule(TensorDictModuleBase):
                 {self.out_keys[0]: leaf_action_spec},
             )
         self._spec = action_spec
-        if low is None and action_spec is None:
+        if low is None and leaf_action_spec is None:
             low = -torch.ones(())
         elif low is None:
             low = leaf_action_spec.space.minimum
-        elif action_spec is not None:
+        elif leaf_action_spec is not None:
             if (low != leaf_action_spec.space.minimum).any():
                 raise ValueError(
                     f"The minimum value provided to {type(self)} does not match the action spec one."
                 )
-        if high is None and action_spec is None:
+        if not isinstance(low, torch.Tensor):
+            low = torch.tensor(low)
+        if high is None and leaf_action_spec is None:
             high = torch.ones(())
         elif high is None:
             high = leaf_action_spec.space.maximum
-        elif action_spec is not None:
+        elif leaf_action_spec is not None:
             if (high != leaf_action_spec.space.maximum).any():
                 raise ValueError(
                     f"The maximum value provided to {type(self)} does not match the action spec one."
                 )
-        self.non_trivial = (high != 1).any() or (low != -1).any()
+        if not isinstance(high, torch.Tensor):
+            high = torch.tensor(high)
         self.register_buffer("low", low)
         self.register_buffer("high", high)
+        self.non_trivial = (self.high != 1).any() or (self.low != -1).any()
+        if (self.high < self.low).any():
+            raise ValueError(f"Got high < low in {type(self)}.")
         self.clamp = clamp
 
     def forward(self, tensordict):
@@ -1647,6 +1654,6 @@ class TanhDeterministicModule(TensorDictModuleBase):
                 eps = torch.finfo(feature.dtype).resolution
                 feature = feature.clamp(-1 + eps, 1 - eps)
             if self.non_trivial:
-                feature = (high - low) / 2 * feature + (high + low) / 2
+                feature = low + (high - low) * (feature + 1) / 2
             tensordict.set(key, feature)
         return tensordict

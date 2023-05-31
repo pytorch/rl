@@ -15,6 +15,7 @@ from .actors import (
     QValueActor,
     QValueHook,
     QValueModule,
+    TanhDeterministicModule,
     ValueOperator,
 )
 from .common import SafeModule

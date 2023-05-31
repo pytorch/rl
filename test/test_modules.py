@@ -5,6 +5,7 @@
 import argparse
 from numbers import Number
 
+import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
@@ -13,7 +14,13 @@ from packaging import version
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import BoundedTensorSpec
-from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, ValueOperator
+from torchrl.modules import (
+    CEMPlanner,
+    LSTMNet,
+    SafeModule,
+    TanhDeterministicModule,
+    ValueOperator,
+)
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -604,6 +611,65 @@ class TestDreamerComponents:
         assert torch.allclose(
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
+
+
+class TestTanhDeterministic:
+    def test_errors(self):
+        with pytest.raises(ValueError, match="does not support multiple output"):
+            TanhDeterministicModule(in_keys=["a"], out_keys=["a", "b"])
+        with pytest.raises(
+            ValueError, match="in_keys and out_keys should have the same length"
+        ):
+            TanhDeterministicModule(in_keys=["a", "b"], out_keys=["a"])
+        with pytest.raises(ValueError, match="minimum value provided to"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhDeterministicModule(in_keys=["act"], low=-2, action_spec=spec)
+        with pytest.raises(ValueError, match="maximum value provided to"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhDeterministicModule(in_keys=["act"], high=-2, action_spec=spec)
+        with pytest.raises(ValueError, match="Got high < low"):
+            TanhDeterministicModule(in_keys=["act"], high=-2, low=-1)
+
+    def test_minmax(self):
+        mod = TanhDeterministicModule(
+            in_keys=["act"],
+            high=2,
+        )
+        assert isinstance(mod.high, torch.Tensor)
+        mod = TanhDeterministicModule(
+            in_keys=["act"],
+            low=-2,
+        )
+        assert isinstance(mod.low, torch.Tensor)
+        mod = TanhDeterministicModule(
+            in_keys=["act"],
+            high=np.ones((1,)),
+        )
+        assert isinstance(mod.high, torch.Tensor)
+        mod = TanhDeterministicModule(
+            in_keys=["act"],
+            low=-np.ones((1,)),
+        )
+        assert isinstance(mod.low, torch.Tensor)
+
+    @pytest.mark.parametrize("clamp", [True, False])
+    def test_boundaries(self, clamp):
+        torch.manual_seed(0)
+        eps = torch.finfo(torch.float).resolution
+        for _ in range(10):
+            min, max = (5 * torch.randn(2)).sort()[0]
+            mod = TanhDeterministicModule(
+                in_keys=["act"], low=min, high=max, clamp=clamp
+            )
+            assert mod.non_trivial
+            td = TensorDict({"act": torch.randn(10) * 10}, [])
+            mod(td)
+            if not clamp:
+                assert (td["act"] <= max + eps).all()
+                assert (td["act"] >= min - eps).all()
+            else:
+                assert (td["act"] < max + eps).all()
+                assert (td["act"] > min - eps).all()
 
 
 if __name__ == "__main__":
