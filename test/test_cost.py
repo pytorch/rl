@@ -8,7 +8,7 @@ import functools
 import operator
 import warnings
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
 from tensordict.nn import InteractionType
@@ -6080,9 +6080,6 @@ class TestBase:
                     expand_dim=expand_dim,
                 )
 
-            def _forward_value_estimator_keys(self, **kwargs) -> None:
-                pass
-
         loss_module = MyLoss(compare_against=compare_against, expand_dim=expand_dim)
 
         for key in ["module.0.bias", "module.0.weight"]:
@@ -6103,6 +6100,36 @@ class TestBase:
 
         for key in ["module.1.bias", "module.1.weight"]:
             loss_module.module_b_params.flatten_keys()[key].requires_grad
+
+    def test_tensordict_keys(self):
+        """Test configurable tensordict key behavior with derived classes."""
+
+        class MyLoss(LossModule):
+            def __init__(self):
+                super().__init__()
+
+        loss_module = MyLoss()
+        with pytest.raises(AttributeError):
+            loss_module.set_keys()
+
+        class MyLoss2(MyLoss):
+            def _forward_value_estimator_keys(self, **kwargs) -> None:
+                pass
+
+        loss_module = MyLoss2()
+        assert loss_module.set_keys() is None
+        with pytest.raises(ValueError):
+            loss_module.set_keys(some_key="test")
+
+        class MyLoss3(MyLoss2):
+            @dataclass
+            class _AcceptedKeys:
+                some_key = "some_value"
+
+        loss_module = MyLoss3()
+        assert loss_module.tensor_keys.some_key == "some_value"
+        loss_module.set_keys(some_key="test")
+        assert loss_module.tensor_keys.some_key == "test"
 
 
 class TestUtils:

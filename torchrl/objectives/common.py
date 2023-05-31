@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import warnings
-from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple, Union
@@ -40,7 +39,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-class LossModule(nn.Module, ABC):
+class LossModule(nn.Module):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -59,6 +58,25 @@ class LossModule(nn.Module, ABC):
 
     By default, the forward method is always decorated with a
     gh :class:`torchrl.envs.ExplorationType.MODE`
+
+    To utilize the ability configuring the tensordict keys via
+    :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
+    This dataclass should include all keys that are intended to be configurable.
+    In addition, the subclass must implement the
+    :meth:._forward_value_estimator_keys() method. This function is crucial for
+    forwarding any altered tensordict keys to the underlying value_estimator.
+
+    Examples:
+        >>> class MyLoss(LossModule):
+        >>>     @dataclass
+        >>>     class _AcceptedKeys:
+        >>>         action = "action"
+        >>>
+        >>>     def _forward_value_estimator_keys(self, **kwargs) -> None:
+        >>>         pass
+        >>>
+        >>> loss = MyLoss()
+        >>> loss.set_keys(action="action2")
     """
 
     @dataclass
@@ -91,11 +109,6 @@ class LossModule(nn.Module, ABC):
         self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 
-    @abstractmethod
-    def _forward_value_estimator_keys(self, **kwargs) -> None:
-        """Passes updated tensordict keys to the underlying value estimator."""
-        ...
-
     def _set_deprecated_ctor_keys(self, **kwargs) -> None:
         """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
         for key, value in kwargs.items():
@@ -124,7 +137,15 @@ class LossModule(nn.Module, ABC):
             else:
                 setattr(self.tensor_keys, key, self.default_keys.key)
 
-        self._forward_value_estimator_keys(**kwargs)
+        try:
+            self._forward_value_estimator_keys(**kwargs)
+        except AttributeError:
+            raise AttributeError(
+                "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
+                "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
+                "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
+                "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
+            )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
