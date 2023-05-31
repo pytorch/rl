@@ -3,8 +3,8 @@ episode_length: 50
 # IO:
 out_dir: out
 out_dir_reward: out_reward # used if restoring multihead
-eval_interval: 10
-log_interval: 10
+eval_interval: 2
+log_interval: 2
 eval_iters: 100
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
 base_model: gpt2  # gpt2*
