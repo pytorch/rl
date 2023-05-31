@@ -1,4 +1,4 @@
-name: Unit-tests on Linux CPU
+name: Unit-tests on Windows CPU
 
 on:
   pull_request:
@@ -9,9 +9,6 @@ on:
       - release/*
   workflow_dispatch:
 
-env:
-  CHANNEL: "nightly"
-
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
@@ -19,34 +16,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests:
-    strategy:
-      matrix:
-        python_version: ["3.8", "3.9", "3.10"]
-      fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+  unittests:
+    uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
     with:
-      runner: linux.12xlarge
+      runner: "windows.4xlarge"
       repository: pytorch/rl
-      timeout: 90
+      timeout: 120
       script: |
-        # Set env vars from matrix
-        export PYTHON_VERSION=${{ matrix.python_version }}
+        set -euxo pipefail
+
+        export PYTHON_VERSION="3.8"
         export CU_VERSION="cpu"
+
+        # TODO: Port this to pytorch/test-infra/.github/workflows/windows_job.yml
+        export PATH="/c/Jenkins/Miniconda3/Scripts:${PATH}"
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
         
-        cd /work
-
         ## setup_env.sh
-        ./.circleci/unittest/linux/scripts/setup_env.sh
+        ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
 
         ## install.sh
-        ./.circleci/unittest/linux/scripts/install.sh
+        ./.circleci/unittest/windows_optdepts/scripts/install.sh
 
         ## run_test.sh
-        ./.circleci/unittest/linux/scripts/run_test.sh
+        ./.circleci/unittest/windows_optdepts/scripts/run_test.sh
 
         ## post_process.sh
-        ./.circleci/unittest/linux/scripts/post_process.sh
+        ./.circleci/unittest/windows_optdepts/scripts/post_process.sh

@@ -15,10 +15,10 @@ from torch import nn
 
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (
-    _get_num_per_traj_init,
     _inv_pad_sequence,
     _split_and_pad_sequence,
 )
+from torchrl.objectives.value.utils import _get_num_per_traj_init
 
 
 class LSTMModule(ModuleBase):
@@ -285,10 +285,13 @@ class LSTMModule(ModuleBase):
         tensordict_shaped = tensordict
         if self.temporal_mode:
             # if less than 2 dims, unsqueeze
-            while tensordict_shaped.ndim < 2:
+            ndim = tensordict_shaped.get(self.in_keys[0]).ndim
+            while ndim < 3:
                 tensordict_shaped = tensordict_shaped.unsqueeze(0)
-            if tensordict_shaped.ndim > 2:
-                dims_to_flatten = tensordict_shaped.ndim - 2
+                ndim += 1
+            if ndim > 3:
+                dims_to_flatten = ndim - 3
+                # we assume that the tensordict can be flattened like this
                 nelts = prod(tensordict_shaped.shape[: dims_to_flatten + 1])
                 tensordict_shaped = tensordict_shaped.apply(
                     lambda value: value.flatten(0, dims_to_flatten),

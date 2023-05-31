@@ -26,19 +26,23 @@ Each env will have the following attributes:
   This is especially useful for transforms (see below). For parametric environments (e.g.
   model-based environments), the device does represent the hardware that will be used to
   compute the operations.
-- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the input keys (:obj:`"action"` and others).
-- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the output keys (:obj:`"observation"`, :obj:`"reward"` and :obj:`"done"`).
 - :obj:`env.observation_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the observation key-spec pairs.
-  This is a pointer to ``env.output_spec["observation"]``.
+- :obj:`env.state_spec`: a :class:`~torchrl.data.CompositeSpec` object
+  containing all the input key-spec pairs (except action). For most stateful
+  environments, this container will be empty.
 - :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
-  representing the action spec. This is a pointer to ``env.input_spec["action"]``.
+  representing the action spec.
 - :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the reward spec. This is a pointer to ``env.output_spec["reward"]``.
+  the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the done-flag spec. This is a pointer to ``env.output_spec["done"]``.
+  the done-flag spec.
+- :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+  all the input keys (:obj:`"_action_spec"` and :obj:`"_state_spec"`).
+  It is locked and should not be modified directly.
+- :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
+  all the output keys (:obj:`"_observation_spec"`, :obj:`"_reward_spec"` and :obj:`"_done_spec"`).
+  It is locked and should not be modified directly.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
 an environment with :obj:`env.batch_size == torch.Size([4])` should have
@@ -63,6 +67,9 @@ With these, the following methods are implemented:
   a maximum number of steps (``max_steps=N``) and using a policy (``policy=model``).
   The policy should be coded using a :class:`tensordict.nn.TensorDictModule`
   (or any other :class:`tensordict.TensorDict`-compatible module).
+  The resulting :class:`tensordict.TensorDict` instance will be marked with
+  a trailing ``"time"`` named dimension that can be used by other modules
+  to treat this batched dimension as it should.
 
 The following figure summarizes how a rollout is executed in torchrl.
 
@@ -325,6 +332,7 @@ to be able to create this other composition:
     GrayScale
     gSDENoise
     InitTracker
+    KLRewardTransform
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -478,6 +486,8 @@ the following function will return ``1`` when queried:
     dm_control.DMControlWrapper
     gym.GymEnv
     gym.GymWrapper
+    gym.MOGymEnv
+    gym.MOGymWrapper
     gym.set_gym_backend
     gym.gym_backend
     habitat.HabitatEnv

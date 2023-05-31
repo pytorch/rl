@@ -164,7 +164,7 @@ class DMControlWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
-        self.output_spec["observation"] = _dmcontrol_to_torchrl_spec_transform(
+        self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
             self._env.observation_spec(), device=self.device
         )
         reward_spec = _dmcontrol_to_torchrl_spec_transform(
@@ -172,15 +172,12 @@ class DMControlWrapper(GymLikeEnv):
         )
         if len(reward_spec.shape) == 0:
             reward_spec.shape = torch.Size([1])
-        self.output_spec["reward"] = reward_spec
+        self.reward_spec = reward_spec
         # populate default done spec
         _ = self.done_spec
-        input_spec = CompositeSpec(
-            action=_dmcontrol_to_torchrl_spec_transform(
-                self._env.action_spec(), device=self.device
-            )
+        self.action_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.action_spec(), device=self.device
         )
-        self.__dict__["_input_spec"] = input_spec
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -234,30 +231,6 @@ class DMControlWrapper(GymLikeEnv):
         done = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
         return observation, reward, done
-
-    @property
-    def input_spec(self) -> TensorSpec:
-        return self._input_spec
-
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        raise NotImplementedError(f"Cannot change {type(self)}.input_spec")
-
-    @property
-    def observation_spec(self) -> TensorSpec:
-        return self.output_spec["observation"]
-
-    @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
-        raise NotImplementedError(f"Cannot change {type(self)}.observation_spec")
-
-    @property
-    def reward_spec(self) -> TensorSpec:
-        return self.output_spec["reward"]
-
-    @reward_spec.setter
-    def reward_spec(self, value: TensorSpec) -> None:
-        raise NotImplementedError(f"Cannot change {type(self)}.reward_spec")
 
     def __repr__(self) -> str:
         return (
