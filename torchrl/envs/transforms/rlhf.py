@@ -157,29 +157,35 @@ class KLRewardTransform(Transform):
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         output_spec = super().transform_output_spec(output_spec)
-        output_spec.unlock_()
         # todo: here we'll need to use the reward_key once it's implemented
         # parent = self.parent
         in_key = _normalize_key(self.in_keys[0])
         out_key = _normalize_key(self.out_keys[0])
+
         if in_key == "reward" and out_key == "reward":
+            parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
-                device=output_spec.device, shape=output_spec["reward"].shape
+                device=output_spec.device,
+                shape=output_spec["_reward_spec"][parent.reward_key].shape,
             )
-            output_spec["reward"] = reward_spec
+            output_spec["_reward_spec"] = CompositeSpec(
+                {parent.reward_key: reward_spec},
+                shape=output_spec["_reward_spec"].shape,
+            )
         elif in_key == "reward":
+            parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
-                device=output_spec.device, shape=output_spec["reward"].shape
+                device=output_spec.device,
+                shape=output_spec["_reward_spec"][parent.reward_key].shape,
             )
             # then we need to populate the output keys
-            observation_spec = output_spec["observation"]
+            observation_spec = output_spec["_observation_spec"]
             observation_spec[out_key] = reward_spec
         else:
-            observation_spec = output_spec["observation"]
+            observation_spec = output_spec["_observation_spec"]
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device, shape=observation_spec[in_key].shape
             )
             # then we need to populate the output keys
             observation_spec[out_key] = reward_spec
-        output_spec.lock_()
         return output_spec
