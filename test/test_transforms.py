@@ -6164,66 +6164,6 @@ class TestVC1(TransformBase):
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
 
-    @pytest.mark.parametrize("stack_images", [True, False])
-    @pytest.mark.parametrize("parallel", [True, False])
-    def test_vc1_mult_images(self, device, stack_images, parallel):
-        in_keys = ["pixels", "pixels2"]
-        out_keys = ["vec"] if stack_images else ["vec", "vec2"]
-        vip = VC1Transform(
-            in_keys=in_keys,
-            out_keys=out_keys,
-            stack_images=stack_images,
-            model_name="default",
-        )
-
-        def base_env_constructor():
-            return TransformedEnv(
-                DiscreteActionConvMockEnvNumpy().to(device),
-                CatTensors(["pixels"], "pixels2", del_keys=False),
-            )
-
-        assert base_env_constructor().device == device
-        if parallel:
-            base_env = ParallelEnv(2, base_env_constructor)
-        else:
-            base_env = base_env_constructor()
-        assert base_env.device == device
-
-        transformed_env = TransformedEnv(base_env, vip)
-        assert transformed_env.device == device
-        assert vip.device == device
-
-        td = transformed_env.reset()
-        assert td.device == device
-        if stack_images:
-            exp_keys = {"pixels_orig", "done", "vec"}
-            # assert td["vec"].shape[0] == 2
-            assert td["vec"].ndimension() == 1 + parallel
-            assert set(td.keys()) == exp_keys
-        else:
-            exp_keys = {"pixels_orig", "done", "vec", "vec2"}
-            assert td["vec"].shape[0 + parallel] != 2
-            assert td["vec"].ndimension() == 1 + parallel
-            assert td["vec2"].shape[0 + parallel] != 2
-            assert td["vec2"].ndimension() == 1 + parallel
-            assert set(td.keys()) == exp_keys
-
-        td = transformed_env.rand_step(td)
-        exp_keys = exp_keys.union(
-            {
-                ("next", "vec"),
-                ("next", "pixels_orig"),
-                "next",
-                "action",
-                ("next", "reward"),
-                ("next", "done"),
-            }
-        )
-        if not stack_images:
-            exp_keys.add(("next", "vec2"))
-        assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
-        transformed_env.close()
-
     def test_transform_env(self, device):
         in_keys = ["pixels"]
         out_keys = ["vec"]

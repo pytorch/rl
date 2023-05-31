@@ -53,22 +53,8 @@ class VC1Transform(Transform):
             "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
              "VC1_vec" is assumed.
-        stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
-             argument will be treaded separetely and each will be given a single,
-             separated entry in the output tensordict. Defaults to ``True``.
-        download (bool, torchvision Weights config or corresponding string):
-            if ``True``, the weights will be downloaded using the torch.hub download
-            API (i.e. weights will be cached for future use).
-            These weights are the original weights from the VC1 publication.
-            If the torchvision weights are needed, there are two ways they can be
-            obtained: :obj:`download=ResNet50_Weights.IMAGENET1K_V1` or :obj:`download="IMAGENET1K_V1"`
-            where :obj:`ResNet50_Weights` can be imported via :obj:`from torchvision.models import resnet50, ResNet50_Weights`.
-            Defaults to False.
-        download_path (str, optional): path where to download the models.
-            Default is None (cache path determined by torch.hub utils).
-        tensor_pixels_keys (list of str, optional): Optionally, one can keep the
-            original images (as collected from the env) in the output tensordict.
-            If no value is provided, this won't be collected.
+        del_keys (bool, optional): If ``True`` (default), the input key will be
+            discarded from the returned tensordict.
     """
 
     inplace = False
@@ -87,6 +73,7 @@ class VC1Transform(Transform):
             model_name = "vc1_vitb_noload"
         self.model_name = model_name
         self.del_keys = del_keys
+        self.stack_images = stack_images
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._init()

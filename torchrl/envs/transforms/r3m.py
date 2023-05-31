@@ -171,15 +171,6 @@ class _R3MNet(Transform):
             self._load_weights(model_name, self, dir_prefix)
 
 
-def _init_first(fun):
-    def new_fun(self, *args, **kwargs):
-        if not self.initialized:
-            self._init()
-        return fun(self, *args, **kwargs)
-
-    return new_fun
-
-
 class R3MTransform(Compose):
     """R3M Transform class.
 
