@@ -89,6 +89,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = (cfg.collector.max_frames_per_traj // frame_skip,)
 
     for i, tensordict in enumerate(collector):
+        exploration_policy.step(tensordict.numel())
         # update weights of the inference policy
         collector.update_policy_weights_()
 
@@ -96,7 +97,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
-        tensordict = tensordict.view(-1)
+        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
@@ -113,16 +114,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 loss_td = loss_module(sampled_tensordict)
 
+                optimizer_critic.zero_grad()
+                optimizer_actor.zero_grad()
+
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_value"]
+                (actor_loss + q_loss).backward()
 
-                optimizer_critic.zero_grad()
-                q_loss.backward(retain_graph=True)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
-                optimizer_actor.zero_grad()
-                actor_loss.backward()
                 optimizer_actor.step()
                 actor_losses.append(actor_loss.item())
 

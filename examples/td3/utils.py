@@ -4,7 +4,14 @@ from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    InitTracker,
+    ParallelEnv,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
@@ -33,6 +40,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
+            InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
         ),

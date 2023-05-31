@@ -92,6 +92,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
 
     for i, tensordict in enumerate(collector):
+        exploration_policy.step(tensordict.numel())
         # update weights of the inference policy
         collector.update_policy_weights_()
 
@@ -99,7 +100,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             r0 = tensordict["next", "reward"].sum(-1).mean().item()
         pbar.update(tensordict.numel())
 
-        tensordict = tensordict.view(-1)
+        tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
