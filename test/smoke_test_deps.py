@@ -7,11 +7,6 @@ import argparse
 import tempfile
 
 import pytest
-from _utils_internal import PONG_VERSIONED
-from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
-from torchrl.envs.libs.gym import _has_gym, GymEnv
-
-from torchrl.envs.libs.gym import gym_backend
 
 TB_ERR = None
 try:
