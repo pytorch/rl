@@ -31,6 +31,7 @@ config = TRLConfig(
         eval_interval=200,
         pipeline="PromptPipeline",
         trainer="AcceleratePPOTrainer",
+        tracker=None,
     ),
     model=ModelConfig(
         model_path="out",
@@ -80,14 +81,14 @@ config = TRLConfig(
 )
 
 
-if __name__ == "__main__":
+def main():
     # Load the pre-trained reward model
     rw_tokenizer = AutoTokenizer.from_pretrained("gpt2")
     rw_tokenizer.pad_token = rw_tokenizer.eos_token
     rw_model = RewardModel.from_pretrained("out_reward")
     # rw_model.half()
     rw_model.eval()
-    rw_device = torch.device("cuda:{}".format(1))  # set reward model device
+    rw_device = torch.device("cuda:{}".format(0))  # set reward model device
     rw_model.to(rw_device)
 
     def get_scores(samples: List[str]):
@@ -106,8 +107,8 @@ if __name__ == "__main__":
             input_ids = encodings_dict["input_ids"].to(rw_device)
             attn_masks = encodings_dict["attention_mask"].to(rw_device)
             with torch.no_grad():
-                sub_scores = rw_model(input_ids=input_ids, attention_mask=attn_masks)
-            scores_list.append(sub_scores["chosen_end_scores"])
+                _, end_scores = rw_model(input_ids=input_ids, attention_mask=attn_masks)
+            scores_list.append(end_scores)
         scores = torch.cat(scores_list, dim=0)
         return scores
 
@@ -133,6 +134,8 @@ if __name__ == "__main__":
                 skip_special_tokens=True,
             ).strip()
             formatted_prompts.append(tmp)
+            if i >= 1000:
+                break
         return formatted_prompts
 
     def reward_fn(samples: List[str], **kwargs):
@@ -173,3 +176,6 @@ if __name__ == "__main__":
         eval_prompts=val_prompts[0:1000],  # sampling 1000 validation prompts for evaluation speed in training
         config=config,
     )
+
+if __name__ == "__main__":
+    main()
