@@ -60,7 +60,7 @@ def _step(self, tensordict):
         {
             "next": {
                 "input_ids": next_input_ids,
-                "attention_mask": attention_mask,
+                "attention_mask": next_attention_mask,
                 "reward": reward,
                 "done": done,
             }
@@ -74,6 +74,18 @@ def _step(self, tensordict):
 def _reset(self, tensordict):
     self.step_num = 0
     batch = next(self.dataloader)
+
+    if self.eval_prompt is None:
+        self.eval_prompt = (
+            batch.transformer_data.input_ids[0],
+            batch.transformer_data.attention_mask[0],
+        )
+    else:
+        (
+            batch.transformer_data.input_ids[0],
+            batch.transformer_data.attention_mask[0],
+        ) = self.eval_prompt
+
     masked_batch = batch.mask_label()
     _, self.normalized_reward = self.reward_model(
         masked_batch.transformer_data.input_ids,
@@ -83,10 +95,10 @@ def _reset(self, tensordict):
 
     out = TensorDict(
         {
-            "input_ids": batch.transformer_data.input_ids,
-            "attention_mask": batch.transformer_data.attention_mask,
+            "input_ids": masked_batch.transformer_data.input_ids,
+            "attention_mask": masked_batch.transformer_data.attention_mask,
             "done": torch.zeros(
-                (*batch.transformer_data.input_ids.shape[:-1], 1), dtype=torch.bool
+                (*masked_batch.transformer_data.input_ids.shape[:-1], 1), dtype=torch.bool
             ),
         },
         self.batch_size,
@@ -158,7 +170,8 @@ class RLHFEnv(EnvBase):
         self.step_num = 0
         self.ref_model = ref_model
         self.ref_model.select_out_keys("sample_log_prob")
-        self.kl_th = 1
+        self.kl_th = 0.1
+        self.eval_prompt = None
         # self.set_seed(seed)
 
     # Helpers: _make_step and gen_params
@@ -175,7 +188,7 @@ def main():
     from torchrl.envs import check_env_specs
 
     config = load_and_update_config("config/train_rlhf.yaml")
-    reward_model, _ = init_reward_model(config)
+    reward_model = init_reward_model(config)
     train_loader, _ = get_prompt_dataloaders(config)
     env = RLHFEnv(reward_model=reward_model, dataloader=train_loader, config=config)
 
