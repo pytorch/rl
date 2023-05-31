@@ -27,15 +27,15 @@ def evaluate_agent(actor, env, episode_length=50, logger=None):
     enc = tiktoken.get_encoding("gpt2")
     training = actor.training
     actor.eval()
-    with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+    with set_exploration_type(ExplorationType.RANDOM), torch.no_grad():
         td = env.rollout(episode_length, actor)
     actor.train(training)
-    reward = td.get(("next", "reward"))[-1, -1].item()
+    reward = td.get(("next", "reward"))[0, -1].item()
     if logger:
         input_ids = td.get(('next', 'input_ids'))
-        mask = td.get(('next', 'attention_mask'))[-1, -1] == 1
-        prompt = enc.decode(input_ids[-1, -1, mask][:-episode_length].tolist())
-        response = enc.decode(input_ids[-1, -1, mask][-episode_length:].tolist())
+        mask = td.get(('next', 'attention_mask'))[0, -1] == 1
+        prompt = enc.decode(input_ids[0, -1, mask][:-episode_length].tolist())
+        response = enc.decode(input_ids[0, -1, mask][-episode_length:].tolist())
         string_to_write = (
             f"Query: \n{prompt},\nResponse: \n{response},\nreward={reward: 4.4f}\n"
             f"====================================================\n"
@@ -121,6 +121,7 @@ def main():
         config=test_config,
         dataloader=train_loader_test,
         ref_model=actor2,
+        test=True,
     )
 
     # ######## TRAINING LOOP ########
@@ -155,7 +156,7 @@ def main():
         rewards.append(td.get(("next", "reward")).mean().cpu().item())
         reward_logger.debug(rewards[-1])
 
-        if i % 10 == 0:
+        if i % config["eval_interval"] == 0:
             test_rewards.append(
                 evaluate_agent(
                     actor,
