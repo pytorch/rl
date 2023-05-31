@@ -24,7 +24,6 @@ def _step(self, tensordict):
 
     # perform the action
     action = tensordict.get("action")
-
     # The output must be written in a ``"next"`` entry
     next_input_ids = input_ids.clone()
     idx = torch.arange(input_ids.shape[0], device=input_ids.device)
@@ -74,18 +73,17 @@ def _step(self, tensordict):
 def _reset(self, tensordict):
     self.step_num = 0
     batch = next(self.dataloader)
-
-    if self.eval_prompt is None:
-        self.eval_prompt = (
-            batch.transformer_data.input_ids[0],
-            batch.transformer_data.attention_mask[0],
-        )
-    else:
-        (
-            batch.transformer_data.input_ids[0],
-            batch.transformer_data.attention_mask[0],
-        ) = self.eval_prompt
-
+    if self.test:
+        if self.eval_prompt is None:
+            self.eval_prompt = (
+                batch.transformer_data.input_ids[0],
+                batch.transformer_data.prompt_rindex[0],
+            )
+        else:
+            (
+                batch.transformer_data.input_ids[0],
+                batch.transformer_data.prompt_rindex[0],
+            ) = self.eval_prompt
     masked_batch = batch.mask_label()
     _, self.normalized_reward = self.reward_model(
         masked_batch.transformer_data.input_ids,
@@ -151,7 +149,7 @@ class RLHFEnv(EnvBase):
     batch_locked = False
 
     def __init__(
-        self, reward_model=None, config=None, dataloader=None, seed=None, ref_model=None
+        self, reward_model=None, config=None, dataloader=None, seed=None, ref_model=None, test=False
     ):
         # if td_params is None:
         #     td_params = self.gen_params()
@@ -172,6 +170,8 @@ class RLHFEnv(EnvBase):
         self.ref_model.select_out_keys("sample_log_prob")
         self.kl_th = 0.1
         self.eval_prompt = None
+        self.stop = False
+        self.test = test
         # self.set_seed(seed)
 
     # Helpers: _make_step and gen_params
