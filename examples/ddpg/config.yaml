@@ -30,7 +30,7 @@ optimization:
   gamma: 0.99
   loss_function: smooth_l1
   lr: 3e-4
-  weight_decay: 0.0
+  weight_decay: 2e-4
   batch_size: 256
   target_update_polyak: 0.995
 

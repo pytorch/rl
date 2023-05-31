@@ -66,9 +66,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Make Optimizers
-    optimizer_actor, optimizer_critic, optimizer_alpha = make_sac_optimizer(
-        cfg, loss_module
-    )
+    optimizer = make_sac_optimizer(cfg, loss_module)
 
     rewards = []
     rewards_eval = []
@@ -116,18 +114,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
+                loss = actor_loss + q_loss + alpha_loss
 
-                optimizer_critic.zero_grad()
-                q_loss.backward()
-                optimizer_critic.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
                 q_losses.append(q_loss.item())
-                optimizer_actor.zero_grad()
-                actor_loss.backward()
-                optimizer_actor.step()
                 actor_losses.append(actor_loss.item())
-                optimizer_alpha.zero_grad()
-                alpha_loss.backward()
-                optimizer_alpha.step()
                 alpha_losses.append(alpha_loss.item())
 
                 # update qnet_target params
