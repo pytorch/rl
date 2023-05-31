@@ -15,7 +15,7 @@ from tensordict.nn import (
 )
 from torch import nn
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
@@ -1579,3 +1579,74 @@ class ActorCriticWrapper(SafeSequential):
 
     get_policy_head = get_policy_operator
     get_value_head = get_value_operator
+
+
+class TanhDeterministicModule(TensorDictModuleBase):
+    def __init__(
+        self,
+        in_keys,
+        out_keys=None,
+        action_spec=None,
+        low=None,
+        high=None,
+        clamp: bool = False,
+    ):
+        self.in_keys = in_keys
+        if out_keys is None:
+            out_keys = ["action"]
+        if len(out_keys) > 1:
+            raise ValueError(
+                f"Class {type(self)} does not support multiple output keys."
+            )
+        if len(in_keys) != len(out_keys):
+            raise ValueError(
+                "in_keys and out_keys should have the same length, "
+                f"got in_keys={in_keys} and out_keys={out_keys}"
+            )
+        self.out_keys = out_keys
+        # action_spec can be a composite spec or not
+        if isinstance(action_spec, CompositeSpec):
+            leaf_action_spec: BoundedTensorSpec = action_spec[self.out_keys[0]]
+        else:
+            leaf_action_spec = action_spec
+            action_spec = CompositeSpec(
+                {self.out_keys[0]: leaf_action_spec},
+            )
+        self._spec = action_spec
+        if low is None and action_spec is None:
+            low = -torch.ones(())
+        elif low is None:
+            low = leaf_action_spec.space.minimum
+        elif action_spec is not None:
+            if (low != leaf_action_spec.space.minimum).any():
+                raise ValueError(
+                    f"The minimum value provided to {type(self)} does not match the action spec one."
+                )
+        if high is None and action_spec is None:
+            high = torch.ones(())
+        elif high is None:
+            high = leaf_action_spec.space.maximum
+        elif action_spec is not None:
+            if (high != leaf_action_spec.space.maximum).any():
+                raise ValueError(
+                    f"The maximum value provided to {type(self)} does not match the action spec one."
+                )
+        self.non_trivial = (high != 1).any() or (low != -1).any()
+        self.register_buffer("low", low)
+        self.register_buffer("high", high)
+        self.clamp = clamp
+
+    def forward(self, tensordict):
+        inputs = [tensordict.get(key) for key in self.in_keys]
+        # map
+        low = self.low
+        high = self.high
+        for key, feature in zip(self.out_keys, inputs):
+            feature = feature.tanh()
+            if self.clamp:
+                eps = torch.finfo(feature.dtype).resolution
+                feature = feature.clamp(-1 + eps, 1 - eps)
+            if self.non_trivial:
+                feature = (high - low) / 2 * feature + (high + low) / 2
+            tensordict.set(key, feature)
+        return tensordict
