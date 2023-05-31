@@ -86,7 +86,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     env_per_collector = cfg.collector.env_per_collector
     frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
     eval_iter = cfg.logger.eval_iter
-    eval_rollout_steps = (cfg.collector.max_frames_per_traj // frame_skip,)
+    eval_rollout_steps = cfg.collector.max_frames_per_traj // frame_skip
 
     for i, tensordict in enumerate(collector):
         exploration_policy.step(tensordict.numel())
