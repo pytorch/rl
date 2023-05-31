@@ -37,10 +37,6 @@ class TransformerData:
             < self.prompt_rindex[:, None]
         ).to(torch.int64)
         input_ids = torch.where(attention_mask == 1, self.input_ids, pad_token_id)
-        # in case whitespace has been merged onto next token
-        input_ids[
-            torch.arange(batch_size, device=input_ids.device), self.prompt_rindex - 1
-        ] = 220
         return self.__class__(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -78,7 +74,7 @@ def make_process_fn(tokenizer, max_length):
         tokenized_prompts = tokenizer(
             example["prompt"], max_length=max_length, truncation=True
         )
-        prompt_rindex = [len(prompt) for prompt in tokenized_prompts["input_ids"]]
+        prompt_rindex = [len(prompt) - 1 for prompt in tokenized_prompts["input_ids"]]
         tokenized_example = tokenizer(
             [
                 prompt + label
