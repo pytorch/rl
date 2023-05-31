@@ -1,15 +1,25 @@
 import importlib
+import os
+import subprocess
+import warnings
 from typing import Union
 
 import torch
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     DEVICE_TYPING,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import Transform
+from torchrl.envs.transforms.transforms import (
+    CenterCrop,
+    Compose,
+    ObservationNorm,
+    Resize,
+    ToTensorImage,
+    Transform,
+)
 
 _has_vc = importlib.util.find_spec("vc_models")
 
@@ -63,16 +73,23 @@ class VC1Transform(Transform):
 
     inplace = False
 
-    def __init__(self, in_keys, out_keys, model_name=None, del_keys: bool = True):
+    def __init__(self, in_keys, out_keys, model_name, del_keys: bool = True):
+        try:
+            from vc_models.models.vit import model_utils
+        except ModuleNotFoundError as err:
+            raise ModuleNotFoundError(
+                "Could not load vc_models. You can install it via "
+                "VC1Transform.install_vc_models()."
+            ) from err
 
-        from vc_models.models.vit import model_utils
-
-        if model_name is None:
-            model_name = model_utils.VC1_LARGE_NAME
+        if model_name == "default":
+            self.make_noload_model()
+            model_name = "vc1_vitb_noload"
         self.model_name = model_name
         self.del_keys = del_keys
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self._init()
 
     def _init(self):
         from vc_models.models.vit import model_utils
@@ -82,13 +99,78 @@ class VC1Transform(Transform):
         )
         self.model = model
         self.embd_size = embd_size
-        self.model_transforms = model_transforms
+        self.model_transforms = self._map_tv_to_torchrl(model_transforms)
+
+    def _map_tv_to_torchrl(
+        self,
+        model_transforms,
+        in_keys=None,
+    ):
+        if in_keys is None:
+            in_keys = self.in_keys
+        from torchvision import transforms
+
+        if isinstance(model_transforms, transforms.Resize):
+            size = model_transforms.size
+            if isinstance(size, int):
+                size = (size, size)
+            return Resize(
+                *size,
+                in_keys=in_keys,
+            )
+        elif isinstance(model_transforms, transforms.CenterCrop):
+            size = model_transforms.size
+            if isinstance(size, int):
+                size = (size,)
+            return CenterCrop(
+                *size,
+                in_keys=in_keys,
+            )
+        elif isinstance(model_transforms, transforms.Normalize):
+            return ObservationNorm(
+                in_keys=in_keys,
+                loc=torch.tensor(model_transforms.mean).reshape(3, 1, 1),
+                scale=torch.tensor(model_transforms.std).reshape(3, 1, 1),
+                standard_normal=True,
+            )
+        elif isinstance(model_transforms, transforms.ToTensor):
+            return ToTensorImage(
+                in_keys=in_keys,
+            )
+        elif isinstance(model_transforms, transforms.Compose):
+            transform_list = []
+            for t in model_transforms.transforms:
+
+                if isinstance(t, transforms.ToTensor):
+                    transform_list.insert(0, t)
+                else:
+                    transform_list.append(t)
+            if len(transform_list) == 0:
+                raise RuntimeError("Did not find any transform.")
+            for i, t in enumerate(transform_list):
+                if i == 0:
+                    transform_list[i] = self._map_tv_to_torchrl(t)
+                else:
+                    transform_list[i] = self._map_tv_to_torchrl(t)
+            return Compose(*transform_list)
+        else:
+            raise NotImplementedError(type(model_transforms))
 
     def _call(self, tensordict):
+        if not self.del_keys:
+            in_keys = [
+                in_key
+                for in_key, out_key in zip(self.in_keys, self.out_keys)
+                if in_key != out_key
+            ]
+            saved_td = tensordict.select(*in_keys)
         tensordict_view = tensordict.view(-1)
-        super()._call(tensordict_view)
+        super()._call(self.model_transforms(tensordict_view))
         if self.del_keys:
             tensordict.exclude(*self.in_keys, inplace=True)
+        else:
+            # reset in_keys
+            tensordict.update(saved_td)
         return tensordict
 
     forward = _call
@@ -99,7 +181,6 @@ class VC1Transform(Transform):
         if obs.ndimension() > 4:
             shape = obs.shape[:-3]
             obs = obs.flatten(0, -4)
-        obs = self.model_transforms(obs)
         out = self.model(obs)
         if shape is not None:
             out = out.view(*shape, *out.shape[1:])
@@ -107,13 +188,13 @@ class VC1Transform(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError("_VC1Net can only infer CompositeSpec")
+            raise ValueError("VC1Transform can only infer CompositeSpec")
 
         keys = [key for key in observation_spec.keys(True, True) if key in self.in_keys]
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -139,3 +220,66 @@ class VC1Transform(Transform):
     @property
     def dtype(self):
         return self._dtype
+
+    @classmethod
+    def install_vc_models(cls, auto_exit=False):
+        try:
+            from vc_models import models  # noqa: F401
+
+            print("vc_models found, no need to install.")
+        except ModuleNotFoundError:
+            HOME = os.environ.get("HOME")
+            vcdir = HOME + "/.cache/torchrl/eai-vc"
+            parentdir = os.path.dirname(os.path.abspath(vcdir))
+            print(parentdir)
+            os.makedirs(parentdir, exist_ok=True)
+            try:
+                from git import Repo
+            except ModuleNotFoundError as err:
+                raise ModuleNotFoundError(
+                    "Could not load git. Make sure that `git` has been installed "
+                    "in your virtual environment."
+                ) from err
+            Repo.clone_from("https://github.com/facebookresearch/eai-vc.git", vcdir)
+            os.chdir(vcdir + "/vc_models")
+            subprocess.call(["python", "setup.py", "develop"])
+            if not auto_exit:
+                input(
+                    "VC1 has been successfully installed. Exit this python run and "
+                    "relaunch it again. Press Enter to exit..."
+                )
+                exit()
+
+    @classmethod
+    def make_noload_model(cls):
+        """Creates an naive model at a custom destination."""
+        import vc_models
+
+        models_filepath = os.path.dirname(os.path.abspath(vc_models.__file__))
+        cfg_path = os.path.join(
+            models_filepath, "conf", "model", "vc1_vitb_noload.yaml"
+        )
+        if os.path.exists(cfg_path):
+            return
+        config = """_target_: vc_models.models.load_model
+model:
+  _target_: vc_models.models.vit.vit.load_mae_encoder
+  checkpoint_path:
+  model:
+    _target_: vc_models.models.vit.vit.vit_base_patch16
+    img_size: 224
+    use_cls: True
+    drop_path_rate: 0.0
+transform:
+  _target_: vc_models.transforms.vit_transforms
+metadata:
+  algo: mae
+  model: vit_base_patch16
+  data:
+    - ego
+    - imagenet
+    - inav
+  comment: 182_epochs
+"""
+        with open(cfg_path, "w") as file:
+            file.write(config)

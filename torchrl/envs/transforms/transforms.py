@@ -966,7 +966,7 @@ class ToTensorImage(ObservationTransform):
 
     Examples:
         >>> transform = ToTensorImage(in_keys=["pixels"])
-        >>> ri = torch.randint(0, 255, (1,1,10,11,3), dtype=torch.uint8)
+        >>> ri = torch.randint(0, 255, (1 , 1, 10, 11, 3), dtype=torch.uint8)
         >>> td = TensorDict(
         ...     {"pixels": ri},
         ...     [1, 1])
@@ -1015,7 +1015,6 @@ class ToTensorImage(ObservationTransform):
         return observation_spec
 
     def _should_unsqueeze(self, observation_like: torch.FloatTensor | TensorSpec):
-        has_3_dimensions = False
         if isinstance(observation_like, torch.FloatTensor):
             has_3_dimensions = observation_like.ndimension() == 3
         else:

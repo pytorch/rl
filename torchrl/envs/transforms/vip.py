@@ -100,7 +100,7 @@ class _VIPNet(Transform):
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]

@@ -44,3 +44,9 @@ pip install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
 python setup.py develop
+
+# install vc1
+python -c """
+from torchrl.envs.transforms.vc1 import VC1Transform
+VC1Transform.install_vc_models(auto_exit=True)
+"""
