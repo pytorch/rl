@@ -45,16 +45,12 @@ class GPT2(nn.Module):
 
     @classmethod
     def from_pretrained(cls, path):
-        filename = Path(path) / "transformer.pt"
-        if filename.exists():
-            print(f"Loading transfomer checkpoint from {filename}")
-            return torch.load(filename)
         return cls(path)
 
     def save_pretrained(self, path):
         save_dir = Path(path)
         save_dir.mkdir(exist_ok=True)
-        torch.save(self, save_dir / "transformer.pt")
+        self.gpt2.save_pretrained(save_dir)
 
 
 def init_transformer(config, as_tensordictmodule=True, skip_compilation=False):
