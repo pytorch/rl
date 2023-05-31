@@ -157,7 +157,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in train_log.items():
             logger.log_scalar(key, value, step=collected_frames)
         if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
-            with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_rollout = eval_env.rollout(
                     eval_rollout_steps,
                     model[0],
