@@ -40,7 +40,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor = actor.to(model_device)
     critic = critic.to(model_device)
 
-    collector = make_collector(cfg, policy=actor)
+    collector, state_dict = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)
     loss_module, adv_module = make_loss(
         cfg.loss, actor_network=actor, value_network=critic
@@ -65,6 +65,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if cfg.logger.backend:
         logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env)
+    test_env.load_state_dict(state_dict)
     record_interval = cfg.logger.log_interval
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0

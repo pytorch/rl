@@ -178,6 +178,7 @@ def make_parallel_env(env_cfg, state_dict):
 
 def get_stats(env_cfg):
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
     return env.state_dict()
 
 
@@ -221,7 +222,7 @@ def make_collector(cfg, policy):
         device=collector_cfg.collector_device,
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
-    return collector
+    return collector, state_dict
 
 
 def make_data_buffer(cfg):
