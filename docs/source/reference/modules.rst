@@ -50,7 +50,7 @@ projected (in a L1-manner) into the desired domain.
     Actor
     SafeModule
     SafeSequential
-    TanhDeterministicModule
+    TanhModule
 
 Exploration wrappers
 ~~~~~~~~~~~~~~~~~~~~

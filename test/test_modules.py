@@ -607,16 +607,16 @@ class TestDreamerComponents:
         )
 
 
-class TestTanhDeterministic:
+class TestTanh:
     def test_errors(self):
         with pytest.raises(
             ValueError, match="in_keys and out_keys should have the same length"
         ):
             TanhModule(in_keys=["a", "b"], out_keys=["a"])
-        with pytest.raises(ValueError, match="minimum value provided to"):
+        with pytest.raises(ValueError, match="The minimum value \(-2\) provided"):
             spec = BoundedTensorSpec(-1, 1, shape=())
             TanhModule(in_keys=["act"], low=-2, spec=spec)
-        with pytest.raises(ValueError, match="maximum value provided to"):
+        with pytest.raises(ValueError, match="The maximum value \(-2\) provided to"):
             spec = BoundedTensorSpec(-1, 1, shape=())
             TanhModule(in_keys=["act"], high=-2, spec=spec)
         with pytest.raises(ValueError, match="Got high < low"):
