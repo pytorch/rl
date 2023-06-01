@@ -1581,24 +1581,46 @@ class ActorCriticWrapper(SafeSequential):
     get_value_head = get_value_operator
 
 
-class TanhDeterministicModule(TensorDictModuleBase):
+class TanhModule(TensorDictModuleBase):
+    """A Tanh module for deterministic policies with bounded action space.
+
+    This transform is to be used as a TensorDictModule layer to map a network
+    output to a bounded space.
+
+    Args:
+        in_keys (list of str or tuples of str): the input keys of the module.
+        out_keys (list of str or tuples of str, optional): the output keys of the module.
+            If none is provided, the same keys as in_keys are assumed.
+
+    Keyword Args:
+        spec (TensorSpec, optional): if provided, the spec of the output.
+            If a CompositeSpec is provided, its key(s) must match the key(s)
+            in out_keys. Otherwise, the key(s) of out_keys are assumed and the
+            same spec is used for all outputs.
+        low (float, np.ndarray or torch.Tensor): the lower bound of the space.
+            If none is provided and no spec is provided, -1 is assumed. If a
+            spec is provided, the minimum value of the spec will be retrieved.
+        high (float, np.ndarray or torch.Tensor): the higher bound of the space.
+            If none is provided and no spec is provided, 1 is assumed. If a
+            spec is provided, the maximum value of the spec will be retrieved.
+        clamp (bool, optional): if ``True``, the outputs will be clamped to be
+            within the boundaries but at a minimum resolution from them.
+            Defaults to ``False``.
+    """
     def __init__(
         self,
         in_keys,
         out_keys=None,
-        action_spec=None,
+        *,
+        spec=None,
         low=None,
         high=None,
         clamp: bool = False,
     ):
-        super(TanhDeterministicModule, self).__init__()
+        super(TanhModule, self).__init__()
         self.in_keys = in_keys
         if out_keys is None:
             out_keys = in_keys
-        if len(out_keys) > 1:
-            raise ValueError(
-                f"Class {type(self)} does not support multiple output keys."
-            )
         if len(in_keys) != len(out_keys):
             raise ValueError(
                 "in_keys and out_keys should have the same length, "
@@ -1606,54 +1628,70 @@ class TanhDeterministicModule(TensorDictModuleBase):
             )
         self.out_keys = out_keys
         # action_spec can be a composite spec or not
-        if isinstance(action_spec, CompositeSpec):
-            leaf_action_spec: BoundedTensorSpec = action_spec[self.out_keys[0]]
+        if isinstance(spec, CompositeSpec):
+            for out_key in self.out_keys:
+                if out_key not in spec.keys(True, True):
+                    spec[out_key] = None
         else:
-            leaf_action_spec = action_spec
-            action_spec = CompositeSpec(
-                {self.out_keys[0]: leaf_action_spec},
+            # if one spec is present, we assume it is the same for all keys
+            spec = CompositeSpec(
+                {out_key: spec for out_key in out_keys},
             )
-        self._spec = action_spec
-        if low is None and leaf_action_spec is None:
+
+        leaf_specs = [spec[out_key] for out_key in self.out_keys]
+        self._spec = spec
+        self.non_trivial = {}
+        for out_key, leaf_spec in zip(out_keys, leaf_specs):
+            _low, _high = self._make_low_high(low, high, leaf_spec)
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            self.register_buffer(f"{key}_low", _low)
+            self.register_buffer(f"{key}_high", _high)
+            self.non_trivial[out_key] = (_high != 1).any() or (_low != -1).any()
+            if (_high < _low).any():
+                raise ValueError(f"Got high < low in {type(self)}.")
+        self.clamp = clamp
+
+
+    def _make_low_high(self, low, high, leaf_spec):
+        if low is None and leaf_spec is None:
             low = -torch.ones(())
         elif low is None:
-            low = leaf_action_spec.space.minimum
-        elif leaf_action_spec is not None:
-            if (low != leaf_action_spec.space.minimum).any():
+            low = leaf_spec.space.minimum
+        elif leaf_spec is not None:
+            if (low != leaf_spec.space.minimum).any():
                 raise ValueError(
                     f"The minimum value provided to {type(self)} does not match the action spec one."
                 )
         if not isinstance(low, torch.Tensor):
             low = torch.tensor(low)
-        if high is None and leaf_action_spec is None:
+        if high is None and leaf_spec is None:
             high = torch.ones(())
         elif high is None:
-            high = leaf_action_spec.space.maximum
-        elif leaf_action_spec is not None:
-            if (high != leaf_action_spec.space.maximum).any():
+            high = leaf_spec.space.maximum
+        elif leaf_spec is not None:
+            if (high != leaf_spec.space.maximum).any():
                 raise ValueError(
                     f"The maximum value provided to {type(self)} does not match the action spec one."
                 )
         if not isinstance(high, torch.Tensor):
             high = torch.tensor(high)
-        self.register_buffer("low", low)
-        self.register_buffer("high", high)
-        self.non_trivial = (self.high != 1).any() or (self.low != -1).any()
-        if (self.high < self.low).any():
-            raise ValueError(f"Got high < low in {type(self)}.")
-        self.clamp = clamp
+        return low, high
 
+    @dispatch
     def forward(self, tensordict):
         inputs = [tensordict.get(key) for key in self.in_keys]
         # map
-        low = self.low
-        high = self.high
-        for key, feature in zip(self.out_keys, inputs):
+        for out_key, feature in zip(self.out_keys, inputs):
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            low_key = f"{key}_low"
+            high_key = f"{key}_high"
+            low = getattr(self, low_key)
+            high = getattr(self, high_key)
             feature = feature.tanh()
             if self.clamp:
                 eps = torch.finfo(feature.dtype).resolution
                 feature = feature.clamp(-1 + eps, 1 - eps)
             if self.non_trivial:
                 feature = low + (high - low) * (feature + 1) / 2
-            tensordict.set(key, feature)
+            tensordict.set(out_key, feature)
         return tensordict
