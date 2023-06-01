@@ -439,7 +439,8 @@ class LossModule(nn.Module):
                 return target_params
             else:
                 params = getattr(self, param_name)
-                return params.detach().clone()
+                # should we clone here?
+                return params.detach()  # .clone()
 
         else:
             raise RuntimeError(
