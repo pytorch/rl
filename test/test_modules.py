@@ -714,10 +714,10 @@ def test_tanh_atanh(use_vmap, scale):
     if use_vmap:
         try:
             from torch import vmap
-        except ModuleNotFoundError:
+        except (ImportError, ModuleNotFoundError):
             try:
                 from functorch import vmap
-            except ModuleNotFoundError:
+            except (ImportError, ModuleNotFoundError):
                 raise pytest.skip("functorch not found")
 
     torch.manual_seed(0)
