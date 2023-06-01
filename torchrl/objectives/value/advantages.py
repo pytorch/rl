@@ -218,7 +218,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 and (value not in self.value_network.out_keys)
             ):
                 raise KeyError(
-                    f"value key '{value}' not found in value network out_keys"
+                    f"value key '{value}' not found in value network out_keys {self.value_network.out_keys}"
                 )
         if self._tensor_keys is None:
             conf = asdict(self.default_keys)
