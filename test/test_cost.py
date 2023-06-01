@@ -951,6 +951,27 @@ class TestDDPG(LossModuleTestBase):
         with _check_td_steady(td):
             _ = loss_fn(td)
 
+    def test_ddpg_notensordict(self):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        td = self._create_mock_data_ddpg()
+        loss = DDPGLoss(actor, value)
+        loss.make_value_estimator(ValueEstimators.TD1)
+
+        kwargs = {
+            "observation": td.get("observation"),
+            "next_reward": td.get(("next", "reward")),
+            "next_done": td.get(("next", "done")),
+            "action": td.get("action"),
+        }
+        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+
+        loss_val_td = loss(td)
+        loss_val = loss(**kwargs)
+        for i, key in enumerate(loss_val_td.keys()):
+            torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+
 
 class TestTD3(LossModuleTestBase):
     seed = 0
