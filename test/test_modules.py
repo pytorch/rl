@@ -14,6 +14,7 @@ from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import BoundedTensorSpec
 from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, ValueOperator
+from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -604,6 +605,34 @@ class TestDreamerComponents:
         assert torch.allclose(
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
+
+
+@pytest.mark.parametrize("use_vmap", [False, True])
+@pytest.mark.parametrize("scale", range(10))
+def test_tanh_atanh(use_vmap, scale):
+    if use_vmap:
+        try:
+            from torch import vmap
+        except ModuleNotFoundError:
+            try:
+                from functorch import vmap
+            except ModuleNotFoundError:
+                raise pytest.skip("functorch not found")
+
+    torch.manual_seed(0)
+    x = (torch.randn(10, dtype=torch.double) * scale).requires_grad_(True)
+    if not use_vmap:
+        y = safetanh(x, 1e-6)
+    else:
+        y = vmap(safetanh, (0, None))(x, 1e-6)
+
+    if not use_vmap:
+        xp = safeatanh(y, 1e-6)
+    else:
+        xp = vmap(safeatanh, (0, None))(y, 1e-6)
+
+    xp.sum().backward()
+    torch.testing.assert_close(x.grad, torch.ones_like(x))
 
 
 if __name__ == "__main__":
