@@ -166,6 +166,7 @@ def make_parallel_env(env_cfg, state_dict):
     )
     for t in env.transform:
         if isinstance(t, ObservationNorm):
+            # we initialize to then load the stats
             t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
     env.load_state_dict(state_dict)
     return env
@@ -186,6 +187,7 @@ def init_stats(env, n_samples_stats, from_pixels):
                     reduce_dim=(-1, -2, -3),
                     keep_dims=(-1, -2, -3),
                 )
+                print('stats:', t.loc, t.scale)
             else:
                 t.init_stats(n_samples_stats)
 
