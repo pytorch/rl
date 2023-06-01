@@ -996,6 +996,9 @@ class TestDDPG(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestTD3(LossModuleTestBase):
     seed = 0
 
@@ -1765,6 +1768,9 @@ class TestSAC(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
 
