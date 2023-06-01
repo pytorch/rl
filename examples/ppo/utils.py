@@ -104,11 +104,15 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
 
+    obs_norm = ObservationNorm(in_keys=["pixels"])
+    env.append_transform(obs_norm)
+
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
         ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
+
     env.append_transform(
         DoubleToFloat(
             in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
