@@ -12,11 +12,11 @@ set -v
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update
+apt-get update -y
 apt-get install -y git wget freeglut3 freeglut3-dev
 
 add-apt-repository ppa:ubuntu-toolchain-r/test
-apt-get update
+apt-get update -y
 apt-get install gcc-4.9
 apt-get install --only-upgrade libstdc++6
 

@@ -10,7 +10,7 @@ set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++ tar
+apt-get update -y && apt-get install -y git wget gcc g++ tar
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -111,7 +111,7 @@ fi
 
 
 # https://github.com/lhelontra/tensorflow-on-arm/issues/13#issuecomment-489296444
-apt-get update
+apt-get update -y
 apt-get upgrade libstdc++6
 #apt-get install libssl-dev -y
 #cd /lib/x86_64-linux-gnu
