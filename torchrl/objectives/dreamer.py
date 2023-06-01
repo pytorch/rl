@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from tensordict.utils import NestedKey
 
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
@@ -49,6 +51,43 @@ class DreamerModelLoss(LossModule):
             Default: False.
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+
+        Attributes:
+            reward (NestedKey): The reward is expected to be in the tensordict
+                key ("next", reward). Defaults to ``"reward"``.
+            true_reward (NestedKey): The `true_reward` will be stored in the
+                tensordict key ("next", true_reward). Defaults to ``"true_reward"``.
+            prior_mean (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            prior_std (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            posterior_mean (NestedKey): The posterior mean is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_mean"``.
+            posterior_std (NestedKey): The posterior std is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_std"``.
+            pixels (NestedKey): The pixels is expected to be in the tensordict key ("next", pixels).
+                Defaults to ``"pixels"``.
+            reco_pixels (NestedKey): The reconstruction pixels is expected to be
+                in the tensordict key ("next", reco_pixels). Defaults to ``"reco_pixels"``.
+        """
+
+        reward: NestedKey = "reward"
+        true_reward: NestedKey = "true_reward"
+        prior_mean: NestedKey = "prior_mean"
+        prior_std: NestedKey = "prior_std"
+        posterior_mean: NestedKey = "posterior_mean"
+        posterior_std: NestedKey = "posterior_std"
+        pixels: NestedKey = "pixels"
+        reco_pixels: NestedKey = "reco_pixels"
+
+    default_keys = _AcceptedKeys()
+
     def __init__(
         self,
         world_model: TensorDictModule,
@@ -73,20 +112,26 @@ class DreamerModelLoss(LossModule):
         self.delayed_clamp = delayed_clamp
         self.global_average = global_average
 
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
+
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
         tensordict = tensordict.clone(recurse=False)
-        tensordict.rename_key_(("next", "reward"), ("next", "true_reward"))
+        tensordict.rename_key_(
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.true_reward),
+        )
         tensordict = self.world_model(tensordict)
         # compute model loss
         kl_loss = self.kl_loss(
-            tensordict.get(("next", "prior_mean")),
-            tensordict.get(("next", "prior_std")),
-            tensordict.get(("next", "posterior_mean")),
-            tensordict.get(("next", "posterior_std")),
+            tensordict.get(("next", self.tensor_keys.prior_mean)),
+            tensordict.get(("next", self.tensor_keys.prior_std)),
+            tensordict.get(("next", self.tensor_keys.posterior_mean)),
+            tensordict.get(("next", self.tensor_keys.posterior_std)),
         ).unsqueeze(-1)
         reco_loss = distance_loss(
-            tensordict.get(("next", "pixels")),
-            tensordict.get(("next", "reco_pixels")),
+            tensordict.get(("next", self.tensor_keys.pixels)),
+            tensordict.get(("next", self.tensor_keys.reco_pixels)),
             self.reco_loss,
         )
         if not self.global_average:
@@ -94,8 +139,8 @@ class DreamerModelLoss(LossModule):
         reco_loss = reco_loss.mean().unsqueeze(-1)
 
         reward_loss = distance_loss(
-            tensordict.get(("next", "true_reward")),
-            tensordict.get(("next", "reward")),
+            tensordict.get(("next", self.tensor_keys.true_reward)),
+            tensordict.get(("next", self.tensor_keys.reward)),
             self.reward_loss,
         )
         if not self.global_average:
@@ -155,6 +200,30 @@ class DreamerActorLoss(LossModule):
 
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+
+        Attributes:
+            belief (NestedKey): The input tensordict key where the belief is expected.
+                Defaults to ``"belief"``.
+            reward (NestedKey): The reward is expected to be in the tensordict key ("next", reward).
+                Defaults to ``"reward"``.
+            value (NestedKey): The reward is expected to be in the tensordict key ("next", value).
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            done (NestedKey): The input tensordict key where the flag if a
+                trajectory is done is expected ("next", done). Defaults to ``"done"``.
+        """
+
+        belief: NestedKey = "belief"
+        reward: NestedKey = "reward"
+        value: NestedKey = "state_value"
+        done: NestedKey = "done"
+
+    default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TDLambda
 
     def __init__(
@@ -181,9 +250,15 @@ class DreamerActorLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
 
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value=self._tensor_keys.value,
+            )
+
     def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
-            tensordict = tensordict.select("state", "belief")
+            tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)
 
         with hold_out_net(self.model_based_env), set_exploration_type(
@@ -204,8 +279,8 @@ class DreamerActorLoss(LossModule):
             with hold_out_net(self.value_model):
                 next_tensordict = self.value_model(next_tensordict)
 
-        reward = fake_data.get(("next", "reward"))
-        next_value = next_tensordict.get("state_value")
+        reward = fake_data.get(("next", self.tensor_keys.reward))
+        next_value = next_tensordict.get(self.tensor_keys.value)
         lambda_target = self.lambda_target(reward, next_value)
         fake_data.set("lambda_target", lambda_target)
 
@@ -224,9 +299,9 @@ class DreamerActorLoss(LossModule):
         done = torch.zeros(reward.shape, dtype=torch.bool, device=reward.device)
         input_tensordict = TensorDict(
             {
-                ("next", "reward"): reward,
-                ("next", "state_value"): value,
-                ("next", "done"): done,
+                ("next", self.tensor_keys.reward): reward,
+                ("next", self.tensor_keys.value): value,
+                ("next", self.tensor_keys.done): done,
             },
             [],
         )
@@ -237,7 +312,6 @@ class DreamerActorLoss(LossModule):
             value_type = self.default_value_estimator
         self.value_type = value_type
         value_net = None
-        value_key = "state_value"
         hp = dict(default_value_kwargs(value_type))
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
@@ -246,15 +320,11 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TD1Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
             )
         elif value_type is ValueEstimators.GAE:
             if hasattr(self, "lmbda"):
@@ -268,11 +338,15 @@ class DreamerActorLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(
                 **hp,
                 value_network=value_net,
-                value_target_key="value_target",
-                value_key=value_key,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "value": self.tensor_keys.value,
+            "value_target": "value_target",
+        }
+        self._value_estimator.set_keys(**tensor_keys)
 
 
 class DreamerValueLoss(LossModule):
@@ -293,6 +367,22 @@ class DreamerValueLoss(LossModule):
 
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+
+        Attributes:
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Defaults to ``"state_value"``.
+        """
+
+        value: NestedKey = "state_value"
+
+    default_keys = _AcceptedKeys()
+
     def __init__(
         self,
         value_model: TensorDictModule,
@@ -305,6 +395,9 @@ class DreamerValueLoss(LossModule):
         self.value_loss = value_loss if value_loss is not None else "l2"
         self.gamma = gamma
         self.discount_loss = discount_loss
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
@@ -320,7 +413,7 @@ class DreamerValueLoss(LossModule):
                 (
                     discount
                     * distance_loss(
-                        tensordict_select.get("state_value"),
+                        tensordict_select.get(self.tensor_keys.value),
                         lambda_target,
                         self.value_loss,
                     )
@@ -331,7 +424,7 @@ class DreamerValueLoss(LossModule):
         else:
             value_loss = (
                 distance_loss(
-                    tensordict_select.get("state_value"),
+                    tensordict_select.get(self.tensor_keys.value),
                     lambda_target,
                     self.value_loss,
                 )
