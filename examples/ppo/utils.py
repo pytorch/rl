@@ -250,6 +250,7 @@ def make_ppo_models(cfg):
     env_cfg = cfg.env
     from_pixels = env_cfg.from_pixels
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    init_stats(proof_environment, 3, env_cfg.from_pixels)
 
     if not from_pixels:
         # we must initialize the observation norm transform
