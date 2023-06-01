@@ -38,15 +38,17 @@ def apply_env_transforms(env, reward_scaling=1.0):
 def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+        cfg.collector.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
-    parallel_env.set_seed(cfg.seed)
+    parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env)
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+            cfg.collector.env_per_collector,
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -63,12 +65,12 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
-        frames_per_batch=cfg.frames_per_batch,
-        max_frames_per_traj=cfg.max_frames_per_traj,
-        total_frames=cfg.total_frames,
-        device=cfg.collector_device,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        max_frames_per_traj=cfg.collector.max_frames_per_traj,
+        total_frames=cfg.collector.total_frames,
+        device=cfg.collector.collector_device,
     )
-    collector.set_seed(cfg.seed)
+    collector.set_seed(cfg.env.seed)
     return collector
 
 
@@ -112,15 +114,26 @@ def make_replay_buffer(
 # -----
 
 
+def get_activation(cfg):
+    if cfg.network.activation == "relu":
+        return nn.ReLU
+    elif cfg.network.activation == "tanh":
+        return nn.Tanh
+    elif cfg.network.activation == "leaky_relu":
+        return nn.LeakyReLU
+    else:
+        raise NotImplementedError
+
+
 def make_sac_agent(cfg, train_env, eval_env, device):
     """Make SAC agent."""
     # Define Actor Network
     in_keys = ["observation"]
     action_spec = train_env.action_spec
     actor_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": cfg.network.hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
-        "activation_class": nn.ReLU,
+        "activation_class": get_activation(cfg),
     }
 
     actor_net = MLP(**actor_net_kwargs)
@@ -133,8 +146,8 @@ def make_sac_agent(cfg, train_env, eval_env, device):
     }
 
     actor_extractor = NormalParamExtractor(
-        scale_mapping=f"biased_softplus_{cfg.default_policy_scale}",
-        scale_lb=cfg.scale_lb,
+        scale_mapping=f"biased_softplus_{cfg.network.default_policy_scale}",
+        scale_lb=cfg.network.scale_lb,
     )
     actor_net = nn.Sequential(actor_net, actor_extractor)
 
@@ -159,9 +172,9 @@ def make_sac_agent(cfg, train_env, eval_env, device):
 
     # Define Critic Network
     qvalue_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": cfg.network.hidden_sizes,
         "out_features": 1,
-        "activation_class": nn.ReLU,
+        "activation_class": get_activation(cfg),
     }
 
     qvalue_net = MLP(
@@ -199,24 +212,24 @@ def make_loss_module(cfg, model):
         actor_network=model[0],
         qvalue_network=model[1],
         num_qvalue_nets=2,
-        loss_function=cfg.loss_function,
+        loss_function=cfg.optimization.loss_function,
         delay_actor=False,
         delay_qvalue=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(
+        loss_module, eps=cfg.optimization.target_update_polyak
+    )
     return loss_module, target_net_updater
 
 
 def make_sac_optimizer(cfg, loss_module):
-    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
-
-    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
-    optimizer_critic = optim.Adam(
-        critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
+    """Make SAC optimizer."""
+    optimizer = optim.Adam(
+        loss_module.parameters(),
+        lr=cfg.optimization.lr,
+        weight_decay=cfg.optimization.weight_decay,
     )
-    optimizer_alpha = optim.Adam([loss_module.log_alpha], lr=cfg.lr)
-    return optimizer_actor, optimizer_critic, optimizer_alpha
+    return optimizer

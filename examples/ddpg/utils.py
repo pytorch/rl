@@ -51,15 +51,17 @@ def apply_env_transforms(env, reward_scaling=1.0):
 def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+        cfg.collector.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
-    parallel_env.set_seed(cfg.seed)
+    parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env)
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+            cfg.collector.env_per_collector,
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -76,12 +78,12 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
-        frames_per_batch=cfg.frames_per_batch,
-        max_frames_per_traj=cfg.max_frames_per_traj,
-        total_frames=cfg.total_frames,
-        device=cfg.collector_device,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        max_frames_per_traj=cfg.collector.max_frames_per_traj,
+        total_frames=cfg.collector.total_frames,
+        device=cfg.collector.collector_device,
     )
-    collector.set_seed(cfg.seed)
+    collector.set_seed(cfg.env.seed)
     return collector
 
 
@@ -125,15 +127,26 @@ def make_replay_buffer(
 # -----
 
 
-def make_ddpg_agent(train_env, eval_env, device):
+def get_activation(cfg):
+    if cfg.network.activation == "relu":
+        return nn.ReLU
+    elif cfg.network.activation == "tanh":
+        return nn.Tanh
+    elif cfg.network.activation == "leaky_relu":
+        return nn.LeakyReLU
+    else:
+        raise NotImplementedError
+
+
+def make_ddpg_agent(cfg, train_env, eval_env, device):
     """Make DDPG agent."""
     # Define Actor Network
     in_keys = ["observation"]
     action_spec = train_env.action_spec
     actor_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": cfg.network.hidden_sizes,
         "out_features": action_spec.shape[-1],
-        "activation_class": nn.ReLU,
+        "activation_class": get_activation(cfg),
     }
 
     actor_net = MLP(**actor_net_kwargs)
@@ -164,9 +177,9 @@ def make_ddpg_agent(train_env, eval_env, device):
 
     # Define Critic Network
     qvalue_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": cfg.network.hidden_sizes,
         "out_features": 1,
-        "activation_class": nn.ReLU,
+        "activation_class": get_activation(cfg),
     }
 
     qvalue_net = MLP(
@@ -208,12 +221,14 @@ def make_loss_module(cfg, model):
     loss_module = DDPGLoss(
         actor_network=model[0],
         value_network=model[1],
-        loss_function=cfg.loss_function,
+        loss_function=cfg.optimization.loss_function,
     )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(
+        loss_module, eps=cfg.optimization.target_update_polyak
+    )
     return loss_module, target_net_updater
 
 
@@ -221,8 +236,12 @@ def make_optimizer(cfg, loss_module):
     critic_params = list(loss_module.value_network_params.flatten_keys().values())
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
-    optimizer_actor = optim.Adam(actor_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
+    optimizer_actor = optim.Adam(
+        actor_params, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+    )
     optimizer_critic = optim.Adam(
-        critic_params, lr=cfg.lr, weight_decay=cfg.weight_decay
+        critic_params,
+        lr=cfg.optimization.lr,
+        weight_decay=cfg.optimization.weight_decay,
     )
     return optimizer_actor, optimizer_critic
