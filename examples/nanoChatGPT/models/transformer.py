@@ -58,6 +58,7 @@ def init_transformer(config, as_tensordictmodule=True, skip_compilation=False):
         "resid_pdrop": config["dropout"],
         "embd_pdrop": config["dropout"],
         "attn_pdrop": config["dropout"],
+        "summary_first_dropout": config["dropout"],
         # "n_positions": 1024,
     }
 

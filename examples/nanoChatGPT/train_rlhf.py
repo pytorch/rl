@@ -55,6 +55,15 @@ def main():
     # ######## INIT MODELS ########
     actor, critic, critic_head = init_actor_critic(config)
     actor.eval()  # deactivate dropout on all modules
+
+    # Freeze the first 70% of the hidden layers of the reward model backbone
+    layers = actor.module[0].module[0].transformer.h
+    num_layers = len(layers)
+    num_unfrozen = int(0.3 * num_layers)
+    for layer in layers[:-num_unfrozen]:
+        layer.requires_grad_(False)
+
+
     critic.eval()
     actor2 = deepcopy(actor)
     actor2.eval()
