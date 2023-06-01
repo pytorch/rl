@@ -15,7 +15,7 @@ from tensordict.nn import (
 )
 from torch import nn
 
-from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
@@ -1606,7 +1606,61 @@ class TanhModule(TensorDictModuleBase):
         clamp (bool, optional): if ``True``, the outputs will be clamped to be
             within the boundaries but at a minimum resolution from them.
             Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> # simplest use case: -1 - 1 boundaries
+        >>> torch.manual_seed(0)
+        >>> in_keys = ["action"]
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ... )
+        >>> data = TensorDict({"action": torch.randn(5) * 10}, [])
+        >>> data = mod(data)
+        >>> data['action']
+        tensor([ 1.0000, -0.9944, -1.0000,  1.0000, -1.0000])
+        >>> # low and high can be customized
+        >>> low = -2
+        >>> high = 1
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     low=low,
+        ...     high=high,
+        ... )
+        >>> data = TensorDict({"action": torch.randn(5) * 10}, [])
+        >>> data = mod(data)
+        >>> data['action']
+        tensor([-2.0000,  0.9991,  1.0000, -2.0000, -1.9991])
+        >>> # A spec can be provided
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> spec = BoundedTensorSpec(low, high, shape=())
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     low=low,
+        ...     high=high,
+        ...     spec=spec,
+        ...     clamp=False,
+        ... )
+        >>> # One can also work with multiple keys
+        >>> in_keys = ['a', 'b']
+        >>> spec = CompositeSpec(
+        ...     a=BoundedTensorSpec(-3, 0, shape=()),
+        ...     b=BoundedTensorSpec(0, 3, shape=()))
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     spec=spec,
+        ... )
+        >>> data = TensorDict(
+        ...     {'a': torch.randn(10), 'b': torch.randn(10)}, batch_size=[])
+        >>> data = mod(data)
+        >>> data['a']
+        tensor([-2.3020, -1.2299, -2.5418, -0.2989, -2.6849, -1.3169, -2.2690, -0.9649,
+                -2.5686, -2.8602])
+        >>> data['b']
+        tensor([2.0315, 2.8455, 2.6027, 2.4746, 1.7843, 2.7782, 0.2111, 0.5115, 1.4687,
+                0.5760])
     """
+
     def __init__(
         self,
         in_keys,
@@ -1651,7 +1705,6 @@ class TanhModule(TensorDictModuleBase):
                 raise ValueError(f"Got high < low in {type(self)}.")
         self.clamp = clamp
 
-
     def _make_low_high(self, low, high, leaf_spec):
         if low is None and leaf_spec is None:
             low = -torch.ones(())
@@ -1660,7 +1713,7 @@ class TanhModule(TensorDictModuleBase):
         elif leaf_spec is not None:
             if (low != leaf_spec.space.minimum).any():
                 raise ValueError(
-                    f"The minimum value provided to {type(self)} does not match the action spec one."
+                    f"The minimum value ({low}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.minimum})."
                 )
         if not isinstance(low, torch.Tensor):
             low = torch.tensor(low)
@@ -1671,7 +1724,7 @@ class TanhModule(TensorDictModuleBase):
         elif leaf_spec is not None:
             if (high != leaf_spec.space.maximum).any():
                 raise ValueError(
-                    f"The maximum value provided to {type(self)} does not match the action spec one."
+                    f"The maximum value ({high}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.maximum})."
                 )
         if not isinstance(high, torch.Tensor):
             high = torch.tensor(high)
