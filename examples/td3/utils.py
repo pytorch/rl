@@ -20,6 +20,8 @@ from torchrl.modules import (
     MLP,
     ProbabilisticActor,
     SafeModule,
+    SafeSequential,
+    TanhModule,
     ValueOperator,
 )
 from torchrl.modules.distributions import TanhDelta
@@ -165,14 +167,13 @@ def make_td3_agent(cfg, train_env, eval_env, device):
             "param",
         ],
     )
-    actor = ProbabilisticActor(
-        spec=action_spec,
-        in_keys=["param"],
-        module=actor_module,
-        distribution_class=dist_class,
-        distribution_kwargs=dist_kwargs,
-        default_interaction_type=InteractionType.RANDOM,
-        return_log_prob=False,
+    actor = SafeSequential(
+        actor_module,
+        TanhModule(
+            in_keys=["param"],
+            out_keys=["action"],
+            spec=action_spec,
+        ),
     )
 
     # Define Critic Network
