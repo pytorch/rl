@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import warnings
 from copy import deepcopy
-
+from dataclasses import dataclass
 from typing import Tuple
 
 import torch
 from tensordict.nn import make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
@@ -39,6 +40,25 @@ class DDPGLoss(LossModule):
             data collection. Default is ``True``.
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+
+        Attributes:
+            state_action_value (NestedKey): The input tensordict key where the
+                state action value is expected.  Will be used for the underlying
+                value estimator as value key. Defaults to ``"state_action_value"``.
+            priority (NestedKey): The input tensordict key where the target
+                priority is written to. Defaults to ``"td_error"``.
+        """
+
+        state_action_value: NestedKey = "state_action_value"
+        priority: NestedKey = "td_error"
+
+    default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
 
     def __init__(
@@ -83,6 +103,12 @@ class DDPGLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value=self._tensor_keys.state_action_value,
+            )
+
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
@@ -105,7 +131,7 @@ class DDPGLoss(LossModule):
         if input_tensordict.device is not None:
             td_error = td_error.to(input_tensordict.device)
         input_tensordict.set(
-            "td_error",
+            self.tensor_keys.priority,
             td_error,
             inplace=True,
         )
@@ -136,7 +162,7 @@ class DDPGLoss(LossModule):
                 td_copy,
                 params=params,
             )
-        return -td_copy.get("state_action_value")
+        return -td_copy.get(self.tensor_keys.state_action_value)
 
     def _loss_value(
         self,
@@ -148,7 +174,7 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.value_network_params,
         )
-        pred_val = td_copy.get("state_action_value").squeeze(-1)
+        pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_params = TensorDict(
             {
@@ -179,22 +205,20 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = "state_action_value"
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
-                value_network=self.actor_critic, value_key=value_key, **hp
+                value_network=self.actor_critic, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {"value": self.tensor_keys.state_action_value}
+        self._value_estimator.set_keys(**tensor_keys)

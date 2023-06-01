@@ -10,14 +10,17 @@ import numpy as np
 import torch
 from torch import distributions as D, nn
 from torch.distributions import constraints
-from torchrl._torchrl import safeatanh, safetanh
 
 from torchrl.modules.distributions.truncated_normal import (
     TruncatedNormal as _TruncatedNormal,
 )
+
+# from torchrl._torchrl import safeatanh, safetanh
 from torchrl.modules.distributions.utils import (
     _cast_device,
     FasterTransformedDistribution,
+    safeatanh,
+    safetanh,
 )
 from torchrl.modules.utils import mappings
 
