@@ -4,12 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 from tensordict.nn import TensorDictModule
 
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
+from torchrl.data import BoundedTensorSpec, CompositeSpec, TensorSpec
 
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
@@ -41,6 +43,13 @@ class TD3Loss(LossModule):
         actor_network (TensorDictModule): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will
             be multiplicated as many times as needed.
+
+    Keyword Args:
+        bounds (tuple of float, optional): the bounds of the action space.
+            Exclusive with action_spec. Either this or ``action_spec`` must
+            be provided.
+        action_spec (TensorSpec, optional): the action spec.
+            Exclusive with bounds. Either this or ``bounds`` must be provided.
         num_qvalue_nets (int, optional): Number of Q-value networks to be
             trained. Default is ``10``.
         policy_noise (float, optional): Standard deviation for the target
@@ -89,6 +98,8 @@ class TD3Loss(LossModule):
         actor_network: TensorDictModule,
         qvalue_network: TensorDictModule,
         *,
+        action_spec: TensorSpec = None,
+        bounds: Optional[Tuple[float]] = None,
         num_qvalue_nets: int = 2,
         policy_noise: float = 0.2,
         noise_clip: float = 0.5,
@@ -127,8 +138,30 @@ class TD3Loss(LossModule):
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
-        self.max_action = actor_network[1].action_high
-        self.min_action = actor_network[1].action_low
+        if not ((action_spec is not None) ^ (bounds is not None)):
+            raise ValueError(
+                "One of 'bounds' and 'action_spec' must be provided, "
+                f"but not both. Got bounds={bounds} and action_spec={action_spec}."
+            )
+        elif action_spec is not None:
+            if isinstance(action_spec, CompositeSpec):
+                action_spec = action_spec[self.tensor_keys.action]
+            if not isinstance(action_spec, BoundedTensorSpec):
+                raise ValueError(
+                    f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
+                )
+            low = action_spec.space.minimum
+            high = action_spec.space.maximum
+        else:
+            low, high = bounds
+        if not isinstance(low, torch.Tensor):
+            low = torch.tensor(low)
+        if not isinstance(high, torch.Tensor):
+            high = torch.tensor(high, device=low.device, dtype=low.dtype)
+        if (low > high).any():
+            raise ValueError("Got a low bound higher than a high bound.")
+        self.register_buffer("max_action", high)
+        self.register_buffer("min_action", low)
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
