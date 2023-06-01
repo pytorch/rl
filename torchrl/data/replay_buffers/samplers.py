@@ -88,7 +88,7 @@ class SamplerWithoutReplacement(Sampler):
 
     When the sampler reaches the end of the list of available indices, a new sample order
     will be generated and the resulting indices will be completed with this new draw, which
-    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to :obj:`True`.
+    can lead to duplicated indices, unless the :obj:`drop_last` argument is set to ``True``.
 
     """
 
@@ -207,6 +207,8 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError("negative p_min")
         mass = np.random.uniform(0.0, p_sum, size=batch_size)
         index = self._sum_tree.scan_lower_bound(mass)
+        if not isinstance(index, np.ndarray):
+            index = np.array([index])
         if isinstance(index, torch.Tensor):
             index.clamp_max_(len(storage) - 1)
         else:

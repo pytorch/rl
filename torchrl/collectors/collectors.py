@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Uni
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
@@ -136,11 +136,19 @@ def recursive_map_to_cpu(dictionary: OrderedDict) -> OrderedDict:
 def _policy_is_tensordict_compatible(policy: nn.Module):
     sig = inspect.signature(policy.forward)
 
-    if isinstance(policy, TensorDictModule) or (
+    if isinstance(policy, TensorDictModuleBase):
+        return True
+    if (
         len(sig.parameters) == 1
         and hasattr(policy, "in_keys")
         and hasattr(policy, "out_keys")
     ):
+        warnings.warn(
+            "Passing a policy that is not a TensorDictModuleBase subclass but has in_keys and out_keys "
+            "will soon be deprecated. We'd like to motivate our users to inherit from this class (which "
+            "has very few restrictions) to make the experience smoother.",
+            category=DeprecationWarning,
+        )
         # if the policy is a TensorDictModule or takes a single argument and defines
         # in_keys and out_keys then we assume it can already deal with TensorDict input
         # to forward and we return True
@@ -292,7 +300,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
         if policy_weights is not None:
             self.policy_weights.apply(lambda x: x.data).update_(policy_weights)
         elif self.get_weights_fn is not None:
-            self.policy.load_state_dict(self.get_weights_fn())
+            self.policy_weights.apply(lambda x: x.data).update_(self.get_weights_fn())
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -456,6 +464,12 @@ class SyncDataCollector(DataCollectorBase):
             is_shared=False)
         >>> del collector
 
+    The collector delivers batches of data that are marked with a ``"time"``
+    dimension.
+
+    Examples:
+        >>> assert data.names[-1] == "time"
+
     """
 
     def __init__(
@@ -488,7 +502,9 @@ class SyncDataCollector(DataCollectorBase):
     ):
         self.closed = True
 
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         if create_env_kwargs is None:
             create_env_kwargs = {}
         if not isinstance(create_env_fn, EnvBase):
@@ -528,6 +544,9 @@ class SyncDataCollector(DataCollectorBase):
         )
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
+            self.policy_weights.update(
+                TensorDict(dict(self.policy.named_buffers()), [])
+            )
         else:
             self.policy_weights = TensorDict({}, [])
 
@@ -655,6 +674,7 @@ class SyncDataCollector(DataCollectorBase):
                 device=self.storing_device,
             ),
         )
+        self._tensordict_out.refine_names(..., "time")
 
         if split_trajs is None:
             split_trajs = False
@@ -726,6 +746,8 @@ class SyncDataCollector(DataCollectorBase):
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             if self.return_same_td:
+                # This is used with multiprocessed collectors to use the buffers
+                # stored in the tensordict.
                 yield tensordict_out
             else:
                 # we must clone the values, as the tensordict is updated in-place.
@@ -1041,7 +1063,9 @@ class _MultiDataCollector(DataCollectorBase):
         devices=None,
         storing_devices=None,
     ):
-        exploration_type = _convert_exploration_type(exploration_mode, exploration_type)
+        exploration_type = _convert_exploration_type(
+            exploration_mode=exploration_mode, exploration_type=exploration_type
+        )
         self.closed = True
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
@@ -1292,13 +1316,18 @@ also that the state dict is synchronised across processes if needed."""
         _check_for_faulty_process(self.procs)
         self.closed = True
         for idx in range(self.num_workers):
-            self.pipes[idx].send((None, "close"))
+            if not self.procs[idx].is_alive():
+                continue
+            try:
+                self.pipes[idx].send((None, "close"))
 
-            if self.pipes[idx].poll(10.0):
-                msg = self.pipes[idx].recv()
-                if msg != "closed":
-                    raise RuntimeError(f"got {msg} but expected 'close'")
-            else:
+                if self.pipes[idx].poll(10.0):
+                    msg = self.pipes[idx].recv()
+                    if msg != "closed":
+                        raise RuntimeError(f"got {msg} but expected 'close'")
+                else:
+                    continue
+            except BrokenPipeError:
                 continue
 
         for proc in self.procs:
@@ -1536,11 +1565,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        out_tensordicts_shared = OrderedDict()
+        buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         out_buffer = None
+
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1571,18 +1601,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
-                    out_tensordicts_shared[idx] = data
+                    buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = (
-                    workers_frames[idx] + out_tensordicts_shared[idx].numel()
-                )
+                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
+                traj_ids = buffers[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1591,19 +1619,17 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in out_tensordicts_shared.values():
+                for item in buffers.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                out_buffer = torch.cat(
-                    list(out_tensordicts_shared.values()), 0, out=out_buffer
-                )
+                out_buffer = torch.cat(list(buffers.values()), 0, out=out_buffer)
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    [item.cpu() for item in buffers.values()],
                     0,
                     out=out_buffer,
                 )
@@ -1624,7 +1650,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del out_tensordicts_shared
+        del buffers
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
@@ -1974,6 +2000,10 @@ def _main_async_collector(
     verbose: bool = VERBOSE,
     interruptor=None,
 ) -> None:
+    if storing_device.type == "cuda":
+        event = torch.cuda.Event()
+    else:
+        event = None
     pipe_parent.close()
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
@@ -2078,6 +2108,9 @@ def _main_async_collector(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
+            if event is not None:
+                event.record()
+                event.synchronize()
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:

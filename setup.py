@@ -120,7 +120,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++14",
+            "-std=c++17",
             "-fdiagnostics-color=always",
         ]
     }
@@ -132,7 +132,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++14",
+                "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -204,7 +204,7 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.0",
+            "tensordict>=0.1.1",
         ],
         extras_require={
             "atari": [

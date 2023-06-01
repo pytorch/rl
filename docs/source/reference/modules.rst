@@ -50,6 +50,7 @@ projected (in a L1-manner) into the desired domain.
     Actor
     SafeModule
     SafeSequential
+    TanhModule
 
 Exploration wrappers
 ~~~~~~~~~~~~~~~~~~~~
@@ -305,6 +306,8 @@ Regular modules
     MLP
     ConvNet
     LSTMNet
+    SqueezeLayer
+    Squeeze2dLayer
 
 Algorithm-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -323,6 +326,7 @@ algorithms, such as DQN, DDPG or Dreamer.
     DdpgMlpActor
     DdpgMlpQNet
     DreamerActor
+    LSTMModule
     ObsEncoder
     ObsDecoder
     RSSMPrior
@@ -390,8 +394,3 @@ Utils
     mappings
     inv_softplus
     biased_softplus
-
-.. currentmodule:: torchrl.modules.models.utils
-
-    SqueezeLayer
-    Squeeze2dLayer

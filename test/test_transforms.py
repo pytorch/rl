@@ -5,7 +5,7 @@
 import abc
 import argparse
 import itertools
-from copy import copy, deepcopy
+from copy import copy
 from functools import partial
 
 import numpy as np
@@ -27,6 +27,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
+from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import prod
@@ -35,6 +36,7 @@ from torchrl.data import (
     CompositeSpec,
     LazyTensorStorage,
     ReplayBuffer,
+    TensorDictReplayBuffer,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -70,6 +72,7 @@ from torchrl.envs import (
     SerialEnv,
     SqueezeTransform,
     StepCounter,
+    TargetReturn,
     TensorDictPrimer,
     TimeMaxPool,
     ToTensorImage,
@@ -80,9 +83,11 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
+from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.modules import ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
 
@@ -277,12 +282,13 @@ class TestBinarizeReward(TransformBase):
         assert ((reward - 1) == td["reward"]).all()
         assert ((reward - 1 == 0) | (reward - 1 == 1)).all()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         device = "cpu"
         batch = [20]
         torch.manual_seed(0)
         br = BinarizeReward()
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(br)
         reward = torch.randn(*batch, 1, device=device)
         misc = torch.randn(*batch, 1, device=device)
@@ -383,50 +389,82 @@ class TestCatFrames(TransformBase):
         ).all()
         assert cloned is not env.transform
 
-    def test_transform_model(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_model(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+            padding=padding,
+        )
+        envbase = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            envbase,
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        torch.manual_seed(10)
+        env.set_seed(10)
+        td = env.rollout(10)
+        torch.manual_seed(10)
+        envbase.set_seed(10)
+        tdbase = envbase.rollout(10)
+        tdbase0 = tdbase.clone()
 
-        model = nn.Sequential(cat_frames, nn.Identity())
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            model(td)
+        model = nn.Sequential(cat_frames2, nn.Identity())
+        model(tdbase)
+        assert (td == tdbase).all()
+        with pytest.raises(ValueError, match="The last dimension of the tensordict"):
+            tdbase0.names = None
+            model(tdbase0)
 
-    def test_transform_rb(self):
-        key1 = "first key"
-        key2 = "second key"
-        keys = [key1, key2]
-        dim = -2
-        d = 4
-        N = 3
-        batch_size = (5,)
-        extra_d = (3,) * (-dim - 1)
-        device = "cpu"
-        key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
-        key2_tensor = torch.ones(*batch_size, d, *extra_d, device=device)
-        key_tensors = [key1_tensor, key2_tensor]
-        td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
-        cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
-        rb.append_transform(cat_frames)
-        rb.extend(td)
-        with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
-        ):
-            _ = rb.sample(10)
+    @pytest.mark.parametrize("dim", [-2, -1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, dim, N, padding, rbclass):
+        # test equivalence between transforms within an env and within a rb
+        key1 = "observation"
+        keys = [key1]
+        out_keys = ["out_" + key1]
+        cat_frames = CatFrames(
+            N=N, in_keys=out_keys, out_keys=out_keys, dim=dim, padding=padding
+        )
+        cat_frames2 = CatFrames(
+            N=N,
+            in_keys=keys + [("next", keys[0])],
+            out_keys=out_keys + [("next", out_keys[0])],
+            dim=dim,
+            padding=padding,
+        )
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                UnsqueezeTransform(dim, in_keys=keys, out_keys=out_keys), cat_frames
+            ),
+        )
+        td = env.rollout(10)
+
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(cat_frames2)
+        rb.add(td.exclude(*out_keys, ("next", out_keys[0])))
+        tdsample = rb.sample(1).squeeze(0).exclude("index")
+        for key in td.keys(True, True):
+            assert (tdsample[key] == td[key]).all(), key
+        assert (tdsample["out_" + key1] == td["out_" + key1]).all()
+        assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
 
     def test_catframes_transform_observation_spec(self):
         N = 4
@@ -638,7 +676,8 @@ class TestR3M(TransformBase):
         assert "pixels" not in td.keys()
         assert td["vec"].shape[-1] == 512
 
-    def test_transform_rb(self, model, device):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, model, device, rbclass):
         if model != "resnet18":
             # we don't test other resnets for the sake of speed and we don't use skip
             # to avoid polluting the log with it
@@ -652,7 +691,7 @@ class TestR3M(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(r3m)
         td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
         rb.extend(td)
@@ -982,8 +1021,9 @@ class TestR3M(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, r3m)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
             + list(transformed_env.observation_spec.keys())
+            + ["action"]
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
@@ -1026,9 +1066,10 @@ class TestStepCounter(TransformBase):
         assert td["step_count"].max() == 9
         assert td.shape[-1] == 100
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         transform = StepCounter(10)
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         td = TensorDict({"a": torch.randn(10)}, [10])
         rb.extend(td)
         rb.append_transform(transform)
@@ -1073,7 +1114,6 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-
             assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
             assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
@@ -1339,14 +1379,15 @@ class TestCatTensors(TransformBase):
         assert "action" not in td.keys()
         assert ("next", "observation") not in td.keys(True)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         ct = CatTensors(
             in_keys=[("next", "observation"), "action"],
             out_key="observation_out",
             dim=-1,
             del_keys=True,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(ct)
         td = (
             TensorDict(
@@ -1496,8 +1537,10 @@ class TestCenterCrop(TransformBase):
         ],
     )
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(
         self,
+        rbclass,
         keys,
         h,
         nchannels,
@@ -1526,7 +1569,7 @@ class TestCenterCrop(TransformBase):
             batch,
         )
         td.set("dont touch", dont_touch.clone())
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(cc)
         rb.extend(td)
         td = rb.sample(10)
@@ -1667,9 +1710,10 @@ class TestDiscreteActionProjection(TransformBase):
         td = model(td)
         assert td["action"].shape[-1] == 10 if include_forward else 7
 
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("include_forward", [True, False])
-    def test_transform_rb(self, include_forward):
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+    def test_transform_rb(self, include_forward, rbclass):
+        rb = rbclass(storage=LazyTensorStorage(10))
         t = DiscreteActionProjection(7, 10, include_forward=include_forward)
         rb.append_transform(t)
         td = TensorDict(
@@ -1677,7 +1721,13 @@ class TestDiscreteActionProjection(TransformBase):
             [10, 4],
         )
         rb.extend(td)
-        assert rb._storage._storage["action"].shape[-1] == 7
+
+        if rbclass is ReplayBuffer:
+            storage = rb._storage._storage
+        else:
+            storage = rb._storage._storage.get("_data")
+
+        assert storage["action"].shape[-1] == 7
         td = rb.sample(10)
         assert td["action"].shape[-1] == 10 if include_forward else 7
 
@@ -1742,7 +1792,9 @@ class TestDoubleToFloat(TransformBase):
 
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            input_spec = CompositeSpec(action=action_spec)
+            input_spec = CompositeSpec(
+                _action_spec=CompositeSpec(action=action_spec), _state_spec=None
+            )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
 
@@ -1861,10 +1913,9 @@ class TestDoubleToFloat(TransformBase):
         td = model(td)
         assert td["observation"].dtype is torch.float
 
-    def test_transform_rb(
-        self,
-    ):
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        rb = rbclass(storage=LazyTensorStorage(10))
         t = DoubleToFloat(in_keys=["observation"], in_keys_inv=["action"])
         rb.append_transform(t)
         td = TensorDict(
@@ -1877,10 +1928,14 @@ class TestDoubleToFloat(TransformBase):
         assert td["observation"].dtype is torch.double
         assert td["action"].dtype is torch.float
         rb.extend(td)
+        if rbclass is ReplayBuffer:
+            storage = rb._storage._storage
+        else:
+            storage = rb._storage._storage.get("_data")
         # observation is not part of in_keys_inv
-        assert rb._storage._storage["observation"].dtype is torch.double
+        assert storage["observation"].dtype is torch.double
         # action is part of in_keys_inv
-        assert rb._storage._storage["action"].dtype is torch.double
+        assert storage["action"].dtype is torch.double
         td = rb.sample(10)
         assert td["observation"].dtype is torch.float
         assert td["action"].dtype is torch.double
@@ -1896,7 +1951,7 @@ class TestExcludeTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,
@@ -2028,9 +2083,10 @@ class TestExcludeTransform(TransformBase):
         assert "b" in td.keys()
         assert "c" in td.keys()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = ExcludeTransform("a")
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {
@@ -2060,7 +2116,7 @@ class TestSelectTransform(TransformBase):
                 c=UnboundedContinuousTensorSpec(3),
             )
             self.reward_spec = UnboundedContinuousTensorSpec(1)
-            self.input_spec = CompositeSpec(action=UnboundedContinuousTensorSpec(2))
+            self.action_spec = UnboundedContinuousTensorSpec(2)
 
         def _step(
             self,
@@ -2192,9 +2248,10 @@ class TestSelectTransform(TransformBase):
         assert "b" in td.keys()
         assert "c" in td.keys()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = SelectTransform("b", "c")
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {
@@ -2375,10 +2432,11 @@ class TestFlattenObservation(TransformBase):
 
     @pytest.mark.skipif(not _has_gym, reason="No gym")
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    def test_transform_rb(self, out_keys):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, out_keys, rbclass):
         t = FlattenObservation(-3, -1, out_keys=out_keys)
         td = TensorDict({"pixels": torch.randint(255, (10, 10, 3))}, []).expand(10)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         rb.extend(td)
         td = rb.sample(2)
@@ -2479,9 +2537,10 @@ class TestFrameSkipTransform(TransformBase):
         ):
             t(tensordict)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = FrameSkipTransform(2)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         tensordict = TensorDict({"a": torch.zeros(10)}, [10])
         rb.extend(tensordict)
@@ -2676,10 +2735,11 @@ class TestGrayScale(TransformBase):
             assert "stuff" not in r.keys()
             assert r["pixels"].shape[-3] == 1
 
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    def test_transform_rb(self, out_keys):
+    def test_transform_rb(self, out_keys, rbclass):
         td = TensorDict({"pixels": torch.rand(3, 12, 12)}, []).expand(3)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(GrayScale(out_keys=out_keys))
         rb.extend(td)
         r = rb.sample(3)
@@ -2750,9 +2810,10 @@ class TestNoop(TransformBase):
         td = TensorDict({}, [])
         t(td)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = NoopResetEnv()
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({}, [10])
         rb.extend(td)
@@ -2823,6 +2884,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2838,6 +2900,7 @@ class TestObservationNorm(TransformBase):
                 ContinuousActionVecMockEnv(),
                 ObservationNorm(
                     loc=torch.zeros(7),
+                    in_keys=["observation"],
                     scale=1.0,
                 ),
             )
@@ -2852,6 +2915,7 @@ class TestObservationNorm(TransformBase):
             SerialEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
@@ -2864,6 +2928,7 @@ class TestObservationNorm(TransformBase):
             ParallelEnv(2, ContinuousActionVecMockEnv),
             ObservationNorm(
                 loc=torch.zeros(7),
+                in_keys=["observation"],
                 scale=1.0,
             ),
         )
@@ -3013,7 +3078,8 @@ class TestObservationNorm(TransformBase):
         else:
             assert torch.allclose(0.5 * obs + 1, obs_tr)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         standard_normal = True
         out_keys = ["stuff"]
 
@@ -3026,7 +3092,7 @@ class TestObservationNorm(TransformBase):
                 standard_normal=standard_normal,
             )
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
 
         obs = torch.randn(7)
@@ -3066,8 +3132,6 @@ class TestObservationNorm(TransformBase):
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        # assert "observation_inv" in env.input_spec.keys()
-        # "observation_inv" should not appear in the tensordict
         assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)["action_inv"])
         assert torch.allclose((td["observation"] - 1) / 0.5, td["observation_out"])
 
@@ -3448,9 +3512,10 @@ class TestResize(TransformBase):
         module(td)
         assert td["pixels"].shape == torch.Size([3, 20, 21])
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = Resize(20, 21, in_keys=["pixels"])
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"pixels": torch.randn(3, 32, 32)}, []).expand(10)
         rb.extend(td)
@@ -3526,9 +3591,10 @@ class TestRewardClipping(TransformBase):
         assert (td["reward"] <= 0.1).all()
         assert (td["reward"] >= -0.1).all()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         t = RewardClipping(-0.1, 0.1)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         td = TensorDict({"reward": torch.randn(10)}, []).expand(10)
         rb.append_transform(t)
         rb.extend(td)
@@ -3673,12 +3739,13 @@ class TestRewardScaling(TransformBase):
         else:
             assert torch.allclose((td["reward"] - loc) / scale, reward)
 
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("standard_normal", [True, False])
-    def test_transform_rb(self, standard_normal):
+    def test_transform_rb(self, rbclass, standard_normal):
         loc = 0.5
         scale = 1.5
         t = RewardScaling(0.5, 1.5, standard_normal=standard_normal)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         reward = torch.randn(10)
         td = TensorDict({"reward": reward}, []).expand(10)
         rb.append_transform(t)
@@ -3726,8 +3793,18 @@ class TestRewardSum(TransformBase):
         t = RewardSum()
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            ValueError, match="At least one dimension of the tensordict"
+        ):
             t(td)
+        td.batch_size = [10]
+        td.names = ["time"]
+        with pytest.raises(KeyError):
+            t(td)
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
+        t(td)
 
     def test_transform_compose(
         self,
@@ -3735,8 +3812,18 @@ class TestRewardSum(TransformBase):
         t = Compose(RewardSum())
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(
+            ValueError, match="At least one dimension of the tensordict"
+        ):
             t(td)
+        td.batch_size = [10]
+        td.names = ["time"]
+        with pytest.raises(KeyError):
+            t(td)
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
+        t(td)
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
     def test_transform_env(
@@ -3758,24 +3845,36 @@ class TestRewardSum(TransformBase):
     def test_transform_model(
         self,
     ):
-        t = RewardSum()
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
         model = nn.Sequential(t, nn.Identity())
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
-        with pytest.raises(NotImplementedError):
-            model(td)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        data = env.rollout(10)
+        data_exclude = data.exclude(("next", "episode_reward"))
+        model(data_exclude)
+        assert (
+            data_exclude["next", "episode_reward"] == data["next", "episode_reward"]
+        ).all()
 
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(
         self,
+        rbclass,
     ):
-        t = RewardSum()
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        t = RewardSum(
+            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+        )
+        rb = rbclass(storage=LazyTensorStorage(10))
+        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        data = env.rollout(10)
+        data_exclude = data.exclude(("next", "episode_reward"))
         rb.append_transform(t)
-        rb.extend(td)
-        with pytest.raises(NotImplementedError):
-            _ = rb.sample(2)
+        rb.add(data_exclude)
+        sample = rb.sample(1).squeeze(0)
+        assert (
+            sample["next", "episode_reward"] == data["next", "episode_reward"]
+        ).all()
 
     @pytest.mark.parametrize(
         "keys",
@@ -3851,13 +3950,42 @@ class TestReward2Go(TransformBase):
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     @pytest.mark.parametrize("t", [3, 20])
-    def test_transform_rb(self, done_flags, gamma, t, device):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, done_flags, gamma, t, device, rbclass):
         batch = 10
         batch_size = [batch, t]
         torch.manual_seed(0)
         out_key = "reward2go"
         r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
-        rb = ReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
+        rb = rbclass(storage=LazyTensorStorage(batch), transform=r2g)
+        done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
+        for i in range(batch):
+            while not done[i].any():
+                done[i] = done[i].bernoulli_(0.1)
+        reward = torch.randn(*batch_size, 1, device=device)
+        misc = torch.randn(*batch_size, 1, device=device)
+
+        td = TensorDict(
+            {"misc": misc, "next": {"done": done, "reward": reward}},
+            batch_size,
+            device=device,
+        )
+        rb.extend(td)
+        sample = rb.sample(13)
+        assert sample[out_key].shape == (13, t, 1)
+        assert (sample[out_key] != 0).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 1.0])
+    @pytest.mark.parametrize("done_flags", [1, 5])
+    @pytest.mark.parametrize("t", [3, 20])
+    def test_transform_offline_rb(self, done_flags, gamma, t, device):
+        batch = 10
+        batch_size = [batch, t]
+        torch.manual_seed(0)
+        out_key = "reward2go"
+        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(batch), transform=r2g)
         done = torch.zeros(*batch_size, 1, dtype=torch.bool, device=device)
         for i in range(batch):
             while not done[i].any():
@@ -4313,14 +4441,15 @@ class TestUnsqueezeTransform(TransformBase):
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     @pytest.mark.parametrize("unsqueeze_dim", [-1, 1])
-    def test_transform_rb(self, out_keys, unsqueeze_dim):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass, out_keys, unsqueeze_dim):
         t = UnsqueezeTransform(
             unsqueeze_dim,
             in_keys=["observation"],
             out_keys=out_keys,
             allow_positive_dim=True,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {"observation": TensorDict({"stuff": torch.randn(3, 4)}, [3, 4])}, []
@@ -4341,19 +4470,17 @@ class TestUnsqueezeTransform(TransformBase):
     def test_transform_inverse(self):
         env = TransformedEnv(
             GymEnv(HALFCHEETAH_VERSIONED),
+            # the order is inverted
             Compose(
-                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
                 UnsqueezeTransform(
                     -1, in_keys_inv=["action_t"], out_keys_inv=["action"]
                 ),
+                SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_t"]),
             ),
         )
         td = env.rollout(3)
         assert env.action_spec.shape[-1] == 6
         assert td["action"].shape[-1] == 6
-        # inverse transforms are now hidden from outer scope
-        # assert env.input_spec["action_t"].shape[-1] == 1
-        # assert td["action_t"].shape[-1] == 1
 
 
 class TestSqueezeTransform(TransformBase):
@@ -4452,8 +4579,8 @@ class TestSqueezeTransform(TransformBase):
     @property
     def _inv_circular_transform(self):
         return Compose(
-            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
             UnsqueezeTransform(-1, in_keys_inv=["action_un"], out_keys_inv=["action"]),
+            SqueezeTransform(-1, in_keys_inv=["action"], out_keys_inv=["action_un"]),
         )
 
     def test_single_trans_env_check(self):
@@ -4559,7 +4686,8 @@ class TestSqueezeTransform(TransformBase):
             assert td[out_keys[0]].shape == torch.Size(expected_shape)
 
     @pytest.mark.parametrize("out_keys", [None, ["obs_sq"]])
-    def test_transform_rb(self, out_keys):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, out_keys, rbclass):
         squeeze_dim = -2
         t = SqueezeTransform(
             squeeze_dim,
@@ -4567,7 +4695,7 @@ class TestSqueezeTransform(TransformBase):
             out_keys=out_keys,
             allow_positive_dim=True,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict(
             {"observation": TensorDict({"stuff": torch.randn(3, 1, 4)}, [3, 1, 4])}, []
@@ -4589,6 +4717,145 @@ class TestSqueezeTransform(TransformBase):
         r = env.rollout(3)
         r2 = GymEnv(HALFCHEETAH_VERSIONED).rollout(3)
         assert (r.zero_() == r2.zero_()).all()
+
+
+class TestTargetReturn(TransformBase):
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_env(self, batch, mode, device):
+        torch.manual_seed(0)
+        t = TargetReturn(target_return=10.0, mode=mode)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
+        td = env.rollout(2)
+        if mode == "reduce":
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
+        else:
+            assert (td["next", "target_return"] == 10.0).all()
+
+    @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_transform_compose(self, batch, mode, device):
+        torch.manual_seed(0)
+        t = Compose(TargetReturn(target_return=10.0, mode=mode))
+        next_reward = torch.rand((*batch, 1))
+        td = TensorDict(
+            {
+                "next": {
+                    "reward": next_reward,
+                },
+            },
+            device=device,
+            batch_size=batch,
+        )
+        td = t.reset(td)
+        td = t._step(td)
+
+        if mode == "reduce":
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
+
+        else:
+            assert (td["next", "target_return"] == 10.0).all()
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_single_trans_env_check(self, mode, device):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            TargetReturn(target_return=10.0, mode=mode).to(device),
+            device=device,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_serial_trans_env_check(self, mode, device):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TargetReturn(target_return=10.0, mode=mode).to(device),
+                device=device,
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_parallel_trans_env_check(self, mode, device):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                TargetReturn(target_return=10.0, mode=mode).to(device),
+                device=device,
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_trans_serial_env_check(self, mode, device):
+        env = TransformedEnv(
+            SerialEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
+            TargetReturn(target_return=10.0, mode=mode).to(device),
+            device=device,
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_trans_parallel_env_check(self, mode, device):
+        env = TransformedEnv(
+            ParallelEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
+            TargetReturn(target_return=10.0, mode=mode),
+            device=device,
+        )
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse method for TargetReturn")
+
+    @pytest.mark.parametrize("mode", ["reduce", "constant"])
+    def test_transform_no_env(self, mode):
+        t = TargetReturn(target_return=10.0, mode=mode)
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, [])
+        td = t.reset(td)
+        td = t._step(td)
+        if mode == "reduce":
+            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
+        else:
+            assert (td["next", "target_return"] == 10.0).all()
+
+    def test_transform_model(
+        self,
+    ):
+        t = TargetReturn(target_return=10.0)
+        model = nn.Sequential(t, nn.Identity())
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, [])
+        with pytest.raises(
+            NotImplementedError, match="cannot be executed without a parent"
+        ):
+            model(td)
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(
+        self,
+        rbclass,
+    ):
+        t = TargetReturn(target_return=10.0)
+        rb = rbclass(storage=LazyTensorStorage(10))
+        reward = torch.randn(10)
+        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        rb.append_transform(t)
+        rb.extend(td)
+        with pytest.raises(
+            NotImplementedError, match="cannot be executed without a parent"
+        ):
+            _ = rb.sample(2)
 
 
 class TestToTensorImage(TransformBase):
@@ -4619,7 +4886,7 @@ class TestToTensorImage(TransformBase):
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
@@ -4628,7 +4895,10 @@ class TestToTensorImage(TransformBase):
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+                {
+                    key: BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
+                    for key in keys
+                }
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
@@ -4665,7 +4935,7 @@ class TestToTensorImage(TransformBase):
         assert (td.get("dont touch") == dont_touch).all()
 
         if len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3))
+            observation_spec = BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
             )
@@ -4674,7 +4944,10 @@ class TestToTensorImage(TransformBase):
             assert (observation_spec.space.maximum == 1).all()
         else:
             observation_spec = CompositeSpec(
-                {key: BoundedTensorSpec(0, 255, (16, 16, 3)) for key in keys}
+                {
+                    key: BoundedTensorSpec(0, 255, (16, 16, 3), dtype=torch.uint8)
+                    for key in keys
+                }
             )
             observation_spec = totensorimage.transform_observation_spec(
                 observation_spec
@@ -4759,10 +5032,32 @@ class TestToTensorImage(TransformBase):
         assert obs.shape[-3] == 3
         assert obs.dtype is torch.float32
 
+    @pytest.mark.parametrize("from_int", [None, True, False])
+    @pytest.mark.parametrize("default_dtype", [torch.float32, torch.uint8])
+    def test_transform_scale(self, from_int, default_dtype):
+        totensorimage = ToTensorImage(in_keys=["pixels"], from_int=from_int)
+        fill_value = 150 if default_dtype == torch.uint8 else 0.5
+        td = TensorDict(
+            {"pixels": torch.full((21, 22, 3), fill_value, dtype=default_dtype)}, []
+        )
+        # Save whether or not the tensor is floating point before the transform changes it
+        # to floating point type.
+        is_floating_point = torch.is_floating_point(td["pixels"])
+        totensorimage(td)
+
+        if from_int is None:
+            expected_pixel_value = (
+                fill_value / 255 if not is_floating_point else fill_value
+            )
+        else:
+            expected_pixel_value = fill_value / 255 if from_int else fill_value
+        assert (td["pixels"] == expected_pixel_value).all()
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    def test_transform_rb(self, out_keys):
+    def test_transform_rb(self, out_keys, rbclass):
         t = ToTensorImage(in_keys=["pixels"], out_keys=out_keys)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"pixels": torch.randint(255, (21, 22, 3))}, [])
         rb.extend(td.expand(10))
@@ -4802,10 +5097,11 @@ class TestTensorDictPrimer(TransformBase):
         model(td)
         assert "mykey" in td.keys()
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         batch_size = (2,)
         t = TensorDictPrimer(mykey=UnboundedContinuousTensorSpec([*batch_size, 3]))
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"a": torch.zeros(())}, [])
         rb.extend(td.expand(10))
@@ -4906,7 +5202,7 @@ class TestTensorDictPrimer(TransformBase):
             env = ContinuousActionVecMockEnv()
             env.set_seed(100)
             kwargs = {
-                key: deepcopy(spec) if key != "action" else deepcopy(env.action_spec)
+                key: spec.clone() if key != "action" else env.action_spec.clone()
                 # copy to avoid having the same spec for all keys
                 for key in default_keys
             }
@@ -5082,7 +5378,8 @@ class TestTimeMaxPool(TransformBase):
         ):
             model(td)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         key1 = "first key"
         key2 = "second key"
         keys = [key1, key2]
@@ -5100,7 +5397,7 @@ class TestTimeMaxPool(TransformBase):
             in_keys=["observation"],
             T=3,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(t)
         rb.extend(td)
         with pytest.raises(
@@ -5223,12 +5520,13 @@ class TestgSDE(TransformBase):
         assert (td["_eps_gSDE"] != 0.0).all()
         assert td["_eps_gSDE"].shape == torch.Size([2, action_dim, state_dim])
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         state_dim = 7
         action_dim = 5
         batch_size = (2,)
         t = gSDENoise(state_dim=state_dim, action_dim=action_dim, shape=batch_size)
-        rb = ReplayBuffer(storage=LazyTensorStorage(10))
+        rb = rbclass(storage=LazyTensorStorage(10))
         rb.append_transform(t)
         td = TensorDict({"a": torch.zeros(())}, [])
         rb.extend(td.expand(10))
@@ -5366,7 +5664,8 @@ class TestVIP(TransformBase):
         assert "pixels" not in sample.keys()
         assert sample["vec"].shape[-1] == 1024
 
-    def test_transform_rb(self, model, device):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, model, device, rbclass):
         in_keys = ["pixels"]
         tensor_pixels_key = None
         out_keys = ["vec"]
@@ -5376,7 +5675,7 @@ class TestVIP(TransformBase):
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(vip)
         td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
         rb.extend(td)
@@ -5695,7 +5994,8 @@ class TestVIP(TransformBase):
         base_env = DiscreteActionConvMockEnvNumpy().to(device)
         transformed_env = TransformedEnv(base_env, vip)
         expected_keys = (
-            list(transformed_env.input_spec.keys())
+            list(transformed_env.state_spec.keys())
+            + ["action"]
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
             + [("next", "reward"), ("next", "done"), "done", "next"]
@@ -6073,7 +6373,8 @@ class TestTransforms:
             dim=-3,
         )
         t2 = FiniteTensorDictCheck()
-        compose = Compose(t1, t2)
+        t3 = StepCounter()
+        compose = Compose(t1, t2, t3)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
             {
@@ -6084,10 +6385,15 @@ class TestTransforms:
             device=device,
         )
         td.set("dont touch", dont_touch.clone())
+        if not batch:
+            with pytest.raises(
+                ValueError, match="The last dimension of the tensordict"
+            ):
+                compose(td.clone(False))
         with pytest.raises(
-            NotImplementedError, match="CatFrames cannot be called independently"
+            NotImplementedError, match="StepCounter cannot be called independently"
         ):
-            compose(td.clone(False))
+            compose[1:](td.clone(False))
         compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
@@ -6095,7 +6401,8 @@ class TestTransforms:
 
         if len(keys) == 1:
             observation_spec = BoundedTensorSpec(0, 255, (nchannels, 16, 16))
-            observation_spec = compose.transform_observation_spec(observation_spec)
+            # StepCounter does not want non composite specs
+            observation_spec = compose[:2].transform_observation_spec(observation_spec)
             assert observation_spec.shape == torch.Size([nchannels * N, 16, 16])
         else:
             observation_spec = CompositeSpec(
@@ -6222,10 +6529,11 @@ class TestTransforms:
         _ = env.reward_spec
 
         assert env._input_spec is not None
-        assert "action" in env._input_spec
-        assert env._input_spec["action"] is not None
-        assert env._output_spec["observation"] is not None
-        assert env._output_spec["reward"] is not None
+        assert "_action_spec" in env._input_spec
+        assert env._input_spec["_action_spec"] is not None
+        assert env._output_spec["_observation_spec"] is not None
+        assert env._output_spec["_reward_spec"] is not None
+        assert env._output_spec["_done_spec"] is not None
 
         env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 
@@ -6290,38 +6598,14 @@ class TestTransforms:
         _ = copy(env.observation_spec)
         _ = copy(env.reward_spec)
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(-7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(7, FiniteTensorDictCheck())
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
-        try:
+        with pytest.raises(ValueError):
             env.insert_transform(4, "ffff")
-            assert 1 == 6
-        except ValueError:
-            assert len(env.transform) == 6
-            assert env._input_spec is not None
-            assert "action" in env._input_spec
-            assert env._input_spec["action"] is not None
-            assert env._output_spec["observation"] is not None
-            assert env._output_spec["reward"] is not None
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -6329,7 +6613,7 @@ def test_batch_locked_transformed(device):
     env = TransformedEnv(
         MockBatchedLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6353,7 +6637,7 @@ def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6373,7 +6657,7 @@ def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
         Compose(
-            ObservationNorm(in_keys=[("next", "observation")], loc=0.5, scale=1.1),
+            ObservationNorm(in_keys=["observation"], loc=0.5, scale=1.1),
             RewardClipping(0, 0.1),
         ),
     )
@@ -6538,32 +6822,29 @@ class TestCroSeq:
 
 @pytest.mark.parametrize("create_copy", [True, False])
 class TestRenameTransform(TransformBase):
-    def test_single_trans_env_check(self, create_copy):
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            RenameTransform(
-                [
-                    "observation",
-                ],
-                [
-                    "stuff",
-                ],
-                create_copy=create_copy,
-            ),
+    @pytest.mark.parametrize("compose", [True, False])
+    def test_single_trans_env_check(self, create_copy, compose):
+        t = RenameTransform(
+            ["observation"],
+            ["stuff"],
+            create_copy=create_copy,
         )
+        if compose:
+            t = Compose(t)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
         check_env_specs(env)
-        env = TransformedEnv(
-            ContinuousActionVecMockEnv(),
-            RenameTransform(
-                ["observation_orig"],
-                ["stuff"],
-                ["observation_orig"],
-                [
-                    "stuff",
-                ],
-                create_copy=create_copy,
-            ),
+        t = RenameTransform(
+            ["observation_orig"],
+            ["stuff"],
+            ["observation_orig"],
+            [
+                "stuff",
+            ],
+            create_copy=create_copy,
         )
+        if compose:
+            t = Compose(t)
+        env = TransformedEnv(ContinuousActionVecMockEnv(), t)
         check_env_specs(env)
 
     def test_serial_trans_env_check(self, create_copy):
@@ -6793,17 +7074,22 @@ class TestRenameTransform(TransformBase):
             True,
         ],
     )
-    def test_transform_rb(self, create_copy, inverse):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, create_copy, inverse, rbclass):
         if not inverse:
             t = RenameTransform(["a"], ["b"], create_copy=create_copy)
             tensordict = TensorDict({"a": torch.randn(())}, []).expand(10)
         else:
             t = RenameTransform(["a"], ["b"], ["a"], ["b"], create_copy=create_copy)
             tensordict = TensorDict({"b": torch.randn(())}, []).expand(10)
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(t)
         rb.extend(tensordict)
-        assert "a" in rb._storage._storage.keys()
+
+        if rbclass is ReplayBuffer:
+            assert "a" in rb._storage._storage.keys()
+        else:
+            assert ("_data", "a") in rb._storage._storage.keys(True)
         sample = rb.sample(2)
         if create_copy:
             assert "a" in sample.keys()
@@ -6893,10 +7179,11 @@ class TestInitTracker(TransformBase):
             chain = nn.Sequential(InitTracker())
             chain(td)
 
-    def test_transform_rb(self):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
         batch = [1]
         device = "cpu"
-        rb = ReplayBuffer(storage=LazyTensorStorage(20))
+        rb = rbclass(storage=LazyTensorStorage(20))
         rb.append_transform(InitTracker())
         reward = torch.randn(*batch, 1, device=device)
         misc = torch.randn(*batch, 1, device=device)
@@ -6913,6 +7200,203 @@ class TestInitTracker(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for InitTracker")
+
+
+class TestKLRewardTransform(TransformBase):
+    envclass = ContinuousActionVecMockEnv
+
+    def _make_actor(self):
+        from tensordict.nn import NormalParamExtractor, TensorDictModule as Mod
+
+        env = self.envclass()
+        n_obs = env.observation_spec["observation"].shape[-1]
+        n_act = env.action_spec.shape[-1]
+
+        module = Mod(
+            nn.Sequential(nn.Linear(n_obs, n_act * 2), NormalParamExtractor()),
+            in_keys=["observation"],
+            out_keys=["loc", "scale"],
+        )
+        actor = ProbabilisticActor(
+            module,
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+        )
+        return actor
+
+    def _make_transform_env(self, out_key, base_env):
+        actor = self._make_actor()
+        transform = KLRewardTransform(actor, out_keys=out_key)
+        return Compose(
+            TensorDictPrimer(
+                primers={
+                    "sample_log_prob": UnboundedContinuousTensorSpec(
+                        shape=base_env.action_spec.shape[:-1]
+                    )
+                }
+            ),
+            transform,
+        )
+
+    @pytest.mark.parametrize("in_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]])
+    @pytest.mark.parametrize(
+        "out_key", [None, "some_stuff", ["some_stuff"], ["a", "b"]]
+    )
+    def test_transform_no_env(self, in_key, out_key):
+        actor = self._make_actor()
+        if any(isinstance(key, list) and len(key) > 1 for key in (in_key, out_key)):
+            with pytest.raises(ValueError):
+                KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
+            return
+        t = KLRewardTransform(actor, in_keys=in_key, out_keys=out_key)
+        batch = [2, 3]
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
+        t._step(tensordict)
+        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
+
+    def test_transform_compose(self):
+        actor = self._make_actor()
+        t = Compose(KLRewardTransform(actor))
+        batch = [2, 3]
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t[0].in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
+        t(tensordict)
+        assert (tensordict.get("next").get("reward") != 0).all()
+
+    @torch.no_grad()
+    @pytest.mark.parametrize(
+        "out_key",
+        [
+            None,
+            "some_stuff",
+            ["some_stuff"],
+        ],
+    )
+    def test_transform_env(self, out_key):
+        base_env = self.envclass()
+        actor = self._make_actor()
+        # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
+        env = TransformedEnv(
+            base_env,
+            Compose(
+                RewardScaling(0.0, 0.0),  # make reward 0 to check the effect of kl
+                KLRewardTransform(actor, out_keys=out_key),
+            ),
+        )
+        actor = self._make_actor()
+        td1 = env.rollout(3, actor)
+        tdparams = TensorDict(dict(actor.named_parameters()), []).unflatten_keys(".")
+        assert (
+            tdparams
+            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
+        ).all()
+
+        def update(x):
+            x.data += 1
+            return x
+
+        tdparams.apply_(update)
+        td2 = env.rollout(3, actor)
+        assert not (
+            tdparams
+            == env.transform[-1].frozen_params.select(*tdparams.keys(True, True))
+        ).any()
+        out_key = env.transform[-1].out_keys[0]
+        assert (td1.get("next").get(out_key) != td2.get("next").get(out_key)).all()
+
+    @pytest.mark.parametrize("out_key", [None, "some_stuff", ["some_stuff"]])
+    def test_single_trans_env_check(self, out_key):
+        base_env = self.envclass()
+        # we need to patch the env and create a sample_log_prob spec to make check_env_specs happy
+        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        out_key = "reward"
+
+        def make_env():
+            base_env = self.envclass()
+            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        out_key = "reward"
+
+        def make_env():
+            base_env = self.envclass()
+            return TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        out_key = "reward"
+        base_env = SerialEnv(2, self.envclass)
+        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        out_key = "reward"
+        base_env = ParallelEnv(2, self.envclass)
+        env = TransformedEnv(base_env, self._make_transform_env(out_key, base_env))
+        check_env_specs(env)
+
+    def test_transform_model(self):
+        actor = self._make_actor()
+        t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
+        batch = [2, 3]
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
+        t = TensorDictSequential(t)
+        t(tensordict)
+        assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        actor = self._make_actor()
+        t = KLRewardTransform(actor, in_keys="reward", out_keys="reward")
+        batch = [2, 3]
+        tensordict = TensorDict(
+            {
+                "action": torch.randn(*batch, 7),
+                "observation": torch.randn(*batch, 7),
+                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
+                "sample_log_prob": torch.randn(*batch),
+            },
+            batch,
+        )
+        rb = rbclass(storage=LazyTensorStorage(100), transform=t)
+        rb.extend(tensordict)
+        sample = rb.sample(3)
+        assert (sample.get(("next", "reward")) != 0).all()
+
+    def test_transform_inverse(self):
+        raise pytest.skip("No inverse for KLRewardTransform")
 
 
 if __name__ == "__main__":

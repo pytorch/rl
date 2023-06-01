@@ -34,14 +34,13 @@ def make_target_updater(
     if cfg.loss == "double":
         if not cfg.hard_update:
             target_net_updater = SoftUpdate(
-                loss_module, 1 - 1 / cfg.value_network_update_interval
+                loss_module, eps=1 - 1 / cfg.value_network_update_interval
             )
         else:
             target_net_updater = HardUpdate(
-                loss_module, cfg.value_network_update_interval
+                loss_module,
+                value_network_update_interval=cfg.value_network_update_interval,
             )
-        # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
-        target_net_updater.init_()
     else:
         if cfg.hard_update:
             raise RuntimeError(
@@ -95,10 +94,13 @@ def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
         qvalue_network=qvalue_model,
         value_network=value_model,
         num_qvalue_nets=cfg.num_q_values,
-        gamma=cfg.gamma,
         **loss_kwargs,
     )
-    target_net_updater = make_target_updater(cfg, loss_module)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
+    if cfg.loss == "double":
+        target_net_updater = make_target_updater(cfg, loss_module)
+    else:
+        target_net_updater = None
     return loss_module, target_net_updater
 
 
@@ -130,10 +132,10 @@ def make_redq_loss(
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         num_qvalue_nets=cfg.num_q_values,
-        gamma=cfg.gamma,
         gSDE=cfg.gSDE,
         **loss_kwargs,
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
@@ -151,7 +153,8 @@ def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
         raise NotImplementedError
     double_loss = cfg.loss == "double"
     loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
-    loss_module = loss_class(actor, value_net, gamma=cfg.gamma, **loss_kwargs)
+    loss_module = loss_class(actor, value_net, **loss_kwargs)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
@@ -167,7 +170,8 @@ def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     if cfg.loss not in ("single", "double"):
         raise NotImplementedError
     loss_kwargs.update({"delay_value": cfg.loss == "double"})
-    loss_module = loss_class(model, gamma=cfg.gamma, **loss_kwargs)
+    loss_module = loss_class(model, **loss_kwargs)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 

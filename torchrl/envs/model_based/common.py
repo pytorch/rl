@@ -35,10 +35,10 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...         self.observation_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
+        ...         self.state_spec = CompositeSpec(
         ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
-        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
         ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
@@ -46,7 +46,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand())
+        ...         tensordict = tensordict.update(self.state_spec.rand())
         ...         tensordict = tensordict.update(self.observation_spec.rand())
         ...         return tensordict
         >>> # This environment is used as follows:
@@ -141,7 +141,9 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         """Sets the specs of the environment from the specs of the given environment."""
         self.observation_spec = env.observation_spec.clone().to(self.device)
         self.reward_spec = env.reward_spec.clone().to(self.device)
-        self.input_spec = env.input_spec.clone().to(self.device)
+        self.action_spec = env.action_spec.clone().to(self.device)
+        self.done_spec = env.done_spec.clone().to(self.device)
+        self.state_spec = env.state_spec.clone().to(self.device)
 
     def _step(
         self,

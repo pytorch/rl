@@ -15,6 +15,7 @@ from .actors import (
     QValueActor,
     QValueHook,
     QValueModule,
+    TanhModule,
     ValueOperator,
 )
 from .common import SafeModule
@@ -27,5 +28,6 @@ from .probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
+from .rnn import LSTMModule
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper

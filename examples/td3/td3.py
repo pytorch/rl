@@ -13,7 +13,7 @@ import tqdm
 from tensordict.nn import InteractionType
 
 from torch import nn, optim
-from torchrl.collectors import MultiSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
@@ -96,13 +96,7 @@ def make_replay_buffer(
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = (
-        torch.device("cuda:0")
-        if torch.cuda.is_available()
-        and torch.cuda.device_count() > 0
-        and cfg.device == "cuda:0"
-        else torch.device("cpu")
-    )
+    device = torch.device(cfg.device)
 
     exp_name = generate_exp_name("TD3", cfg.exp_name)
     logger = get_logger(
@@ -116,7 +110,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     np.random.seed(cfg.seed)
 
     parallel_env = ParallelEnv(
-        cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+        cfg.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env_name, device=device)),
     )
     parallel_env.set_seed(cfg.seed)
 
@@ -130,7 +125,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            cfg.env_per_collector, EnvCreator(lambda: env_maker(task=cfg.env_name))
+            cfg.env_per_collector,
+            EnvCreator(lambda: env_maker(task=cfg.env_name, device=device)),
         ),
         train_env.transform.clone(),
     )
@@ -211,31 +207,35 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sigma_init=1,
         sigma_end=1,
         mean=0,
-        std=0.01,
+        std=0.1,
     ).to(device)
 
     # Create TD3 loss
+    if cfg.loss == "double":
+        double = True
+    elif cfg.loss == "single":
+        double = False
+    else:
+        raise NotImplementedError
     loss_module = TD3Loss(
         actor_network=model[0],
         qvalue_network=model[1],
-        num_qvalue_nets=2,
-        gamma=cfg.gamma,
-        loss_function="smooth_l1",
+        num_qvalue_nets=2 if double else 1,
+        loss_function=cfg.loss_function,
     )
+    loss_module.make_value_estimator(gamma=cfg.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(loss_module, cfg.target_update_polyak)
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.target_update_polyak)
 
     # Make Off-Policy Collector
-    collector = MultiSyncDataCollector(
-        # we'll just run one ParallelEnvironment. Adding elements to the list would increase the number of envs run in parallel
-        [
-            train_env,
-        ],
+    collector = MultiaSyncDataCollector(
+        [train_env],
         actor_model_explore,
         frames_per_batch=cfg.frames_per_batch,
         max_frames_per_traj=cfg.max_frames_per_traj,
         total_frames=cfg.total_frames,
+        device=cfg.collector_device,
     )
     collector.set_seed(cfg.seed)
 
@@ -260,15 +260,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     rewards_eval = []
 
     # Main loop
-    target_net_updater.init_()
-
     collected_frames = 0
     pbar = tqdm.tqdm(total=cfg.total_frames)
     r0 = None
     q_loss = None
 
     for i, tensordict in enumerate(collector):
-
         # update weights of the inference policy
         collector.update_policy_weights_()
 
@@ -277,13 +274,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(tensordict.numel())
 
         # extend the replay buffer with the new data
-        if ("collector", "mask") in tensordict.keys(True):
-            # if multi-step, a mask is present to help filter padded values
-            current_frames = tensordict["collector", "mask"].sum()
-            tensordict = tensordict[tensordict.get(("collector", "mask")).squeeze(-1)]
-        else:
-            tensordict = tensordict.view(-1)
-            current_frames = tensordict.numel()
+        tensordict = tensordict.view(-1)
+        current_frames = tensordict.numel()
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
@@ -305,11 +297,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
 
                 optimizer_critic.zero_grad()
-                q_loss.backward(retain_graph=True)
+                update_actor = i % cfg.policy_update_delay == 0
+                q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
-                if i % cfg.policy_update_delay == 0:
+                if update_actor:
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()

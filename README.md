@@ -490,7 +490,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [DDPG](examples/ddpg/ddpg.py)
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
-- [A2C](examples/a2c/a2c.py)
+- [A2C](examples/a2c_old/a2c.py)
 - [PPO](examples/ppo/ppo.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
@@ -643,7 +643,7 @@ If you're using TorchRL, please refer to this BibTeX entry to cite this work:
   author = {Moens, Vincent},
   title = {{TorchRL: an open-source Reinforcement Learning (RL) library for PyTorch}},
   url = {https://github.com/pytorch/rl},
-  version = {0.1.0},
+  version = {0.1.1},
   year = {2023}
 }
 ```

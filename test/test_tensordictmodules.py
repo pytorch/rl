@@ -15,8 +15,8 @@ from torchrl.data.tensor_specs import (
     CompositeSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.utils import set_exploration_type
-from torchrl.modules import NormalParamWrapper, SafeModule, TanhNormal
+from torchrl.envs.utils import set_exploration_type, step_mdp
+from torchrl.modules import LSTMModule, NormalParamWrapper, SafeModule, TanhNormal
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
@@ -29,7 +29,10 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 _has_functorch = False
 try:
-    from torch import vmap
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
 except ImportError:
@@ -1521,6 +1524,201 @@ def test_ensure_tensordict_compatible():
     )
     assert set(ensured_module.in_keys) == {"x"}
     assert isinstance(ensured_module, TensorDictModule)
+
+
+class TestLSTMModule:
+    def test_errs(self):
+        with pytest.raises(ValueError, match="batch_first"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=False,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=[
+                    "observation",
+                    "hidden0",
+                ],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys="abc",
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="in_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_key="smth",
+                in_keys=[
+                    "observation",
+                    "hidden0",
+                ],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden0")],
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys="abc",
+            )
+        with pytest.raises(ValueError, match="out_keys"):
+            lstm_module = LSTMModule(
+                input_size=3,
+                hidden_size=64,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_key="smth",
+                out_keys=["intermediate", ("next", "hidden0")],
+            )
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=64,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        td = TensorDict({"observation": torch.randn(3)}, [])
+        with pytest.raises(KeyError, match="is_init"):
+            lstm_module(td)
+
+    def test_set_temporal_mode(self):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        assert lstm_module.set_recurrent_mode(False) is lstm_module
+        assert not lstm_module.set_recurrent_mode(False).temporal_mode
+        assert lstm_module.set_recurrent_mode(True) is not lstm_module
+        assert lstm_module.set_recurrent_mode(True).temporal_mode
+        assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
+            lstm_module.parameters()
+        )
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    def test_singel_step(self, shape):
+        td = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        td = lstm_module(td)
+        td_next = step_mdp(td, keep_other=True)
+        td_next = lstm_module(td_next)
+        assert not torch.isclose(
+            td_next["next", "hidden0"], td["next", "hidden0"]
+        ).any()
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    @pytest.mark.parametrize("t", [1, 10])
+    def test_single_step_vs_multi(self, shape, t):
+        td = TensorDict(
+            {
+                "observation": torch.arange(t, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(*shape, t, 3),
+                "is_init": torch.zeros(*shape, t, 1, dtype=torch.bool),
+            },
+            [*shape, t],
+        )
+        lstm_module_ss = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
+        lstm_module_ms(td)
+        td_ss = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        for _t in range(t):
+            lstm_module_ss(td_ss)
+            td_ss = step_mdp(td_ss, keep_other=True)
+            td_ss["observation"][:] = _t + 1
+        torch.testing.assert_close(
+            td_ss["hidden0"], td["next", "hidden0"][..., -1, :, :]
+        )
+
+    @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
+    def test_multi_consecutive(self, shape):
+        t = 20
+        td = TensorDict(
+            {
+                "observation": torch.arange(t, dtype=torch.float32)
+                .unsqueeze(-1)
+                .expand(*shape, t, 3),
+                "is_init": torch.zeros(*shape, t, 1, dtype=torch.bool),
+            },
+            [*shape, t],
+        )
+        if shape:
+            td["is_init"][0, ..., 13, :] = True
+        else:
+            td["is_init"][13, :] = True
+
+        lstm_module_ss = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        lstm_module_ms = lstm_module_ss.set_recurrent_mode()
+        lstm_module_ms(td)
+        td_ss = TensorDict(
+            {
+                "observation": torch.zeros(*shape, 3),
+                "is_init": torch.zeros(*shape, 1, dtype=torch.bool),
+            },
+            shape,
+        )
+        for _t in range(t):
+            td_ss["is_init"][:] = td["is_init"][..., _t, :]
+            lstm_module_ss(td_ss)
+            td_ss = step_mdp(td_ss, keep_other=True)
+            td_ss["observation"][:] = _t + 1
+        torch.testing.assert_close(
+            td_ss["intermediate"], td["intermediate"][..., -1, :]
+        )
 
 
 if __name__ == "__main__":
