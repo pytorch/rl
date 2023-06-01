@@ -952,6 +952,9 @@ class TestDDPG(LossModuleTestBase):
             _ = loss_fn(td)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestTD3(LossModuleTestBase):
     seed = 0
 
@@ -1721,6 +1724,9 @@ class TestSAC(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
 
@@ -6027,6 +6033,10 @@ class TestAdv:
         )
         module.set_keys(value=value)
         assert module.tensor_keys.value == value
+
+        with pytest.raises(KeyError) as excinfo:
+            module.set_keys(unknown_key="unknown_value")
+            assert "unknown_value not found" in str(excinfo.value)
 
     @pytest.mark.parametrize(
         "adv,kwargs",
