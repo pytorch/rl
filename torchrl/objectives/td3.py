@@ -127,9 +127,8 @@ class TD3Loss(LossModule):
         self.loss_function = loss_function
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
-        self.max_action = (
-            actor_network.spec[self.tensor_keys.action].space.maximum.max().item()
-        )
+        self.max_action = actor_network[1].action_high
+        self.min_action = actor_network[1].action_low
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
@@ -171,7 +170,7 @@ class TD3Loss(LossModule):
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
         next_action = (actor_output_td[1][self.tensor_keys.action] + noise).clamp(
-            -self.max_action, self.max_action
+            self.min_action, self.max_action
         )
         actor_output_td[1].set(self.tensor_keys.action, next_action, inplace=True)
         tensordict_actor.set(

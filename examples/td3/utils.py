@@ -1,5 +1,5 @@
 import torch
-from tensordict.nn import InteractionType
+
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
@@ -18,13 +18,12 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
     MLP,
-    ProbabilisticActor,
     SafeModule,
     SafeSequential,
     TanhModule,
     ValueOperator,
 )
-from torchrl.modules.distributions import TanhDelta
+
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.td3 import TD3Loss
 
@@ -153,12 +152,6 @@ def make_td3_agent(cfg, train_env, eval_env, device):
 
     actor_net = MLP(**actor_net_kwargs)
 
-    dist_class = TanhDelta
-    dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
-    }
-
     in_keys_actor = in_keys
     actor_module = SafeModule(
         actor_net,
@@ -210,6 +203,7 @@ def make_td3_agent(cfg, train_env, eval_env, device):
         sigma_end=1,
         mean=0,
         std=0.1,
+        spec=action_spec,
     ).to(device)
     return model, actor_model_explore
 

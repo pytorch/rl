@@ -1,5 +1,5 @@
 import torch
-from tensordict.nn import InteractionType
+
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
@@ -18,13 +18,12 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
-    ProbabilisticActor,
     SafeModule,
     SafeSequential,
     TanhModule,
     ValueOperator,
 )
-from torchrl.modules.distributions import TanhDelta
+
 from torchrl.objectives import SoftUpdate
 from torchrl.objectives.ddpg import DDPGLoss
 
@@ -152,12 +151,6 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     }
 
     actor_net = MLP(**actor_net_kwargs)
-
-    dist_class = TanhDelta
-    dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
-    }
 
     in_keys_actor = in_keys
     actor_module = SafeModule(
