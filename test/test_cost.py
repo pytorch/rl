@@ -6072,6 +6072,10 @@ class TestAdv:
         module.set_keys(value=value)
         assert module.tensor_keys.value == value
 
+        with pytest.raises(KeyError) as excinfo:
+            module.set_keys(unknown_key="unknown_value")
+            assert "unknown_value not found" in str(excinfo.value)
+
     @pytest.mark.parametrize(
         "adv,kwargs",
         [
