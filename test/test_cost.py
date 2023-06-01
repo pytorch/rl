@@ -692,7 +692,14 @@ class TestDDPG(LossModuleTestBase):
         raise NotImplementedError
 
     def _create_mock_data_ddpg(
-        self, batch=8, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        batch=8,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        reward_key="reward",
+        done_key="done",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -709,8 +716,8 @@ class TestDDPG(LossModuleTestBase):
                 "observation": obs,
                 "next": {
                     "observation": next_obs,
-                    "done": done,
-                    "reward": reward,
+                    done_key: done,
+                    reward_key: reward,
                 },
                 "action": action,
             },
@@ -719,7 +726,15 @@ class TestDDPG(LossModuleTestBase):
         return td
 
     def _create_seq_mock_data_ddpg(
-        self, batch=8, T=4, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        batch=8,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        reward_key="reward",
+        done_key="done",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -740,8 +755,8 @@ class TestDDPG(LossModuleTestBase):
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                    "done": done,
-                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    done_key: done,
+                    reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
@@ -904,6 +919,8 @@ class TestDDPG(LossModuleTestBase):
         )
 
         default_keys = {
+            "reward": "reward",
+            "done": "done",
             "state_action_value": "state_action_value",
             "priority": "td_error",
         }
@@ -920,7 +937,11 @@ class TestDDPG(LossModuleTestBase):
             value,
             loss_function="l2",
         )
-        key_mapping = {"state_action_value": ("value", "state_action_value_test")}
+        key_mapping = {
+            "state_action_value": ("value", "state_action_value_test"),
+            "reward": ("reward", "reward_test"),
+            "done": ("done", "done_test"),
+        }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize(
@@ -933,11 +954,13 @@ class TestDDPG(LossModuleTestBase):
         tensor_keys = {
             "state_action_value": "state_action_value_test",
             "priority": "td_error_test",
+            "reward": "reward_test",
+            "done": "done_test",
         }
 
         actor = self._create_mock_actor()
         value = self._create_mock_value(out_keys=[tensor_keys["state_action_value"]])
-        td = self._create_mock_data_ddpg()
+        td = self._create_mock_data_ddpg(reward_key="reward_test", done_key="done_test")
         loss_fn = DDPGLoss(
             actor,
             value,

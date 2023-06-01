@@ -127,15 +127,22 @@ class DDPGLoss(LossModule):
 
         Attributes:
             state_action_value (NestedKey): The input tensordict key where the
-                state action value is expected.  Will be used for the underlying
+                state action value is expected. Will be used for the underlying
                 value estimator as value key. Defaults to ``"state_action_value"``.
             priority (NestedKey): The input tensordict key where the target
                 priority is written to. Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
 
         """
 
         state_action_value: NestedKey = "state_action_value"
         priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
@@ -186,13 +193,15 @@ class DDPGLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.state_action_value,
+                reward=self._tensor_keys.reward,
+                done=self._tensor_keys.done,
             )
 
     @property
     def in_keys(self):
         keys = [
-            ("next", "reward"),
-            ("next", "done"),
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
         ]
         keys += self.value_network.in_keys
         keys += self.actor_in_keys
@@ -318,5 +327,9 @@ class DDPGLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-        tensor_keys = {"value": self.tensor_keys.state_action_value}
+        tensor_keys = {
+            "value": self.tensor_keys.state_action_value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
+        }
         self._value_estimator.set_keys(**tensor_keys)
