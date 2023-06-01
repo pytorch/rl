@@ -148,6 +148,7 @@ def main():
         val_losses,
         label="valid loss",
     )
+    ax.set_yscale('log')
     ax.legend()
 
     f.savefig("figures/reward_curve_loss.png", dpi=150)
@@ -164,6 +165,7 @@ def main():
         val_accs,
         label="valid accs",
     )
+    ax.set_yscale('log')
     ax.legend()
 
     f.savefig("figures/reward_curve_accuracy.png", dpi=150)

@@ -88,7 +88,7 @@ def main():
     rw_model = RewardModel.from_pretrained("out_reward")
     # rw_model.half()
     rw_model.eval()
-    rw_device = torch.device("cuda:{}".format(0))  # set reward model device
+    rw_device = torch.device("cuda:{}".format(1))  # set reward model device
     rw_model.to(rw_device)
 
     def get_scores(samples: List[str]):
