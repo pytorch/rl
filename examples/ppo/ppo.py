@@ -97,10 +97,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         for _ in range(ppo_epochs):
-            for _ in range(frames_in_batch // mini_batch_size):
+            for batch in data_buffer:
 
                 # Get a data batch
-                batch = data_buffer.sample().to(model_device)
+                batch = batch.to(model_device)
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
