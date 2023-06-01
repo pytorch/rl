@@ -169,19 +169,16 @@ else:
         @staticmethod
         def forward(ctx, tanh_val, eps):
             lim = 1.0 - eps
-            output = tanh_val.clamp(-lim, lim)
-            ctx.save_for_backward(output)
-            output = output.atanh()
+            tanh_val_clamp = tanh_val.clamp(-lim, lim)
+            ctx.save_for_backward(tanh_val_clamp)
+            output = tanh_val_clamp.atanh()
             return output
 
         @staticmethod
         def backward(ctx, *grad):
             grad = grad[0]
-            (tanh_val,) = ctx.saved_tensors
-            eps = ctx.eps
-            lim = 1.0 - eps
-            output = tanh_val.clamp(-lim, lim)
-            return (grad / (1 - output.pow(2)), None)
+            (tanh_val_clamp,) = ctx.saved_tensors
+            return (grad / (1 - tanh_val_clamp.pow(2)), None)
 
 
 safetanh = _SafeTanh.apply
