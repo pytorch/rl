@@ -22,7 +22,7 @@ from utils import (
 )
 
 
-@hydra.main(config_path=".", config_name="config")
+@hydra.main(config_path=".", config_name="dt_config")
 def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 

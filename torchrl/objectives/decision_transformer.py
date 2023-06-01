@@ -101,7 +101,7 @@ class OnlineDTLoss(LossModule):
 class DTLoss(LossModule):
     r"""TorchRL implementation of the Online Decision Transformer loss.
 
-    Presented in "Decision Transformer" https://arxiv.org/abs/2202.05607
+    Presented in "Decision Transformer: Reinforcement Learning via Sequence Modeling" https://arxiv.org/abs/2106.01345
     Args:
         actor_network (ProbabilisticActor): stochastic actor
 

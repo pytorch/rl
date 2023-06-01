@@ -44,8 +44,8 @@ from torchrl.trainers.helpers.envs import LIBS
 
 
 def make_base_env(env_cfg):
-    env_library = LIBS[env_cfg.env_library]
-    env_name = env_cfg.env_name
+    env_library = LIBS[env_cfg.library]
+    env_name = env_cfg.name
     frame_skip = env_cfg.frame_skip
 
     env_kwargs = {
@@ -53,7 +53,7 @@ def make_base_env(env_cfg):
         "frame_skip": frame_skip,
     }
     if env_library is DMControlEnv:
-        env_task = env_cfg.env_task
+        env_task = env_cfg.task
         env_kwargs.update({"task_name": env_task})
     env = env_library(**env_kwargs)
     if env_cfg.noop > 1:
@@ -61,7 +61,7 @@ def make_base_env(env_cfg):
     return env
 
 
-def make_transformed_env(base_env, env_cfg, train=False):
+def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env = TransformedEnv(base_env)
     if train:
         transformed_env.append_transform(
@@ -102,9 +102,8 @@ def make_transformed_env(base_env, env_cfg, train=False):
             dim=-2,
         )
     )
-    loc, std = get_loc_std("hopper-medium-v2")
     obsnorm = ObservationNorm(
-        loc=loc, scale=std, in_keys="observation", standard_normal=True
+        loc=obs_loc, scale=obs_std, in_keys="observation", standard_normal=True
     )
     transformed_env.append_transform(obsnorm)
 
@@ -114,7 +113,7 @@ def make_transformed_env(base_env, env_cfg, train=False):
     return transformed_env
 
 
-def make_parallel_env(env_cfg, train=False):
+def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
     if train:
         num_envs = env_cfg.num_train_envs
     else:
@@ -122,13 +121,15 @@ def make_parallel_env(env_cfg, train=False):
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))),
         env_cfg,
+        obs_loc,
+        obs_std,
         train,
     )
     return env
 
 
-def make_env(env_cfg, train=False):
-    env = make_parallel_env(env_cfg, train=train)
+def make_env(env_cfg, obs_loc, obs_std, train=False):
+    env = make_parallel_env(env_cfg, obs_loc, obs_std, train=train)
     return env
 
 
@@ -227,7 +228,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     )
     # TODO: add obsnorm here
 
-    return data
+    return data, loc, std
 
 
 def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
@@ -407,8 +408,7 @@ def make_dt_loss(actor_network):
     return loss
 
 
-def make_odt_optimizer(optim_cfg, actor_network, loss):
-    # Should be Lambda Optimizer
+def make_odt_optimizer(optim_cfg, actor_network, loss_module):
 
     dt_optimizer = Lamb(
         actor_network.parameters(),
@@ -421,7 +421,7 @@ def make_odt_optimizer(optim_cfg, actor_network, loss):
     )
 
     log_temp_optimizer = torch.optim.Adam(
-        [loss.log_alpha],
+        [loss_module.log_alpha],
         lr=1e-4,
         betas=[0.9, 0.999],
     )
@@ -429,8 +429,7 @@ def make_odt_optimizer(optim_cfg, actor_network, loss):
     return dt_optimizer, log_temp_optimizer, scheduler
 
 
-def make_dt_optimizer(optim_cfg, actor_network, loss):
-    # Should be Lambda Optimizer
+def make_dt_optimizer(optim_cfg, actor_network):
     dt_optimizer = torch.optim.Adam(
         actor_network.parameters(),
         lr=optim_cfg.lr,
@@ -450,9 +449,11 @@ def make_dt_optimizer(optim_cfg, actor_network, loss):
 
 
 def make_logger(logger_cfg):
-    exp_name = generate_exp_name("OnlineDecisionTransformer", logger_cfg.exp_name)
+    exp_name = generate_exp_name(logger_cfg.model_name, logger_cfg.exp_name)
     logger_cfg.exp_name = exp_name
-    logger = get_logger(logger_cfg.backend, logger_name="oDT", experiment_name=exp_name)
+    logger = get_logger(
+        logger_cfg.backend, logger_name=logger_cfg.model_name, experiment_name=exp_name
+    )
     return logger
 
 
