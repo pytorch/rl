@@ -6,7 +6,8 @@
 from typing import Union
 
 import torch
-from torch import distributions as d
+from packaging import version
+from torch import autograd, distributions as d
 from torch.distributions import Independent, Transform, TransformedDistribution
 
 
@@ -89,3 +90,96 @@ class FasterTransformedDistribution(TransformedDistribution):
         super(TransformedDistribution, self).__init__(
             batch_shape, event_shape, validate_args=validate_args
         )
+
+
+if version.parse(torch.__version__) >= version.parse("2.0.0"):
+
+    class _SafeTanh(autograd.Function):
+        generate_vmap_rule = True
+
+        @staticmethod
+        def forward(input, eps):
+            output = input.tanh()
+            lim = 1.0 - eps
+            output = output.clamp(-lim, lim)
+            # ctx.save_for_backward(output)
+            return output
+
+        @staticmethod
+        def setup_context(ctx, inputs, output):
+            # input, eps = inputs
+            # ctx.mark_non_differentiable(ind, ind_inv)
+            # # Tensors must be saved via ctx.save_for_backward. Please do not
+            # # assign them directly onto the ctx object.
+            ctx.save_for_backward(output)
+
+        @staticmethod
+        def backward(ctx, *grad):
+            grad = grad[0]
+            (output,) = ctx.saved_tensors
+            return (grad * (1 - output.pow(2)), None)
+
+    class _SafeaTanh(autograd.Function):
+        generate_vmap_rule = True
+
+        @staticmethod
+        def setup_context(ctx, inputs, output):
+            tanh_val, eps = inputs
+            # ctx.mark_non_differentiable(ind, ind_inv)
+            # # Tensors must be saved via ctx.save_for_backward. Please do not
+            # # assign them directly onto the ctx object.
+            ctx.save_for_backward(tanh_val)
+            ctx.eps = eps
+
+        @staticmethod
+        def forward(tanh_val, eps):
+            lim = 1.0 - eps
+            output = tanh_val.clamp(-lim, lim)
+            # ctx.save_for_backward(output)
+            output = output.atanh()
+            return output
+
+        @staticmethod
+        def backward(ctx, *grad):
+            grad = grad[0]
+            (tanh_val,) = ctx.saved_tensors
+            eps = ctx.eps
+            lim = 1.0 - eps
+            output = tanh_val.clamp(-lim, lim)
+            return (grad / (1 - output.pow(2)), None)
+
+else:
+
+    class _SafeTanh(autograd.Function):
+        @staticmethod
+        def forward(ctx, input, eps):
+            output = input.tanh()
+            lim = 1.0 - eps
+            output = output.clamp(-lim, lim)
+            ctx.save_for_backward(output)
+            return output
+
+        @staticmethod
+        def backward(ctx, *grad):
+            grad = grad[0]
+            (output,) = ctx.saved_tensors
+            return (grad * (1 - output.pow(2)), None)
+
+    class _SafeaTanh(autograd.Function):
+        @staticmethod
+        def forward(ctx, tanh_val, eps):
+            lim = 1.0 - eps
+            tanh_val_clamp = tanh_val.clamp(-lim, lim)
+            ctx.save_for_backward(tanh_val_clamp)
+            output = tanh_val_clamp.atanh()
+            return output
+
+        @staticmethod
+        def backward(ctx, *grad):
+            grad = grad[0]
+            (tanh_val_clamp,) = ctx.saved_tensors
+            return (grad / (1 - tanh_val_clamp.pow(2)), None)
+
+
+safetanh = _SafeTanh.apply
+safeatanh = _SafeaTanh.apply

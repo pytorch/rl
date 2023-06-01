@@ -173,7 +173,7 @@ class TD3Loss(LossModule):
         next_action = (actor_output_td[1][self.tensor_keys.action] + noise).clamp(
             -self.max_action, self.max_action
         )
-        actor_output_td[1].set(self.tensor_keys.action, next_action, inplace=True)
+        actor_output_td[1].set(self.tensor_keys.action, next_action)
         tensordict_actor.set(
             self.tensor_keys.action,
             actor_output_td.get(self.tensor_keys.action),
