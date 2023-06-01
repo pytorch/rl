@@ -12,7 +12,7 @@ from torch.hub import load_state_dict_from_url
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
@@ -92,7 +92,9 @@ class _VIPNet(Transform):
             out = out.view(*shape, *out.shape[1:])
         return out
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         if not isinstance(observation_spec, CompositeSpec):
             raise ValueError("_VIPNet can only infer CompositeSpec")
 

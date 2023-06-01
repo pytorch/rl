@@ -35,7 +35,7 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data.tensor_specs import TensorSpec
+from torchrl.data.tensor_specs import TensorSpecBase
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
@@ -62,7 +62,7 @@ class RandomPolicy:
     This is a wrapper around the action_spec.rand method.
 
     Args:
-        action_spec: TensorSpec object describing the action specs
+        action_spec: TensorSpecBase object describing the action specs
 
     Examples:
         >>> from tensordict import TensorDict
@@ -72,7 +72,7 @@ class RandomPolicy:
         >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
     """
 
-    def __init__(self, action_spec: TensorSpec):
+    def __init__(self, action_spec: TensorSpecBase):
         self.action_spec = action_spec
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
@@ -185,7 +185,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             ]
         ] = None,
         device: Optional[DEVICE_TYPING] = None,
-        observation_spec: TensorSpec = None,
+        observation_spec: TensorSpecBase = None,
     ) -> Tuple[TensorDictModule, torch.device, Union[None, Callable[[], dict]]]:
         """Util method to get a policy and its device given the collector __init__ inputs.
 
@@ -200,7 +200,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
             policy (TensorDictModule, optional): a policy to be used
             device (int, str or torch.device, optional): device where to place
                 the policy
-            observation_spec (TensorSpec, optional): spec of the observations
+            observation_spec (TensorSpecBase, optional): spec of the observations
 
         """
         if policy is None:

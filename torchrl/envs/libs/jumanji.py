@@ -15,7 +15,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
@@ -53,7 +53,7 @@ def _jumanji_to_torchrl_spec_transform(
     dtype: Optional[torch.dtype] = None,
     device: DEVICE_TYPING = None,
     categorical_action_encoding: bool = True,
-) -> TensorSpec:
+) -> TensorSpecBase:
     if isinstance(spec, jumanji.specs.DiscreteArray):
         action_space_cls = (
             DiscreteTensorSpec
@@ -172,21 +172,21 @@ class JumanjiWrapper(GymLikeEnv):
         state = _tree_reshape(state, self.batch_size)
         return state
 
-    def _make_state_spec(self, env) -> TensorSpec:
+    def _make_state_spec(self, env) -> TensorSpecBase:
         key = jax.random.PRNGKey(0)
         state, _ = env.reset(key)
         state_dict = _object_to_tensordict(state, self.device, batch_size=())
         state_spec = _extract_spec(state_dict)
         return state_spec
 
-    def _make_action_spec(self, env) -> TensorSpec:
+    def _make_action_spec(self, env) -> TensorSpecBase:
         action_spec = _jumanji_to_torchrl_spec_transform(
             env.action_spec(), device=self.device
         )
         action_spec = action_spec.expand(*self.batch_size, *action_spec.shape)
         return action_spec
 
-    def _make_observation_spec(self, env) -> TensorSpec:
+    def _make_observation_spec(self, env) -> TensorSpecBase:
         spec = env.observation_spec()
         new_spec = _jumanji_to_torchrl_spec_transform(spec, device=self.device)
         if isinstance(spec, jumanji.specs.Array):
@@ -198,7 +198,7 @@ class JumanjiWrapper(GymLikeEnv):
         else:
             raise TypeError(f"Unsupported spec type {type(spec)}")
 
-    def _make_reward_spec(self, env) -> TensorSpec:
+    def _make_reward_spec(self, env) -> TensorSpecBase:
         reward_spec = _jumanji_to_torchrl_spec_transform(
             env.reward_spec(), device=self.device
         )

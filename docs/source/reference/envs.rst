@@ -31,11 +31,11 @@ Each env will have the following attributes:
 - :obj:`env.state_spec`: a :class:`~torchrl.data.CompositeSpec` object
   containing all the input key-spec pairs (except action). For most stateful
   environments, this container will be empty.
-- :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpec` object
+- :obj:`env.action_spec`: a :class:`~torchrl.data.TensorSpecBase` object
   representing the action spec.
-- :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
+- :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpecBase` object representing
   the reward spec.
-- :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
+- :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpecBase` object representing
   the done-flag spec.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"_action_spec"` and :obj:`"_state_spec"`).

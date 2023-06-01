@@ -11,7 +11,7 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import dispatch
 from tensordict.utils import NestedKey
 from torch import nn
-from torchrl.data.tensor_specs import TensorSpec
+from torchrl.data.tensor_specs import TensorSpecBase
 
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.tensordict_module.actors import (
@@ -44,7 +44,7 @@ class DQNLoss(LossModule):
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
             create a double DQN. Default is ``False``.
-        action_space (str or TensorSpec, optional): Action space. Must be one of
+        action_space (str or TensorSpecBase, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
             :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
@@ -141,7 +141,7 @@ class DQNLoss(LossModule):
         loss_function: str = "l2",
         delay_value: bool = False,
         gamma: float = None,
-        action_space: Union[str, TensorSpec] = None,
+        action_space: Union[str, TensorSpecBase] = None,
         priority_key: str = None,
     ) -> None:
 

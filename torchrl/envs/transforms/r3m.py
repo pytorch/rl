@@ -12,7 +12,7 @@ from torch.nn import Identity
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
@@ -103,7 +103,9 @@ class _R3MNet(Transform):
             out = out.view(*shape, *out.shape[1:])
         return out
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         if not isinstance(observation_spec, CompositeSpec):
             raise ValueError("_R3MNet can only infer CompositeSpec")
 

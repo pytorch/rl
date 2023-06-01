@@ -25,7 +25,7 @@ from torchrl.data.tensor_specs import (
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
@@ -180,7 +180,7 @@ __all__ = ["GymWrapper", "GymEnv"]
 
 def _gym_to_torchrl_spec_transform(
     spec, dtype=None, device="cpu", categorical_action_encoding=False
-) -> TensorSpec:
+) -> TensorSpecBase:
     """Maps the gym specs to the TorchRL specs.
 
     By convention, 'state' keys of Dict specs will be renamed "observation" to match the

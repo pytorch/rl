@@ -457,7 +457,7 @@ class BinaryBox(Box):
 
 
 @dataclass(repr=False)
-class TensorSpec:
+class TensorSpecBase:
     """Parent class of the tensor meta-data containers for observation, actions and rewards.
 
     Args:
@@ -700,11 +700,11 @@ class TensorSpec:
         return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
 
     @abc.abstractmethod
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
+    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpecBase":
         raise NotImplementedError
 
     @abc.abstractmethod
-    def clone(self) -> "TensorSpec":
+    def clone(self) -> "TensorSpecBase":
         raise NotImplementedError
 
     def __repr__(self):
@@ -730,7 +730,7 @@ class TensorSpec:
         if kwargs is None:
             kwargs = {}
         if func not in cls.SPEC_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (TensorSpec,)) for t in types
+            issubclass(t, (TensorSpecBase,)) for t in types
         ):
             return NotImplemented(
                 f"func {func} for spec {cls} with handles {cls.SPEC_HANDLED_FUNCTIONS}"
@@ -792,7 +792,7 @@ class _LazyStackedMixin(Generic[T]):
                                 f"Indexing occured along dimension {dim_idx} but stacking was done along dim {self.dim}."
                             )
                         out = self._specs[item]
-                        if isinstance(out, TensorSpec):
+                        if isinstance(out, TensorSpecBase):
                             return out
                         return torch.stack(list(out), 0)
                 else:
@@ -814,7 +814,7 @@ class _LazyStackedMixin(Generic[T]):
                 for i, _item in enumerate(item):
                     if i == self.dim:
                         out = self._specs[_item]
-                        if isinstance(out, TensorSpec):
+                        if isinstance(out, TensorSpecBase):
                             return out
                         return torch.stack(list(out), 0)
                     elif isinstance(_item, slice):
@@ -831,7 +831,7 @@ class _LazyStackedMixin(Generic[T]):
                     f"Trying to index a {self.__class__.__name__} along dimension 0 when the stack dimension is {self.dim}."
                 )
             out = self._specs[item]
-            if isinstance(out, TensorSpec):
+            if isinstance(out, TensorSpecBase):
                 return out
             return torch.stack(list(out), 0)
 
@@ -894,7 +894,7 @@ class _LazyStackedMixin(Generic[T]):
         return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
 
 
-class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
+class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpecBase], TensorSpecBase):
     """A lazy representation of a stack of tensor specs.
 
     Stacks tensor-specs together along one dimension.
@@ -975,7 +975,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
 
 @dataclass(repr=False)
-class OneHotDiscreteTensorSpec(TensorSpec):
+class OneHotDiscreteTensorSpec(TensorSpecBase):
     """A unidimensional, one-hot discrete tensor spec.
 
     By default, TorchRL assumes that categorical variables are encoded as
@@ -1237,7 +1237,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class BoundedTensorSpec(TensorSpec):
+class BoundedTensorSpec(TensorSpecBase):
     """A bounded continuous tensor spec.
 
     Args:
@@ -1483,7 +1483,7 @@ class BoundedTensorSpec(TensorSpec):
 
 
 @dataclass(repr=False)
-class UnboundedContinuousTensorSpec(TensorSpec):
+class UnboundedContinuousTensorSpec(TensorSpecBase):
     """An unbounded continuous tensor spec.
 
     Args:
@@ -1560,8 +1560,15 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
 
 
+TensorSpec = type(
+    "TensorSpec",
+    UnboundedContinuousTensorSpec.__bases__,
+    dict(UnboundedContinuousTensorSpec.__dict__),
+)
+
+
 @dataclass(repr=False)
-class UnboundedDiscreteTensorSpec(TensorSpec):
+class UnboundedDiscreteTensorSpec(TensorSpecBase):
     """An unbounded discrete tensor spec.
 
     Args:
@@ -1891,7 +1898,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         )
 
 
-class DiscreteTensorSpec(TensorSpec):
+class DiscreteTensorSpec(TensorSpecBase):
     """A discrete tensor spec.
 
     An alternative to OneHotTensorSpec for categorical variables in TorchRL. Instead of
@@ -2380,7 +2387,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
 
 
-class CompositeSpec(TensorSpec):
+class CompositeSpec(TensorSpecBase):
     """A composition of TensorSpecs.
 
     Args:
@@ -2891,13 +2898,15 @@ class CompositeSpec(TensorSpec):
             and self._specs == other._specs
         )
 
-    def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
+    def update(
+        self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpecBase]]
+    ) -> None:
         for key, item in dict_or_spec.items():
             if key in self.keys(True) and isinstance(self[key], CompositeSpec):
                 self[key].update(item)
                 continue
             try:
-                if isinstance(item, TensorSpec) and item.device != self.device:
+                if isinstance(item, TensorSpecBase) and item.device != self.device:
                     item = deepcopy(item)
                     if self.device is not None:
                         item = item.to(self.device)
@@ -3068,7 +3077,9 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     """
 
-    def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
+    def update(
+        self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpecBase]]
+    ) -> None:
         pass
 
     def __eq__(self, other):
@@ -3167,7 +3178,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
-@TensorSpec.implements_for_spec(torch.stack)
+@TensorSpecBase.implements_for_spec(torch.stack)
 def _stack_specs(list_of_spec, dim, out=None):
     if out is not None:
         raise NotImplementedError(
@@ -3177,11 +3188,11 @@ def _stack_specs(list_of_spec, dim, out=None):
     if not len(list_of_spec):
         raise ValueError("Cannot stack an empty list of specs.")
     spec0 = list_of_spec[0]
-    if isinstance(spec0, TensorSpec):
+    if isinstance(spec0, TensorSpecBase):
         device = spec0.device
         all_equal = True
         for spec in list_of_spec[1:]:
-            if not isinstance(spec, TensorSpec):
+            if not isinstance(spec, TensorSpecBase):
                 raise RuntimeError(
                     "Stacking specs cannot occur: Found more than one type of specs in the list."
                 )
@@ -3232,8 +3243,8 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
         raise NotImplementedError
 
 
-@TensorSpec.implements_for_spec(torch.squeeze)
-def _squeeze_spec(spec: TensorSpec, *args, **kwargs) -> TensorSpec:
+@TensorSpecBase.implements_for_spec(torch.squeeze)
+def _squeeze_spec(spec: TensorSpecBase, *args, **kwargs) -> TensorSpecBase:
     return spec.squeeze(*args, **kwargs)
 
 
@@ -3242,8 +3253,8 @@ def _squeeze_composite_spec(spec: CompositeSpec, *args, **kwargs) -> CompositeSp
     return spec.squeeze(*args, **kwargs)
 
 
-@TensorSpec.implements_for_spec(torch.unsqueeze)
-def _unsqueeze_spec(spec: TensorSpec, *args, **kwargs) -> TensorSpec:
+@TensorSpecBase.implements_for_spec(torch.unsqueeze)
+def _unsqueeze_spec(spec: TensorSpecBase, *args, **kwargs) -> TensorSpecBase:
     return spec.unsqueeze(*args, **kwargs)
 
 

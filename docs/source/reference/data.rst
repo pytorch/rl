@@ -191,7 +191,7 @@ Here's an example:
 TensorSpec
 ----------
 
-The `TensorSpec` parent class and subclasses define the basic properties of observations and actions in TorchRL, such
+The `TensorSpecBase` parent class and subclasses define the basic properties of observations and actions in TorchRL, such
 as shape, device, dtype and domain.
 It is important that your environment specs match the input and output that it sends and receives, as
 :obj:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
@@ -203,6 +203,7 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     :toctree: generated/
     :template: rl_template.rst
 
+    TensorSpecBase
     TensorSpec
     BinaryDiscreteTensorSpec
     BoundedTensorSpec
