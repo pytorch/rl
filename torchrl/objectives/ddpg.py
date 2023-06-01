@@ -40,45 +40,45 @@ class DDPGLoss(LossModule):
             data collection. Default is ``True``.
 
     Examples:
-    >>> import torch
-    >>> from torch import nn
-    >>> from torchrl.data import BoundedTensorSpec
-    >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
-    >>> from torchrl.objectives.ddpg import DDPGLoss
-    >>> from tensordict.tensordict import TensorDict
-    >>> n_act, n_obs = 4, 3
-    >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
-    >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
-    >>> class ValueClass(nn.Module):
-    ...     def __init__(self):
-    ...         super().__init__()
-    ...         self.linear = nn.Linear(n_obs + n_act, 1)
-    ...     def forward(self, obs, act):
-    ...         return self.linear(torch.cat([obs, act], -1))
-    >>> module = ValueClass()
-    >>> value = ValueOperator(
-    ...     module=module,
-    ...     in_keys=["observation", "action"])
-    >>> loss = DDPGLoss(actor, value)
-    >>> batch = [2, ]
-    >>> data = TensorDict({
-    ...        "observation": torch.randn(*batch, n_obs),
-    ...        "action": spec.rand(batch),
-    ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
-    ...        ("next", "reward"): torch.randn(*batch, 1),
-    ...    }, batch)
-    >>> loss(data)
-    TensorDict(
-        fields={
-            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-            target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
+        >>> from torchrl.objectives.ddpg import DDPGLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation", "action"])
+        >>> loss = DDPGLoss(actor, value)
+        >>> batch = [2, ]
+        >>> data = TensorDict({
+        ...        "observation": torch.randn(*batch, n_obs),
+        ...        "action": spec.rand(batch),
+        ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...        ("next", "reward"): torch.randn(*batch, 1),
+        ...    }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
 
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
@@ -88,33 +88,33 @@ class DDPGLoss(LossModule):
     ``["loss_actor", "loss_value", "pred_value", "target_value", "pred_value_max", "target_value_max"]``
 
     Examples:
-    >>> import torch
-    >>> from torch import nn
-    >>> from torchrl.data import BoundedTensorSpec
-    >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
-    >>> from torchrl.objectives.ddpg import DDPGLoss
-    >>> _ = torch.manual_seed(42)
-    >>> n_act, n_obs = 4, 3
-    >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
-    >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
-    >>> class ValueClass(nn.Module):
-    ...     def __init__(self):
-    ...         super().__init__()
-    ...         self.linear = nn.Linear(n_obs + n_act, 1)
-    ...     def forward(self, obs, act):
-    ...         return self.linear(torch.cat([obs, act], -1))
-    >>> module = ValueClass()
-    >>> value = ValueOperator(
-    ...     module=module,
-    ...     in_keys=["observation", "action"])
-    >>> loss = DDPGLoss(actor, value)
-    >>> loss_val = loss(
-    ...     observation=torch.randn(n_obs),
-    ...     action=spec.rand(),
-    ...     next_done=torch.zeros(1, dtype=torch.bool),
-    ...     next_reward=torch.randn(1))
-    >>> loss_val
-    (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(1.3344, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(1.7744), tensor(0.6193), tensor(1.7744))
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
+        >>> from torchrl.objectives.ddpg import DDPGLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation", "action"])
+        >>> loss = DDPGLoss(actor, value)
+        >>> loss_val = loss(
+        ...     observation=torch.randn(n_obs),
+        ...     action=spec.rand(),
+        ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_reward=torch.randn(1))
+        >>> loss_val
+        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(1.3344, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(1.7744), tensor(0.6193), tensor(1.7744))
 
     """
 
