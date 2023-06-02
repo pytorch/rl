@@ -16,6 +16,7 @@ jobs:
       repository: pytorch/rl
       runner: "linux.g5.4xlarge.nvidia.gpu"
       docker-image: "pytorch/manylinux-cuda117"
+      run-with-docker: false
       timeout: 120
       script: |
         set -euo pipefail
@@ -23,8 +24,9 @@ jobs:
         export PYTHON_VERSION="3.8"
         export CU_VERSION="11.7"
         export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
 
         ./.circleci/unittest/linux_libs/scripts_brax/setup_env.sh
-        ./.circleci/unittest/linux_libs/scripts_brax/install.sh
-        ./.circleci/unittest/linux_libs/scripts_brax/run_test.sh
-        ./.circleci/unittest/linux_libs/scripts_brax/post_process.sh
+        docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/install.sh
+        bash .circleci/unittest/linux_libs/scripts_brax/run_test.sh
+        docker run -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/post_process.sh
