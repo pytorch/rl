@@ -224,7 +224,7 @@ def make_collector(cfg, policy):
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_device,
-        storing_device='cpu',
+        storing_device="cpu",
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
     return collector, state_dict
@@ -436,7 +436,9 @@ def make_ppo_modules_pixels(proof_environment):
     # Define another head for the value
     value_net = MLP(
         activation_class=torch.nn.ReLU,
-        in_features=common_mlp_output.shape[-1], out_features=1, num_cells=[256]
+        in_features=common_mlp_output.shape[-1],
+        out_features=1,
+        num_cells=[256],
     )
     value_module = ValueOperator(
         value_net,

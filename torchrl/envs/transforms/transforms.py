@@ -1849,9 +1849,7 @@ class ObservationNorm(ObservationTransform):
         reduce_dim = sorted(dim if dim < 0 else dim - data.ndim for dim in reduce_dim)
 
         if keep_dims is not None:
-            keep_dims = sorted(
-                dim if dim < 0 else dim - data.ndim for dim in keep_dims
-                )
+            keep_dims = sorted(dim if dim < 0 else dim - data.ndim for dim in keep_dims)
             if not all(k in reduce_dim for k in keep_dims):
                 raise ValueError("keep_dim elements must be part of reduce_dim list.")
         else:
@@ -2054,10 +2052,15 @@ class CatFrames(ObservationTransform):
         """Resets _buffers."""
         _reset = tensordict.get("_reset", None)
         if _reset is None:
+            parent = self.parent
+            if parent is not None:
+                parent_device = parent.device
+            else:
+                parent_device = None
             _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
-                device=self.parent.device,
+                device=parent_device,
             )
         _reset = _reset.sum(
             tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool

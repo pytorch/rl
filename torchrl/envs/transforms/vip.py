@@ -334,6 +334,12 @@ class VIPTransform(Compose):
             self._device = dest
         return super().to(dest)
 
+    def to(self, device):
+        if not isinstance(device, (str, int, torch.device)):
+            raise ValueError(f"Expected a device but got {type(device)}.")
+        self._device = device
+        return super().to(device)
+
     @property
     def device(self):
         return self._device

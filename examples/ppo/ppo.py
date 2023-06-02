@@ -17,8 +17,9 @@ import hydra
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import torch
-    from tensordict import TensorDict
     import tqdm
+    from tensordict import TensorDict
+    from torchrl.envs.utils import ExplorationType, set_exploration_type
     from utils import (
         make_collector,
         make_data_buffer,
@@ -28,14 +29,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_ppo_models,
         make_test_env,
     )
-    from torchrl.envs.utils import set_exploration_type, ExplorationType
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
     cfg.collector.frames_per_batch = (
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    mini_batch_size = cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
+    mini_batch_size = cfg.loss.mini_batch_size = (
+        cfg.loss.mini_batch_size // cfg.env.frame_skip
+    )
 
     model_device = cfg.optim.device
     actor, critic, critic_head = make_ppo_models(cfg)
@@ -45,7 +47,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collector, state_dict = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)
     loss_module, adv_module = make_loss(
-        cfg.loss, actor_network=actor, value_network=critic, value_head=critic_head,
+        cfg.loss,
+        actor_network=actor,
+        value_network=critic,
+        value_head=critic_head,
     )
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
 
@@ -80,10 +85,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for data in collector:
 
         frames_in_batch = data.numel()
-        total_done += data.get(('next', 'done')).sum()
+        total_done += data.get(("next", "done")).sum()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
-
 
         # Log end-of-episode accumulated rewards for training
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -92,7 +96,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "reward_training", episode_rewards.mean().item(), collected_frames
             )
 
-        losses = TensorDict({}, batch_size=[ppo_epochs, - (frames_in_batch // -mini_batch_size)])
+        losses = TensorDict(
+            {}, batch_size=[ppo_epochs, -(frames_in_batch // -mini_batch_size)]
+        )
         for j in range(ppo_epochs):
             # Compute GAE
             with torch.no_grad():
@@ -120,7 +126,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
                 )
-                losses[j, i]['grad_norm'] = grad_norm
+                losses[j, i]["grad_norm"] = grad_norm
 
                 optim.step()
                 if scheduler is not None:
@@ -135,13 +141,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 pbar.set_description(
                     f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next', 'reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
-            if i + 1 != - (frames_in_batch // -mini_batch_size):
-                print(f"Should have had {- (frames_in_batch // -mini_batch_size)} iters but had {i}.")
+            if i + 1 != -(frames_in_batch // -mini_batch_size):
+                print(
+                    f"Should have had {- (frames_in_batch // -mini_batch_size)} iters but had {i}."
+                )
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         if logger is not None:
             for key, value in losses.items():
                 logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar('total_done', total_done, collected_frames)
+            logger.log_scalar("total_done", total_done, collected_frames)
 
         collector.update_policy_weights_()
 
