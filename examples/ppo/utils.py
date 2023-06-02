@@ -170,7 +170,7 @@ def make_parallel_env(env_cfg, state_dict):
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
     )
     init_stats(env, 3, env_cfg.from_pixels)
-    env.load_state_dict(state_dict)
+    env.load_state_dict(state_dict, strict=False)
     return env
 
 
