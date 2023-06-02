@@ -19,6 +19,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 
+from torchrl._utils import get_full_error_trace
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -749,6 +750,7 @@ but got an object of type {type(transform)}."""
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
         print('sending transforms to', device)
+        get_full_error_trace()
         self.transform = self.transform.to(device)
 
         if self.cache_specs:
@@ -915,6 +917,7 @@ class Compose(Transform):
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
         print("sending Compose to", dest)
+        get_full_error_trace()
         # self.transforms = self.transforms.to(dest)
         return super().to(dest)
 
@@ -2022,6 +2025,7 @@ class CatFrames(ObservationTransform):
 
     def to(self, device):
         print('sending catframes to device', device)
+        get_full_error_trace()
         return super().to(device)
 
     def __init__(

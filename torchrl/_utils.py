@@ -2,6 +2,7 @@ import collections
 
 import functools
 import inspect
+import traceback
 
 import math
 import os
@@ -518,3 +519,11 @@ class _DecoratorContextManager:
     def clone(self):
         # override this method if your children class takes __init__ parameters
         return self.__class__()
+
+def get_full_error_trace():
+    try:
+        raise Exception
+    except Exception as e:
+        # Capture the error traceback
+        error_trace = traceback.format_exc()
+        print(error_trace)
