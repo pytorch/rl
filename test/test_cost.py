@@ -654,6 +654,9 @@ class TestDQN(LossModuleTestBase):
         assert loss_fn.tensor_keys.priority in td.keys()
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestDDPG(LossModuleTestBase):
     seed = 0
 
@@ -751,9 +754,6 @@ class TestDDPG(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
@@ -852,9 +852,6 @@ class TestDDPG(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
@@ -1265,6 +1262,9 @@ class TestTD3(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize("version", [1, 2])
 class TestSAC(LossModuleTestBase):
     seed = 0
@@ -1372,9 +1372,6 @@ class TestSAC(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -1530,9 +1527,6 @@ class TestSAC(LossModuleTestBase):
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -1837,9 +1831,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -1944,9 +1935,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
@@ -4109,6 +4097,7 @@ class TestDreamer(LossModuleTestBase):
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
 
+
 class TestOnlineDT:
     seed = 0
 
@@ -4357,9 +4346,6 @@ class TestIQL:
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
@@ -4476,9 +4462,6 @@ class TestIQL:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
