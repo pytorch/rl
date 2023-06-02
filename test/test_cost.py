@@ -4252,7 +4252,7 @@ class TestOnlineDT:
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
-class TestIQL:
+class TestIQL(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
