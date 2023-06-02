@@ -316,7 +316,7 @@ def make_ppo_modules_state(proof_environment):
     # Define a shared Module and TensorDictModule
     common_mlp = MLP(
         in_features=input_shape[-1],
-        activation_class=torch.nn.Tanh,
+        activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=shared_features_size,
         num_cells=[64, 64],
@@ -411,6 +411,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=num_outputs,
+        activation_class=torch.nn.ReLU,
         num_cells=[256],
     )
     policy_module = TensorDictModule(
@@ -424,7 +425,7 @@ def make_ppo_modules_pixels(proof_environment):
         policy_module,
         in_keys=["logits"],
         spec=CompositeSpec(action=proof_environment.action_spec),
-        safe=True,
+        # safe=True,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -433,6 +434,7 @@ def make_ppo_modules_pixels(proof_environment):
 
     # Define another head for the value
     value_net = MLP(
+        activation_class=torch.nn.ReLU,
         in_features=common_mlp_output.shape[-1], out_features=1, num_cells=[256]
     )
     value_module = ValueOperator(

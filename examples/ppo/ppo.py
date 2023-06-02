@@ -85,7 +85,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Compute GAE
         with torch.no_grad():
-            data = adv_module(data)
+            data = adv_module(data.to(model_device)).cpu()
 
         data_reshape = data.reshape(-1)
         # Update the data buffer
