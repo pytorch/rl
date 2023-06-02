@@ -1,6 +1,6 @@
 # Task and env
 env:
-  name: HalfCheetah-v3
+  name: HalfCheetah-v2
   task: ""
   library: gym
   exp_name: iql_halfcheetah-medium-v2
