@@ -1,4 +1,7 @@
 # task and env
+defaults:
+  - hydra/job_logging: disabled
+
 env:
   env_name: PongNoFrameskip-v4
   env_task: ""

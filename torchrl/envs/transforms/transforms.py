@@ -748,6 +748,7 @@ but got an object of type {type(transform)}."""
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
+        print('sending transforms to', device)
         self.transform.to(device)
 
         if self.cache_specs:
@@ -913,8 +914,7 @@ class Compose(Transform):
         transform.set_container(self)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
-        for t in self.transforms:
-            t.to(dest)
+        self.transforms = self.transforms.to(dest)
         return super().to(dest)
 
     def __iter__(self):
@@ -2018,6 +2018,10 @@ class CatFrames(ObservationTransform):
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "zeros"}
+
+    def to(self, device):
+        print('sending catframes to device', device)
+        return super().to(device)
 
     def __init__(
         self,
