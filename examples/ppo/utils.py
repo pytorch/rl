@@ -178,7 +178,7 @@ def get_stats(env_cfg):
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
     init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
     state_dict = env.state_dict()
-    for key in list(state_dict.items()):
+    for key, item in list(state_dict.items()):
         if key.endswith('loc') or key.endswith('scale'):
             continue
         del state_dict[key]
