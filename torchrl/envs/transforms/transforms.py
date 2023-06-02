@@ -2067,9 +2067,7 @@ class CatFrames(ObservationTransform):
             _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
-                device=tensordict.device
-                if tensordict.device is not None
-                else torch.device("cpu"),
+                device=self.parent.device
             )
         _reset = _reset.sum(
             tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
@@ -2091,6 +2089,7 @@ class CatFrames(ObservationTransform):
         shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
+        print(f'creating buffer {buffer_name} with device', data.device, 'while parent has device', self.parent.device)
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
         setattr(self, buffer_name, buffer)
         return buffer
