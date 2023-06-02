@@ -26,7 +26,9 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
 
-        docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/setup_env.sh
-        docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/install.sh
-        docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/run_test.sh
-        docker run -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/post_process.sh
+        docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/run_all.sh
+
+        # docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/setup_env.sh
+        # docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/install.sh
+        # docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/run_test.sh
+        # docker run -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/post_process.sh
