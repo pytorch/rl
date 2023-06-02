@@ -784,7 +784,10 @@ class SyncDataCollector(DataCollectorBase):
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             _reset = done_or_terminated
+            print('_reset device', _reset.device)
             td_reset = self._tensordict.select().set("_reset", _reset)
+            print('td_reset device', self._tensordict.device)
+            print('env device', self.env.device)
             td_reset = self.env.reset(td_reset)
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
