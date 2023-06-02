@@ -19,7 +19,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 
-from torchrl._utils import get_full_error_trace
+from torchrl._utils import get_trace
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -2026,6 +2026,8 @@ class CatFrames(ObservationTransform):
 
     def to(self, device):
         print('sending catframes to device', device)
+        if device == torch.device('cpu'):
+            get_trace()
         return super().to(device)
 
     def __init__(

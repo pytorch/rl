@@ -520,5 +520,6 @@ class _DecoratorContextManager:
         # override this method if your children class takes __init__ parameters
         return self.__class__()
 
-def get_full_error_trace():
+def get_trace():
+    """A simple debugging util to spot where a function is being called."""
     traceback.print_stack()
