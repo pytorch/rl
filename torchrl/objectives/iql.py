@@ -174,7 +174,7 @@ class IQLLoss(LossModule):
             tensordict_reshape = tensordict
 
         device = self.device
-        td_device = tensordict_reshape.to(device)
+        td_device = tensordict_reshape.to(device).clone()
 
         loss_actor = self._loss_actor(td_device)
         loss_qvalue, priority = self._loss_qvalue(td_device)
@@ -212,6 +212,7 @@ class IQLLoss(LossModule):
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
+
         td_q = vmap(self.qvalue_network, (None, 0))(
             td_q, self.target_qvalue_network_params
         )
