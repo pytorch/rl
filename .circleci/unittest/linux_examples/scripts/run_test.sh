@@ -49,7 +49,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   collector.env_per_collector=2 \
   collector.collector_device=cuda:0 \
   optimization.utd_ratio=1 \
-  replay_buffer.size=120
+  replay_buffer.size=120 \
+  logger.backend=
 #  record_video=True \
 #  record_frames=4 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \

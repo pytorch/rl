@@ -45,6 +45,6 @@ network:
 
 # Logging
 logger:
-  type: wandb
+  backend: wandb
   mode: online
   eval_iter: 25000
