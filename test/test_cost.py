@@ -4249,6 +4249,9 @@ class TestOnlineDT:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestIQL:
     seed = 0
 
