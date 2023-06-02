@@ -17,6 +17,7 @@ The helper functions are coded in the utils.py associated with this script.
 import hydra
 import torch
 import tqdm
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.trainers.helpers.envs import correct_for_frame_skip
 
 from utils import (
@@ -100,7 +101,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             for key, value in loss_vals.items():
                 logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar("reward_training", avg_return, collected_frames)
+            logger.log_scalar("train_reward", avg_return, collected_frames)
 
             pbar.set_description(
                 f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {avg_return: 4.4f} (init={r0: 4.4f})"
@@ -112,9 +113,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             and (collected_frames - frames_in_batch) // record_interval
             < collected_frames // record_interval
         ):
-            with torch.no_grad():
-                test_env.eval()
-                policy.eval()
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 # Generate a complete episode
                 td_test = test_env.rollout(
                     policy=policy,
@@ -124,11 +123,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     break_when_any_done=True,
                 ).clone()
                 logger.log_scalar(
-                    "reward_testing",
+                    "evaluation_reward",
                     td_test["next"]["reward"].sum().item(),
                     collected_frames,
                 )
-                policy.train()
 
 
 if __name__ == "__main__":

@@ -85,10 +85,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in loss_vals.items():
             logger.log_scalar(key, value.item(), i)
         eval_reward = eval_td["next", "reward"].sum(1).mean().item()
-        logger.log_scalar("evaluation reward", eval_reward, i)
+        logger.log_scalar("evaluation_reward", eval_reward, i)
 
         pbar.set_description(
-            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), evaluation reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
+            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), evaluation_reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
         )
 
 
