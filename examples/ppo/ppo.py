@@ -35,7 +35,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg.collector.frames_per_batch = (
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
+    mini_batch_size = cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
     model_device = cfg.optim.device
     actor, critic, critic_head = make_ppo_models(cfg)
@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
 
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
-    num_mini_batches = batch_size // cfg.loss.mini_batch_size
+    num_mini_batches = batch_size // mini_batch_size
     total_network_updates = (
         (cfg.collector.total_frames // batch_size)
         * cfg.loss.ppo_epochs
