@@ -1960,6 +1960,7 @@ class CatFrames(ObservationTransform):
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
+        as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
