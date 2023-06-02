@@ -2050,8 +2050,7 @@ class CatFrames(ObservationTransform):
         self.padding = padding
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
-            setattr(
-                self,
+            self.register_buffer(
                 buffer_name,
                 torch.nn.parameter.UninitializedBuffer(
                     device=torch.device("cpu"), dtype=torch.get_default_dtype()
@@ -2112,6 +2111,7 @@ class CatFrames(ObservationTransform):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if self._just_reset or (_reset is not None and _reset.any()):
+                print("buffer device", buffer.device, 'reset device', _reset.device)
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
