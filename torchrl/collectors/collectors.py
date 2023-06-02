@@ -550,7 +550,7 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy_weights = TensorDict({}, [])
 
-        print('sending env to device', self.device)
+        print("sending env to device", self.device)
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
@@ -784,14 +784,7 @@ class SyncDataCollector(DataCollectorBase):
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             _reset = done_or_terminated
-            print('_reset device', _reset.device)
             td_reset = self._tensordict.select().set("_reset", _reset)
-            print('td_reset device', self._tensordict.device)
-            print('env device', self.env.device)
-            for t in self.env.transform:
-                print('transform', t)
-                for name, buffer in t.named_buffers():
-                    print(name, buffer.device)
             td_reset = self.env.reset(td_reset)
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),

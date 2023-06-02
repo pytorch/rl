@@ -426,6 +426,7 @@ class Transform(nn.Module):
         self.empty_cache()
         return super().to(*args, **kwargs)
 
+
 class TransformedEnv(EnvBase):
     """A transformed_in environment.
 
@@ -752,7 +753,6 @@ but got an object of type {type(transform)}."""
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
-        print('sending transforms to', device)
         self.transform = self.transform.to(device)
 
         if self.cache_specs:
@@ -916,11 +916,6 @@ class Compose(Transform):
         transform.eval()
         self.transforms.insert(index, transform)
         transform.set_container(self)
-
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
-        print("sending Compose to", dest)
-        # self.transforms = self.transforms.to(dest)
-        return super().to(dest)
 
     def __iter__(self):
         yield from self.transforms
@@ -2025,8 +2020,7 @@ class CatFrames(ObservationTransform):
     ACCEPTED_PADDING = {"same", "zeros"}
 
     def to(self, device):
-        print('sending catframes to device', device)
-        if device == torch.device('cpu'):
+        if device == torch.device("cpu"):
             get_trace()
         return super().to(device)
 
@@ -2066,7 +2060,7 @@ class CatFrames(ObservationTransform):
             _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
-                device=self.parent.device
+                device=self.parent.device,
             )
         _reset = _reset.sum(
             tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
@@ -2088,7 +2082,6 @@ class CatFrames(ObservationTransform):
         shape[self.dim] = d * self.N
         shape = torch.Size(shape)
         getattr(self, buffer_name).materialize(shape)
-        print(f'creating buffer {buffer_name} with device', data.device, 'while parent has device', self.parent.device)
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
         setattr(self, buffer_name, buffer)
         return buffer
@@ -2111,7 +2104,6 @@ class CatFrames(ObservationTransform):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if self._just_reset or (_reset is not None and _reset.any()):
-                print("buffer device", buffer.device, 'reset device', _reset.device if _reset is not None else None)
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
