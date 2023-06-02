@@ -66,6 +66,7 @@ def make_base_env(env_cfg, from_pixels=None):
         if from_pixels is None
         else from_pixels,  # for rendering
         "pixels_only": False,
+        "device": env_cfg.device,
     }
     if env_library is DMControlEnv:
         env_task = env_cfg.env_task
@@ -196,9 +197,8 @@ def init_stats(env, n_samples_stats, from_pixels):
                 t.init_stats(n_samples_stats)
 
 
-def make_test_env(env_cfg):
+def make_test_env(env_cfg, state_dict):
     env_cfg.num_envs = 1
-    state_dict = get_stats(env_cfg)
     env = make_parallel_env(env_cfg, state_dict=state_dict)
     return env
 

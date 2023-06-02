@@ -64,8 +64,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = None
     if cfg.logger.backend:
         logger = make_logger(cfg.logger)
-    test_env = make_test_env(cfg.env)
-    test_env.load_state_dict(state_dict)
+    test_env = make_test_env(cfg.env, state_dict)
     record_interval = cfg.logger.log_interval
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
