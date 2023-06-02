@@ -454,6 +454,7 @@ class ClipPPOLoss(PPOLoss):
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
+            raise Exception('to be removed')
             self.value_estimator(
                 tensordict,
                 params=self.critic_params.detach(),

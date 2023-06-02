@@ -471,7 +471,6 @@ def make_loss(loss_cfg, actor_network, value_network):
         critic_coef=loss_cfg.critic_coef,
         normalize_advantage=True,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
 
 
