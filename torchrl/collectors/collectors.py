@@ -788,7 +788,7 @@ class SyncDataCollector(DataCollectorBase):
             td_reset = self._tensordict.select().set("_reset", _reset)
             print('td_reset device', self._tensordict.device)
             print('env device', self.env.device)
-            for t in env.transform:
+            for t in self.env.transform:
                 print('transform', t)
                 for name, buffer in t.named_buffers():
                     print(name, buffer.device)
