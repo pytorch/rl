@@ -74,7 +74,6 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
         for field in fields:
             if hasattr(cfg, field):
                 setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
-
     return cfg
 
 
