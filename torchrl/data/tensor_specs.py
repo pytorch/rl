@@ -1482,6 +1482,7 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
+
 def _is_nested_list(index, notuple=False):
     if not notuple and isinstance(index, tuple):
         for idx in index:
@@ -1494,6 +1495,7 @@ def _is_nested_list(index, notuple=False):
         else:
             return False
     return False
+
 
 @dataclass(repr=False)
 class UnboundedContinuousTensorSpec(TensorSpec):
@@ -2381,9 +2383,10 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        raise NotImplementedError(
-            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
-        )
+        if _is_nested_list(idx):
+            raise NotImplementedError(
+                "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+            )
 
         return self.__class__(
             nvec=self.nvec[idx].clone(),
