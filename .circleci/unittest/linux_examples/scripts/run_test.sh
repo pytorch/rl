@@ -95,7 +95,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.collector_device=cuda:0 \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
-  replay_buffer.size=120
+  replay_buffer.size=120 \
+  logger.backend=
 #  logger.record_video=True \
 #  logger.record_frames=4 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -120,7 +121,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.env_per_collector=2 \
   collector.collector_device=cuda:0 \
   network.device=cuda:0 \
-  logger.mode=offline
+  logger.mode=offline \
+  logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   total_frames=48 \
   batch_size=10 \
@@ -154,7 +156,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   collector.env_per_collector=1 \
   collector.collector_device=cuda:0 \
   optimization.utd_ratio=1 \
-  buffer_size=120
+  buffer_size=120 \
+  logger.backend=
 #  record_video=True \
 #  record_frames=4 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
@@ -177,7 +180,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
-  buffer_size=120
+  buffer_size=120 \
+  logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   collector.total_frames=48 \
@@ -210,7 +214,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.collector_device=cuda:0 \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
-  replay_buffer.size=120
+  replay_buffer.size=120 \
+  logger.backend=
 #  record_video=True \
 #  record_frames=4 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
@@ -230,7 +235,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.num_workers=2 \
   collector.env_per_collector=1 \
   logger.mode=offline \
-  collector.collector_device=cuda:0
+  collector.collector_device=cuda:0 \
+  logger.backend=
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 
