@@ -16,7 +16,7 @@ env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 # more logging
 export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
