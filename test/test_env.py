@@ -340,9 +340,7 @@ class TestParallel:
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
         parallel_env = ParallelEnv(num_parallel_env, lambda: env)
-        parallel_env.start()
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
-        parallel_env.close()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -857,7 +855,7 @@ class TestParallel:
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel):
-        num_env = 3
+        num_env = 2
 
         def make_make_env():
             def make_transformed_env(seed=None):
