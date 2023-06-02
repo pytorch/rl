@@ -27,6 +27,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_ppo_models,
         make_test_env,
     )
+    from torchrl.envs.utils import set_exploration_type, ExplorationType
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
@@ -37,6 +38,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     model_device = cfg.optim.device
     actor, critic = make_ppo_models(cfg)
+    print("actor", actor)
+    print("critic", critic)
 
     collector, state_dict = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)
@@ -72,19 +75,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
     l0 = None
     frame_skip = cfg.env.frame_skip
     ppo_epochs = cfg.loss.ppo_epochs
+    total_done = 0
     for data in collector:
 
         frames_in_batch = data.numel()
+        total_done += data.get(('next', 'done')).sum()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
-        data_view = data.reshape(-1)
 
         # Compute GAE
         with torch.no_grad():
-            data_view = adv_module(data_view)
+            data = adv_module(data)
 
+        data_reshape = data.reshape(-1)
         # Update the data buffer
-        data_buffer.extend(data_view)
+        data_buffer.extend(data_reshape)
 
         # Log end-of-episode accumulated rewards for training
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -93,14 +98,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "reward_training", episode_rewards.mean().item(), collected_frames
             )
 
-        for _ in range(ppo_epochs):
-            for batch in data_buffer:
+        losses = TensorDict({}, batch_size=[ppo_epochs, - (frames_in_batch // -mini_batch_size)])
+        for j in range(ppo_epochs):
+            for i, batch in enumerate(data_buffer):
 
                 # Get a data batch
                 batch = batch.to(model_device)
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
+                losses[j, i] = loss.detach()
+
                 loss_sum = (
                     loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
                 )
@@ -110,6 +118,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
                 )
+                losses[j, i]['grad_norm'] = grad_norm
+
                 optim.step()
                 if scheduler is not None:
                     scheduler.step()
@@ -123,10 +133,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 pbar.set_description(
                     f"loss: {loss_sum.item(): 4.4f} (init: {l0: 4.4f}), reward: {data['next', 'reward'].mean(): 4.4f} (init={r0: 4.4f})"
                 )
+            if i + 1 != - (frames_in_batch // -mini_batch_size):
+                print(f"Should have had {- (frames_in_batch // -mini_batch_size)} iters but had {i}.")
+        losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         if logger is not None:
-            for key, value in loss.items():
+            for key, value in losses.items():
                 logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar("grad_norm", grad_norm.item(), collected_frames)
+            logger.log_scalar('total_done', total_done, collected_frames)
 
         collector.update_policy_weights_()
 
@@ -137,7 +150,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             < collected_frames // record_interval
         ):
 
-            with torch.no_grad():
+            with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
                 test_env.eval()
                 actor.eval()
                 # Generate a complete episode
@@ -154,6 +167,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     collected_frames,
                 )
                 actor.train()
+                del td_test
 
 
 if __name__ == "__main__":

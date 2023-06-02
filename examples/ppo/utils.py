@@ -224,6 +224,7 @@ def make_collector(cfg, policy):
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_device,
+        storing_device='cpu',
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
     return collector, state_dict
