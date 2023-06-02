@@ -134,6 +134,11 @@ class TD3Loss(LossModule):
             compare_against=list(actor_network.parameters()),
         )
 
+        for p in self.parameters():
+            device = p.device
+            break
+        else:
+            device = None
         self.num_qvalue_nets = num_qvalue_nets
         self.loss_function = loss_function
         self.policy_noise = policy_noise
@@ -160,6 +165,9 @@ class TD3Loss(LossModule):
             high = torch.tensor(high, device=low.device, dtype=low.dtype)
         if (low > high).any():
             raise ValueError("Got a low bound higher than a high bound.")
+        if device is not None:
+            low = low.to(device)
+            high = high.to(device)
         self.register_buffer("max_action", high)
         self.register_buffer("min_action", low)
         if gamma is not None:
