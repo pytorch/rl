@@ -1848,8 +1848,11 @@ class ObservationNorm(ObservationTransform):
             reduce_dim = [reduce_dim]
         # make all reduce_dim and keep_dims negative
         reduce_dim = sorted(dim if dim < 0 else dim - data.ndim for dim in reduce_dim)
-        keep_dims = sorted(dim if dim < 0 else dim - data.ndim for dim in keep_dims)
+
         if keep_dims is not None:
+            keep_dims = sorted(
+                dim if dim < 0 else dim - data.ndim for dim in keep_dims
+                )
             if not all(k in reduce_dim for k in keep_dims):
                 raise ValueError("keep_dim elements must be part of reduce_dim list.")
         else:
