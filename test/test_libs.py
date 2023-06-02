@@ -468,6 +468,9 @@ class TestCollectorLib:
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
         # env = SerialEnv(3, env_fn)
         env = ParallelEnv(3, env_fn)
+        # check_env_specs(env)
+
+        # env = ParallelEnv(3, env_fn)
         frames_per_batch = 21
         collector = MultiaSyncDataCollector(
             create_env_fn=[env, env],
@@ -568,7 +571,7 @@ class TestJumanji:
         env.set_seed(1)
         key = env.key
         base_env = env._env
-        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        key, *keys = jax.random.split(key, int(np.prod(batch_size) + 1))
         state, timestep = jax.vmap(base_env.reset)(jnp.stack(keys))
         # state = env._reshape(state)
         # timesteps.append(timestep)
@@ -980,7 +983,7 @@ class TestBrax:
         env.set_seed(1)
         key = env._key
         base_env = env._env
-        key, *keys = jax.random.split(key, np.prod(batch_size) + 1)
+        key, *keys = jax.random.split(key, int(np.prod(batch_size) + 1))
         state = jax.vmap(base_env.reset)(jnp.stack(keys))
         for i in range(rollout.shape[-1]):
             action = rollout[..., i]["action"]

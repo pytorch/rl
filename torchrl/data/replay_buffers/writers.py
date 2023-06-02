@@ -72,3 +72,31 @@ class RoundRobinWriter(Writer):
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
+
+
+class TensorDictRoundRobinWriter(RoundRobinWriter):
+    """A RoundRobin Writer class for composable, tensordict-based replay buffers."""
+
+    def add(self, data: Any) -> int:
+        ret = self._cursor
+        data["index"] = ret
+        self._storage[self._cursor] = data
+        self._cursor = (self._cursor + 1) % self._storage.max_size
+        return ret
+
+    def extend(self, data: Sequence) -> torch.Tensor:
+        cur_size = self._cursor
+        batch_size = len(data)
+        if cur_size + batch_size <= self._storage.max_size:
+            index = np.arange(cur_size, cur_size + batch_size)
+            self._cursor = (self._cursor + batch_size) % self._storage.max_size
+        else:
+            d = self._storage.max_size - cur_size
+            index = np.empty(batch_size, dtype=np.int64)
+            index[:d] = np.arange(cur_size, self._storage.max_size)
+            index[d:] = np.arange(batch_size - d)
+            self._cursor = batch_size - d
+        # storage must convert the data to the appropriate format if needed
+        data["index"] = index
+        self._storage[index] = data
+        return index

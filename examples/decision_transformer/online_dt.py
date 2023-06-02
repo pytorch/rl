@@ -45,9 +45,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     r0 = None
     l0 = None
+    pretrain_gradient_steps = cfg.optim.pretrain_gradient_steps
+    clip_grad = cfg.optim.clip_grad
+    eval_steps = cfg.logger.eval_steps
+    pretrain_log_interval = cfg.logger.pretrain_log_interval
+    reward_scaling = cfg.env.reward_scaling
+
     print(" ***Pretraining*** ")
     # Pretraining
-    for i in range(cfg.optim.pretrain_gradient_steps):
+    for i in range(pretrain_gradient_steps):
         pbar.update(i)
         data = offline_buffer.sample()
         # loss
@@ -56,7 +62,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         temperature_loss = loss_vals["loss_alpha"]
 
         transformer_optim.zero_grad()
-        torch.nn.utils.clip_grad_norm_(policy.parameters(), 0.25)
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), clip_grad)
         transformer_loss.backward()
         transformer_optim.step()
 
@@ -69,23 +75,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # evaluation
         with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             inference_policy.eval()
-            if i % cfg.logger.pretrain_log_interval == 0:
+            if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
-                    max_steps=cfg.logger.eval_steps,
+                    max_steps=eval_steps,
                     policy=inference_policy,
                     auto_cast_to_device=True,
                 )
                 inference_policy.train()
         if r0 is None:
-            r0 = eval_td["next", "reward"].sum(1).mean().item() / cfg.env.reward_scaling
+            r0 = eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
         if l0 is None:
             l0 = transformer_loss.item()
 
         for key, value in loss_vals.items():
             logger.log_scalar(key, value.item(), i)
-        eval_reward = (
-            eval_td["next", "reward"].sum(1).mean().item() / cfg.env.reward_scaling
-        )
+        eval_reward = eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
         logger.log_scalar("evaluation reward", eval_reward, i)
 
         pbar.set_description(

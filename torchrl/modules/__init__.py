@@ -57,6 +57,7 @@ from .tensordict_module import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
     SafeSequential,
+    TanhModule,
     ValueOperator,
     WorldModelWrapper,
 )

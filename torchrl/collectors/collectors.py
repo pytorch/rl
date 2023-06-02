@@ -544,6 +544,9 @@ class SyncDataCollector(DataCollectorBase):
         )
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
+            self.policy_weights.update(
+                TensorDict(dict(self.policy.named_buffers()), [])
+            )
         else:
             self.policy_weights = TensorDict({}, [])
 
@@ -743,6 +746,8 @@ class SyncDataCollector(DataCollectorBase):
                 ]
                 tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
             if self.return_same_td:
+                # This is used with multiprocessed collectors to use the buffers
+                # stored in the tensordict.
                 yield tensordict_out
             else:
                 # we must clone the values, as the tensordict is updated in-place.
@@ -1560,11 +1565,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        out_tensordicts_shared = OrderedDict()
+        buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         out_buffer = None
+
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
@@ -1595,18 +1601,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
-                    out_tensordicts_shared[idx] = data
+                    buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = (
-                    workers_frames[idx] + out_tensordicts_shared[idx].numel()
-                )
+                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = out_tensordicts_shared[idx].get(("collector", "traj_ids"))
+                traj_ids = buffers[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1615,19 +1619,17 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in out_tensordicts_shared.values():
+                for item in buffers.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                out_buffer = torch.cat(
-                    list(out_tensordicts_shared.values()), 0, out=out_buffer
-                )
+                out_buffer = torch.cat(list(buffers.values()), 0, out=out_buffer)
             else:
                 out_buffer = torch.cat(
-                    [item.cpu() for item in out_tensordicts_shared.values()],
+                    [item.cpu() for item in buffers.values()],
                     0,
                     out=out_buffer,
                 )
@@ -1648,7 +1650,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del out_tensordicts_shared
+        del buffers
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
@@ -1998,6 +2000,10 @@ def _main_async_collector(
     verbose: bool = VERBOSE,
     interruptor=None,
 ) -> None:
+    if storing_device.type == "cuda":
+        event = torch.cuda.Event()
+    else:
+        event = None
     pipe_parent.close()
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
@@ -2102,6 +2108,9 @@ def _main_async_collector(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
+            if event is not None:
+                event.record()
+                event.synchronize()
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
