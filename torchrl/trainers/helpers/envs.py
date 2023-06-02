@@ -60,7 +60,7 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
 
     """
     # Adapt all frame counts wrt frame_skip
-    if cfg.env.frame_skip != 1:
+    if cfg.frame_skip != 1:
         fields = [
             "max_frames_per_traj",
             "total_frames",
@@ -71,10 +71,9 @@ def correct_for_frame_skip(cfg: "DictConfig") -> "DictConfig":  # noqa: F821
             "init_env_steps",
             "noops",
         ]
-        for param_category, parameter_dict in cfg.items():
-            for parameter, value in parameter_dict.items():
-                if parameter in fields:
-                    setattr(cfg[param_category], parameter, value // cfg.env.frame_skip)
+        for field in fields:
+            if hasattr(cfg, field):
+                setattr(cfg, field, getattr(cfg, field) // cfg.frame_skip)
 
     return cfg
 
