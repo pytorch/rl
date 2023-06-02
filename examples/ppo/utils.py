@@ -269,7 +269,7 @@ def make_ppo_models(cfg):
         common_operator=common_module,
         policy_operator=policy_module,
         value_operator=value_module,
-    )
+    ).to(cfg.optim.device)
 
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
