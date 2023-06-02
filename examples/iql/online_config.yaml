@@ -1,44 +1,44 @@
 # Task and env
 env:
-  env_name: Pendulum-v1
-  env_task: ""
-  env_library: gym
+  name: Pendulum-v1
+  task: ""
+  library: gym
+  exp_name: iql_pendulum_gym
   record_video: 0
   n_samples_stats: 1000
   frame_skip: 1
-  from_pixels: False
-  num_envs: 1
   reward_scaling: 1.0
   noop: 1
   seed: 0
 
 # Collector
 collector:
-  async_collection: 1
   frames_per_batch: 200
   total_frames: 1000000 
   multi_step: 0
-  init_random_frames: 5000
-  collector_devices: cpu
-  num_collectors: 1
+  init_random_frames: 1000
+  env_per_collector: 1
+  collector_device: cpu
   max_frames_per_traj: 200
 
 # logger
 logger:
   backend: wandb
-  exp_name: iql_pendulum_gym
   log_interval: 5000 # record interval in frames
   eval_steps: 200
+  mode: online
+  eval_iter: 1000
 
 # Buffer
 replay_buffer:
   prb: 0
   buffer_prefetch: 64
-  capacity: 1_000_000
+  size: 1_000_000
 
 # Optimization
 optim:
-  device: cpu
+  utd_ratio: 1
+  device: cuda:0
   lr: 3e-4
   weight_decay: 0.0
   batch_size: 256
@@ -47,6 +47,7 @@ optim:
 
 # Policy and model
 model:
+  hidden_sizes: [256, 256]
   activation: relu
   default_policy_scale: 1.0
   scale_lb: 0.1
@@ -55,7 +56,7 @@ model:
 loss: 
   loss_function: smooth_l1
   gamma: 0.99
-  tau: 0.05
+  tau: 0.005
   # IQL hyperparameter
   temperature: 3.0
   expectile: 0.7

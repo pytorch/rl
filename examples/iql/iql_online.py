@@ -15,118 +15,163 @@ The helper functions are coded in the utils.py associated with this script.
 """
 
 import hydra
+import numpy as np
 import torch
 import tqdm
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.trainers.helpers.envs import correct_for_frame_skip
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
-    get_stats,
     make_collector,
+    make_environment,
     make_iql_model,
     make_iql_optimizer,
-    make_logger,
     make_loss,
     make_replay_buffer,
-    make_test_env,
 )
 
 
 @hydra.main(config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    cfg = correct_for_frame_skip(cfg)
-    model_device = cfg.optim.device
+    exp_name = generate_exp_name("IQL-online", cfg.env.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="iql_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+        )
 
-    state_dict = get_stats(cfg.env)
-    logger = make_logger(cfg)
-    replay_buffer = make_replay_buffer(cfg.replay_buffer)
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
+    device = torch.device(cfg.optim.device)
 
-    actor_network, qvalue_network, value_network = make_iql_model(cfg)
-    policy = actor_network.to(model_device)
-    qvalue_network = qvalue_network.to(model_device)
-    value_network = value_network.to(model_device)
+    # Make Env
+    train_env, eval_env = make_environment(cfg, cfg.collector.env_per_collector)
 
-    collector = make_collector(cfg, state_dict=state_dict, policy=policy)
-    loss, target_net_updater = make_loss(
-        cfg.loss, policy, qvalue_network, value_network
+    # Make Buffer
+    replay_buffer = make_replay_buffer(
+        batch_size=cfg.optim.batch_size,
+        prb=cfg.replay_buffer.prb,
+        buffer_size=cfg.replay_buffer.size,
+        device=device,
     )
-    optim = make_iql_optimizer(cfg.optim, policy, qvalue_network, value_network)
 
-    optim_steps_per_batch = cfg.optim.optim_steps_per_batch
-    batch_size = cfg.optim.batch_size
-    init_random_frames = cfg.collector.init_random_frames
+    # Make Model
+    model = make_iql_model(cfg, train_env, eval_env, device)
 
-    test_env = make_test_env(cfg.env, state_dict=state_dict)
-    record_interval = cfg.logger.log_interval
-    eval_steps = cfg.logger.eval_steps
+    # Make Collector
+    collector = make_collector(cfg, train_env, actor_model_explore=model[0])
 
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    # Make Loss
+    loss_module, target_net_updater = make_loss(cfg.loss, model)
+
+    # Make Optimizer
+    optimizer = make_iql_optimizer(cfg.optim, loss_module)
+
+    rewards = []
+    rewards_eval = []
+    # Main loop
     collected_frames = 0
-
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     r0 = None
-    l0 = None
-    for data in collector:
-        frames_in_batch = data.numel()
-        collected_frames += frames_in_batch
-        pbar.update(data.numel())
-        # extend replay buffer
-        replay_buffer.extend(data.view(-1))
-        if collected_frames >= init_random_frames:
-            for _ in range(optim_steps_per_batch):
-                # sample
-                sample = replay_buffer.sample(batch_size)
-                # loss
-                loss_vals = loss(sample)
-                # backprop
-                actor_loss = loss_vals["loss_actor"]
-                q_loss = loss_vals["loss_qvalue"]
-                value_loss = loss_vals["loss_value"]
-                loss_val = actor_loss + q_loss + value_loss
+    q_loss = None
 
-                optim.zero_grad()
-                loss_val.backward()
-                optim.step()
+    init_random_frames = cfg.collector.init_random_frames
+    num_updates = int(
+        cfg.collector.env_per_collector
+        * cfg.collector.frames_per_batch
+        * cfg.optim.utd_ratio
+    )
+    prb = cfg.replay_buffer.prb
+    env_per_collector = cfg.collector.env_per_collector
+    eval_iter = cfg.logger.eval_iter
+    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
+    eval_rollout_steps = cfg.collector.max_frames_per_traj // frame_skip
+
+    for i, tensordict in enumerate(collector):
+        # update weights of the inference policy
+        collector.update_policy_weights_()
+
+        if r0 is None:
+            r0 = tensordict["next", "reward"].sum(-1).mean().item()
+        pbar.update(tensordict.numel())
+
+        tensordict = tensordict.view(-1)
+        current_frames = tensordict.numel()
+        replay_buffer.extend(tensordict.cpu())
+        collected_frames += current_frames
+
+        # optimization steps
+        if collected_frames >= init_random_frames:
+            (actor_losses, q_losses, value_losses) = ([], [], [])
+            for _ in range(num_updates):
+                # sample from replay buffer
+                sampled_tensordict = replay_buffer.sample().clone()
+
+                loss_td = loss_module(sampled_tensordict)
+
+                actor_loss = loss_td["loss_actor"]
+                q_loss = loss_td["loss_qvalue"]
+                value_loss = loss_td["loss_value"]
+                loss = actor_loss + q_loss + value_loss
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                q_losses.append(q_loss.item())
+                actor_losses.append(actor_loss.item())
+                value_losses.append(value_loss.item())
+
+                # update qnet_target params
                 target_net_updater.step()
 
-            if r0 is None:
-                r0 = data["next", "reward"].sum(1).mean().item()
-                episodes_collected = data["next"]["done"].sum().item()
-                r0 /= episodes_collected
-            if l0 is None:
-                l0 = loss_val.item()
+                # update priority
+                if prb:
+                    replay_buffer.update_priority(sampled_tensordict)
 
-            avg_return = data["next", "reward"].sum(1).mean().item()
-            episodes_collected = data["next"]["done"].sum().item()
-            avg_return /= episodes_collected
-
-            for key, value in loss_vals.items():
-                logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar("train_reward", avg_return, collected_frames)
-
-            pbar.set_description(
-                f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), reward: {avg_return: 4.4f} (init={r0: 4.4f})"
+        rewards.append(
+            (i, tensordict["next", "reward"].sum().item() / env_per_collector)
+        )
+        train_log = {
+            "train_reward": rewards[-1][1],
+            "collected_frames": collected_frames,
+        }
+        if q_loss is not None:
+            train_log.update(
+                {
+                    "actor_loss": np.mean(actor_losses),
+                    "q_loss": np.mean(q_losses),
+                    "value_loss": np.mean(value_losses),
+                    "entropy": loss_td["entropy"],
+                }
             )
-            collector.update_policy_weights_()
-        # Test current policy
-        if (
-            logger is not None
-            and (collected_frames - frames_in_batch) // record_interval
-            < collected_frames // record_interval
-        ):
+        if logger is not None:
+            for key, value in train_log.items():
+                logger.log_scalar(key, value, step=collected_frames)
+        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
-                # Generate a complete episode
-                td_test = test_env.rollout(
-                    policy=policy,
-                    max_steps=eval_steps,
-                    auto_reset=True,
+                eval_rollout = eval_env.rollout(
+                    eval_rollout_steps,
+                    model[0],
                     auto_cast_to_device=True,
                     break_when_any_done=True,
-                ).clone()
-                logger.log_scalar(
-                    "evaluation_reward",
-                    td_test["next"]["reward"].sum().item(),
-                    collected_frames,
                 )
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                rewards_eval.append((i, eval_reward))
+                eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
+                if logger is not None:
+                    logger.log_scalar(
+                        "evaluation_reward", rewards_eval[-1][1], step=collected_frames
+                    )
+        if len(rewards_eval):
+            pbar.set_description(
+                f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
+            )
+
+    collector.shutdown()
 
 
 if __name__ == "__main__":

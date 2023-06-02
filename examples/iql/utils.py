@@ -3,144 +3,68 @@ import torch.optim
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
-from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
-from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
+from torchrl.collectors import SyncDataCollector
+from torchrl.data import (
+    LazyMemmapStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
+)
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.envs import (
-    CatTensors,
+    Compose,
     DoubleToFloat,
     EnvCreator,
-    NoopResetEnv,
-    ObservationNorm,
     ParallelEnv,
-    RenameTransform,
     RewardScaling,
     TransformedEnv,
 )
-from torchrl.envs.libs.dm_control import DMControlEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import IQLLoss, SoftUpdate
 
-from torchrl.record.loggers import generate_exp_name, get_logger
-
-from torchrl.trainers.helpers.envs import LIBS
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 # ====================================================================
 # Environment utils
 # -----------------
 
 
-def make_base_env(env_cfg, from_pixels=None):
-    env_library = LIBS[env_cfg.env_library]
-    env_name = env_cfg.env_name
-    frame_skip = env_cfg.frame_skip
-
-    env_kwargs = {
-        "env_name": env_name,
-        "frame_skip": frame_skip,
-        "from_pixels": from_pixels,  # for rendering
-        "pixels_only": False,
-    }
-    if env_library is DMControlEnv:
-        env_task = env_cfg.env_task
-        env_kwargs.update({"task_name": env_task})
-    env = env_library(**env_kwargs)
-    if env_cfg.noop > 1:
-        env = TransformedEnv(env, NoopResetEnv(env_cfg.noop))
-    return env
+def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
+    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
 
 
-def make_transformed_env(base_env, env_cfg):
-    return make_transformed_env_states(base_env, env_cfg)
-
-
-def make_transformed_env_states(base_env, env_cfg):
-    if not isinstance(env_cfg.reward_scaling, float):
-        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 1.0)
-
-    env_library = LIBS[env_cfg.env_library]
-    env = TransformedEnv(base_env)
-
-    reward_scaling = env_cfg.reward_scaling
-
-    env.append_transform(RewardScaling(0.0, reward_scaling))
-
-    double_to_float_list = []
-    double_to_float_inv_list = []
-
-    # we concatenate all the state vectors
-    # even if there is a single tensor, it'll be renamed in "observation_vector"
-    selected_keys = [
-        key for key in env.observation_spec.keys(True, True) if key != "pixels"
-    ]
-    out_key = "observation_vector"
-    env.append_transform(CatTensors(in_keys=selected_keys, out_key=out_key))
-
-    obs_norm = ObservationNorm(in_keys=[out_key])
-    env.append_transform(obs_norm)
-
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_list += [
-            "action",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
-    env.append_transform(
-        DoubleToFloat(
-            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-        )
+def apply_env_transforms(env, reward_scaling=1.0):
+    transformed_env = TransformedEnv(
+        env,
+        Compose(
+            RewardScaling(loc=0.0, scale=reward_scaling),
+            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+        ),
     )
-    return env
+    return transformed_env
 
 
-def make_parallel_env(env_cfg, state_dict):
-    num_envs = env_cfg.num_envs
-    env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
+def make_environment(cfg, num_envs=1):
+    """Make environments for training and evaluation."""
+    parallel_env = ParallelEnv(
+        num_envs,
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-            t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
-    env.load_state_dict(state_dict)
-    return env
+    parallel_env.set_seed(cfg.env.seed)
 
+    train_env = apply_env_transforms(parallel_env)
 
-def make_test_env(env_cfg, state_dict):
-    env_cfg.num_envs = 1
-    env = make_parallel_env(env_cfg, state_dict=state_dict)
-    return env
-
-
-def get_stats(env_cfg):
-    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats)
-    return env.state_dict()
-
-
-def init_stats(env, n_samples_stats):
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-            t.init_stats(n_samples_stats)
+    eval_env = TransformedEnv(
+        ParallelEnv(
+            num_envs,
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        ),
+        train_env.transform.clone(),
+    )
+    return train_env, eval_env
 
 
 # ====================================================================
@@ -148,73 +72,66 @@ def init_stats(env, n_samples_stats):
 # ---------------------------
 
 
-def make_collector(cfg, state_dict, policy):
-    env_cfg = cfg.env
-    loss_cfg = cfg.loss
-    collector_cfg = cfg.collector
-    if collector_cfg.async_collection:
-        collector_class = MultiaSyncDataCollector
-    else:
-        collector_class = MultiSyncDataCollector
-    if collector_cfg.multi_step:
-        ms = MultiStep(gamma=loss_cfg.gamma, n_steps=collector_cfg.multi_step)
-    else:
-        ms = None
-    collector = collector_class(
-        [make_parallel_env(env_cfg, state_dict=state_dict)]
-        * collector_cfg.num_collectors,
-        policy,
-        frames_per_batch=collector_cfg.frames_per_batch,
-        total_frames=collector_cfg.total_frames,
-        postproc=ms,
-        device=collector_cfg.collector_devices,
-        init_random_frames=collector_cfg.init_random_frames,
-        max_frames_per_traj=collector_cfg.max_frames_per_traj,
+def make_collector(cfg, train_env, actor_model_explore):
+    """Make collector."""
+    collector = SyncDataCollector(
+        train_env,
+        actor_model_explore,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        max_frames_per_traj=cfg.collector.max_frames_per_traj,
+        total_frames=cfg.collector.total_frames,
+        device=cfg.collector.collector_device,
     )
+    collector.set_seed(cfg.env.seed)
     return collector
 
 
-def make_replay_buffer(rb_cfg):
-    if rb_cfg.prb:
-        sampler = PrioritizedSampler(max_capacity=rb_cfg.capacity, alpha=0.7, beta=0.5)
+def make_replay_buffer(
+    batch_size,
+    prb=False,
+    buffer_size=1000000,
+    buffer_scratch_dir="/tmp/",
+    device="cpu",
+    prefetch=3,
+):
+    if prb:
+        replay_buffer = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            pin_memory=False,
+            prefetch=prefetch,
+            storage=LazyMemmapStorage(
+                buffer_size,
+                scratch_dir=buffer_scratch_dir,
+                device=device,
+            ),
+            batch_size=batch_size,
+        )
     else:
-        sampler = RandomSampler()
-    return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(rb_cfg.capacity), sampler=sampler
-    )
+        replay_buffer = TensorDictReplayBuffer(
+            pin_memory=False,
+            prefetch=prefetch,
+            storage=LazyMemmapStorage(
+                buffer_size,
+                scratch_dir=buffer_scratch_dir,
+                device=device,
+            ),
+            batch_size=batch_size,
+        )
+    return replay_buffer
 
 
-def make_offline_replay_buffer(rb_cfg, state_dict):
+def make_offline_replay_buffer(rb_cfg):
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
         split_trajs=False,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
     )
-    data.append_transform(
-        RewardScaling(
-            loc=state_dict["transforms.0.loc"],
-            scale=state_dict["transforms.0.scale"],
-            standard_normal=state_dict["transforms.0.standard_normal"],
-        )
-    )
-    data.append_transform(
-        RenameTransform(
-            ["observation", ("next", "observation")],
-            ["observation_vector", ("next", "observation_vector")],
-        )
-    )
-    data.append_transform(
-        ObservationNorm(
-            in_keys=["observation_vector"],
-            loc=state_dict["transforms.2.loc"],
-            scale=state_dict["transforms.2.scale"],
-            standard_normal=state_dict["transforms.2.standard_normal"],
-        )
-    )
+
     data.append_transform(
         DoubleToFloat(
-            in_keys=["observation_vector", ("next", "observation_vector")],
+            in_keys=["observation", ("next", "observation")],
             in_keys_inv=[],
         )
     )
@@ -232,17 +149,13 @@ def make_offline_replay_buffer(rb_cfg, state_dict):
 #
 
 
-def make_iql_model(cfg):
-    env_cfg = cfg.env
+def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
-    proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    # we must initialize the observation norm transform
-    init_stats(proof_environment, n_samples_stats=3)
 
-    action_spec = proof_environment.action_spec
+    action_spec = train_env.action_spec
 
-    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, proof_environment)
-    in_keys = ["observation_vector"]
+    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, eval_env)
+    in_keys = ["observation"]
     out_keys = ["loc", "scale"]
 
     actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
@@ -254,16 +167,16 @@ def make_iql_model(cfg):
         module=actor_module,
         in_keys=["loc", "scale"],
         spec=action_spec,
-        # safe=False,
         distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
             "tanh_loc": False,
         },
+        default_interaction_type=ExplorationType.RANDOM,
     )
 
-    in_keys = ["observation_vector", "action"]
+    in_keys = ["observation", "action"]
 
     out_keys = ["state_action_value"]
     qvalue = ValueOperator(
@@ -271,30 +184,31 @@ def make_iql_model(cfg):
         out_keys=out_keys,
         module=q_net,
     )
-    in_keys = ["observation_vector"]
+    in_keys = ["observation"]
     out_keys = ["state_value"]
     value_net = ValueOperator(
         in_keys=in_keys,
         out_keys=out_keys,
         module=value_net,
     )
+    model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
+    # init nets
+    with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
+        td = eval_env.reset()
+        td = td.to(device)
+        for net in model:
+            net(td)
+    del td
+    eval_env.close()
 
-    # init the lazy layers
-    with torch.no_grad(), set_exploration_mode("random"):
-        td = proof_environment.rollout(max_steps=1000)
-        print(td)
-        actor(td)
-        qvalue(td)
-        value_net(td)
-
-    return actor, qvalue, value_net
+    return model
 
 
 def make_iql_modules_state(model_cfg, proof_environment):
     action_spec = proof_environment.action_spec
 
     actor_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": model_cfg.hidden_sizes,
         "out_features": 2 * action_spec.shape[-1],
         "activation_class": ACTIVATIONS[model_cfg.activation],
     }
@@ -306,7 +220,7 @@ def make_iql_modules_state(model_cfg, proof_environment):
     actor_net = torch.nn.Sequential(actor_net, actor_extractor)
 
     qvalue_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": model_cfg.hidden_sizes,
         "out_features": 1,
         "activation_class": ACTIVATIONS[model_cfg.activation],
     }
@@ -315,7 +229,7 @@ def make_iql_modules_state(model_cfg, proof_environment):
 
     # Define Value Network
     value_net_kwargs = {
-        "num_cells": [256, 256],
+        "num_cells": model_cfg.hidden_sizes,
         "out_features": 1,
         "activation_class": ACTIVATIONS[model_cfg.activation],
     }
@@ -329,44 +243,25 @@ def make_iql_modules_state(model_cfg, proof_environment):
 # ---------
 
 
-def make_loss(loss_cfg, actor_network, qvalue_network, value_network):
-    loss = IQLLoss(
-        actor_network,
-        qvalue_network,
-        value_network=value_network,
-        gamma=loss_cfg.gamma,
+def make_loss(loss_cfg, model):
+    loss_module = IQLLoss(
+        model[0],
+        model[1],
+        value_network=model[2],
         loss_function=loss_cfg.loss_function,
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
     )
-    target_net_updater = SoftUpdate(loss, tau=loss_cfg.tau)
-    target_net_updater.init_()
-    return loss, target_net_updater
+    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
+    target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
+
+    return loss_module, target_net_updater
 
 
-def make_iql_optimizer(optim_cfg, actor_network, qvalue_network, value_network):
+def make_iql_optimizer(optim_cfg, loss_module):
     optim = torch.optim.Adam(
-        list(actor_network.parameters())
-        + list(qvalue_network.parameters())
-        + list(value_network.parameters()),
+        loss_module.parameters(),
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )
     return optim
-
-
-# ====================================================================
-# Logging and recording
-# ---------------------
-
-
-def make_logger(cfg):
-    exp_name = generate_exp_name("IQL", cfg.logger.exp_name)
-    cfg.logger.exp_name = exp_name
-    logger = get_logger(
-        cfg.logger.backend,
-        logger_name="iql",
-        experiment_name=exp_name,
-        wandb_kwargs={"config": cfg},
-    )
-    return logger

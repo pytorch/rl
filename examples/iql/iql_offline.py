@@ -11,39 +11,51 @@ The helper functions are coded in the utils.py associated with this script.
 """
 
 import hydra
+import numpy as np
 import torch
 import tqdm
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.record.loggers import generate_exp_name, get_logger
 
 from utils import (
-    get_stats,
+    make_environment,
     make_iql_model,
     make_iql_optimizer,
-    make_logger,
     make_loss,
     make_offline_replay_buffer,
-    make_parallel_env,
 )
 
 
 @hydra.main(config_path=".", config_name="offline_config")
 def main(cfg: "DictConfig"):  # noqa: F821
-    model_device = cfg.optim.device
+    exp_name = generate_exp_name("IQL-offline", cfg.env.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="iql_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
+        )
 
-    state_dict = get_stats(cfg.env)
-    evaluation_env = make_parallel_env(cfg.env, state_dict=state_dict)
-    logger = make_logger(cfg)
-    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, state_dict)
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
+    device = torch.device(cfg.optim.device)
 
-    actor_network, qvalue_network, value_network = make_iql_model(cfg)
-    policy = actor_network.to(model_device)
-    qvalue_network = qvalue_network.to(model_device)
-    value_network = value_network.to(model_device)
+    # Make Env
+    train_env, eval_env = make_environment(cfg, cfg.logger.eval_envs)
 
-    loss, target_net_updater = make_loss(
-        cfg.loss, policy, qvalue_network, value_network
-    )
-    optim = make_iql_optimizer(cfg.optim, policy, qvalue_network, value_network)
+    # Make Buffer
+    replay_buffer = make_offline_replay_buffer(cfg.replay_buffer)
+
+    # Make Model
+    model = make_iql_model(cfg, train_env, eval_env, device)
+
+    # Make Loss
+    loss_module, target_net_updater = make_loss(cfg.loss, model)
+
+    # Make Optimizer
+    optimizer = make_iql_optimizer(cfg.optim, loss_module)
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -51,30 +63,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     l0 = None
 
     gradient_steps = cfg.optim.gradient_steps
-    evaluation_interval = cfg.logger.evaluation_interval
+    evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
 
     for i in range(gradient_steps):
         pbar.update(i)
         data = replay_buffer.sample()
         # loss
-        loss_vals = loss(data)
+        loss_vals = loss_module(data)
         # backprop
         actor_loss = loss_vals["loss_actor"]
         q_loss = loss_vals["loss_qvalue"]
         value_loss = loss_vals["loss_value"]
         loss_val = actor_loss + q_loss + value_loss
 
-        optim.zero_grad()
+        optimizer.zero_grad()
         loss_val.backward()
-        optim.step()
+        optimizer.step()
         target_net_updater.step()
 
         # evaluation
         if i % evaluation_interval == 0:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
-                eval_td = evaluation_env.rollout(
-                    max_steps=eval_steps, policy=policy, auto_cast_to_device=True
+                eval_td = eval_env.rollout(
+                    max_steps=eval_steps, policy=model[0], auto_cast_to_device=True
                 )
 
         if r0 is None:
