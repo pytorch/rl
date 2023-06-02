@@ -1846,6 +1846,9 @@ class ObservationNorm(ObservationTransform):
         data = torch.cat(data, cat_dim)
         if isinstance(reduce_dim, int):
             reduce_dim = [reduce_dim]
+        # make all reduce_dim and keep_dims negative
+        reduce_dim = sorted(dim if dim < 0 else dim - data.ndim for dim in reduce_dim)
+        keep_dims = sorted(dim if dim < 0 else dim - data.ndim for dim in keep_dims)
         if keep_dims is not None:
             if not all(k in reduce_dim for k in keep_dims):
                 raise ValueError("keep_dim elements must be part of reduce_dim list.")
@@ -1853,7 +1856,7 @@ class ObservationNorm(ObservationTransform):
             keep_dims = []
         loc = data.mean(reduce_dim, keepdim=True)
         scale = data.std(reduce_dim, keepdim=True)
-        for r in sorted(reduce_dim, reverse=True):
+        for r in reduce_dim:
             if r not in keep_dims:
                 loc = loc.squeeze(r)
                 scale = scale.squeeze(r)
