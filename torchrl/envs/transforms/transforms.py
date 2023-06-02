@@ -749,7 +749,7 @@ but got an object of type {type(transform)}."""
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
         print('sending transforms to', device)
-        self.transform.to(device)
+        self.transform = self.transform.to(device)
 
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
@@ -914,7 +914,8 @@ class Compose(Transform):
         transform.set_container(self)
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
-        self.transforms = self.transforms.to(dest)
+        print("sending Compose to", dest)
+        # self.transforms = self.transforms.to(dest)
         return super().to(dest)
 
     def __iter__(self):
