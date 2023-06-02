@@ -35,6 +35,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
+    model_device = cfg.optim.device
     actor, critic = make_ppo_models(cfg)
 
     collector, state_dict = make_collector(cfg, policy=actor)
