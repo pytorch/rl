@@ -177,8 +177,12 @@ def make_parallel_env(env_cfg, state_dict):
 def get_stats(env_cfg):
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
     init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
-    return env.state_dict()
-
+    state_dict = env.state_dict()
+    for key in list(state_dict.items()):
+        if key.endswith('loc') or key.endswith('scale'):
+            continue
+        del state_dict[key]
+    return state_dict
 
 def init_stats(env, n_samples_stats, from_pixels):
     for t in env.transform:
