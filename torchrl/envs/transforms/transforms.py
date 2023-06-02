@@ -2111,7 +2111,7 @@ class CatFrames(ObservationTransform):
                 buffer = self._make_missing_buffer(data, buffer_name)
             # shift obs 1 position to the right
             if self._just_reset or (_reset is not None and _reset.any()):
-                print("buffer device", buffer.device, 'reset device', _reset.device)
+                print("buffer device", buffer.device, 'reset device', _reset.device if _reset is not None else None)
                 data_in = buffer[_reset]
                 shape = [1 for _ in data_in.shape]
                 shape[self.dim] = self.N
