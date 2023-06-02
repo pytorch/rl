@@ -74,7 +74,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     r0 = None
     l0 = None
     frame_skip = cfg.env.frame_skip
-    mini_batch_size = cfg.loss.mini_batch_size
     ppo_epochs = cfg.loss.ppo_epochs
     for data in collector:
 

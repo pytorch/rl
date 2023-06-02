@@ -104,7 +104,7 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
 
-    obs_norm = ObservationNorm(in_keys=["pixels"])
+    obs_norm = ObservationNorm(in_keys=["pixels"], standard_normal=True)
     env.append_transform(obs_norm)
 
     if env_library is DMControlEnv:
@@ -168,10 +168,7 @@ def make_parallel_env(env_cfg, state_dict):
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
     )
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-            # we initialize to then load the stats
-            t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
+    init_stats(env, 3, env_cfg.from_pixels)
     env.load_state_dict(state_dict)
     return env
 
@@ -188,11 +185,13 @@ def init_stats(env, n_samples_stats, from_pixels):
             if from_pixels:
                 t.init_stats(
                     n_samples_stats,
-                    cat_dim=-3,
-                    reduce_dim=(-1, -2, -3),
+                    cat_dim=-4,
+                    reduce_dim=tuple(
+                        -i for i in range(1, len(t.parent.batch_size) + 5)
+                    ),
                     keep_dims=(-1, -2, -3),
                 )
-                print('stats:', t.loc, t.scale)
+                print("stats:", t.loc, t.scale, t.loc.shape)
             else:
                 t.init_stats(n_samples_stats)
 
