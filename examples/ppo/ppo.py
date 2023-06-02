@@ -17,6 +17,7 @@ import hydra
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import torch
+    from tensordict import TensorDict
     import tqdm
     from utils import (
         make_collector,
@@ -37,14 +38,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
 
     model_device = cfg.optim.device
-    actor, critic = make_ppo_models(cfg)
+    actor, critic, critic_head = make_ppo_models(cfg)
     print("actor", actor)
     print("critic", critic)
 
     collector, state_dict = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)
     loss_module, adv_module = make_loss(
-        cfg.loss, actor_network=actor, value_network=critic
+        cfg.loss, actor_network=actor, value_network=critic, value_head=critic_head,
     )
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
 

@@ -283,9 +283,10 @@ def make_ppo_models(cfg):
         del td
 
     actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_head()
+    critic = actor_critic.get_value_operator()
+    critic_head = actor_critic.get_value_head()
 
-    return actor, critic
+    return actor, critic, critic_head
 
 
 def make_ppo_modules_state(proof_environment):
@@ -460,11 +461,11 @@ def make_advantage_module(loss_cfg, value_network):
     return advantage_module
 
 
-def make_loss(loss_cfg, actor_network, value_network):
+def make_loss(loss_cfg, actor_network, value_network, value_head):
     advantage_module = make_advantage_module(loss_cfg, value_network)
     loss_module = ClipPPOLoss(
         actor=actor_network,
-        critic=value_network,
+        critic=value_head,
         clip_epsilon=loss_cfg.clip_epsilon,
         loss_critic_type=loss_cfg.loss_critic_type,
         entropy_coef=loss_cfg.entropy_coef,
