@@ -19,7 +19,6 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 
-from torchrl._utils import get_trace
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -2021,11 +2020,6 @@ class CatFrames(ObservationTransform):
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "zeros"}
-
-    def to(self, device):
-        if device == torch.device("cpu"):
-            get_trace()
-        return super().to(device)
 
     def __init__(
         self,
