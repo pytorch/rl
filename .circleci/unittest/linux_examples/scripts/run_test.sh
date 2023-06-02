@@ -96,6 +96,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
   replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
   logger.backend=
 #  logger.record_video=True \
 #  logger.record_frames=4 \
@@ -122,6 +123,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.collector_device=cuda:0 \
   network.device=cuda:0 \
   logger.mode=offline \
+  env.name=Pendulum-v1 \
   logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
   total_frames=48 \
@@ -157,6 +159,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   collector.collector_device=cuda:0 \
   optimization.utd_ratio=1 \
   buffer_size=120 \
+  env.name=Pendulum-v1 \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
@@ -215,6 +218,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
   replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
@@ -236,6 +240,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.env_per_collector=1 \
   logger.mode=offline \
   collector.collector_device=cuda:0 \
+  env.name=Pendulum-v1 \
   logger.backend=
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
