@@ -38,7 +38,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 
     state_dict = get_stats(cfg.env)
-    logger = make_logger(cfg.logger)
+    logger = make_logger(cfg)
     replay_buffer = make_replay_buffer(cfg.replay_buffer)
 
     actor_network, qvalue_network, value_network = make_iql_model(cfg)

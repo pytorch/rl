@@ -360,8 +360,13 @@ def make_iql_optimizer(optim_cfg, actor_network, qvalue_network, value_network):
 # ---------------------
 
 
-def make_logger(logger_cfg):
-    exp_name = generate_exp_name("IQL", logger_cfg.exp_name)
-    logger_cfg.exp_name = exp_name
-    logger = get_logger(logger_cfg.backend, logger_name="iql", experiment_name=exp_name)
+def make_logger(cfg):
+    exp_name = generate_exp_name("IQL", cfg.logger.exp_name)
+    cfg.logger.exp_name = exp_name
+    logger = get_logger(
+        cfg.logger.backend,
+        logger_name="iql",
+        experiment_name=exp_name,
+        wandb_kwargs={"config": cfg},
+    )
     return logger

@@ -32,7 +32,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     state_dict = get_stats(cfg.env)
     evaluation_env = make_parallel_env(cfg.env, state_dict=state_dict)
-    logger = make_logger(cfg.logger)
+    logger = make_logger(cfg)
     replay_buffer = make_offline_replay_buffer(cfg.replay_buffer, state_dict)
 
     actor_network, qvalue_network, value_network = make_iql_model(cfg)
