@@ -1,42 +1,31 @@
-from copy import deepcopy
-
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torchrl.collectors import MultiaSyncDataCollector, MultiSyncDataCollector
-from torchrl.data import (
-    CompositeSpec,
-    LazyMemmapStorage,
-    MultiStep,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import LazyMemmapStorage, MultiStep, TensorDictReplayBuffer
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.envs import (
-    CatFrames,
     CatTensors,
     DoubleToFloat,
     EnvCreator,
-    GrayScale,
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
     RenameTransform,
-    Resize,
     RewardScaling,
-    ToTensorImage,
     TransformedEnv,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
 from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import ConvNet, MLP, ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import IQLLoss, SoftUpdate
-from torchrl.record import VideoRecorder
+
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers import Recorder
+
 from torchrl.trainers.helpers.envs import LIBS
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -60,8 +49,6 @@ def make_base_env(env_cfg, from_pixels=None):
     env_library = LIBS[env_cfg.env_library]
     env_name = env_cfg.env_name
     frame_skip = env_cfg.frame_skip
-    if from_pixels is None:
-        from_pixels = env_cfg.from_pixels
 
     env_kwargs = {
         "env_name": env_name,
@@ -79,52 +66,7 @@ def make_base_env(env_cfg, from_pixels=None):
 
 
 def make_transformed_env(base_env, env_cfg):
-    from_pixels = env_cfg.from_pixels
-    if from_pixels:
-        return make_transformed_env_pixels(base_env, env_cfg)
-    else:
-        return make_transformed_env_states(base_env, env_cfg)
-
-
-def make_transformed_env_pixels(base_env, env_cfg):
-    if not isinstance(env_cfg.reward_scaling, float):
-        env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 1.0)
-
-    env_library = LIBS[env_cfg.env_library]
-    env = TransformedEnv(base_env)
-
-    reward_scaling = env_cfg.reward_scaling
-
-    env.append_transform(RewardScaling(0.0, reward_scaling))
-
-    double_to_float_list = []
-    double_to_float_inv_list = []
-
-    env.append_transform(ToTensorImage())
-    env.append_transform(GrayScale())
-    env.append_transform(Resize(84, 84))
-    env.append_transform(CatFrames(N=4, dim=-3))
-
-    obs_norm = ObservationNorm(in_keys=["pixels"])
-    env.append_transform(obs_norm)
-
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_list += [
-            "action",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
-    env.append_transform(
-        DoubleToFloat(
-            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-        )
-    )
-    return env
+    return make_transformed_env_states(base_env, env_cfg)
 
 
 def make_transformed_env_states(base_env, env_cfg):
@@ -190,24 +132,15 @@ def make_test_env(env_cfg, state_dict):
 
 
 def get_stats(env_cfg):
-    from_pixels = env_cfg.from_pixels
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, from_pixels)
+    init_stats(env, env_cfg.n_samples_stats)
     return env.state_dict()
 
 
-def init_stats(env, n_samples_stats, from_pixels):
+def init_stats(env, n_samples_stats):
     for t in env.transform:
         if isinstance(t, ObservationNorm):
-            if from_pixels:
-                t.init_stats(
-                    n_samples_stats,
-                    cat_dim=-3,
-                    reduce_dim=(-1, -2, -3),
-                    keep_dims=(-1, -2, -3),
-                )
-            else:
-                t.init_stats(n_samples_stats)
+            t.init_stats(n_samples_stats)
 
 
 # ====================================================================
@@ -304,21 +237,13 @@ def make_iql_model(cfg):
     model_cfg = cfg.model
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
     # we must initialize the observation norm transform
-    init_stats(proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels)
+    init_stats(proof_environment, n_samples_stats=3)
 
-    env_specs = proof_environment.specs
-    from_pixels = env_cfg.from_pixels
+    action_spec = proof_environment.action_spec
 
-    if not from_pixels:
-        actor_net, q_net, value_net = make_iql_modules_state(
-            model_cfg, proof_environment
-        )
-        in_keys = ["observation_vector"]
-        out_keys = ["loc", "scale"]
-    else:
-        actor_net, q_net = make_iql_modules_pixels(model_cfg, proof_environment)
-        in_keys = ["pixels"]
-        out_keys = ["param", "hidden"]
+    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, proof_environment)
+    in_keys = ["observation_vector"]
+    out_keys = ["loc", "scale"]
 
     actor_module = TensorDictModule(actor_net, in_keys=in_keys, out_keys=out_keys)
 
@@ -328,20 +253,17 @@ def make_iql_model(cfg):
     actor = ProbabilisticActor(
         module=actor_module,
         in_keys=["loc", "scale"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
-        safe=False,
+        spec=action_spec,
+        # safe=False,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env_specs["input_spec"]["action"].space.minimum,
-            "max": env_specs["input_spec"]["action"].space.maximum,
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
             "tanh_loc": False,
         },
     )
 
-    if not from_pixels:
-        in_keys = ["observation_vector", "action"]
-    else:
-        in_keys = ["pixels", "action"]
+    in_keys = ["observation_vector", "action"]
 
     out_keys = ["state_action_value"]
     qvalue = ValueOperator(
@@ -349,10 +271,7 @@ def make_iql_model(cfg):
         out_keys=out_keys,
         module=q_net,
     )
-    if not from_pixels:
-        in_keys = ["observation_vector"]
-    else:
-        in_keys = ["pixels"]
+    in_keys = ["observation_vector"]
     out_keys = ["state_value"]
     value_net = ValueOperator(
         in_keys=in_keys,
@@ -372,12 +291,11 @@ def make_iql_model(cfg):
 
 
 def make_iql_modules_state(model_cfg, proof_environment):
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
+    action_spec = proof_environment.action_spec
 
     actor_net_kwargs = {
         "num_cells": [256, 256],
-        "out_features": 2 * out_features,
+        "out_features": 2 * action_spec.shape[-1],
         "activation_class": ACTIVATIONS[model_cfg.activation],
     }
     actor_net = MLP(**actor_net_kwargs)
@@ -406,38 +324,6 @@ def make_iql_modules_state(model_cfg, proof_environment):
     return actor_net, q_net, value_net
 
 
-def make_iql_modules_pixels(model_cfg, proof_environment):
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[0]
-
-    actor_net = torch.nn.ModuleList()
-
-    actor_convnet_kwargs = {"activation_class": ACTIVATIONS[model_cfg.activation]}
-    actor_net.append(ConvNet(**actor_convnet_kwargs))
-
-    actor_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": out_features,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-    actor_net.append(MLP(**actor_net_kwargs))
-
-    q_net = torch.nn.ModuleList()
-
-    q_net_convnet_kwargs = {"activation_class": ACTIVATIONS[model_cfg.activation]}
-    q_net.append(ConvNet(**q_net_convnet_kwargs))
-
-    qvalue_net_kwargs = {
-        "num_cells": [256, 256],
-        "out_features": 1,
-        "activation_class": ACTIVATIONS[model_cfg.activation],
-    }
-
-    q_net.append(MLP(**qvalue_net_kwargs))
-
-    return actor_net, q_net
-
-
 # ====================================================================
 # IQL Loss
 # ---------
@@ -453,7 +339,7 @@ def make_loss(loss_cfg, actor_network, qvalue_network, value_network):
         temperature=loss_cfg.temperature,
         expectile=loss_cfg.expectile,
     )
-    target_net_updater = SoftUpdate(loss, 1 - loss_cfg.tau)
+    target_net_updater = SoftUpdate(loss, tau=loss_cfg.tau)
     target_net_updater.init_()
     return loss, target_net_updater
 
@@ -479,21 +365,3 @@ def make_logger(logger_cfg):
     logger_cfg.exp_name = exp_name
     logger = get_logger(logger_cfg.backend, logger_name="iql", experiment_name=exp_name)
     return logger
-
-
-def make_recorder(cfg, logger, policy) -> Recorder:
-    env_cfg = deepcopy(cfg.env)
-    env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
-    if cfg.recorder.video:
-        env.insert_transform(
-            0, VideoRecorder(logger=logger, tag=cfg.logger.exp_name, in_keys=["pixels"])
-        )
-    return Recorder(
-        record_interval=1,
-        record_frames=cfg.recorder.frames,
-        frame_skip=env_cfg.frame_skip,
-        policy_exploration=policy,
-        recorder=env,
-        exploration_mode="mean",
-    )

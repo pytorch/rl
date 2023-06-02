@@ -6,23 +6,17 @@ env:
   record_video: 0
   n_samples_stats: 1000
   frame_skip: 1
-  from_pixels: False
   num_envs: 1
   reward_scaling: 1.0
   noop: 1
   seed: 0
-  evaluation_interval: 500
-
-# Eval
-recorder:
-  video: False
-  interval: 10000 # record interval in frames
-  frames: 10000
 
 # logger
 logger:
   backend: wandb
   exp_name: iql_halfcheetah-medium-v2
+  evaluation_interval: 500
+  eval_steps: 1000
 
 # Buffer
 replay_buffer:
@@ -35,7 +29,6 @@ optim:
   lr: 3e-4
   weight_decay: 0.0
   batch_size: 256
-  lr_scheduler: ""
   gradient_steps: 100000
 
 

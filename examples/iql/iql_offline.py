@@ -13,7 +13,7 @@ The helper functions are coded in the utils.py associated with this script.
 import hydra
 import torch
 import tqdm
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from utils import (
     get_stats,
@@ -50,7 +50,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     r0 = None
     l0 = None
 
-    for i in range(cfg.optim.gradient_steps):
+    gradient_steps = cfg.optim.gradient_steps
+    evaluation_interval = cfg.logger.evaluation_interval
+    eval_steps = cfg.logger.eval_steps
+
+    for i in range(gradient_steps):
         pbar.update(i)
         data = replay_buffer.sample()
         # loss
@@ -67,10 +71,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         target_net_updater.step()
 
         # evaluation
-        if i % cfg.env.evaluation_interval == 0:
-            with set_exploration_mode("random"), torch.no_grad():
+        if i % evaluation_interval == 0:
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_td = evaluation_env.rollout(
-                    max_steps=1000, policy=policy, auto_cast_to_device=True
+                    max_steps=eval_steps, policy=policy, auto_cast_to_device=True
                 )
 
         if r0 is None:
