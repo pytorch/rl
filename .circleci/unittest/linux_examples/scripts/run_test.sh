@@ -50,6 +50,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   collector.collector_device=cuda:0 \
   optimization.utd_ratio=1 \
   replay_buffer.size=120 \
+  env.name=Pendulum-v1 \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
