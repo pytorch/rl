@@ -409,7 +409,6 @@ def make_dt_loss(actor_network):
 
 
 def make_odt_optimizer(optim_cfg, actor_network, loss_module):
-
     dt_optimizer = Lamb(
         actor_network.parameters(),
         lr=optim_cfg.lr,
@@ -448,11 +447,14 @@ def make_dt_optimizer(optim_cfg, actor_network):
 # ---------------------
 
 
-def make_logger(logger_cfg):
-    exp_name = generate_exp_name(logger_cfg.model_name, logger_cfg.exp_name)
-    logger_cfg.exp_name = exp_name
+def make_logger(cfg):
+    exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
+    cfg.logger.exp_name = exp_name
     logger = get_logger(
-        logger_cfg.backend, logger_name=logger_cfg.model_name, experiment_name=exp_name
+        cfg.logger.backend,
+        logger_name=cfg.logger.model_name,
+        experiment_name=exp_name,
+        wandb_kwargs={"config": cfg},
     )
     return logger
 

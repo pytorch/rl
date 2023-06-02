@@ -27,7 +27,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 
     test_env = make_env(cfg.env)
-    logger = make_logger(cfg.logger)
+    logger = make_logger(cfg)
     offline_buffer = make_offline_replay_buffer(
         cfg.replay_buffer, cfg.env.reward_scaling
     )

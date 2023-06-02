@@ -26,7 +26,7 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 
-    logger = make_logger(cfg.logger)
+    logger = make_logger(cfg)
     offline_buffer, obs_loc, obs_std = make_offline_replay_buffer(
         cfg.replay_buffer, cfg.env.reward_scaling
     )
