@@ -521,9 +521,4 @@ class _DecoratorContextManager:
         return self.__class__()
 
 def get_full_error_trace():
-    try:
-        raise Exception
-    except Exception as e:
-        # Capture the error traceback
-        error_trace = traceback.format_exc()
-        print(error_trace)
+    traceback.print_stack()
