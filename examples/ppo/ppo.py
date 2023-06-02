@@ -47,7 +47,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, adv_module = make_loss(
         cfg.loss, actor_network=actor, value_network=critic, value_head=critic_head,
     )
-    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic)
+    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
 
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // mini_batch_size
