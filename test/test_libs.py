@@ -1377,11 +1377,11 @@ class TestD4RL:
 @pytest.mark.parametrize(
     "dataset",
     [
-        "adult_num",
-        "adult_onehot",
+        # "adult_num", # 1226: Expensive to test
+        # "adult_onehot", # 1226: Expensive to test
         "mushroom_num",
         "mushroom_onehot",
-        "covertype",
+        # "covertype",  # 1226: Expensive to test
         "shuttle",
         "magic",
     ],

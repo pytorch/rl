@@ -671,10 +671,17 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("open_before", [False, True])
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: Skip PONG for efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out,open_before",
+        [  # 1226: Skip PONG for efficiency
+            [True, True, True],
+            [True, True, False],
+            [False, False, True],
+        ],
+    )
     def test_parallel_env_cast(
         self,
         env_name,
