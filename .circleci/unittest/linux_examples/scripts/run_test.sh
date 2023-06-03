@@ -184,7 +184,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   optim_steps_per_batch=1 \
   record_video=True \
   record_frames=4 \
-  replay_buffer.size=120 \
+  replay_buffer_size=120 \
   logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
