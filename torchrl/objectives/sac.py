@@ -452,7 +452,7 @@ class SACLoss(LossModule):
         target_value = self._get_value_v2(
             tensordict,
             self._alpha,
-            self.target_actor_network_params,
+            self.actor_network_params,
             self.target_qvalue_network_params,
         )
 

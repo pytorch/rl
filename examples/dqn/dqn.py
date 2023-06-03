@@ -49,7 +49,7 @@ cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)

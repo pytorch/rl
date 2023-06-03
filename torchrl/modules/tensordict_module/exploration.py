@@ -11,11 +11,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
@@ -422,14 +418,6 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         noise_key = self.ou.noise_key
         steps_key = self.ou.steps_key
 
-        ou_specs = {
-            noise_key: None,
-            steps_key: UnboundedContinuousTensorSpec(
-                shape=(*self.td_module._spec.shape, 1),
-                device=self.td_module._spec.device,
-                dtype=torch.int64,
-            ),
-        }
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
                 spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
@@ -444,6 +432,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 self._spec[action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
+        ou_specs = {
+            noise_key: None,
+            steps_key: None,
+        }
         self._spec.update(ou_specs)
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
