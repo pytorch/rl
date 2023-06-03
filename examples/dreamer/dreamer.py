@@ -67,7 +67,7 @@ def retrieve_stats_from_state_dict(obs_norm_state_dict):
     }
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
