@@ -653,6 +653,9 @@ class TestDQN(LossModuleTestBase):
         assert loss_fn.tensor_keys.priority in td.keys()
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestDDPG(LossModuleTestBase):
     seed = 0
 
@@ -765,9 +768,6 @@ class TestDDPG(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
@@ -866,9 +866,6 @@ class TestDDPG(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
@@ -996,6 +993,9 @@ class TestDDPG(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestTD3(LossModuleTestBase):
     seed = 0
 
@@ -1103,6 +1103,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("use_action_spec", [True, False])
     def test_td3(
         self,
         delay_actor,
@@ -1111,14 +1112,23 @@ class TestTD3(LossModuleTestBase):
         policy_noise,
         noise_clip,
         td_est,
+        use_action_spec,
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_td3(device=device)
+        if use_action_spec:
+            action_spec = actor.spec
+            bounds = None
+        else:
+            bounds = (-1, 1)
+            action_spec = None
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=action_spec,
+            bounds=bounds,
             loss_function="l2",
             policy_noise=policy_noise,
             noise_clip=noise_clip,
@@ -1195,6 +1205,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=actor.spec,
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_qvalue=delay_qvalue,
@@ -1281,6 +1292,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=actor.spec,
         )
 
         default_keys = {
@@ -1304,7 +1316,35 @@ class TestTD3(LossModuleTestBase):
         key_mapping = {"state_action_value": ("value", "state_action_value_test")}
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
+    @pytest.mark.parametrize("spec", [True, False])
+    @pytest.mark.parametrize("bounds", [True, False])
+    def test_constructor(self, spec, bounds):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        action_spec = actor.spec if spec else None
+        bounds = (-1, 1) if bounds else None
+        if (bounds is not None and action_spec is not None) or (
+            bounds is None and action_spec is None
+        ):
+            with pytest.raises(ValueError, match="but not both"):
+                TD3Loss(
+                    actor,
+                    value,
+                    action_spec=action_spec,
+                    bounds=bounds,
+                )
+            return
+        TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+        )
 
+
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize("version", [1, 2])
 class TestSAC(LossModuleTestBase):
     seed = 0
@@ -1412,9 +1452,6 @@ class TestSAC(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -1570,9 +1607,6 @@ class TestSAC(LossModuleTestBase):
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -1765,6 +1799,9 @@ class TestSAC(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestDiscreteSAC(LossModuleTestBase):
     seed = 0
 
@@ -1874,9 +1911,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -1982,9 +2016,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
@@ -4150,6 +4181,9 @@ class TestDreamer(LossModuleTestBase):
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
+)
 class TestIQL(LossModuleTestBase):
     seed = 0
 
@@ -4255,9 +4289,6 @@ class TestIQL(LossModuleTestBase):
         )
         return td
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
@@ -4375,9 +4406,6 @@ class TestIQL(LossModuleTestBase):
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
-    )
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("temperature", [0.0, 0.1, 1.0, 10.0])
