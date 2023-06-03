@@ -159,7 +159,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py
   collector.env_per_collector=1 \
   collector.collector_device=cuda:0 \
   optimization.utd_ratio=1 \
-  buffer_size=120 \
+  replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
 #  record_video=True \
