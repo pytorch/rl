@@ -1059,6 +1059,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("use_action_spec", [True, False])
     def test_td3(
         self,
         delay_actor,
@@ -1067,14 +1068,23 @@ class TestTD3(LossModuleTestBase):
         policy_noise,
         noise_clip,
         td_est,
+        use_action_spec,
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
         td = self._create_mock_data_td3(device=device)
+        if use_action_spec:
+            action_spec = actor.spec
+            bounds = None
+        else:
+            bounds = (-1, 1)
+            action_spec = None
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=action_spec,
+            bounds=bounds,
             loss_function="l2",
             policy_noise=policy_noise,
             noise_clip=noise_clip,
@@ -1151,6 +1161,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=actor.spec,
             policy_noise=policy_noise,
             noise_clip=noise_clip,
             delay_qvalue=delay_qvalue,
@@ -1237,6 +1248,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
+            action_spec=actor.spec,
         )
 
         default_keys = {
@@ -1259,6 +1271,31 @@ class TestTD3(LossModuleTestBase):
         )
         key_mapping = {"state_action_value": ("value", "state_action_value_test")}
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("spec", [True, False])
+    @pytest.mark.parametrize("bounds", [True, False])
+    def test_constructor(self, spec, bounds):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        action_spec = actor.spec if spec else None
+        bounds = (-1, 1) if bounds else None
+        if (bounds is not None and action_spec is not None) or (
+            bounds is None and action_spec is None
+        ):
+            with pytest.raises(ValueError, match="but not both"):
+                TD3Loss(
+                    actor,
+                    value,
+                    action_spec=action_spec,
+                    bounds=bounds,
+                )
+            return
+        TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+        )
 
 
 @pytest.mark.skipif(
