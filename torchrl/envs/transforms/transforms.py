@@ -823,6 +823,13 @@ class Compose(Transform):
         for t in transforms:
             t.set_container(self)
 
+    def to(self, *args, **kwargs):
+        # because Module.to(...) does not call to(...) on sub-modules, we have
+        # manually call it:
+        for t in self.transforms:
+            t.to(*args, **kwargs)
+        return super().to(*args, **kwargs)
+
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
             tensordict = t._call(tensordict)
