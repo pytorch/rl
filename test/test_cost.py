@@ -3478,7 +3478,7 @@ class TestA2C(LossModuleTestBase):
             "value_target": ("value_target", "value_target_test"),
             "value": ("value", "value_state_test"),
             "reward": ("reward", "reward_test"),
-            "done": ("done", "done_test"),
+            "done": ("done", ("done", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -3492,7 +3492,7 @@ class TestA2C(LossModuleTestBase):
         value_key = "state_value_test"
         action_key = "action_test"
         reward_key = "reward_test"
-        done_key = "done_test"
+        done_key = ("done", "test")
 
         td = self._create_seq_mock_data_a2c(
             device=device,
