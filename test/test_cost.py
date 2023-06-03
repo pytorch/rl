@@ -936,8 +936,8 @@ class TestDDPG(LossModuleTestBase):
         )
         key_mapping = {
             "state_action_value": ("value", "state_action_value_test"),
-            "reward": ("reward", "reward_test"),
-            "done": ("done", "done_test"),
+            "reward": ("reward", "reward2"),
+            "done": ("done", ("done", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -952,12 +952,14 @@ class TestDDPG(LossModuleTestBase):
             "state_action_value": "state_action_value_test",
             "priority": "td_error_test",
             "reward": "reward_test",
-            "done": "done_test",
+            "done": ("done", "test"),
         }
 
         actor = self._create_mock_actor()
         value = self._create_mock_value(out_keys=[tensor_keys["state_action_value"]])
-        td = self._create_mock_data_ddpg(reward_key="reward_test", done_key="done_test")
+        td = self._create_mock_data_ddpg(
+            reward_key="reward_test", done_key=("done", "test")
+        )
         loss_fn = DDPGLoss(
             actor,
             value,
