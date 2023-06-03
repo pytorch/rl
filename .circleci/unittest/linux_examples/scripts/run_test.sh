@@ -31,6 +31,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 # With batched environments
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
+  env.device=cuda:0 \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
   collector.collector_device=cuda:0 \
@@ -187,6 +188,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   buffer_size=120
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
+  env.device=cuda:0 \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \
   collector.collector_device=cuda:0 \
