@@ -2,9 +2,11 @@ import importlib
 import os
 import subprocess
 import warnings
+from functools import partial
 from typing import Union
 
 import torch
+from torch import nn
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -73,7 +75,6 @@ class VC1Transform(Transform):
             model_name = "vc1_vitb_noload"
         self.model_name = model_name
         self.del_keys = del_keys
-        self.stack_images = stack_images
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._init()
@@ -253,7 +254,7 @@ model:
   _target_: vc_models.models.vit.vit.load_mae_encoder
   checkpoint_path:
   model:
-    _target_: vc_models.models.vit.vit.vit_base_patch16
+    _target_: torchrl.envs.transforms.vc1.vit_base_patch16
     img_size: 224
     use_cls: True
     drop_path_rate: 0.0
@@ -270,3 +271,19 @@ metadata:
 """
         with open(cfg_path, "w") as file:
             file.write(config)
+
+
+def vit_base_patch16(**kwargs):
+    from vc_models.models.vit.vit import VisionTransformer
+
+    model = VisionTransformer(
+        patch_size=16,
+        embed_dim=13,
+        depth=4,
+        num_heads=3,
+        mlp_ratio=4,
+        qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        **kwargs,
+    )
+    return model
