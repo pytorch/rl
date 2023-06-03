@@ -630,7 +630,12 @@ class TestCatFrames(TransformBase):
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing R3M on cuda only")
 @pytest.mark.parametrize("device", ["cuda:0"])
-@pytest.mark.parametrize("model", ["resnet18", ])  # 1226: "resnet34", "resnet50"])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "resnet18",
+    ],
+)  # 1226: "resnet34", "resnet50"])
 class TestR3M(TransformBase):
     def test_transform_inverse(self, model, device):
         raise pytest.skip("no inverse for R3MTransform")
