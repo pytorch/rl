@@ -371,7 +371,10 @@ def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn
     if isinstance(create_env_fn, ParallelEnv):
         sd = create_env_fn.state_dict()["worker0"]
     elif isinstance(create_env_fn, EnvCreator):
-        sd = create_env_fn().state_dict()
+        _env = create_env_fn()
+        _env.rollout(2)
+        sd = _env.state_dict()
+        del _env
     else:
         sd = create_env_fn.state_dict()
     sd = {
