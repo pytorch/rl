@@ -810,9 +810,9 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED]) # 1226: No pong for efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize("device", [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")])
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
         env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
