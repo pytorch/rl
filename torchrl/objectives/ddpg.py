@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 
@@ -38,6 +38,84 @@ class DDPGLoss(LossModule):
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
             data collection. Default is ``True``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
+        >>> from torchrl.objectives.ddpg import DDPGLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation", "action"])
+        >>> loss = DDPGLoss(actor, value)
+        >>> batch = [2, ]
+        >>> data = TensorDict({
+        ...        "observation": torch.randn(*batch, n_obs),
+        ...        "action": spec.rand(batch),
+        ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...        ("next", "reward"): torch.randn(*batch, 1),
+        ...    }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                pred_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value_max: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["next_reward", "next_done"]`` + in_keys of the actor_network and value_network.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_value", "pred_value", "target_value", "pred_value_max", "target_value_max"]``
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.tensordict_module.actors import Actor, ValueOperator
+        >>> from torchrl.objectives.ddpg import DDPGLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> actor = Actor(spec=spec, module=nn.Linear(n_obs, n_act))
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation", "action"])
+        >>> loss = DDPGLoss(actor, value)
+        >>> loss_val = loss(
+        ...     observation=torch.randn(n_obs),
+        ...     action=spec.rand(),
+        ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_reward=torch.randn(1))
+        >>> loss_val
+        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(1.3344, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(1.7744), tensor(0.6193), tensor(1.7744))
+
     """
 
     @dataclass
@@ -49,14 +127,22 @@ class DDPGLoss(LossModule):
 
         Attributes:
             state_action_value (NestedKey): The input tensordict key where the
-                state action value is expected.  Will be used for the underlying
+                state action value is expected. Will be used for the underlying
                 value estimator as value key. Defaults to ``"state_action_value"``.
             priority (NestedKey): The input tensordict key where the target
                 priority is written to. Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
+
         """
 
         state_action_value: NestedKey = "state_action_value"
         priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
@@ -107,35 +193,56 @@ class DDPGLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.state_action_value,
+                reward=self._tensor_keys.reward,
+                done=self._tensor_keys.done,
             )
 
-    def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
+    @property
+    def in_keys(self):
+        keys = [
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+        ]
+        keys += self.value_network.in_keys
+        keys += self.actor_in_keys
+        keys = list(set(keys))
+        return keys
+
+    @dispatch(
+        dest=[
+            "loss_actor",
+            "loss_value",
+            "pred_value",
+            "target_value",
+            "pred_value_max",
+            "target_value_max",
+        ]
+    )
+    def forward(self, tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
         This function will also write a "td_error" key that can be used by prioritized replay buffers to assign
             a priority to items in the tensordict.
 
         Args:
-            input_tensordict (TensorDictBase): a tensordict with keys ["done", "reward"] and the in_keys of the actor
+            tensordict (TensorDictBase): a tensordict with keys ["done", "reward"] and the in_keys of the actor
                 and value networks.
 
         Returns:
             a tuple of 2 tensors containing the DDPG loss.
 
         """
-        loss_value, td_error, pred_val, target_value = self._loss_value(
-            input_tensordict,
-        )
+        loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
         td_error = td_error.detach()
-        td_error = td_error.unsqueeze(input_tensordict.ndimension())
-        if input_tensordict.device is not None:
-            td_error = td_error.to(input_tensordict.device)
-        input_tensordict.set(
+        td_error = td_error.unsqueeze(tensordict.ndimension())
+        if tensordict.device is not None:
+            td_error = td_error.to(tensordict.device)
+        tensordict.set(
             self.tensor_keys.priority,
             td_error,
             inplace=True,
         )
-        loss_actor = self._loss_actor(input_tensordict)
+        loss_actor = self._loss_actor(tensordict)
         return TensorDict(
             source={
                 "loss_actor": loss_actor.mean(),
@@ -220,5 +327,9 @@ class DDPGLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-        tensor_keys = {"value": self.tensor_keys.state_action_value}
+        tensor_keys = {
+            "value": self.tensor_keys.state_action_value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
+        }
         self._value_estimator.set_keys(**tensor_keys)
