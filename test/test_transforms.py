@@ -629,7 +629,7 @@ class TestCatFrames(TransformBase):
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing R3M on cuda only")
-@pytest.mark.parametrize("device", ["cuda:0"])
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
 @pytest.mark.parametrize(
     "model",
     [
@@ -5565,7 +5565,7 @@ class TestgSDE(TransformBase):
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing VIP on cuda only")
-@pytest.mark.parametrize("device", ["cuda:0"])
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
 @pytest.mark.parametrize("model", ["resnet50"])
 class TestVIP(TransformBase):
     def test_transform_inverse(self, model, device):
