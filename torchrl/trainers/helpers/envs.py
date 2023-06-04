@@ -216,6 +216,7 @@ def make_env_transforms(
 
 
 def get_norm_state_dict(env):
+    """Gets the normalization loc and scale from the env state_dict."""
     sd = env.state_dict()
     sd = {
         key: val
