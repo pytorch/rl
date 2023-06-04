@@ -4256,13 +4256,20 @@ class TestDreamer(LossModuleTestBase):
 class TestIQL(LossModuleTestBase):
     seed = 0
 
-    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_actor(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        observation_key="observation",
+    ):
         # Actor
         action_spec = BoundedTensorSpec(
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -4271,7 +4278,16 @@ class TestIQL(LossModuleTestBase):
         )
         return actor.to(device)
 
-    def _create_mock_qvalue(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+    def _create_mock_qvalue(
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        out_keys=None,
+        observation_key="observation",
+        action_key="action",
+    ):
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -4283,15 +4299,24 @@ class TestIQL(LossModuleTestBase):
         module = ValueClass()
         qvalue = ValueOperator(
             module=module,
-            in_keys=["observation", "action"],
+            in_keys=[observation_key, action_key],
+            out_keys=out_keys,
         )
         return qvalue.to(device)
 
     def _create_mock_value(
-        self, batch=2, obs_dim=3, action_dim=4, device="cpu", out_keys=None
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        out_keys=None,
+        observation_key="observation",
     ):
         module = nn.Linear(obs_dim, 1)
-        value = ValueOperator(module=module, in_keys=["observation"], out_keys=out_keys)
+        value = ValueOperator(
+            module=module, in_keys=[observation_key], out_keys=out_keys
+        )
         return value.to(device)
 
     def _create_mock_distributional_actor(
@@ -4300,7 +4325,16 @@ class TestIQL(LossModuleTestBase):
         raise NotImplementedError
 
     def _create_mock_data_iql(
-        self, batch=16, obs_dim=3, action_dim=4, atoms=None, device="cpu"
+        self,
+        batch=16,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        observation_key="observation",
+        action_key="action",
+        done_key="done",
+        reward_key="reward",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -4314,13 +4348,13 @@ class TestIQL(LossModuleTestBase):
         td = TensorDict(
             batch_size=(batch,),
             source={
-                "observation": obs,
+                observation_key: obs,
                 "next": {
-                    "observation": next_obs,
-                    "done": done,
-                    "reward": reward,
+                    observation_key: next_obs,
+                    done_key: done,
+                    reward_key: reward,
                 },
-                "action": action,
+                action_key: action,
             },
             device=device,
         )
@@ -4587,6 +4621,8 @@ class TestIQL(LossModuleTestBase):
             "action": "action",
             "state_action_value": "state_action_value",
             "value": "state_value",
+            "reward": "reward",
+            "done": "done",
         }
 
         self.tensordict_keys_test(
@@ -4603,8 +4639,52 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
         )
 
-        key_mapping = {"value": ("value", "value_test")}
+        key_mapping = {
+            "value": ("value", "value_test"),
+            "done": ("done", "done_test"),
+            "reward": ("reward", ("reward", "test")),
+        }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("action_key", ["action", "action2"])
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    def test_iql_notensordict(self, action_key, observation_key, reward_key, done_key):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_iql(
+            action_key=action_key,
+            observation_key=observation_key,
+            reward_key=reward_key,
+            done_key=done_key,
+        )
+
+        actor = self._create_mock_actor(observation_key=observation_key)
+        qvalue = self._create_mock_qvalue(
+            observation_key=observation_key,
+            action_key=action_key,
+            out_keys=["state_action_value"],
+        )
+        value = self._create_mock_value(observation_key=observation_key)
+
+        loss = IQLLoss(actor_network=actor, qvalue_network=qvalue, value_network=value)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+
+        kwargs = {
+            action_key: td.get(action_key),
+            observation_key: td.get(observation_key),
+            f"next_{reward_key}": td.get(("next", reward_key)),
+            f"next_{done_key}": td.get(("next", done_key)),
+        }
+        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+
+        loss_val = loss(**kwargs)
+        loss_val_td = loss(td)
+        assert len(loss_val) == 4
+        torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+        torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
+        torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[2])
+        torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[3])
 
 
 def test_hold_out():
