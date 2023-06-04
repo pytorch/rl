@@ -332,6 +332,7 @@ to be able to create this other composition:
     GrayScale
     gSDENoise
     InitTracker
+    KLRewardTransform
     NoopResetEnv
     ObservationNorm
     ObservationTransform

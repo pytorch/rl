@@ -22,6 +22,7 @@ from .transforms import (
     GrayScale,
     gSDENoise,
     InitTracker,
+    KLRewardTransform,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,

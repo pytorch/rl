@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import warnings
+from dataclasses import dataclass
 from numbers import Number
 from typing import Tuple, Union
 
@@ -13,6 +14,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import Tensor
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import (
@@ -54,9 +56,6 @@ class REDQLoss_deprecated(LossModule):
         sub_sample_len (int, optional): number of Q-value networks to be
             subsampled to evaluate the next state value
             Default is ``2``.
-        priority_key (str, optional): Key where to write the priority value
-            for prioritized replay buffers. Default is
-            ``"td_error"``.
         loss_function (str, optional): loss function to be used for the Q-value.
             Can be one of  ``"smooth_l1"``, ``"l2"``,
             ``"l1"``, Default is ``"smooth_l1"``.
@@ -76,9 +75,16 @@ class REDQLoss_deprecated(LossModule):
         gSDE (bool, optional): Knowing if gSDE is used is necessary to create
             random noise variables.
             Default is ``False``.
-
+        priority_key (str, optional): [Deprecated] Key where to write the priority value
+            for prioritized replay buffers. Default is
+            ``"td_error"``.
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        priority_key: NestedKey = "td_error"
+
+    default_keys = _AcceptedKeys()
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
 
@@ -89,7 +95,6 @@ class REDQLoss_deprecated(LossModule):
         *,
         num_qvalue_nets: int = 10,
         sub_sample_len: int = 2,
-        priority_key: str = "td_error",
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
@@ -99,10 +104,13 @@ class REDQLoss_deprecated(LossModule):
         delay_qvalue: bool = True,
         gSDE: bool = False,
         gamma: float = None,
+        priority_key: str = None,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
         super().__init__()
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
+
         self.convert_to_functional(
             actor_network,
             "actor_network",
@@ -122,7 +130,6 @@ class REDQLoss_deprecated(LossModule):
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
-        self.priority_key = priority_key
         self.loss_function = loss_function
 
         try:
@@ -172,6 +179,9 @@ class REDQLoss_deprecated(LossModule):
         with torch.no_grad():
             alpha = self.log_alpha.exp()
         return alpha
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         loss_actor, sample_log_prob = self._actor_loss(tensordict)
@@ -292,26 +302,21 @@ class REDQLoss_deprecated(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        value_key = "state_value"
         # we do not need a value network bc the next state value is already passed
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=None, value_key=value_key, **hp
-            )
+            self._value_estimator = TD1Estimator(value_network=None, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=None, value_key=value_key, **hp
-            )
+            self._value_estimator = TD0Estimator(value_network=None, **hp)
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
         elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=None, value_key=value_key, **hp
-            )
+            self._value_estimator = TDLambdaEstimator(value_network=None, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+        tensor_keys = {"value": "state_value"}
+        self._value_estimator.set_keys(**tensor_keys)
 
 
 class DoubleREDQLoss_deprecated(REDQLoss_deprecated):

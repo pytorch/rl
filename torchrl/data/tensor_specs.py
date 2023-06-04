@@ -1467,9 +1467,10 @@ class BoundedTensorSpec(TensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        raise NotImplementedError(
-            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
-        )
+        if _is_nested_list(idx):
+            raise NotImplementedError(
+                "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+            )
 
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         # Expand is required as pytorch.tensor indexing
@@ -1480,6 +1481,20 @@ class BoundedTensorSpec(TensorSpec):
             device=self.device,
             dtype=self.dtype,
         )
+
+
+def _is_nested_list(index, notuple=False):
+    if not notuple and isinstance(index, tuple):
+        for idx in index:
+            if _is_nested_list(idx, notuple=True):
+                return True
+    elif isinstance(index, list):
+        for idx in index:
+            if isinstance(idx, list):
+                return True
+        else:
+            return False
+    return False
 
 
 @dataclass(repr=False)
@@ -2368,9 +2383,10 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
-        raise NotImplementedError(
-            "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
-        )
+        if _is_nested_list(idx):
+            raise NotImplementedError(
+                "Pending resolution of https://github.com/pytorch/pytorch/issues/100080."
+            )
 
         return self.__class__(
             nvec=self.nvec[idx].clone(),
