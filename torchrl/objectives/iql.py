@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict.nn import TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -57,6 +57,109 @@ class IQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.iql import IQLLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = IQLLoss(actor, qvalue, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor, value, and qvalue network
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_value", "entropy"]``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.iql import IQLLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = IQLLoss(actor, qvalue, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> loss_val = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_val
+        (tensor(1.4535, grad_fn=<MeanBackward0>), tensor(0.8389, grad_fn=<MeanBackward0>), tensor(0.3406, grad_fn=<MeanBackward0>), tensor(3.3441))
+
     """
 
     @dataclass
@@ -78,6 +181,11 @@ class IQLLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected. Will be used for the underlying
                 value estimator as value key. Defaults to ``"state_action_value"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         value: NestedKey = "state_value"
@@ -85,6 +193,8 @@ class IQLLoss(LossModule):
         log_prob: NestedKey = "_log_prob"
         priority: NestedKey = "td_error"
         state_action_value: NestedKey = "state_action_value"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -153,6 +263,19 @@ class IQLLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+        ]
+        keys.extend(self.actor_network.in_keys)
+        keys.extend(self.qvalue_network.in_keys)
+        keys.extend(self.value_network.in_keys)
+
+        return list(set(keys))
+
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
         """Loss function for iql expectile value difference."""
@@ -163,8 +286,18 @@ class IQLLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
 
+    @dispatch(
+        dest=[
+            "loss_actor",
+            "loss_qvalue",
+            "loss_value",
+            "entropy",
+        ]
+    )
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
@@ -317,5 +450,7 @@ class IQLLoss(LossModule):
         tensor_keys = {
             "value_target": "value_target",
             "value": self.tensor_keys.value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)
