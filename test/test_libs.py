@@ -25,7 +25,6 @@ from _utils_internal import (
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
-from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
