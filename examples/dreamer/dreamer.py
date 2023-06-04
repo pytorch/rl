@@ -170,7 +170,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
-    create_env_fn.rollout(2)
+    if isinstance(create_env_fn, EnvBase):
+        create_env_fn.rollout(2)
+    else:
+        create_env_fn().rollout(2)
 
     # Create the replay buffer
 
