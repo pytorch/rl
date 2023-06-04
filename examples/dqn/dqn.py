@@ -20,6 +20,7 @@ from torchrl.trainers.helpers.collectors import (
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
     EnvConfig,
+    get_norm_state_dict,
     initialize_observation_norm_transforms,
     parallel_env_constructor,
     retrieve_observation_norms_state_dict,
@@ -127,7 +128,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     if isinstance(create_env_fn, ParallelEnv):
         raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
+        recorder.transform[1:].load_state_dict(
+            get_norm_state_dict(create_env_fn()), strict=False
+        )
     elif isinstance(create_env_fn, TransformedEnv):
         recorder.transform = create_env_fn.transform.clone()
     else:

@@ -215,6 +215,16 @@ def make_env_transforms(
     return env
 
 
+def get_norm_state_dict(env):
+    sd = env.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    return sd
+
+
 def transformed_env_constructor(
     cfg: "DictConfig",  # noqa: F821
     video_tag: str = "",
