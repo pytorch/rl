@@ -572,31 +572,13 @@ class TestParallel:
         "env_name",
         [
             PENDULUM_VERSIONED,
-            PONG_VERSIONED,
         ],
-    )
-    @pytest.mark.parametrize("frame_skip", [4, 1])
+    )  # PONG_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize(
-        "transformed_in",
-        [
-            True,
-            False,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "transformed_out",
-        [
-            False,
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "static_seed",
-        [
-            False,
-            True,
-        ],
-    )
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: effociency
+    @pytest.mark.parametrize("static_seed", [False, True])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
