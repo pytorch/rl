@@ -8,7 +8,7 @@ CALL_TIMES = defaultdict(lambda: 0.0)
 
 
 def pytest_sessionfinish(maxprint=50):
-    out_str = f"""
+    out_str = """
 Call times:
 ===========
 """
