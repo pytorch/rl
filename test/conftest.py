@@ -12,6 +12,7 @@ def pytest_sessionfinish(maxprint=50):
 Call times:
 ===========
 """
+    keys = list(CALL_TIMES.keys())
     if len(keys) > 1:
         maxchar = max(*[len(key) for key in keys])
     else:
