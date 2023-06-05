@@ -12,12 +12,16 @@ def pytest_sessionfinish(maxprint=50):
 Call times:
 ===========
 """
-    maxchar = max(*[len(key) for key in CALL_TIMES.keys()])
+    keys = list(CALL_TIMES.keys())
+    if len(keys) > 1:
+        maxchar = max(*[len(key) for key in keys])
+    else:
+        maxchar = len(keys[0])
     for i, (key, item) in enumerate(
         sorted(CALL_TIMES.items(), key=lambda x: x[1], reverse=True)
     ):
         spaces = "  " + " " * (maxchar - len(key))
-        out_str += f"\t{key}{spaces}{item: 4.4f}\n"
+        out_str += f"\t{key}{spaces}{item: 4.4f}s\n"
         if i == maxprint - 1:
             break
     print(out_str)
