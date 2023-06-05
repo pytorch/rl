@@ -14,9 +14,8 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.nn import dispatch
-from tensordict.nn.common import _seq_of_nested_key_check
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, unravel_keys
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -3608,7 +3607,7 @@ class ExcludeTransform(Transform):
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            _seq_of_nested_key_check(excluded_keys)
+            excluded_keys = [unravel_keys(key) for key in excluded_keys]
         except ValueError:
             raise ValueError(
                 "excluded keys must be a list or tuple of strings or tuples of strings."
@@ -3654,7 +3653,7 @@ class SelectTransform(Transform):
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            _seq_of_nested_key_check(selected_keys)
+            selected_keys = [unravel_keys(key) for key in selected_keys]
         except ValueError:
             raise ValueError(
                 "selected keys must be a list or tuple of strings or tuples of strings."
