@@ -452,7 +452,10 @@ if _has_gym:
 
 # @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.parametrize("env_lib,env_args,env_kwargs", params)
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "device",
+    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+)
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
         if not _has_dmc and env_lib is DMControlEnv:
@@ -480,8 +483,8 @@ class TestCollectorLib:
             init_random_frames=-1,
             reset_at_each_iter=False,
             split_trajs=True,
-            devices=[device, device],
-            storing_devices=[device, device],
+            device=device,
+            storing_devices=device,
             update_at_each_batch=False,
             exploration_type=ExplorationType.RANDOM,
         )

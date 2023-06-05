@@ -676,7 +676,7 @@ class TestParallel:
     )  # 1226: Skip PONG for efficiency
     @pytest.mark.parametrize(
         "transformed_in,transformed_out,open_before",
-        [  # 1226: Skip PONG for efficiency
+        [  # 1226: efficiency
             [True, True, True],
             [True, True, False],
             [False, False, True],
@@ -773,9 +773,14 @@ class TestParallel:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out",
+        [  # 1226
+            [True, True],
+            [False, False],
+        ],
+    )
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
