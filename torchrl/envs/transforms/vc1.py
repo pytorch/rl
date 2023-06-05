@@ -278,9 +278,9 @@ def vit_base_patch16(**kwargs):
 
     model = VisionTransformer(
         patch_size=16,
-        embed_dim=13,
+        embed_dim=16,
         depth=4,
-        num_heads=3,
+        num_heads=4,
         mlp_ratio=4,
         qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6),
