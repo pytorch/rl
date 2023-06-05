@@ -155,7 +155,8 @@ class RoboHiveEnv(GymEnv):
                 env_name, return_dict=True, device_id=render_device, **kwargs
             )
             self.wrapper_frame_skip = self.frame_skip
-
+        # except Exception as err:
+        #     raise RuntimeError(f"Failed to build env {env_name}.") from err
         self.from_pixels = from_pixels
         self.render_device = render_device
         self.info_dict_reader = self.read_info
@@ -258,6 +259,9 @@ class RoboHiveEnv(GymEnv):
         # recover vec
         obsvec = []
         pixel_list = []
+        print('got', observation)
+        print('observations', observations)
+        print('self._env.obs_keys', self._env.obs_keys)
         if self.from_pixels:
             visual = self.env.get_exteroception()
             observations.update(visual)
@@ -268,7 +272,9 @@ class RoboHiveEnv(GymEnv):
                     pix = pix[None]
                 pixel_list.append(pix)
             elif key in self._env.obs_keys:
+                print('getting', key)
                 value = observations[key]
+                print(value.shape)
                 if not value.shape:
                     value = value[None]
                 obsvec.append(value)  # ravel helps with images
@@ -278,6 +284,7 @@ class RoboHiveEnv(GymEnv):
             out = {"observation": obsvec, "pixels": np.concatenate(pixel_list, 0)}
         else:
             out = {"observation": obsvec}
+        print([(key, item.shape) for key, item in out.items()])
         return super().read_obs(out)
 
     def read_info(self, info, tensordict_out):
