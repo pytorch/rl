@@ -7,6 +7,7 @@ import math
 import os
 import sys
 import time
+import traceback
 import warnings
 from copy import copy
 from distutils.util import strtobool
@@ -518,3 +519,8 @@ class _DecoratorContextManager:
     def clone(self):
         # override this method if your children class takes __init__ parameters
         return self.__class__()
+
+
+def get_trace():
+    """A simple debugging util to spot where a function is being called."""
+    traceback.print_stack()
