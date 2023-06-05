@@ -484,7 +484,7 @@ class TestCollectorLib:
             reset_at_each_iter=False,
             split_trajs=True,
             device=device,
-            storing_devices=device,
+            storing_device=device,
             exploration_type=ExplorationType.RANDOM,
         )
         for i, _data in enumerate(collector):
