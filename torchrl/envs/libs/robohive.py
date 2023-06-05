@@ -5,14 +5,16 @@
 import importlib
 import os
 import warnings
+
+from copy import copy
 from pathlib import Path
 
 import numpy as np
 import torch
-
+from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
-from torchrl.data import BoundedTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
+from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import (
     _gym_to_torchrl_spec_transform,
     GymEnv,
@@ -126,7 +128,6 @@ class RoboHiveEnv(GymEnv):
             render_device = int(str(self.device)[-1])
         except ValueError:
             render_device = 0
-        print(f"rendering device: {render_device}, device is {self.device}")
 
         if not _has_robohive:
             raise RuntimeError(
@@ -168,14 +169,10 @@ class RoboHiveEnv(GymEnv):
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
             cams = sorted(cams)
-            print("cams", cams)
             new_env_name = "-".join([cam[:-3] for cam in cams] + [env_name])
-            print("new_env_name", new_env_name)
             if new_env_name in cls.env_list:
                 return new_env_name
             visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
-            print(f"env visual_keys: {visual_keys}")
-            print(f"new env name: {new_env_name}")
             register_env_variant(
                 env_name,
                 variants={
@@ -188,54 +185,66 @@ class RoboHiveEnv(GymEnv):
             return env_name
 
     def _make_specs(self, env: "gym.Env") -> None:
-        if self.from_pixels:
-            num_cams = len(env.visual_keys)
-            # n_pix = 224 * 224 * 3 * num_cams
-            # env.observation_space = gym.spaces.Box(
-            #     -8 * np.ones(env.obs_dim - n_pix),
-            #     8 * np.ones(env.obs_dim - n_pix),
-            #     dtype=np.float32,
-            # )
+        # if self.from_pixels:
+        #     num_cams = len(env.visual_keys)
+        # n_pix = 224 * 224 * 3 * num_cams
+        # env.observation_space = gym.spaces.Box(
+        #     -8 * np.ones(env.obs_dim - n_pix),
+        #     8 * np.ones(env.obs_dim - n_pix),
+        #     dtype=np.float32,
+        # )
         self.action_spec = _gym_to_torchrl_spec_transform(
             env.action_space, device=self.device
         )
-        observation_spec = _gym_to_torchrl_spec_transform(
-            env.observation_space,
-            device=self.device,
+        # get a np rollout
+        rollout = TensorDict({"done": torch.zeros(3, 1)}, [3])
+        env.reset()
+
+        def get_obs():
+            _dict = {}
+            obs_dict = copy(env.obs_dict)
+            if self.from_pixels:
+                visual = self.env.get_exteroception()
+                obs_dict.update(visual)
+            pixel_list = []
+            for obs_key in obs_dict:
+                if obs_key.startswith("rgb"):
+                    pix = obs_dict[obs_key]
+                    if not pix.shape[0] == 1:
+                        pix = pix[None]
+                    pixel_list.append(pix)
+                elif obs_key in env.obs_keys:
+                    value = env.obs_dict[obs_key]
+                    if not value.shape:
+                        value = value[None]
+                    _dict[obs_key] = value
+            if pixel_list:
+                _dict["pixels"] = np.concatenate(pixel_list, 0)
+            return _dict
+
+        for i in range(3):
+            _dict = {}
+            _dict.update(get_obs())
+            _dict["action"] = action = env.action_space.sample()
+            _, r, d, _ = env.step(action)
+            _dict[("next", "reward")] = r.reshape(1)
+            _dict[("next", "done")] = [1]
+            _dict["next"] = get_obs()
+            rollout[i] = TensorDict(_dict, [])
+
+        observation_spec = make_composite_from_td(
+            rollout.get("next").exclude("done", "reward")[0]
         )
-        if not isinstance(observation_spec, CompositeSpec):
-            observation_spec = CompositeSpec(observation=observation_spec)
         self.observation_spec = observation_spec
-        if self.from_pixels:
-            self.observation_spec["pixels"] = BoundedTensorSpec(
-                torch.zeros(
-                    num_cams,
-                    224,  # working with 640
-                    224,  # working with 480
-                    3,
-                    device=self.device,
-                    dtype=torch.uint8,
-                ),
-                255
-                * torch.ones(
-                    num_cams,
-                    224,
-                    224,
-                    3,
-                    device=self.device,
-                    dtype=torch.uint8,
-                ),
-                torch.Size(torch.Size([num_cams, 224, 224, 3])),
-                dtype=torch.uint8,
-                device=self.device,
-            )
 
         self.reward_spec = UnboundedContinuousTensorSpec(
+            shape=(1,),
             device=self.device,
         )  # default
 
         rollout = self.rollout(2).get("next").exclude("done", "reward")[0]
-        self.observation_spec.update(make_composite_from_td(rollout))
+        spec = make_composite_from_td(rollout)
+        self.observation_spec.update(spec)
 
     def set_from_pixels(self, from_pixels: bool) -> None:
         """Sets the from_pixels attribute to an existing environment.
@@ -257,11 +266,8 @@ class RoboHiveEnv(GymEnv):
         except KeyError:
             pass
         # recover vec
-        obsvec = []
+        obsdict = {}
         pixel_list = []
-        print('got', observation)
-        print('observations', observations)
-        print('self._env.obs_keys', self._env.obs_keys)
         if self.from_pixels:
             visual = self.env.get_exteroception()
             observations.update(visual)
@@ -272,25 +278,21 @@ class RoboHiveEnv(GymEnv):
                     pix = pix[None]
                 pixel_list.append(pix)
             elif key in self._env.obs_keys:
-                print('getting', key)
                 value = observations[key]
-                print(value.shape)
                 if not value.shape:
                     value = value[None]
-                obsvec.append(value)  # ravel helps with images
-        if obsvec:
-            obsvec = np.concatenate(obsvec, 0)
+                obsdict[key] = value  # ravel helps with images
+        # if obsvec:
+        #     obsvec = np.concatenate(obsvec, 0)
         if self.from_pixels:
-            out = {"observation": obsvec, "pixels": np.concatenate(pixel_list, 0)}
-        else:
-            out = {"observation": obsvec}
-        print([(key, item.shape) for key, item in out.items()])
+            obsdict.update({"pixels": np.concatenate(pixel_list, 0)})
+        out = obsdict
         return super().read_obs(out)
 
     def read_info(self, info, tensordict_out):
         out = {}
         for key, value in info.items():
-            if key in ("obs_dict", "done", "reward"):
+            if key in ("obs_dict", "done", "reward", *self._env.obs_keys):
                 continue
             if isinstance(value, dict):
                 value = {key: _val for key, _val in value.items() if _val is not None}
@@ -298,6 +300,9 @@ class RoboHiveEnv(GymEnv):
             if value is not None:
                 out[key] = value
         tensordict_out.update(out)
+        tensordict_out.update(
+            tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
+        )
         return tensordict_out
 
     def to(self, *args, **kwargs):
@@ -314,219 +319,8 @@ class RoboHiveEnv(GymEnv):
     def get_available_cams(cls, env_name):
         env = gym.make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
-        print("available cameras", cams)
         return cams
 
 
 if _has_robohive:
     RoboHiveEnv.register_envs()
-    # MODEL_PATH = robohive.envs.multi_task.substeps1.MODEL_PATH
-    # CONFIG_PATH = robohive.envs.multi_task.substeps1.CONFIG_PATH
-    # RANDOM_ENTRY_POINT = robohive.envs.multi_task.substeps1.RANDOM_ENTRY_POINT
-    # FIXED_ENTRY_POINT = robohive.envs.multi_task.substeps1.FIXED_ENTRY_POINT
-    # ENTRY_POINT = RANDOM_ENTRY_POINT
-#
-#     visual_obs_keys_wt = robohive.envs.multi_task.substeps1.visual_obs_keys_wt
-#
-#     override_keys = [
-#         "objs_jnt",
-#         "end_effector",
-#         "knob1_site_err",
-#         "knob2_site_err",
-#         "knob3_site_err",
-#         "knob4_site_err",
-#         "light_site_err",
-#         "slide_site_err",
-#         "leftdoor_site_err",
-#         "rightdoor_site_err",
-#         "microhandle_site_err",
-#         "kettle_site0_err",
-#         "rgb:right_cam:224x224:2d",
-#         "rgb:left_cam:224x224:2d",
-#     ]
-#
-#     @set_directory(CURR_DIR)
-#     def register_kitchen_envs():
-#         print("RLHive:> Registering Kitchen Envs")
-#
-#         env_list = [
-#             "FK1_RelaxFixed-v4",
-#             # "kitchen_close-v3",
-#         ]
-#
-#         obs_keys_wt = {
-#             "robot_jnt": 1.0,
-#             "end_effector": 1.0,
-#         }
-#
-#         env_names = copy(env_list)
-#
-#         for env in env_list:
-#             try:
-#                 _env = gym.make(env)
-#                 cams = [
-#                     _env.sim.model.id2name(ic, 7) for ic in range(_env.sim.model.ncam)
-#                 ]
-#                 if len(cams) == 0:
-#                     continue
-#                 visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
-#                 print("env visual_keys", visual_keys)
-#                 new_env_name = "visual_" + env
-#                 register_env_variant(
-#                     env,
-#                     variants={
-#                         "obs_keys_wt": obs_keys_wt,
-#                         "visual_keys": visual_keys,
-#                     },
-#                     variant_id=new_env_name,
-#                     override_keys=override_keys,
-#                 )
-#                 env_names += [new_env_name]
-#             except AssertionError as err:
-#                 warnings.warn(
-#                     f"Could not register {new_env_name}, the following error was raised: {err}"
-#                 )
-#         return env_names
-#
-#     @set_directory(CURR_DIR)
-#     def register_franka_envs():
-#         print("RLHive:> Registering Franka Envs")
-#         env_list = [
-#             # "franka_slide_random-v3",
-#             # "franka_slide_close-v3",
-#             # "franka_slide_open-v3",
-#             # "franka_micro_random-v3",
-#             # "franka_micro_close-v3",
-#             # "franka_micro_open-v3",
-#         ]
-#         env_names = copy(env_list)
-#
-#         # Franka Appliance ======================================================================
-#         obs_keys_wt = {
-#             "robot_jnt": 1.0,
-#             "end_effector": 1.0,
-#         }
-#         # visual_obs_keys = {
-#         #     "rgb:right_cam:224x224:2d": 1.0,
-#         #     "rgb:left_cam:224x224:2d": 1.0,
-#         # }
-#         for env in env_list:
-#             try:
-#                 _env = gym.make(env)
-#                 cams = [
-#                     _env.sim.model.id2name(ic, 7) for ic in range(_env.sim.model.ncam)
-#                 ]
-#                 if len(cams) == 0:
-#                     continue
-#                 visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
-#                 print("env visual_keys", visual_keys)
-#                 new_env_name = "visual_" + env
-#                 register_env_variant(
-#                     env,
-#                     variants={
-#                         "obs_keys_wt": obs_keys_wt,
-#                         "visual_keys": visual_keys,
-#                     },
-#                     variant_id=new_env_name,
-#                     override_keys=override_keys,
-#                 )
-#                 env_names += [new_env_name]
-#             except AssertionError as err:
-#                 warnings.warn(
-#                     f"Could not register {new_env_name}, the following error was raised: {err}"
-#                 )
-#         return env_names
-#
-#     @set_directory(CURR_DIR)
-#     def _register_hand_envs():
-#         print("RLHive:> Registering Arm Envs")
-#         env_list = ["door-v1", "hammer-v1", "pen-v1", "relocate-v1"]
-#         env_names = copy(env_list)
-#
-#         # Hand Manipulation Suite ======================================================================
-#         for env in env_list:
-#             try:
-#                 _env = gym.make(env)
-#                 cams = [
-#                     _env.sim.model.id2name(ic, 7) for ic in range(_env.sim.model.ncam)
-#                 ]
-#                 if len(cams) == 0:
-#                     continue
-#                 visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
-#                 print("env visual_keys", visual_keys)
-#                 new_env_name = "visual_" + env
-#                 register_env_variant(
-#                     env,
-#                     variants={
-#                         "visual_keys": visual_keys,
-#                     },
-#                     variant_id=new_env_name,
-#                 )
-#                 env_names += [new_env_name]
-#             except AssertionError as err:
-#                 warnings.warn(
-#                     f"Could not register {new_env_name}, the following error was raised: {err}"
-#                 )
-#         return env_names
-#
-#     @set_directory(CURR_DIR)
-#     def _register_myo_envs():
-#         print("RLHive:> Registering Myo Envs")
-#         env_list = [
-#             "motorFingerReachFixed-v0",
-#             "myoFingerPoseFixed-v0",
-#             "myoFingerPoseRandom-v0",
-#             "myoFingerReachFixed-v0",
-#             "myoFingerReachRandom-v0",
-#             # "ElbowPose1D1MRandom-v0",
-#             "myoElbowPose1D6MRandom-v0",
-#             "myoHandPoseFixed-v0",
-#             "myoHandPoseRandom-v0",
-#             "myoHandReachFixed-v0",
-#             "myoHandReachRandom-v0",
-#             "myoHandKeyTurnFixed-v0",
-#             "myoHandKeyTurnRandom-v0",
-#             "myoHandObjHoldFixed-v0",
-#             "myoHandObjHoldRandom-v0",
-#             "myoHandPenTwirlFixed-v0",
-#             "myoHandPenTwirlRandom-v0",
-#             "myoChallengeDieReorientP1-v0",
-#             "myoChallengeDieReorientP2-v0",
-#             "myoChallengeBaodingP1-v1",
-#             "myoChallengeBaodingP2-v1",
-#         ]
-#         env_names = copy(env_list)
-#
-#         visual_keys = [
-#             "rgb:left_cam:224x224:2d",
-#             "rgb:right_cam:224x224:2d",
-#         ]
-#         # Hand Manipulation Suite ======================================================================
-#         for env in env_list:
-#             try:
-#                 _env = gym.make(env)
-#                 cams = [
-#                     _env.sim.model.id2name(ic, 7) for ic in range(_env.sim.model.ncam)
-#                 ]
-#                 if len(cams) == 0:
-#                     continue
-#                 visual_keys = [f"rgb:{c}:224x224:2d" for c in cams]
-#                 print("env visual_keys", visual_keys)
-#                 new_env_name = "visual_" + env
-#                 register_env_variant(
-#                     env,
-#                     variants={
-#                         # "obs_keys": [
-#                         #     "hand_jnt",
-#                         # ],
-#                         "visual_keys": visual_keys,
-#                     },
-#                     variant_id=new_env_name,
-#                 )
-#                 env_names += [new_env_name]
-#             except AssertionError as err:
-#                 warnings.warn(
-#                     f"Could not register {new_env_name}, the following error was raised: {err}"
-#                 )
-#         return env_names
-#

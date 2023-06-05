@@ -429,7 +429,9 @@ def make_composite_from_td(data):
             key: make_composite_from_td(tensor)
             if isinstance(tensor, TensorDictBase)
             else UnboundedContinuousTensorSpec(
-                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+                dtype=tensor.dtype,
+                device=tensor.device,
+                shape=tensor.shape if tensor.shape else [1],
             )
             for key, tensor in data.items()
         },

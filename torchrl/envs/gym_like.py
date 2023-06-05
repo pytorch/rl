@@ -234,7 +234,7 @@ class GymLikeEnv(_EnvWrapper):
         )
 
         if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out)
+            tensordict_out = self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out.select().set("next", tensordict_out)
 
