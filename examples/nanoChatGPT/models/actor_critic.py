@@ -32,12 +32,12 @@ class Masker(nn.Module):
 class ActorCritic(ActorValueOperator):
     def __init__(self, base_model):
         base_model = copy.deepcopy(base_model)
-        n_embd = base_model.gpt2.lm_head.in_features
+        n_embd = base_model.lm_head.in_features
 
         # actor network
         # extract last layer to be reused by actor
-        actor_head = base_model.gpt2.lm_head
-        base_model.gpt2.lm_head = nn.Identity()
+        actor_head = base_model.lm_head
+        base_model.lm_head = nn.Identity()
 
         # critic network
         value_head = nn.Linear(n_embd, 1, bias=False)
@@ -67,7 +67,7 @@ class ActorCritic(ActorValueOperator):
 
 def init_actor_critic(config):
     base_model = init_transformer(
-        config, as_tensordictmodule=False, skip_compilation=True
+        config, as_tensordictmodule=False, skip_compilation=True, inference=True
     )
     a2c_model = ActorCritic(base_model)
     a2c_model.to(config["device"])
