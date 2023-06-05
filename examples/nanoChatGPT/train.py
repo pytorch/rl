@@ -177,6 +177,7 @@ def main():
     plt.title('Supervised Fine Tuning: Loss')
     ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
     ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_losses, label="valid loss")
+    ax.set_yscale('log')
     ax.legend()
     f.savefig("figures/train_curve.png", dpi=150)
 
