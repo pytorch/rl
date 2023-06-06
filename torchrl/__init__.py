@@ -11,9 +11,9 @@ from torch import multiprocessing as mp
 
 if torch.has_cuda and torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
-    os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     # if VERBOSE:
-    print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+    print("MUJOCO_EGL_DEVICE_ID: ", os.environ["MUJOCO_EGL_DEVICE_ID"])
 
 from ._extension import _init_extension
 
