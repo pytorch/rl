@@ -98,6 +98,7 @@ class IQLLoss(LossModule):
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
         >>> loss(data)
         TensorDict(
@@ -152,13 +153,13 @@ class IQLLoss(LossModule):
         >>> loss = IQLLoss(actor, qvalue, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_val = loss(
+        >>> loss_actor, loss_qvlaue, loss_value, entropy = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
-        >>> loss_val
-        (tensor(1.4535, grad_fn=<MeanBackward0>), tensor(0.8389, grad_fn=<MeanBackward0>), tensor(0.3406, grad_fn=<MeanBackward0>), tensor(3.3441))
+        >>> loss_actor.backward()
 
     """
 
@@ -269,10 +270,11 @@ class IQLLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+            *self.value_network.in_keys,
         ]
-        keys.extend(self.actor_network.in_keys)
-        keys.extend(self.qvalue_network.in_keys)
-        keys.extend(self.value_network.in_keys)
 
         return list(set(keys))
 
