@@ -149,8 +149,6 @@ class A2CLoss(LossModule):
         ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
-        >>> loss_val
-        (tensor(4.3483, grad_fn=<MeanBackward0>), tensor(1.4114, grad_fn=<MeanBackward0>), tensor(2.5165), tensor(-0.0252, grad_fn=<MulBackward0>))
     """
 
     @dataclass

@@ -115,8 +115,6 @@ class DDPGLoss(LossModule):
         ...     next_done=torch.zeros(1, dtype=torch.bool),
         ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
-        >>> loss_val
-        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(2.1672, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(2.0914), tensor(0.6193), tensor(2.0914))
 
     """
 

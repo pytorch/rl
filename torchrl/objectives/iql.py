@@ -159,8 +159,6 @@ class IQLLoss(LossModule):
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
-        >>> loss_val
-        (tensor(1.4535, grad_fn=<MeanBackward0>), tensor(0.7506, grad_fn=<MeanBackward0>), tensor(0.3406, grad_fn=<MeanBackward0>), tensor(3.3441))
 
     """
 
