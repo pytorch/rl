@@ -197,7 +197,6 @@ def init_stats(env, n_samples_stats, from_pixels):
                     ),
                     keep_dims=(-1, -2, -3),
                 )
-                print("stats:", t.loc, t.scale, t.loc.shape)
             else:
                 t.init_stats(n_samples_stats)
 
