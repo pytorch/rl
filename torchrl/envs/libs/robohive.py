@@ -80,13 +80,15 @@ class RoboHiveEnv(GymEnv):
 
         if not _has_robohive:
             raise ImportError("Cannot load robohive.")
+        from robohive import robohive_envs
         from robohive.utils.prompt_utils import Prompt, set_prompt_verbosity
 
         set_prompt_verbosity(Prompt.WARN)
-        with set_gym_backend("gym"):
-            robo_envs = set(GymEnv.available_envs) - existing_envs
-        cls.env_list += robo_envs
-        if not len(robo_envs):
+        # with set_gym_backend("gym"):
+        # robo_envs = set(GymEnv.available_envs) - existing_envs
+        cls.env_list += robohive_envs
+        # cls.env_list = sorted(cls.env_list)
+        if not len(robohive_envs):
             raise RuntimeError("did not load any environment.")
 
     @implement_for(
