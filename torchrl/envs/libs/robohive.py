@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
-from torchrl._utils import implement_for
+from torchrl._utils import implement_for, VERBOSE
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import (
     _gym_to_torchrl_spec_transform,
@@ -21,6 +21,12 @@ from torchrl.envs.libs.gym import (
     set_gym_backend,
 )
 from torchrl.envs.utils import make_composite_from_td
+
+if torch.has_cuda and torch.cuda.device_count() > 1:
+    n = torch.cuda.device_count() - 1
+    os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
+    if VERBOSE:
+        print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 _has_robohive = importlib.util.find_spec("robohive") is not None
 
