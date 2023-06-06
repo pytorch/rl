@@ -12,6 +12,7 @@ from pathlib import Path
 
 import evaluate
 import torch
+import matplotlib.pyplot as plt
 import numpy as np
 
 from data.openai_summarize_tldr import get_prompt_dataloaders
@@ -41,7 +42,7 @@ def create_loss_estimator(config, ctx):
     rouge_fn = evaluate.load("rouge")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
-    
+
     @torch.no_grad()
     def estimate_loss(model, dataloader, return_rouge=False):
         model.eval()
@@ -92,8 +93,6 @@ def main():
 
     train_losses = []
     val_losses = []
-    train_rouges = []
-    val_rouges = []
     # ######## TRAINING LOOP ########
     t0 = time.time()
     next_batch = next(train_loader)  # fetch the very first batch
@@ -132,21 +131,11 @@ def main():
         t0 = t1
         if it % config["eval_interval"] == 0:
             # evaluate the loss on train/val sets and write checkpoints
-            if False:  # return_rouge:
-                val_loss, val_rouge = estimate_loss(model, val_loader, return_rouge=True)
-                train_loss, train_rouge = estimate_loss(model, train_loader, return_rouge=True)
-                print(
-                    f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, "
-                    f"train rouge {train_rouge:.4f}, val rouge {val_rouge:.4f}"
-                )
-                train_rouges.append(train_rouge)
-                val_rouges.append(val_rouge)
-            else:
-                val_loss = estimate_loss(model, val_loader)
-                train_loss = estimate_loss(model, train_loader)
-                print(
-                    f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
-                )
+            val_loss = estimate_loss(model, val_loader)
+            train_loss = estimate_loss(model, train_loader)
+            print(
+                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
+            )
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
@@ -171,8 +160,6 @@ def main():
             train_losses.append(lossf)
             print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
-    import matplotlib.pyplot as plt
-
     f, ax = plt.subplots(figsize=(8, 6))
     plt.title('Supervised Fine Tuning: Loss')
     ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
@@ -181,13 +168,12 @@ def main():
     ax.legend()
     f.savefig("figures/train_curve.png", dpi=150)
 
-    if False:
-        f, ax = plt.subplots(figsize=(8, 6))
-        plt.title('Supervised Fine Tuning: Rouge')
-        ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), train_rouges, label="train rouge")
-        ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_rouges, label="valid rouge")
-        ax.legend()
-        f.savefig("figures/train_curve_rouge.png", dpi=150)
+    # f, ax = plt.subplots(figsize=(8, 6))
+    # plt.title('Supervised Fine Tuning: Rouge')
+    # ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), train_rouges, label="train rouge")
+    # ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_rouges, label="valid rouge")
+    # ax.legend()
+    # f.savefig("figures/train_curve_rouge.png", dpi=150)
 
 if __name__ == "__main__":
     main()
