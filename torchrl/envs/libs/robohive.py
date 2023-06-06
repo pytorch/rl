@@ -66,7 +66,14 @@ class RoboHiveEnv(GymEnv):
 
     Github: https://github.com/vikashplus/robohive/
 
-    RoboHive requires gym 0.13
+    RoboHive requires gym 0.13.
+
+    Args:
+        env_name (str): the environment name to build.
+        read_info (bool, optional): whether the the info should be parsed.
+            Defaults to ``True``.
+        device (torch.device, optional): the device on which the input/output
+            are expected. Defaults to torch default device.
     """
 
     env_list = []
@@ -162,7 +169,8 @@ class RoboHiveEnv(GymEnv):
         #     raise RuntimeError(f"Failed to build env {env_name}.") from err
         self.from_pixels = from_pixels
         self.render_device = render_device
-        self.info_dict_reader = self.read_info
+        if kwargs.get("read_info", True):
+            self.info_dict_reader = self.read_info
         return env
 
     @classmethod

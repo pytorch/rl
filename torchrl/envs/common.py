@@ -264,11 +264,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING = None,
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
+        if device is None:
+            device = torch.device("cpu")
         self.__dict__["_done_key"] = None
         self.__dict__["_reward_key"] = None
         self.__dict__["_action_key"] = None
@@ -1364,10 +1366,12 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         self,
         *args,
         dtype: Optional[np.dtype] = None,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING = None,
         batch_size: Optional[torch.Size] = None,
         **kwargs,
     ):
+        if device is None:
+            device = torch.device("cpu")
         super().__init__(
             device=device,
             dtype=dtype,
