@@ -6,14 +6,11 @@ import torch.nn as nn
 from tensordict.nn import TensorDictModule
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
-from .transformer import GPT2
-from .utils import crop_block_size, print_trainable_parameters
-
 
 class RewardModel(nn.Module):
     def __init__(self, model_path):
         super().__init__()
-        model = GPT2.from_pretrained(model_path, return_dict=False)
+        model = GPT2LMHeadModel.from_pretrained(model_path, return_dict=False)
 
         self.config = model.config
         # `gpt-neo(x)` models use `hidden_size` attribute names instead of `n_embd``
@@ -91,7 +88,7 @@ def init_reward_model(config):
     if config["init_reward_from"] == "scratch":
         model = RewardModel(config["out_dir"])
     elif config["init_reward_from"] == "resume":
-        model = RewardModel.from_pretrained(config["out_dir_reward"], return_dict=False)
+        model = RewardModel.from_pretrained(config["out_dir_reward"])
     else:
         raise ValueError(f"option {config['init_reward_from']=} not recognised")
 

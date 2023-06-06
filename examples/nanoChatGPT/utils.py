@@ -12,13 +12,22 @@ import logging
 import yaml
 
 
+def load_config(path):
+    """
+    Load config from specified path. Useful in notebooks where argparse can cause
+    problems.
+    """
+    with open(path) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    return config
+
+
 def load_and_update_config(path):
     """
     Loads config from specified path and allows values to be overridden with command
     line arguments
     """
-    with open(path) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+    config = load_config(path)
 
     parser = argparse.ArgumentParser()
     for key, value in config.items():
