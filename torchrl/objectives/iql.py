@@ -153,12 +153,13 @@ class IQLLoss(LossModule):
         >>> loss = IQLLoss(actor, qvalue, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_val = loss(
+        >>> loss_actor, loss_qvlaue, loss_value, entropy = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_observation=torch.zeros(*batch, n_obs),
         ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
 
     """
 

@@ -109,12 +109,13 @@ class DDPGLoss(LossModule):
         ...     module=module,
         ...     in_keys=["observation", "action"])
         >>> loss = DDPGLoss(actor, value)
-        >>> loss_val = loss(
+        >>> loss_actor, loss_value, pred_value, target_value, pred_value_max, target_value_max = loss(
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
         ...     next_done=torch.zeros(1, dtype=torch.bool),
         ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
+        >>> loss_actor.backward()
 
     """
 

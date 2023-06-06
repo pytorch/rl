@@ -143,12 +143,13 @@ class A2CLoss(LossModule):
         ...     in_keys=["observation"])
         >>> loss = A2CLoss(actor, value, loss_critic_type="l2")
         >>> batch = [2, ]
-        >>> loss_val = loss(
+        >>> loss_obj, loss_critic, entropy, loss_entropy = loss(
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),
         ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
+        >>> loss_obj.backward()
     """
 
     @dataclass
