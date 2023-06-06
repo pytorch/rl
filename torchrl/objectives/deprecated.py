@@ -238,7 +238,7 @@ class REDQLoss_deprecated(LossModule):
         with torch.no_grad():
             selected_q_params = self.target_qvalue_network_params[selected_models_idx]
 
-            next_td = step_mdp(tensordict).select(
+            next_td = step_mdp(tensordict, keep_other=False).select(
                 *self.actor_network.in_keys
             )  # next_observation ->
             # observation

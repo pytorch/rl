@@ -432,7 +432,7 @@ class DistributionalDQNLoss(LossModule):
 
         with torch.no_grad():
             # Calculate nth next state probabilities
-            next_td = step_mdp(tensordict)
+            next_td = step_mdp(tensordict, keep_other=False)
             self.value_network(
                 next_td,
                 params=self.value_network_params,

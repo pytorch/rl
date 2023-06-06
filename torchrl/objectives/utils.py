@@ -439,7 +439,9 @@ def next_state_value(
         return rewards
 
     if pred_next_val is None:
-        next_td = step_mdp(tensordict)  # next_observation -> observation
+        next_td = step_mdp(
+            tensordict, keep_other=False
+        )  # next_observation -> observation
         next_td = next_td.select(*operator.in_keys)
         operator(next_td, **kwargs)
         pred_next_val_detach = next_td.get(next_val_key).squeeze(-1)

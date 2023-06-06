@@ -429,7 +429,7 @@ class TD0Estimator(ValueEstimatorBase):
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
@@ -604,7 +604,7 @@ class TD1Estimator(ValueEstimatorBase):
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
@@ -789,7 +789,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 ("next", self.tensor_keys.steps_to_next_obs), reward
             )  # we must update the rewards if they are used later in the code
 
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
@@ -981,7 +981,7 @@ class GAE(ValueEstimatorBase):
 
         value = tensordict.get(self.tensor_keys.value)
 
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if target_params is not None:
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
@@ -1059,7 +1059,7 @@ class GAE(ValueEstimatorBase):
 
         value = tensordict.get(self.tensor_keys.value)
 
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if target_params is not None:
             # we assume that target parameters are not differentiable
             kwargs["params"] = target_params
