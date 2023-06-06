@@ -3,11 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to the TorchRL Documentation!
-=====================================
+TorchRL
+=======
 
-.. note::
-   The TensorDict class has been moved out of TorchRL into a dedicated library. Take a look at `the documentation <./tensordict>`_ or find the source code `on GitHub <https://github.com/pytorch-labs/tensordict>`_.
+.. figure:: /_static/img/logo.png
+   :width: 600
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 
