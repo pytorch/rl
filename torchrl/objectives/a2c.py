@@ -97,6 +97,7 @@ class A2CLoss(LossModule):
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
         >>> loss(data)
         TensorDict(
@@ -146,9 +147,10 @@ class A2CLoss(LossModule):
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),
         ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
-        ...     next_reward = torch.randn(*batch, 1))
+        ...     next_reward = torch.randn(*batch, 1),
+        ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_val
-        (tensor(1.7593, grad_fn=<MeanBackward0>), tensor(0.2344, grad_fn=<MeanBackward0>), tensor(1.5480), tensor(-0.0155, grad_fn=<MulBackward0>))
+        (tensor(4.3483, grad_fn=<MeanBackward0>), tensor(1.4114, grad_fn=<MeanBackward0>), tensor(2.5165), tensor(-0.0252, grad_fn=<MulBackward0>))
     """
 
     @dataclass
@@ -227,6 +229,29 @@ class A2CLoss(LossModule):
             self.gamma = gamma
         self.loss_critic_type = loss_critic_type
 
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor.in_keys,
+            *[("next", key) for key in self.actor.in_keys],
+        ]
+        if self.critic_coef:
+            keys.extend(self.critic.in_keys)
+        return list(set(keys))
+
+    @property
+    def out_keys(self):
+        outs = ["loss_objective"]
+        if self.critic_coef:
+            outs.append("loss_critic")
+        if self.entropy_bonus:
+            outs.append("entropy")
+            outs.append("loss_entropy")
+        return outs
+
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
@@ -288,28 +313,6 @@ class A2CLoss(LossModule):
                 f"can be used for the value loss."
             )
         return self.critic_coef * loss_value
-
-    @property
-    def in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
-        ]
-        keys.extend(self.actor.in_keys)
-        if self.critic_coef:
-            keys.extend(self.critic.in_keys)
-        return list(set(keys))
-
-    @property
-    def out_keys(self):
-        outs = ["loss_objective"]
-        if self.critic_coef:
-            outs.append("loss_critic")
-        if self.entropy_bonus:
-            outs.append("entropy")
-            outs.append("loss_entropy")
-        return outs
 
     @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

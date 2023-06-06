@@ -66,6 +66,7 @@ class DDPGLoss(LossModule):
         ...        "action": spec.rand(batch),
         ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...        ("next", "reward"): torch.randn(*batch, 1),
+        ...        ("next", "observation"): torch.randn(*batch, n_obs),
         ...    }, batch)
         >>> loss(data)
         TensorDict(
@@ -112,9 +113,10 @@ class DDPGLoss(LossModule):
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
         ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
         >>> loss_val
-        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(1.3344, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(1.7744), tensor(0.6193), tensor(1.7744))
+        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(2.1672, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(2.0914), tensor(0.6193), tensor(2.0914))
 
     """
 
@@ -202,9 +204,10 @@ class DDPGLoss(LossModule):
         keys = [
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            *self.actor_in_keys,
+            *[("next", key) for key in self.actor_in_keys],
+            *self.value_network.in_keys,
         ]
-        keys += self.value_network.in_keys
-        keys += self.actor_in_keys
         keys = list(set(keys))
         return keys
 

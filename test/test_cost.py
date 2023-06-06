@@ -979,12 +979,12 @@ class TestDDPG(LossModuleTestBase):
         value = self._create_mock_value()
         td = self._create_mock_data_ddpg()
         loss = DDPGLoss(actor, value)
-        loss.make_value_estimator(ValueEstimators.TD1)
 
         kwargs = {
             "observation": td.get("observation"),
             "next_reward": td.get(("next", "reward")),
             "next_done": td.get(("next", "done")),
+            "next_observation": td.get(("next", "observation")),
             "action": td.get("action"),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -3623,6 +3623,7 @@ class TestA2C(LossModuleTestBase):
 
         kwargs = {
             observation_key: td.get(observation_key),
+            f"next_{observation_key}": td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
             action_key: td.get(action_key),
@@ -4675,6 +4676,7 @@ class TestIQL(LossModuleTestBase):
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
