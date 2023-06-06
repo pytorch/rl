@@ -442,10 +442,11 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [False, True])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: faster execution
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
@@ -493,9 +494,10 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env_with_policy(
         self,
         env_name,

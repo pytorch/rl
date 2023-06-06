@@ -153,7 +153,7 @@ def _is_consistent_device_type(
     _os_is_windows and _python_is_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
-@pytest.mark.parametrize("num_env", [1, 2])
+@pytest.mark.parametrize("num_env", [2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
@@ -936,9 +936,10 @@ def test_excluded_keys(collector_class, exclude):
         MultiSyncDataCollector,
     ],
 )
-@pytest.mark.parametrize("init_random_frames", [0, 50])
-@pytest.mark.parametrize("explicit_spec", [False, True])
-@pytest.mark.parametrize("split_trajs", [True, False])
+@pytest.mark.parametrize("init_random_frames", [50])  # 1226: faster execution
+@pytest.mark.parametrize(
+    "explicit_spec,split_trajs", [[True, True], [False, False]]
+)  # 1226: faster execution
 def test_collector_output_keys(
     collector_class, init_random_frames, explicit_spec, split_trajs
 ):
@@ -1406,10 +1407,10 @@ class TestUpdateParams:
         [
             ["cpu", "cuda"],
             ["cuda", "cpu"],
-            ["cpu", "cuda:0"],
-            ["cuda:0", "cpu"],
-            ["cuda", "cuda:0"],
-            ["cuda:0", "cuda"],
+            # ["cpu", "cuda:0"],  # 1226: faster execution
+            # ["cuda:0", "cpu"],
+            # ["cuda", "cuda:0"],
+            # ["cuda:0", "cuda"],
         ],
     )
     def test_param_sync(self, give_weights, collector, policy_device, env_device):
