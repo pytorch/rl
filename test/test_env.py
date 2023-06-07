@@ -16,7 +16,7 @@ import yaml
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
-    get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -184,7 +184,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
@@ -264,7 +264,7 @@ class TestModelBasedEnvBase:
             ),
         )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_rollout(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -287,7 +287,7 @@ class TestModelBasedEnvBase:
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -1066,7 +1066,7 @@ def test_steptensordict(
         assert out is next_tensordict
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked(device):
     env = MockBatchedLockedEnv(device)
     assert env.batch_locked
@@ -1084,7 +1084,7 @@ def test_batch_locked(device):
         env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked(device):
     env = MockBatchedUnLockedEnv(device)
     assert not env.batch_locked
@@ -1099,7 +1099,7 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1123,7 +1123,7 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_info_dict_reader(device, seed=0):
     try:
         import gymnasium as gym

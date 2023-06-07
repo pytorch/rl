@@ -87,6 +87,17 @@ def get_available_devices():
     return devices
 
 
+def get_default_devices():
+    num_cuda = torch.cuda.device_count()
+    if num_cuda == 0:
+        return [torch.device("cpu")]
+    elif num_cuda == 1:
+        return [torch.device("cuda:0")]
+    else:
+        # then run on all devices
+        return get_available_devices()
+
+
 def generate_seeds(seed, repeat):
     seeds = [seed]
     for _ in range(repeat - 1):

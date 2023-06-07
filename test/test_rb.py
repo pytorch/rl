@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, make_tc
+from _utils_internal import get_default_devices, make_tc
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -316,7 +316,7 @@ class TestStorages:
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -650,7 +650,7 @@ def test_batch_errors():
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
