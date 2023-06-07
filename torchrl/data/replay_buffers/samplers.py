@@ -28,7 +28,7 @@ class Sampler(ABC):
 
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
-        raise NotImplementedError
+        ...
 
     def add(self, index: int) -> None:
         return

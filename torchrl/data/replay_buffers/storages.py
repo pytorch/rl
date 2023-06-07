@@ -46,11 +46,11 @@ class Storage:
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get(self, index: int) -> Any:
-        raise NotImplementedError
+        ...
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -82,11 +82,13 @@ class Storage:
     def __len__(self):
         ...
 
+    @abc.abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def _empty(self):
