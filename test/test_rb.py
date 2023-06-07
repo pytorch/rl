@@ -536,6 +536,26 @@ class TestBuffers:
         else:
             assert (s == data).all()
 
+    def test_empty(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_datum(rbtype)
+        for _ in range(2):
+            rb.add(data)
+            s = rb.sample(1)[0]
+            if isinstance(s, TensorDictBase):
+                s = s.select(*data.keys(True), strict=False)
+                data = data.select(*s.keys(True), strict=False)
+                assert (s == data).all()
+                assert list(s.keys(True, True))
+            else:
+                assert (s == data).all()
+            rb.empty()
+            with pytest.raises(
+                RuntimeError, match="Cannot sample from an empty storage"
+            ):
+                rb.sample()
+
     def test_extend(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)

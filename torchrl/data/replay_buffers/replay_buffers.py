@@ -309,6 +309,11 @@ class ReplayBuffer:
 
         return data, info
 
+    def empty(self):
+        self._writer._empty()
+        self._sampler._empty()
+        self._storage._empty()
+
     def sample(
         self, batch_size: Optional[int] = None, return_info: bool = False
     ) -> Any:
