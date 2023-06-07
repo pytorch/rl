@@ -310,6 +310,7 @@ class ReplayBuffer:
         return data, info
 
     def empty(self):
+        """Empties the replay buffer and reset cursor to 0."""
         self._writer._empty()
         self._sampler._empty()
         self._storage._empty()
