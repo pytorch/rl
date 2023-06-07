@@ -14,7 +14,7 @@ import torch
 
 from _utils_internal import (  # noqa
     dtype_fixture,
-    get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -214,7 +214,7 @@ class TestBinarizeReward(TransformBase):
         check_env_specs(env)
         env.close()
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     def test_transform_no_env(self, device, batch):
         torch.manual_seed(0)
@@ -508,7 +508,7 @@ class TestCatFrames(TransformBase):
                     result[key].space.minimum[i], observation_spec[key].space.minimum[0]
                 )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(1, 4))
     @pytest.mark.parametrize("dim", [-3, -2, 1])
@@ -554,7 +554,7 @@ class TestCatFrames(TransformBase):
         # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
         assert v1 is not v2
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch_size", [(), (1,), (1, 2)])
     @pytest.mark.parametrize("d", range(2, 3))
     @pytest.mark.parametrize(
@@ -599,7 +599,7 @@ class TestCatFrames(TransformBase):
         # we don't want the same tensor to be returned twice, but they're all copies of the same buffer
         assert v1 is not v2
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_catframes_reset(self, device):
         key1 = "first key"
         key2 = "second key"
@@ -628,8 +628,14 @@ class TestCatFrames(TransformBase):
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("model", ["resnet18", "resnet34", "resnet50"])
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing R3M on cuda only")
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "resnet18",
+    ],
+)  # 1226: "resnet34", "resnet50"])
 class TestR3M(TransformBase):
     def test_transform_inverse(self, model, device):
         raise pytest.skip("no inverse for R3MTransform")
@@ -1078,7 +1084,7 @@ class TestStepCounter(TransformBase):
         ):
             rb.sample(5)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
     @pytest.mark.parametrize("reset_workers", [True, False])
@@ -1131,7 +1137,7 @@ class TestStepCounter(TransformBase):
         ):
             model(5)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
     @pytest.mark.parametrize("max_steps", [None, 1, 5, 50])
     @pytest.mark.parametrize("reset_workers", [True, False])
@@ -1249,7 +1255,7 @@ class TestCatTensors(TransformBase):
         env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), ct)
         check_env_specs(env)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys",
         [
@@ -1301,7 +1307,7 @@ class TestCatTensors(TransformBase):
                 [1, len(keys) * 4, 32]
             )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys",
         [
@@ -1414,7 +1420,7 @@ class TestCenterCrop(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -1461,7 +1467,7 @@ class TestCenterCrop(TransformBase):
         ],
     )
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_model(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -1497,7 +1503,7 @@ class TestCenterCrop(TransformBase):
         ],
     )
     @pytest.mark.parametrize("keys", [["observation_pixels"]])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, h, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -1745,7 +1751,7 @@ class TestDiscreteActionProjection(TransformBase):
 
 
 class TestDoubleToFloat(TransformBase):
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys",
         [
@@ -2327,7 +2333,7 @@ class TestFlattenObservation(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, size, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -2370,7 +2376,7 @@ class TestFlattenObservation(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, size, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, *size, nchannels, 16, 16, device=device)
@@ -2592,7 +2598,7 @@ class TestGrayScale(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, device):
         torch.manual_seed(0)
         nchannels = 3
@@ -2626,7 +2632,7 @@ class TestGrayScale(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, device):
         torch.manual_seed(0)
         nchannels = 3
@@ -2824,7 +2830,7 @@ class TestNoop(TransformBase):
 
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_env(self, random, device, compose):
         torch.manual_seed(0)
         env = ContinuousActionVecMockEnv()
@@ -2844,7 +2850,7 @@ class TestNoop(TransformBase):
 
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_noop_reset_env_error(self, random, device, compose):
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: ContinuousActionVecMockEnv())
@@ -3140,7 +3146,7 @@ class TestObservationNorm(TransformBase):
         "keys",
         [["next_observation", "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("standard_normal", [True, False])
     @pytest.mark.parametrize(
@@ -3207,7 +3213,7 @@ class TestObservationNorm(TransformBase):
 
     @pytest.mark.parametrize("keys", [["observation"], ["observation", "next_pixel"]])
     @pytest.mark.parametrize("size", [1, 3])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_observationnorm_init_stats(
@@ -3268,7 +3274,7 @@ class TestObservationNorm(TransformBase):
 
     @pytest.mark.parametrize("keys", [["pixels"], ["pixels", "stuff"]])
     @pytest.mark.parametrize("size", [1, 3])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
     @pytest.mark.parametrize("parallel", [True, False])
     def test_observationnorm_init_stats_pixels(
@@ -3386,7 +3392,7 @@ class TestResize(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -3423,7 +3429,7 @@ class TestResize(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, interpolation, keys, nchannels, batch, device):
         torch.manual_seed(0)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
@@ -3611,7 +3617,7 @@ class TestRewardScaling(TransformBase):
     @pytest.mark.parametrize("scale", [0.1, 10])
     @pytest.mark.parametrize("loc", [1, 5])
     @pytest.mark.parametrize("keys", [None, ["reward_1"]])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
         torch.manual_seed(0)
@@ -3880,7 +3886,7 @@ class TestRewardSum(TransformBase):
         "keys",
         [["done", "reward"]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_sum_reward(self, keys, device):
         torch.manual_seed(0)
         batch = 4
@@ -3946,7 +3952,7 @@ class TestRewardSum(TransformBase):
 
 
 class TestReward2Go(TransformBase):
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     @pytest.mark.parametrize("t", [3, 20])
@@ -3975,7 +3981,7 @@ class TestReward2Go(TransformBase):
         assert sample[out_key].shape == (13, t, 1)
         assert (sample[out_key] != 0).all()
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     @pytest.mark.parametrize("t", [3, 20])
@@ -4023,7 +4029,7 @@ class TestReward2Go(TransformBase):
         with pytest.raises(KeyError, match="Could not find"):
             _ = r2g.inv(td)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
     def test_transform_inverse(self, gamma, done_flags, device):
@@ -4199,7 +4205,7 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(
         self, keys, size, nchannels, batch, device, unsqueeze_dim
     ):
@@ -4262,7 +4268,7 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
     )
@@ -4344,7 +4350,7 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(
         self, keys, size, nchannels, batch, device, unsqueeze_dim
     ):
@@ -4492,7 +4498,7 @@ class TestSqueezeTransform(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
     )
@@ -4529,7 +4535,7 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.parametrize(
         "keys", [["observation", "some_other_key"], ["observation_pixels"]]
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
     )
@@ -4625,7 +4631,7 @@ class TestSqueezeTransform(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
     )
@@ -4722,7 +4728,7 @@ class TestSqueezeTransform(TransformBase):
 class TestTargetReturn(TransformBase):
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_env(self, batch, mode, device):
         torch.manual_seed(0)
         t = TargetReturn(target_return=10.0, mode=mode)
@@ -4735,7 +4741,7 @@ class TestTargetReturn(TransformBase):
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, batch, mode, device):
         torch.manual_seed(0)
         t = Compose(TargetReturn(target_return=10.0, mode=mode))
@@ -4759,7 +4765,7 @@ class TestTargetReturn(TransformBase):
             assert (td["next", "target_return"] == 10.0).all()
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_single_trans_env_check(self, mode, device):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
@@ -4769,7 +4775,7 @@ class TestTargetReturn(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_serial_trans_env_check(self, mode, device):
         def make_env():
             return TransformedEnv(
@@ -4782,7 +4788,7 @@ class TestTargetReturn(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_parallel_trans_env_check(self, mode, device):
         def make_env():
             return TransformedEnv(
@@ -4795,7 +4801,7 @@ class TestTargetReturn(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_trans_serial_env_check(self, mode, device):
         env = TransformedEnv(
             SerialEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
@@ -4805,7 +4811,7 @@ class TestTargetReturn(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_trans_parallel_env_check(self, mode, device):
         env = TransformedEnv(
             ParallelEnv(2, DiscreteActionConvMockEnvNumpy).to(device),
@@ -4864,7 +4870,7 @@ class TestToTensorImage(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, batch, device):
         torch.manual_seed(0)
         nchannels = 3
@@ -4913,7 +4919,7 @@ class TestToTensorImage(TransformBase):
         "keys",
         [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, batch, device):
         torch.manual_seed(0)
         nchannels = 3
@@ -5183,7 +5189,7 @@ class TestTensorDictPrimer(TransformBase):
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("value", [0.0, 1.0])
     @pytest.mark.parametrize("serial", [True, False])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_env(
         self,
         default_keys,
@@ -5240,7 +5246,7 @@ class TestTensorDictPrimer(TransformBase):
 class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("T", [2, 4])
     @pytest.mark.parametrize("seq_len", [8])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, T, seq_len, device):
         batch = 1
         nodes = 4
@@ -5266,7 +5272,7 @@ class TestTimeMaxPool(TransformBase):
 
     @pytest.mark.parametrize("T", [2, 4])
     @pytest.mark.parametrize("seq_len", [8])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, T, seq_len, device):
         batch = 1
         nodes = 4
@@ -5405,7 +5411,7 @@ class TestTimeMaxPool(TransformBase):
         ):
             _ = rb.sample(10)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_tmp_reset(self, device):
         key1 = "first key"
         key2 = "second key"
@@ -5558,7 +5564,8 @@ class TestgSDE(TransformBase):
 
 
 @pytest.mark.skipif(not _has_tv, reason="torchvision not installed")
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="Testing VIP on cuda only")
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
 @pytest.mark.parametrize("model", ["resnet50"])
 class TestVIP(TransformBase):
     def test_transform_inverse(self, model, device):
@@ -6364,7 +6371,7 @@ class TestTransforms:
         "keys",
         [["next_observation", "some_other_key"], [("next", "observation_pixels")]],
     )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_compose(self, keys, batch, device, nchannels=1, N=4):
         torch.manual_seed(0)
         t1 = CatFrames(
@@ -6414,7 +6421,7 @@ class TestTransforms:
                     [nchannels * N, 16, 16]
                 )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
         "keys_inv_1",
         [
@@ -6474,7 +6481,7 @@ class TestTransforms:
         assert last_t.scale == 4
         assert last_t2.scale == 4
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_finitetensordictcheck(self, device):
         ftd = FiniteTensorDictCheck()
         td = TensorDict(
@@ -6488,7 +6495,7 @@ class TestTransforms:
             ftd(td)
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device found")
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_pin_mem(self, device):
         pin_mem = PinMemoryTransform()
         td = TensorDict(
@@ -6608,7 +6615,7 @@ class TestTransforms:
             env.insert_transform(4, "ffff")
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked_transformed(device):
     env = TransformedEnv(
         MockBatchedLockedEnv(device),
@@ -6632,7 +6639,7 @@ def test_batch_locked_transformed(device):
         env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device),
@@ -6652,7 +6659,7 @@ def test_batch_unlocked_transformed(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size_transformed(device):
     env = TransformedEnv(
         MockBatchedUnLockedEnv(device, batch_size=torch.Size([2])),
