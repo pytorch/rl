@@ -3794,6 +3794,8 @@ class TestReinforce(LossModuleTestBase):
 
 @pytest.mark.parametrize("device", get_available_devices())
 class TestDreamer(LossModuleTestBase):
+    img_size = (64, 64)
+
     def _create_world_model_data(
         self, batch_size, temporal_length, rssm_hidden_dim, state_dim
     ):
@@ -3801,9 +3803,11 @@ class TestDreamer(LossModuleTestBase):
             {
                 "state": torch.zeros(batch_size, temporal_length, state_dim),
                 "belief": torch.zeros(batch_size, temporal_length, rssm_hidden_dim),
-                "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                "pixels": torch.randn(batch_size, temporal_length, 3, *self.img_size),
                 "next": {
-                    "pixels": torch.randn(batch_size, temporal_length, 3, 64, 64),
+                    "pixels": torch.randn(
+                        batch_size, temporal_length, 3, *self.img_size
+                    ),
                     "reward": torch.randn(batch_size, temporal_length, 1),
                     "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
                 },
@@ -3839,8 +3843,10 @@ class TestDreamer(LossModuleTestBase):
         )
         return td
 
-    def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+    def _create_world_model_model(self, rssm_hidden_dim, state_dim, mlp_num_units=13):
+        mock_env = TransformedEnv(
+            ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
+        )
         default_dict = {
             "state": UnboundedContinuousTensorSpec(state_dim),
             "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
@@ -3849,8 +3855,8 @@ class TestDreamer(LossModuleTestBase):
             TensorDictPrimer(random=False, default_value=0, **default_dict)
         )
 
-        obs_encoder = ObsEncoder()
-        obs_decoder = ObsDecoder()
+        obs_encoder = ObsEncoder(channels=3, num_layers=2)
+        obs_decoder = ObsDecoder(channels=3, num_layers=4)
 
         rssm_prior = RSSMPrior(
             hidden_dim=rssm_hidden_dim,
@@ -3914,8 +3920,10 @@ class TestDreamer(LossModuleTestBase):
             world_model(td)
         return world_model
 
-    def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+    def _create_mb_env(self, rssm_hidden_dim, state_dim, mlp_num_units=13):
+        mock_env = TransformedEnv(
+            ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
+        )
         default_dict = {
             "state": UnboundedContinuousTensorSpec(state_dim),
             "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
@@ -3963,8 +3971,10 @@ class TestDreamer(LossModuleTestBase):
             model_based_env.rollout(3)
         return model_based_env
 
-    def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
-        mock_env = TransformedEnv(ContinuousActionConvMockEnv(pixel_shape=[3, 64, 64]))
+    def _create_actor_model(self, rssm_hidden_dim, state_dim, mlp_num_units=13):
+        mock_env = TransformedEnv(
+            ContinuousActionConvMockEnv(pixel_shape=[3, *self.img_size])
+        )
         default_dict = {
             "state": UnboundedContinuousTensorSpec(state_dim),
             "belief": UnboundedContinuousTensorSpec(rssm_hidden_dim),
@@ -3975,7 +3985,7 @@ class TestDreamer(LossModuleTestBase):
 
         actor_module = DreamerActor(
             out_features=mock_env.action_spec.shape[0],
-            depth=4,
+            depth=1,
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
@@ -4003,11 +4013,11 @@ class TestDreamer(LossModuleTestBase):
             actor_model(td)
         return actor_model
 
-    def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=200):
+    def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=13):
         value_model = SafeModule(
             MLP(
                 out_features=1,
-                depth=3,
+                depth=1,
                 num_cells=mlp_num_units,
                 activation_class=nn.ELU,
             ),

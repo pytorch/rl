@@ -407,7 +407,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_encoder(self, device, temporal_size, batch_size, depth):
-        encoder = ObsEncoder(depth=depth).to(device)
+        encoder = ObsEncoder(channels=depth).to(device)
         obs = torch.randn(*batch_size, *temporal_size, 3, 64, 64, device=device)
         emb = encoder(obs)
         assert emb.shape == (*batch_size, *temporal_size, depth * 8 * 4)
@@ -419,7 +419,7 @@ class TestDreamerComponents:
     def test_dreamer_decoder(
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
     ):
-        decoder = ObsDecoder(depth=depth).to(device)
+        decoder = ObsDecoder(channels=depth).to(device)
         stoch_state = torch.randn(
             *batch_size, *temporal_size, stoch_size, device=device
         )
