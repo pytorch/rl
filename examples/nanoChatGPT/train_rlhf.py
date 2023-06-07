@@ -2,21 +2,22 @@ from copy import deepcopy
 from pathlib import Path
 
 import tiktoken
-
 import torch
 import tqdm
-
 from data.openai_summarize_tldr import get_prompt_dataloaders
+from env import RLHFEnv
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
-from tensordict.nn import TensorDictModuleBase
 from torch import vmap
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.envs import ExplorationType, set_exploration_type
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from utils import get_file_logger, load_and_update_config, setup
+
+from tensordict.nn import TensorDictModuleBase
 
 HERE = Path(__file__).parent
 
@@ -108,7 +109,7 @@ def main():
     )
 
     # DataLoader
-    train_loader, _ = get_prompt_dataloaders(config)
+    train_loader, _ = get_prompt_dataloaders(config, inference=True)
 
     # Environment
     env = RLHFEnv(
@@ -117,12 +118,11 @@ def main():
         dataloader=train_loader,
         ref_model=actor2,
     )
-
     # Test Environment
     test_config = deepcopy(config)
     test_config["batch_size"] = 1
     test_config["episode_length"] = 50
-    train_loader_test, _ = get_prompt_dataloaders(test_config)
+    train_loader_test, _ = get_prompt_dataloaders(test_config, inference=True)
     test_env = RLHFEnv(
         reward_model=reward_model,
         config=test_config,
@@ -179,6 +179,7 @@ def main():
         for epoch in range(num_epochs):
             with torch.no_grad():
                 tdd = td.update(adv_fn(td.select(*adv_fn.in_keys).to(device)).cpu())
+                import ipdb; ipdb.set_trace()
             rb.extend(tdd.reshape(-1))
             if len(rb) != tdd.numel():
                 raise ValueError(

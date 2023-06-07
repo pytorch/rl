@@ -28,7 +28,7 @@ def _step(self, tensordict):
     next_input_ids = input_ids.clone()
     idx = torch.arange(input_ids.shape[0], device=input_ids.device)
     pad_index = attention_mask.argmin(dim=1)
-    next_input_ids[idx, pad_index] = action
+    next_input_ids[idx, pad_index] = action.squeeze()
     next_attention_mask = attention_mask.clone()
     next_attention_mask[idx, pad_index] = 1
 
@@ -122,7 +122,7 @@ def _make_spec(self):
         shape=self.batch_size,
     )
     # since the environment is stateless, we expect the previous output as input
-    self.input_spec = self.observation_spec.clone()
+    # self.input_spec = self.observation_spec.clone()
     # action-spec will be automatically wrapped in input_spec, but the convenient
     # self.action_spec = spec is supported
     self.action_spec = BoundedTensorSpec(
@@ -167,7 +167,8 @@ class RLHFEnv(EnvBase):
             seed = torch.empty((), dtype=torch.int64).random_().item()
         self.step_num = 0
         self.ref_model = ref_model
-        self.ref_model.select_out_keys("sample_log_prob")
+        if ref_model is not None:
+            self.ref_model.select_out_keys("sample_log_prob")
         self.kl_th = 0.1
         self.eval_prompt = None
         self.stop = False

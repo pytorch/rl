@@ -186,7 +186,13 @@ def create_datasets(config):
     return train_data, val_data
 
 
-def get_prompt_dataloaders(config):
+def strip_labels(it):
+    for batch in it:
+        batch.transformer_data.labels = None
+        yield batch
+
+
+def get_prompt_dataloaders(config, inference=False):
     train_data, val_data = create_datasets(config)
 
     train_loader = create_infinite_dataloader(
@@ -194,4 +200,6 @@ def get_prompt_dataloaders(config):
     )
     val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
 
+    if inference:
+        return strip_labels(train_loader), strip_labels(val_loader)
     return train_loader, val_loader

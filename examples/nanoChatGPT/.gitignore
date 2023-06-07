@@ -1,2 +1,4 @@
 *.png
 *.bin
+*.pt
+*.json

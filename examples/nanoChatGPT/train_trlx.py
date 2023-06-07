@@ -83,7 +83,7 @@ config = TRLConfig(
 class Counter():
     def __init__(self):
         self.count = 0
-    
+
     def __call__(self):
         self.count += 1
         return ""
@@ -143,9 +143,12 @@ def main():
                 skip_special_tokens=True,
             ).strip()
             formatted_prompts.append(tmp)
+            if i >= 1000:
+                break
         return formatted_prompts
 
     def reward_fn(samples: List[str], **kwargs):
+        import ipdb; ipdb.set_trace()
         original_samples = [text.split("TL;DR:")[0] + "TL;DR: " for text in samples]
         original_samples = [text + (post_summary_dict.get(text.strip()) or MISSING_KEYS_COUNTER()) for text in original_samples]
         original_scores = get_scores(original_samples)
