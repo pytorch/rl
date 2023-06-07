@@ -311,7 +311,7 @@ class CQLLoss(LossModule):
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_alpha": loss_alpha.mean(),
-            "loss_alpha_prime": loss_alpha_prime.mean(),
+            "loss_alpha_prime": loss_alpha_prime,
             "alpha": self._alpha,
             "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
         }
@@ -345,20 +345,23 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         return self._alpha * log_prob - min_q_logprob
 
-    def _get_policy_actions(self, tensordict, actor_params, num_actions=10):
-        tensordict = (
-            tensordict.unsqueeze(1)
+    def _get_policy_actions(self, observation, actor_params, num_actions=10):
+        observation = (
+            observation.unsqueeze(1)
             .repeat(1, num_actions, 1)
-            .view(tensordict.shape[0] * num_actions, tensordict.shape[1])
+            .view(observation.shape[0] * num_actions, observation.shape[1])
         )
+        tensordict = TensorDict({self.actor_network.in_keys[0]: observation}, [])
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
-                next_dist = self.actor_network.get_dist(tensordict, params=actor_params)
-                next_action = next_dist.rsample()
-                tensordict.set(self.tensor_keys.action, next_action)
-                next_sample_log_prob = next_dist.log_prob(next_action)
+                dist = self.actor_network.get_dist(tensordict, params=actor_params)
+                action = dist.rsample()
+                tensordict.set(self.tensor_keys.action, action)
+                sample_log_prob = dist.log_prob(action)
+                tensordict.del_("loc")
+                tensordict.del_("scale")
 
-        return tensordict, next_sample_log_prob
+        return tensordict, sample_log_prob
 
     def _get_value_v(self, tensordict, _alpha, actor_params, qval_params):
         r"""Value network for SAC v2.
@@ -389,23 +392,23 @@ class CQLLoss(LossModule):
                 next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
                     next_tensordict, qval_params
                 )
-                state_action_value = next_tensordict_expand.get(
+                next_state_value = next_tensordict_expand.get(
                     self.tensor_keys.state_action_value
                 ).min(0)[0]
                 # could be wrong to min
                 if (
-                    state_action_value.shape[-len(next_sample_log_prob.shape) :]
+                    next_state_value.shape[-len(next_sample_log_prob.shape) :]
                     != next_sample_log_prob.shape
                 ):
                     next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
                 if not self.deterministic_backup:
-                    next_state_value = (
-                        state_action_value - _alpha * next_sample_log_prob
-                    )
+                    next_state_value = next_state_value - _alpha * next_sample_log_prob
 
             if self.max_q_backup:
-                next_tensordict = self._get_policy_actions(
-                    tensordict.get("next").clone(False), actor_params, num_actions=10
+                next_tensordict, _ = self._get_policy_actions(
+                    tensordict.get(("next", "observation")),
+                    actor_params,
+                    num_actions=self.num_random,
                 )
                 next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
                     next_tensordict, qval_params
@@ -419,7 +422,7 @@ class CQLLoss(LossModule):
                     self.num_qvalue_nets, tensordict.shape[0], 10, -1
                 ).max(2)[0]
                 # take min over qvalue nets
-                state_action_value = state_action_value.min(0)[0]
+                next_state_value = state_action_value.min(0)[0]
 
             tensordict.set(
                 ("next", self.value_estimator.tensor_keys.value), next_state_value
@@ -436,26 +439,34 @@ class CQLLoss(LossModule):
             self.target_qvalue_network_params,
         )
 
+        tensordict_pred_q = tensordict.select(*self.qvalue_network.in_keys)
+        q_pred = vmap(self.qvalue_network, (None, 0))(
+            tensordict_pred_q, self.qvalue_network_params
+        ).get(self.tensor_keys.state_action_value)
+
         # add CQL
-        random_actions_tensor = torch.FloatTensor(
-            tensordict.shape[0] * self.num_random, tensordict["actions"].shape[-1]
-        ).uniform_(
-            -1, 1
-        )  # .cuda()
+        random_actions_tensor = (
+            torch.FloatTensor(
+                tensordict.shape[0] * self.num_random, tensordict["action"].shape[-1]
+            )
+            .uniform_(-1, 1)
+            .to(tensordict.device)
+        )
         curr_actions_td, curr_log_pis = self._get_policy_actions(
-            tensordict.clone(False), self.actor_network_params, num_actions=10
+            tensordict.get("observation"),
+            self.actor_network_params,
+            num_actions=self.num_random,
         )
         new_curr_actions_td, new_log_pis = self._get_policy_actions(
-            tensordict.get("next").clone(False),
+            tensordict.get(("next", "observation")),
             self.actor_network_params,
-            num_actions=10,
+            num_actions=self.num_random,
         )
 
         # process all in one forward pass
         # stack qvalue params
-        qvalue_params = torch.stack(
+        qvalue_params = torch.cat(
             [
-                self.qvalue_network_params,
                 self.qvalue_network_params,
                 self.qvalue_network_params,
                 self.qvalue_network_params,
@@ -464,17 +475,31 @@ class CQLLoss(LossModule):
         )
         # select and stack input params
         # q value random action
-        tensordict_q_random = tensordict.select(*self.qvalue_network.in_keys).set(
-            self.tensor_keys.action, random_actions_tensor
+        tensordict_q_random = TensorDict(
+            {self.tensor_keys.action: random_actions_tensor}, []
         )
-        tensordict_pred_q = tensordict.select(*self.qvalue_network.in_keys)
+        current_observation = tensordict.get(*self.actor_network.in_keys)
+        current_observation = (
+            current_observation.unsqueeze(1)
+            .repeat(1, self.num_random, 1)
+            .view(
+                current_observation.shape[0] * self.num_random,
+                current_observation.shape[1],
+            )
+        )
+        tensordict_q_random.set(*self.actor_network.in_keys, current_observation)
 
-        cql_tensordict = torch.stack(
+        cql_tensordict = torch.cat(
             [
-                tensordict_pred_q,
-                tensordict_q_random,
-                curr_actions_td,
-                new_curr_actions_td,
+                tensordict_q_random.expand(
+                    self.num_qvalue_nets, *curr_actions_td.batch_size
+                ),
+                curr_actions_td.expand(
+                    self.num_qvalue_nets, *curr_actions_td.batch_size
+                ),
+                new_curr_actions_td.expand(
+                    self.num_qvalue_nets, *curr_actions_td.batch_size
+                ),
             ],
             0,
         )
@@ -484,11 +509,10 @@ class CQLLoss(LossModule):
         # get q values
         state_action_value = cql_tensordict_expand.get(
             self.tensor_keys.state_action_value
-        ).squeeze(-1)
+        )
         # split q values
-        (q_pred, q_random, q_curr, q_new,) = state_action_value.split(
+        (q_random, q_curr, q_new,) = state_action_value.split(
             [
-                self.num_qvalue_nets,
                 self.num_qvalue_nets,
                 self.num_qvalue_nets,
                 self.num_qvalue_nets,
@@ -496,27 +520,24 @@ class CQLLoss(LossModule):
             dim=0,
         )
 
-        cat_q1 = torch.cat([q_random[0], q_pred[0], q_new[0], q_curr[0]], 1)
-        cat_q2 = torch.cat([q_random[1], q_pred[1], q_new[1], q_curr[1]], 1)
-        if self.min_q_version == 3:
-            # importance sammpled version
-            random_density = np.log(0.5 ** curr_actions_td["action"].shape[-1])
-            cat_q1 = torch.cat(
-                [
-                    q_random[0] - random_density,
-                    q_new[0] - new_log_pis.detach(),
-                    q_curr[0] - curr_log_pis.detach(),
-                ],
-                1,
-            )
-            cat_q2 = torch.cat(
-                [
-                    q_random[1] - random_density,
-                    q_new[1] - new_log_pis.detach(),
-                    q_curr[1] - curr_log_pis.detach(),
-                ],
-                1,
-            )
+        # importance sammpled version
+        random_density = np.log(0.5 ** curr_actions_td["action"].shape[-1])
+        cat_q1 = torch.cat(
+            [
+                q_random[0] - random_density,
+                q_new[0] - new_log_pis.detach().unsqueeze(-1),
+                q_curr[0] - curr_log_pis.detach().unsqueeze(-1),
+            ],
+            1,
+        )
+        cat_q2 = torch.cat(
+            [
+                q_random[1] - random_density,
+                q_new[1] - new_log_pis.detach().unsqueeze(-1),
+                q_curr[1] - curr_log_pis.detach().unsqueeze(-1),
+            ],
+            1,
+        )
 
         min_qf1_loss = (
             torch.logsumexp(cat_q1 / self.temperature, 1).mean()
@@ -532,7 +553,7 @@ class CQLLoss(LossModule):
         # Subtract the log likelihood of data
         min_qf1_loss = min_qf1_loss - q_pred[0].mean() * self.min_q_weight
         min_qf2_loss = min_qf2_loss - q_pred[1].mean() * self.min_q_weight
-
+        alpha_prime_loss = 0
         if self.with_lagrange:
             alpha_prime = torch.clamp(
                 self.log_alpha_prime.exp(), min=0.0, max=1000000.0
@@ -542,6 +563,7 @@ class CQLLoss(LossModule):
 
             alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
 
+        q_pred = q_pred.squeeze(-1)
         loss_qval = distance_loss(
             q_pred,
             target_value.expand_as(q_pred),
