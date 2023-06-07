@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, make_tc
+from _utils_internal import get_default_devices, make_tc
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -316,7 +316,7 @@ class TestStorages:
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -536,6 +536,26 @@ class TestBuffers:
         else:
             assert (s == data).all()
 
+    def test_empty(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_datum(rbtype)
+        for _ in range(2):
+            rb.add(data)
+            s = rb.sample(1)[0]
+            if isinstance(s, TensorDictBase):
+                s = s.select(*data.keys(True), strict=False)
+                data = data.select(*s.keys(True), strict=False)
+                assert (s == data).all()
+                assert list(s.keys(True, True))
+            else:
+                assert (s == data).all()
+            rb.empty()
+            with pytest.raises(
+                RuntimeError, match="Cannot sample from an empty storage"
+            ):
+                rb.sample()
+
     def test_extend(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
@@ -650,7 +670,7 @@ def test_batch_errors():
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)

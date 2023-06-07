@@ -37,6 +37,6 @@ conda deactivate && conda activate ./env
 # this workflow only tests the libs
 python -c "import gym, d4rl"
 
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestD4RL --error-for-skips
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestD4RL --error-for-skips
 coverage combine
 coverage xml -i
