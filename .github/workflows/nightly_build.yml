@@ -148,7 +148,7 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
   upload-wheel-linux:
@@ -270,7 +270,7 @@ jobs:
           python3 -m torch.utils.collect_env
           python3 -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
   build-wheel-windows:
@@ -359,7 +359,7 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
   upload-wheel-windows:

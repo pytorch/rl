@@ -1531,7 +1531,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="batch_first"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=False,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
@@ -1539,7 +1539,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=[
                     "observation",
@@ -1550,7 +1550,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys="abc",
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
@@ -1558,7 +1558,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_key="smth",
                 in_keys=[
@@ -1570,7 +1570,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0")],
@@ -1578,7 +1578,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys="abc",
@@ -1586,7 +1586,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_key="smth",
@@ -1594,7 +1594,7 @@ class TestLSTMModule:
             )
         lstm_module = LSTMModule(
             input_size=3,
-            hidden_size=64,
+            hidden_size=12,
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],

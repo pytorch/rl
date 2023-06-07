@@ -27,6 +27,6 @@ export MKL_THREADING_LAYER=GNU
 # this workflow only tests the libs
 python -c "import envpool"
 
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 20 --capture no -k TestEnvPool --error-for-skips
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestEnvPool --error-for-skips
 coverage combine
 coverage xml -i
