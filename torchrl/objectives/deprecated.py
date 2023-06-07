@@ -78,6 +78,10 @@ class REDQLoss_deprecated(LossModule):
         priority_key (str, optional): [Deprecated] Key where to write the priority value
             for prioritized replay buffers. Default is
             ``"td_error"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
     """
 
     @dataclass
@@ -105,6 +109,7 @@ class REDQLoss_deprecated(LossModule):
         gSDE: bool = False,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
@@ -116,7 +121,12 @@ class REDQLoss_deprecated(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # let's make sure that actor_network has `return_log_prob` set to True
         self.actor_network.return_log_prob = True
 
@@ -126,7 +136,7 @@ class REDQLoss_deprecated(LossModule):
             "qvalue_network",
             expand_dim=num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=actor_network.parameters(),
+            compare_against=policy_params,
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))

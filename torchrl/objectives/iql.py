@@ -57,6 +57,10 @@ class IQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -211,6 +215,7 @@ class IQLLoss(LossModule):
         expectile: float = 0.5,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -228,13 +233,18 @@ class IQLLoss(LossModule):
             create_target_params=False,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # Value Function Network
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=False,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         # Q Function Network
