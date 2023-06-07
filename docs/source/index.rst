@@ -27,6 +27,9 @@ for :doc:`cost functions <reference/objectives>`, :ref:`returns <reference/objec
 
 TorchRL aims at a high modularity and good runtime performance.
 
+To read more about TorchRL philosophy and capabilities beyond this API reference,
+check the `TorchRL paper <https://arxiv.org/abs/2306.00577>`__.
+
 Tutorials
 =========
 
