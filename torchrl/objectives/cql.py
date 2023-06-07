@@ -51,12 +51,6 @@ class CQLLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
-        value_network (TensorDictModule, optional): V(s) parametric model.
-            This module typically outputs a ``"state_value"`` entry.
-
-            .. note::
-              If not provided, the second version of SAC is assumed, where
-              only the Q-Value network is needed.
 
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
@@ -81,9 +75,17 @@ class CQLLoss(LossModule):
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used for data collection.
             Default is ``True``.
-        delay_value (bool, optional): Whether to separate the target value
-            networks from the value networks used for data collection.
-            Default is ``True``.
+        gamma (float, optional): Discount factor. Default is ``None``.
+        temperature (float, optional): CQL temperature. Default is ``1.0``.
+        min_q_weight (float, optional): Minimum Q weight. Default is ``1.0``.
+        max_q_backup (bool, optional): Whether to use the max-min Q backup.
+            Default is ``False``.
+        deterministic_backup (bool, optional): Whether to use the deterministic. Default is ``True``.
+        num_random (int, optional): Number of random actions to sample for the CQL loss.
+            Default is ``10``.
+        with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
+            Default is ``False``.
+        lagrange_thresh (float, optional): Lagrange threshold. Default is ``0.0``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
@@ -133,7 +135,6 @@ class CQLLoss(LossModule):
         delay_actor: bool = False,
         delay_qvalue: bool = True,
         gamma: float = None,
-        min_q_version: int = 3,
         temperature: float = 1.0,
         min_q_weight: float = 1.0,
         max_q_backup: bool = False,
@@ -219,7 +220,6 @@ class CQLLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
-        self.min_q_version = min_q_version
         self.temperature = temperature
         self.min_q_weight = min_q_weight
         self.max_q_backup = max_q_backup
@@ -347,9 +347,9 @@ class CQLLoss(LossModule):
 
     def _get_policy_actions(self, observation, actor_params, num_actions=10):
         observation = (
-            observation.unsqueeze(1)
+            observation.unsqueeze(-1)
             .repeat(1, num_actions, 1)
-            .view(observation.shape[0] * num_actions, observation.shape[1])
+            .view(observation.shape[0] * num_actions, observation.shape[-1])
         )
         tensordict = TensorDict({self.actor_network.in_keys[0]: observation}, [])
         with torch.no_grad():
@@ -419,8 +419,8 @@ class CQLLoss(LossModule):
                 )
                 # take max over actions
                 state_action_value = state_action_value.reshape(
-                    self.num_qvalue_nets, tensordict.shape[0], 10, -1
-                ).max(2)[0]
+                    self.num_qvalue_nets, tensordict.shape[0], self.num_random, -1
+                ).max(-2)[0]
                 # take min over qvalue nets
                 next_state_value = state_action_value.min(0)[0]
 
@@ -480,11 +480,11 @@ class CQLLoss(LossModule):
         )
         current_observation = tensordict.get(*self.actor_network.in_keys)
         current_observation = (
-            current_observation.unsqueeze(1)
+            current_observation.unsqueeze(-2)
             .repeat(1, self.num_random, 1)
             .view(
                 current_observation.shape[0] * self.num_random,
-                current_observation.shape[1],
+                current_observation.shape[-1],
             )
         )
         tensordict_q_random.set(*self.actor_network.in_keys, current_observation)
@@ -540,12 +540,12 @@ class CQLLoss(LossModule):
         )
 
         min_qf1_loss = (
-            torch.logsumexp(cat_q1 / self.temperature, 1).mean()
+            torch.logsumexp(cat_q1 / self.temperature, dim=1).mean()
             * self.min_q_weight
             * self.temperature
         )
         min_qf2_loss = (
-            torch.logsumexp(cat_q2 / self.temperature, 1).mean()
+            torch.logsumexp(cat_q2 / self.temperature, dim=1).mean()
             * self.min_q_weight
             * self.temperature
         )
