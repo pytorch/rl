@@ -263,6 +263,7 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
+        self._in_keys = None
         self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
@@ -367,6 +368,7 @@ class SACLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
@@ -421,8 +423,7 @@ class SACLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
@@ -433,8 +434,17 @@ class SACLoss(LossModule):
         ]
         if self._version == 1:
             keys.extend(self.value_network.in_keys)
+        self._in_keys = list(set(keys))
 
-        return list(set(keys))
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
     @property
     def out_keys(self):
@@ -777,6 +787,7 @@ class DiscreteSACLoss(LossModule):
     ``["loss_actor", "loss_qvalue", "loss_alpha",
        "alpha", "entropy", "state_action_value_actor",
        "action_log_prob_actor", "next.state_value", "target_value"]``
+    The output keys can also be filtered using :meth:`DiscreteSACLoss.select_out_keys` method.
 
     Examples:
         >>> import torch
@@ -810,6 +821,7 @@ class DiscreteSACLoss(LossModule):
         >>> loss = DiscreteSACLoss(actor, qvalue, num_actions=actor.spec["action"].space.n)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
+        >>> # filter output keys to "loss_actor", and "loss_qvalue"
         >>> _ = loss.select_out_keys("loss_actor", "loss_qvalue")
         >>> loss_actor, loss_qvalue = loss(
         ...     observation=torch.randn(*batch, n_obs),
@@ -850,6 +862,17 @@ class DiscreteSACLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     delay_actor: bool = False
+    out_keys = [
+        "loss_actor",
+        "loss_qvalue",
+        "loss_alpha",
+        "alpha",
+        "entropy",
+        "state_action_value_actor",
+        "action_log_prob_actor",
+        "next.state_value",
+        "target_value",
+    ]
 
     def __init__(
         self,
@@ -868,7 +891,7 @@ class DiscreteSACLoss(LossModule):
         delay_qvalue: bool = True,
         priority_key: str = None,
     ):
-        self._out_keys = None
+        self._in_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -947,9 +970,9 @@ class DiscreteSACLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
@@ -958,30 +981,19 @@ class DiscreteSACLoss(LossModule):
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
         ]
-        return list(set(keys))
+        self._in_keys = list(set(keys))
 
     @property
-    def out_keys(self):
-        if self._out_keys is None:
-            keys = [
-                "loss_actor",
-                "loss_qvalue",
-                "loss_alpha",
-                "alpha",
-                "entropy",
-                "state_action_value_actor",
-                "action_log_prob_actor",
-                "next.state_value",
-                "target_value",
-            ]
-            self._out_keys = keys
-        return self._out_keys
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
 
-    @out_keys.setter
-    def out_keys(self, values):
-        self._out_keys = values
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
-    @dispatch()
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(

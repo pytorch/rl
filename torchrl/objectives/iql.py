@@ -232,6 +232,8 @@ class IQLLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
+        self._in_keys = None
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -283,8 +285,7 @@ class IQLLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
@@ -294,8 +295,17 @@ class IQLLoss(LossModule):
             *self.qvalue_network.in_keys,
             *self.value_network.in_keys,
         ]
+        self._in_keys = list(set(keys))
 
-        return list(set(keys))
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
@@ -310,6 +320,7 @@ class IQLLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
