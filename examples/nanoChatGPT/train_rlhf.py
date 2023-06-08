@@ -2,7 +2,11 @@ import torch
 import torch.nn.functional as F
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase, set_skip_existing
-from torchrl.data.replay_buffers import LazyTensorStorage, SamplerWithoutReplacement, TensorDictReplayBuffer
+from torchrl.data.replay_buffers import (
+    LazyTensorStorage,
+    SamplerWithoutReplacement,
+    TensorDictReplayBuffer,
+)
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import trange
@@ -40,12 +44,17 @@ def generate(model, batch, max_new_tokens=50):
     input_ids = batch.transformer_data.input_ids.clone()
     # mask the portion of input_ids that corresponds to the label
     prompt_rindex = batch.transformer_data.prompt_rindex
-    label_idx = torch.arange(input_ids.shape[1], device=prompt_rindex.device) >= prompt_rindex[:, None]
+    label_idx = (
+        torch.arange(input_ids.shape[1], device=prompt_rindex.device)
+        >= prompt_rindex[:, None]
+    )
     input_ids[label_idx] = EOS_TOKEN_ID
 
     # move padding tokens to left pad
     # huggingface models expect left padding for generation
-    input_ids = torch.stack([torch.roll(row, (row == EOS_TOKEN_ID).sum().item(), 0) for row in input_ids])
+    input_ids = torch.stack(
+        [torch.roll(row, (row == EOS_TOKEN_ID).sum().item(), 0) for row in input_ids]
+    )
 
     # generate and capture scores
     generation_config = GenerationConfig(
@@ -55,15 +64,20 @@ def generate(model, batch, max_new_tokens=50):
         max_new_tokens=max_new_tokens,
     )
     outputs = model.generate(
-        input_ids=input_ids, attention_mask=(input_ids != EOS_TOKEN_ID).to(torch.int64), generation_config=generation_config
+        input_ids=input_ids,
+        attention_mask=(input_ids != EOS_TOKEN_ID).to(torch.int64),
+        generation_config=generation_config,
     )
     samples = outputs.sequences
     # we'll insert generated tokens into a tensor prepopulated with padding tokens,
     # thereby moving back to right padding for reward model
-    generated = torch.ones_like(input_ids) * EOS_TOKEN_ID
+    generated_shape = torch.Size(
+        [input_ids.shape[0], input_ids.shape[1] + max_new_tokens]
+    )
+    generated = torch.ones(generated_shape, dtype=input_ids.dtype, device=input_ids.device) * EOS_TOKEN_ID
     for i, sample in enumerate(samples):
         mask = sample != EOS_TOKEN_ID
-        generated[i, :mask.sum()] = sample[mask]
+        generated[i, : mask.sum()] = sample[mask]
 
     # get the scores and normalise for log probabilities
     scores = torch.stack(outputs.scores, 1)
@@ -86,7 +100,12 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
         [
             torch.stack(
                 [
-                    torch.where(torch.arange(row.shape[0], device=generated.device) < rindex + i, row, EOS_TOKEN_ID)
+                    torch.where(
+                        torch.arange(row.shape[0], device=generated.device)
+                        < rindex + i,
+                        row,
+                        EOS_TOKEN_ID,
+                    )
                     # + 1 so that we get prompt and full generated sequence as first
                     # and last row respectively
                     for i in range(max_new_tokens + 1)
@@ -100,7 +119,8 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
     # done is True when we either first sample an EOS token or reach the maximum number
     # of generated tokens
     done_idx = torch.minimum(
-        (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.transformer_data.prompt_rindex, torch.tensor(max_new_tokens)
+        (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.transformer_data.prompt_rindex,
+        torch.tensor(max_new_tokens),
     )
     done = (
         torch.arange(max_new_tokens, device=generated.device) == done_idx[:, None]
@@ -113,8 +133,6 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
             for i in batch.transformer_data.prompt_rindex
         ]
     )
-    print(generated.shape)
-    print(f"{action_idx=}")
     action = generated[
         torch.arange(generated.shape[0], device=generated.device)[:, None],
         action_idx,
@@ -141,7 +159,7 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
             "attention_mask": rollout_attention_mask[:, 1:].clone(),
             "done": done,
             "reward": reward,
-        }
+        },
     }
     return TensorDict(td, batch_size=done.shape[:2], device=generated.device)
 
@@ -153,7 +171,7 @@ def flatten_td(td):
     # tensordict that has shape [N] where N <= B * T.
     done = td["next", "done"]
     mask = torch.zeros_like(done)
-    mask[..., 1:, :] = done[..., :-1, : ] # shift by one
+    mask[..., 1:, :] = done[..., :-1, :]  # shift by one
     mask = ~mask.cumsum(-2).bool().squeeze()
     return td[mask]
 
@@ -223,6 +241,7 @@ def main():
 
     # TODO: make configurable
     model.save_pretrained("out_rlhf")
+
 
 if __name__ == "__main__":
     main()
