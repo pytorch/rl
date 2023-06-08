@@ -186,7 +186,7 @@ class SACLoss(LossModule):
         >>> loss = SACLoss(actor, qvalue, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvlaue, _, _, _, _ = loss(
+        >>> loss_actor, loss_qvalue, _, _, _, _ = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
@@ -194,6 +194,18 @@ class SACLoss(LossModule):
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
 
+    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
     """
 
     @dataclass
@@ -251,6 +263,7 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -425,12 +438,18 @@ class SACLoss(LossModule):
 
     @property
     def out_keys(self):
-        keys = ["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]
-        if self._version == 1:
-            keys.append("loss_value")
-        return keys
+        if self._out_keys is None:
+            keys = ["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]
+            if self._version == 1:
+                keys.append("loss_value")
+            self._out_keys = keys
+        return self._out_keys
 
-    @dispatch()
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
