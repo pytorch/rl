@@ -23,6 +23,7 @@ generation_config.eos_token_id = tokenizer.eos_token_id
 encoded_input = tokenizer(texts, return_tensors='pt', return_token_type_ids=True, padding=True)
 out = model.generate(**encoded_input, generation_config=generation_config)
 
+
 def generated_to_tensordict(obj, *, tokenizer=None, done_token=None):
     inputs = {}
     if done_token is None:
@@ -31,13 +32,14 @@ def generated_to_tensordict(obj, *, tokenizer=None, done_token=None):
     # scores
     num_gens = len(obj.scores)
 
-    inputs["sample_log_prob"] = torch.stack(list(obj.scores), 1)
     seq = obj.sequences.unfold(1, num_gens, 1).transpose(-2, -1)
     inputs["sequences"] = seq[..., :-1]
     inputs["mask"] = inputs["sequences"] != done_token
     inputs["next", "sequences"] = seq[..., 1:]
     inputs["next", "mask"] = inputs["next", "sequences"] != done_token
     inputs["action"] = seq[..., -1]
+
+    inputs["sample_log_prob"] = torch.stack(list(obj.scores), 1).gather(-1, inputs["action"].unsqueeze(-1)).squeeze(-1)
 
     # filter out the dones that follow a done
     inputs["next", "done"] = inputs["action"] == done_token
