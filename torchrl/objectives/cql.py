@@ -85,6 +85,116 @@ class CQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.cql import CQLLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> loss = CQLLoss(actor, qvalue)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_alpha_prime: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor, value, and qvalue network.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "loss_alpha_prime", "alpha", "entropy"]``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.cql import CQLLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> loss = CQLLoss(actor, qvalue, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> loss_actor, loss_qvalue, _, _, _, _ = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
+
+    The output keys can also be filtered using the :meth:`CQLLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
     """
 
     @dataclass
