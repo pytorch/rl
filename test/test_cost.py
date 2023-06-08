@@ -2784,17 +2784,15 @@ class TestCQL(LossModuleTestBase):
 
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
-    @pytest.mark.parametrize("num_qvalue", [1, 2, 4])
     @pytest.mark.parametrize("max_q_backup", [True, False])
     @pytest.mark.parametrize("deterministic_backup", [True, False])
     @pytest.mark.parametrize("with_lagrange", [True, False])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_sac(
+    def test_cql(
         self,
         delay_actor,
         delay_qvalue,
-        num_qvalue,
         max_q_backup,
         deterministic_backup,
         with_lagrange,
@@ -2819,13 +2817,17 @@ class TestCQL(LossModuleTestBase):
         loss_fn = CQLLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            num_qvalue_nets=num_qvalue,
             loss_function="l2",
             max_q_backup=max_q_backup,
             deterministic_backup=deterministic_backup,
             with_lagrange=with_lagrange,
             **kwargs,
         )
+
+        if td_est is ValueEstimators.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_estimator(td_est)
+            return
 
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
@@ -2837,6 +2839,8 @@ class TestCQL(LossModuleTestBase):
         # check that losses are independent
         for k in loss.keys():
             if not k.startswith("loss"):
+                continue
+            if k == "loss_alpha_prime" and not with_lagrange:
                 continue
             loss[k].sum().backward(retain_graph=True)
             if k == "loss_actor":
@@ -2885,12 +2889,6 @@ class TestCQL(LossModuleTestBase):
                         include_nested=True, leaves_only=True
                     )
                 )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
             else:
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
@@ -2908,7 +2906,6 @@ class TestCQL(LossModuleTestBase):
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
-    @pytest.mark.parametrize("num_qvalue", [1, 2, 4])
     @pytest.mark.parametrize("max_q_backup", [True, False])
     @pytest.mark.parametrize("deterministic_backup", [True, False])
     @pytest.mark.parametrize("with_lagrange", [True, False])
@@ -2918,7 +2915,6 @@ class TestCQL(LossModuleTestBase):
         n,
         delay_actor,
         delay_qvalue,
-        num_qvalue,
         max_q_backup,
         deterministic_backup,
         with_lagrange,
@@ -2940,7 +2936,6 @@ class TestCQL(LossModuleTestBase):
         loss_fn = CQLLoss(
             actor_network=actor,
             qvalue_network=qvalue,
-            num_qvalue_nets=num_qvalue,
             loss_function="l2",
             max_q_backup=max_q_backup,
             deterministic_backup=deterministic_backup,

@@ -43,17 +43,13 @@ except ImportError as err:
 class CQLLoss(LossModule):
     """TorchRL implementation of the CQL loss.
 
-    Presented in "Soft Actor-Critic: Off-Policy Maximum Entropy Deep
-    Reinforcement Learning with a Stochastic Actor" https://arxiv.org/abs/1801.01290
-    and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
+    Presented in "Conservative Q-Learning for Offline Reinforcement Learning" https://arxiv.org/abs/2006.04779
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
 
-        num_qvalue_nets (integer, optional): number of Q-Value networks used.
-            Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
             the value function loss. Default is `"smooth_l1"`.
         alpha_init (float, optional): initial entropy multiplier.
@@ -125,7 +121,6 @@ class CQLLoss(LossModule):
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
         *,
-        num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
         min_alpha: float = None,
@@ -160,12 +155,12 @@ class CQLLoss(LossModule):
 
         # Q value
         self.delay_qvalue = delay_qvalue
-        self.num_qvalue_nets = num_qvalue_nets
+        self.num_qvalue_nets = 2
 
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
-            num_qvalue_nets,
+            self.num_qvalue_nets,
             create_target_params=self.delay_qvalue,
             compare_against=list(actor_network.parameters()),
         )
@@ -283,7 +278,7 @@ class CQLLoss(LossModule):
         for p in self.parameters():
             return p.device
         raise RuntimeError(
-            "At least one of the networks of SACLoss must have trainable " "parameters."
+            "At least one of the networks of CQLLoss must have trainable " "parameters."
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -364,17 +359,6 @@ class CQLLoss(LossModule):
         return tensordict, sample_log_prob
 
     def _get_value_v(self, tensordict, _alpha, actor_params, qval_params):
-        r"""Value network for SAC v2.
-
-        SAC v2 is based on a value estimate of the form:
-
-        .. math::
-
-          V = Q(s,a) - \alpha * \log p(a | s)
-
-        This class computes this value given the actor and qvalue network
-
-        """
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         with torch.no_grad():
