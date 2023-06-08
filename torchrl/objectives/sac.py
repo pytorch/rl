@@ -198,7 +198,7 @@ class SACLoss(LossModule):
     method.
 
     Examples:
-        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> _ = loss.select_out_keys('loss_actor', 'loss_qvalue')
         >>> loss_actor, loss_qvalue = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
@@ -713,6 +713,111 @@ class DiscreteSACLoss(LossModule):
             Key where to write the priority value for prioritized replay buffers.
             Default is `"td_error"`.
 
+    Examples:
+    >>> import torch
+    >>> from torch import nn
+    >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+    >>> from torchrl.modules.distributions.continuous import NormalParamWrapper
+    >>> from torchrl.modules.distributions.discrete import OneHotCategorical
+    >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+    >>> from torchrl.modules.tensordict_module.common import SafeModule
+    >>> from torchrl.objectives.sac import DiscreteSACLoss
+    >>> from tensordict.tensordict import TensorDict
+    >>> n_act, n_obs = 4, 3
+    >>> spec = OneHotDiscreteTensorSpec(n_act)
+    >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+    >>> module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
+    >>> actor = ProbabilisticActor(
+    ...     module=module,
+    ...     in_keys=["logits"],
+    ...     out_keys=["action"],
+    ...     spec=spec,
+    ...     distribution_class=OneHotCategorical)
+    >>> class ValueClass(nn.Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.linear = nn.Linear(n_obs, n_act)
+    ...     def forward(self, obs):
+    ...         return self.linear(obs)
+    >>> module = ValueClass()
+    >>> qvalue = ValueOperator(
+    ...     module=module,
+    ...     in_keys=['observation'])
+    >>> loss = DiscreteSACLoss(actor, qvalue, num_actions=actor.spec["action"].space.n)
+    >>> batch = [2, ]
+    >>> action = spec.rand(batch)
+    >>> data = TensorDict({
+    ...         "observation": torch.randn(*batch, n_obs),
+    ...         "action": action,
+    ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+    ...         ("next", "reward"): torch.randn(*batch, 1),
+    ...         ("next", "observation"): torch.randn(*batch, n_obs),
+    ...     }, batch)
+    >>> loss(data)
+    TensorDict(
+        fields={
+            action_log_prob_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_alpha",
+       "alpha", "entropy", "state_action_value_actor",
+       "action_log_prob_actor", "next.state_value", "target_value"]``
+
+    Examples:
+    >>> import torch
+    >>> from torch import nn
+    >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+    >>> from torchrl.modules.distributions.continuous import NormalParamWrapper
+    >>> from torchrl.modules.distributions.discrete import OneHotCategorical
+    >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+    >>> from torchrl.modules.tensordict_module.common import SafeModule
+    >>> from torchrl.objectives.sac import DiscreteSACLoss
+    >>> n_act, n_obs = 4, 3
+    >>> spec = OneHotDiscreteTensorSpec(n_act)
+    >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+    >>> module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
+    >>> actor = ProbabilisticActor(
+    ...     module=module,
+    ...     in_keys=["logits"],
+    ...     out_keys=["action"],
+    ...     spec=spec,
+    ...     distribution_class=OneHotCategorical)
+    >>> class ValueClass(nn.Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.linear = nn.Linear(n_obs, n_act)
+    ...     def forward(self, obs):
+    ...         return self.linear(obs)
+    >>> module = ValueClass()
+    >>> qvalue = ValueOperator(
+    ...     module=module,
+    ...     in_keys=['observation'])
+    >>> loss = DiscreteSACLoss(actor, qvalue, num_actions=actor.spec["action"].space.n)
+    >>> batch = [2, ]
+    >>> action = spec.rand(batch)
+    >>> _ = loss.select_out_keys("loss_actor", "loss_qvalue")
+    >>> loss_actor, loss_qvalue = loss(
+    ...     observation=torch.randn(*batch, n_obs),
+    ...     action=action,
+    ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+    ...     next_observation=torch.zeros(*batch, n_obs),
+    ...     next_reward=torch.randn(*batch, 1))
+    >>> loss_actor.backward()
     """
 
     @dataclass
@@ -729,11 +834,18 @@ class DiscreteSACLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
                 Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         action: NestedKey = "action"
         value: NestedKey = "state_value"
         priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -756,6 +868,7 @@ class DiscreteSACLoss(LossModule):
         delay_qvalue: bool = True,
         priority_key: str = None,
     ):
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -831,8 +944,44 @@ class DiscreteSACLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
 
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+        ]
+        return list(set(keys))
+
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = [
+                "loss_actor",
+                "loss_qvalue",
+                "loss_alpha",
+                "alpha",
+                "entropy",
+                "state_action_value_actor",
+                "action_log_prob_actor",
+                "next.state_value",
+                "target_value",
+            ]
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
@@ -1029,5 +1178,7 @@ class DiscreteSACLoss(LossModule):
         tensor_keys = {
             "value": self.tensor_keys.value,
             "value_target": "value_target",
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)
