@@ -113,6 +113,8 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
             for i in batch.transformer_data.prompt_rindex
         ]
     )
+    print(generated.shape)
+    print(f"{action_idx=}")
     action = generated[
         torch.arange(generated.shape[0], device=generated.device)[:, None],
         action_idx,
@@ -193,7 +195,7 @@ def main():
     )
     losses = []
 
-    for _ in trange(min(5, config["max_iters"])):
+    for _ in trange(config["max_iters"]):
         batch = next(tdl)
         generated, log_probs = generate(model, batch)
         # generate the tensordict structure expected from a rollout using the generated
