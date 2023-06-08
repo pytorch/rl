@@ -997,6 +997,11 @@ class TestDDPG(LossModuleTestBase):
         loss_val = loss(**kwargs)
         for i, key in enumerate(loss_val_td.keys()):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+        # test select
+        loss.select_out_keys('loss_actor', 'target_value')
+        loss_actor, target_value = loss(**kwargs)
+        assert loss_actor == loss_val_td['loss_actor']
+        assert (target_value == loss_val_td['target_value']).all()
 
 
 @pytest.mark.skipif(
@@ -1907,6 +1912,12 @@ class TestSAC(LossModuleTestBase):
         torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
         if version == 1:
             torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[5])
+        # test select
+        torch.manual_seed(self.seed)
+        loss.select_out_keys('loss_actor', 'loss_alpha')
+        loss_actor, loss_alpha = loss(**kwargs)
+        assert loss_actor == loss_val_td['loss_actor']
+        assert loss_alpha == loss_val_td['loss_alpha']
 
 
 @pytest.mark.skipif(
@@ -3746,6 +3757,12 @@ class TestA2C(LossModuleTestBase):
         # don't test entropy and loss_entropy, since they depend on a random sample
         # from distribution
         assert len(loss_val) == 4
+        # test select
+        torch.manual_seed(self.seed)
+        loss.select_out_keys('loss_objective', 'loss_critic')
+        loss_objective, loss_critic = loss(**kwargs)
+        assert loss_objective == loss_val_td['loss_objective']
+        assert loss_critic == loss_val_td['loss_critic']
 
 
 class TestReinforce(LossModuleTestBase):
@@ -4805,6 +4822,12 @@ class TestIQL(LossModuleTestBase):
         torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
         torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[2])
         torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[3])
+        # test select
+        torch.manual_seed(self.seed)
+        loss.select_out_keys('loss_actor', 'loss_value')
+        loss_actor, loss_value = loss(**kwargs)
+        assert loss_actor == loss_val_td['loss_actor']
+        assert loss_value == loss_val_td['loss_value']
 
 
 def test_hold_out():

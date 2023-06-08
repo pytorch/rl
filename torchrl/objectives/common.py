@@ -12,7 +12,8 @@ from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import make_functional, repopulate_module, TensorDictModule, \
+    TensorDictModuleBase
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
@@ -39,7 +40,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-class LossModule(nn.Module):
+class LossModule(TensorDictModuleBase):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input

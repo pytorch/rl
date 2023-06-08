@@ -200,6 +200,7 @@ class A2CLoss(LossModule):
         advantage_key: str = None,
         value_target_key: str = None,
     ):
+        self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
@@ -243,13 +244,19 @@ class A2CLoss(LossModule):
 
     @property
     def out_keys(self):
-        outs = ["loss_objective"]
-        if self.critic_coef:
-            outs.append("loss_critic")
-        if self.entropy_bonus:
-            outs.append("entropy")
-            outs.append("loss_entropy")
-        return outs
+        if self._out_keys is None:
+            outs = ["loss_objective"]
+            if self.critic_coef:
+                outs.append("loss_critic")
+            if self.entropy_bonus:
+                outs.append("entropy")
+                outs.append("loss_entropy")
+            self._out_keys = outs
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

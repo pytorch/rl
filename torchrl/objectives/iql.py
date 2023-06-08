@@ -199,6 +199,12 @@ class IQLLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+    out_keys = [
+            "loss_actor",
+            "loss_qvalue",
+            "loss_value",
+            "entropy",
+        ]
 
     def __init__(
         self,
@@ -292,14 +298,7 @@ class IQLLoss(LossModule):
                 done=self.tensor_keys.done,
             )
 
-    @dispatch(
-        dest=[
-            "loss_actor",
-            "loss_qvalue",
-            "loss_value",
-            "entropy",
-        ]
-    )
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:

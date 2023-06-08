@@ -251,6 +251,7 @@ class SACLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -425,12 +426,18 @@ class SACLoss(LossModule):
 
     @property
     def out_keys(self):
-        keys = ["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]
-        if self._version == 1:
-            keys.append("loss_value")
-        return keys
+        if self._out_keys is None:
+            keys = ["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]
+            if self._version == 1:
+                keys.append("loss_value")
+            self._out_keys = keys
+        return self._out_keys
 
-    @dispatch()
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:

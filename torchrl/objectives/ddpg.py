@@ -147,7 +147,14 @@ class DDPGLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
-
+    out_keys = [
+            "loss_actor",
+            "loss_value",
+            "pred_value",
+            "target_value",
+            "pred_value_max",
+            "target_value_max",
+        ]
     def __init__(
         self,
         actor_network: TensorDictModule,
@@ -210,16 +217,7 @@ class DDPGLoss(LossModule):
         keys = list(set(keys))
         return keys
 
-    @dispatch(
-        dest=[
-            "loss_actor",
-            "loss_value",
-            "pred_value",
-            "target_value",
-            "pred_value_max",
-            "target_value_max",
-        ]
-    )
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 
