@@ -209,6 +209,9 @@ class Transform(nn.Module):
                 )
         return tensordict
 
+    def _call_at_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._call(tensordict)
+
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
@@ -650,7 +653,7 @@ but got an object of type {type(transform)}."""
 
         mt_mode = self.transform.missing_tolerance
         self.set_missing_tolerance(True)
-        out_tensordict = self.transform._call(out_tensordict)
+        out_tensordict = self.transform._call_at_reset(out_tensordict)
         self.set_missing_tolerance(mt_mode)
         return out_tensordict
 

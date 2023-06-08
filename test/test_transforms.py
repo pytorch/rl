@@ -27,7 +27,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
 )
-from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import prod
@@ -83,7 +83,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
-from torchrl.envs.transforms.rlhf import KLRewardTransform
+from torchrl.envs.transforms.rlhf import KLRewardTransform, RewardModel
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
@@ -112,37 +112,37 @@ class TransformBase:
         it is worth trying both options here.
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_serial_trans_env_check(self):
         """tests that a serial transformed env (SerialEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_parallel_trans_env_check(self):
         """tests that a parallel transformed env (ParallelEnv(N, lambda: TransformedEnv(env, transform))) passes the check_env_specs test."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_trans_serial_env_check(self):
         """tests that a transformed serial env (TransformedEnv(SerialEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_trans_parallel_env_check(self):
         """tests that a transformed paprallel env (TransformedEnv(ParallelEnv(N, lambda: env()), transform)) passes the check_env_specs test."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_no_env(self):
         """tests the transform on dummy data, without an env."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_compose(self):
         """tests the transform on dummy data, without an env but inside a Compose."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_env(self):
@@ -153,12 +153,12 @@ class TransformBase:
         a check that reset produces the desired output and that step() does too.
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_model(self):
         """tests the transform before an nn.Module that reads the output."""
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_rb(self):
@@ -168,7 +168,7 @@ class TransformBase:
         an error will be raised when called or appended to a RB.
 
         """
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def test_transform_inverse(self):
@@ -177,7 +177,7 @@ class TransformBase:
         If your transform is not supposed to work offline, test that
         an error will be raised when called in a nn.Module.
         """
-        raise NotImplementedError
+        ...
 
 
 class TestBinarizeReward(TransformBase):
@@ -7404,6 +7404,147 @@ class TestKLRewardTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
+
+
+class TestRewardModel(TransformBase):
+    def _mock_reward_model(self, tdmodule, in_keys=None, out_keys=None):
+        reward_model = torch.nn.LazyLinear(1)
+        if tdmodule:
+            return TensorDictModule(reward_model, in_keys, out_keys)
+        return reward_model
+
+    def test_single_trans_env_check(self):
+        base_env = ContinuousActionVecMockEnv()
+        t = RewardModel(
+            self._mock_reward_model(True, in_keys=["observation"], out_keys=["reward"])
+        )
+        env = TransformedEnv(base_env, t)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            t = RewardModel(
+                self._mock_reward_model(
+                    True, in_keys=["observation"], out_keys=["reward"]
+                )
+            )
+            return TransformedEnv(base_env, t)
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            base_env = ContinuousActionVecMockEnv()
+            t = RewardModel(
+                self._mock_reward_model(
+                    True, in_keys=["observation"], out_keys=["reward"]
+                )
+            )
+            return TransformedEnv(base_env, t)
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        make_env = ContinuousActionVecMockEnv
+        t = RewardModel(
+            self._mock_reward_model(True, in_keys=["observation"], out_keys=["reward"])
+        )
+        env = TransformedEnv(SerialEnv(2, make_env), t)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        make_env = ContinuousActionVecMockEnv
+        t = RewardModel(
+            self._mock_reward_model(True, in_keys=["observation"], out_keys=["reward"])
+        )
+        env = TransformedEnv(ParallelEnv(2, make_env), t)
+        check_env_specs(env)
+
+    def test_transform_exception(self):
+        with pytest.raises(
+            ValueError,
+            match="Reward models that are not TensorDictModuleBase require the in_keys to be specified",
+        ):
+            RewardModel(self._mock_reward_model(False))
+        with pytest.raises(ValueError, match="Got conflicting in_keys"):
+            RewardModel(
+                self._mock_reward_model(True, in_keys=["a"], out_keys=["b"]),
+                in_keys=["b"],
+            )
+        with pytest.raises(
+            RuntimeError,
+            match="out_keys was not provided but the number of out_keys of the reward model",
+        ):
+            RewardModel(
+                self._mock_reward_model(True, in_keys=["a"], out_keys=["a", "b"])
+            )
+        with pytest.raises(
+            ValueError, match="One and only one reward key should be provided"
+        ):
+            RewardModel(
+                self._mock_reward_model(True, in_keys=["a"], out_keys=["a", "b"]),
+                out_keys=["a", "b"],
+            )
+        with pytest.raises(ValueError, match="Got conflicting out_keys"):
+            RewardModel(
+                self._mock_reward_model(True, in_keys=["a"], out_keys=["a", "b"]),
+                out_keys=["c"],
+            )
+        with pytest.raises(
+            ValueError, match="the done state shape must match the tensordict shape"
+        ):
+            t = RewardModel(
+                self._mock_reward_model(
+                    True,
+                    in_keys=["a"],
+                    out_keys=["a"],
+                )
+            )
+            t._call(
+                TensorDict({"a": torch.randn(3), "done": torch.zeros(3)}, batch_size=[])
+            )
+        with pytest.raises(RuntimeError, match="The reward model provided to"):
+
+            class MyModule(TensorDictModuleBase):
+                in_keys = ["a"]
+                out_keys = ["b"]
+
+                def forward(self, td):
+                    td = td.clone()
+                    td.set("b", td.get("a"))
+                    return td
+
+            t = RewardModel(MyModule())
+            t._call(
+                TensorDict(
+                    {
+                        "a": torch.randn(3, 1),
+                        "done": torch.zeros(3, 1, dtype=torch.bool),
+                    },
+                    [3],
+                )
+            )
+
+    def test_transform_no_env(self):
+        pass
+
+    def test_transform_compose(self):
+        pass
+
+    def test_transform_env(self):
+        pass
+
+    def test_transform_model(self):
+        pass
+
+    def test_transform_rb(self):
+        pass
+
+    def test_transform_inverse(self):
+        pass
 
 
 if __name__ == "__main__":

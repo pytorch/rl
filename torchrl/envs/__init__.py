@@ -33,6 +33,7 @@ from .transforms import (
     Resize,
     Reward2GoTransform,
     RewardClipping,
+    RewardModel,
     RewardScaling,
     RewardSum,
     SelectTransform,
