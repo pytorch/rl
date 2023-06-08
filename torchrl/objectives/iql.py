@@ -213,11 +213,11 @@ class IQLLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
     out_keys = [
-            "loss_actor",
-            "loss_qvalue",
-            "loss_value",
-            "entropy",
-        ]
+        "loss_actor",
+        "loss_qvalue",
+        "loss_value",
+        "entropy",
+    ]
 
     def __init__(
         self,

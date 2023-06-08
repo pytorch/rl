@@ -12,8 +12,12 @@ from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, repopulate_module, TensorDictModule, \
-    TensorDictModuleBase
+from tensordict.nn import (
+    make_functional,
+    repopulate_module,
+    TensorDictModule,
+    TensorDictModuleBase,
+)
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor

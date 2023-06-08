@@ -161,13 +161,14 @@ class DDPGLoss(LossModule):
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
     out_keys = [
-            "loss_actor",
-            "loss_value",
-            "pred_value",
-            "target_value",
-            "pred_value_max",
-            "target_value_max",
-        ]
+        "loss_actor",
+        "loss_value",
+        "pred_value",
+        "target_value",
+        "pred_value_max",
+        "target_value_max",
+    ]
+
     def __init__(
         self,
         actor_network: TensorDictModule,
