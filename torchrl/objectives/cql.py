@@ -249,6 +249,7 @@ class CQLLoss(LossModule):
         lagrange_thresh: float = 0.0,
         priority_key: str = None,
     ) -> None:
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
