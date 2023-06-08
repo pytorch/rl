@@ -76,10 +76,10 @@ class OnlineDTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        target_actions = torch.clone(tensordict["action"].detach()).to(self.device)
+        target_actions = tensordict["action"].detach()
 
         action_dist = self.actor_network.get_dist(
-            tensordict.to(self.device), params=self.actor_network_params
+            tensordict, params=self.actor_network_params
         )
 
         loss_log_likelihood = action_dist.log_prob(target_actions).mean()
@@ -91,9 +91,9 @@ class OnlineDTLoss(LossModule):
         out = {
             "loss": loss,
             "loss_log_likelihood": -loss_log_likelihood,
-            "entropy": entropy,
+            "entropy": entropy.detach(),
             "loss_alpha": loss_alpha,
-            "alpha": self.log_alpha.exp(),
+            "alpha": self.log_alpha.exp().detach(),
         }
         return TensorDict(out, [])
 
@@ -133,10 +133,10 @@ class DTLoss(LossModule):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
-        target_actions = torch.clone(tensordict["action"].detach()).to(self.device)
+        target_actions = tensordict["action"].detach()
 
         pred_actions = self.actor_network(
-            tensordict.to(self.device), params=self.actor_network_params
+            tensordict, params=self.actor_network_params
         ).get("action")
         loss = distance_loss(
             pred_actions,
