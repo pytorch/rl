@@ -1,15 +1,14 @@
+import argparse
+import logging
 import math
 import os
 from contextlib import nullcontext
 from pathlib import Path
 
 import torch
+import yaml
 
 HERE = Path(__file__).parent
-import argparse
-import logging
-
-import yaml
 
 
 def load_config(path):

@@ -2,12 +2,12 @@ import os
 import time
 from pathlib import Path
 
-import torch
+import matplotlib.pyplot as plt
 import numpy as np
-
+import torch
 from data import get_reward_dataloaders
 from models.reward import init_reward_model
-from utils import load_and_update_config, create_lr_scheduler, setup
+from utils import create_lr_scheduler, load_and_update_config, setup
 
 HERE = Path(__file__).parent
 
@@ -134,8 +134,6 @@ def main():
                 f"iter {it}: train loss {lossf:.4f}, accuracy {train_accs[-1]:.4f} time {dt*1000:.2f}ms"
             )
 
-    import matplotlib.pyplot as plt
-
     f, ax = plt.subplots(figsize=(8, 6))
     plt.title("Reward Model: Loss")
     ax.plot(
@@ -148,7 +146,7 @@ def main():
         val_losses,
         label="valid loss",
     )
-    ax.set_yscale('log')
+    ax.set_yscale("log")
     ax.legend()
 
     f.savefig("figures/reward_curve_loss.png", dpi=150)
@@ -165,7 +163,7 @@ def main():
         val_accs,
         label="valid accs",
     )
-    ax.set_yscale('log')
+    ax.set_yscale("log")
     ax.legend()
 
     f.savefig("figures/reward_curve_accuracy.png", dpi=150)
