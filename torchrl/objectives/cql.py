@@ -222,6 +222,8 @@ class CQLLoss(LossModule):
         state_action_value: NestedKey = "state_action_value"
         log_prob: NestedKey = "_log_prob"
         priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -344,6 +346,8 @@ class CQLLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
@@ -379,8 +383,10 @@ class CQLLoss(LossModule):
             raise NotImplementedError(f"Unknown value type {value_type}")
 
         tensor_keys = {
-            "value": self.tensor_keys.value,
             "value_target": "value_target",
+            "value": self.tensor_keys.value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
