@@ -85,6 +85,20 @@ def make_process_fn(tokenizer, max_length):
             truncation=True,
         )
         tokenized_example["prompt_rindex"] = prompt_rindex
+        # drop any examples whose total length when tokenized exceeds block size
+        # with recommended block size of 550, this is only ~0.1% of available examples.
+        indices_to_drop = {
+            i
+            for i, input_ids in enumerate(tokenized_example["input_ids"])
+            if input_ids[-1] != tokenizer.eos_token_id
+        }
+        for key in tokenized_example:
+            tokenized_example[key] = [
+                item
+                for i, item in enumerate(tokenized_example[key])
+                if i not in indices_to_drop
+            ]
+
         return tokenized_example
 
     return process
@@ -130,6 +144,7 @@ def create_tldr_memmaps(split, max_length):
     rindex_arr = np.memmap(rindex_filename, dtype=dtype, mode="w+", shape=(n_examples,))
 
     print(f"writing {ids_filename} and {mask_filename}...")
+    # TODO: write in batches rather than one row at a time
     for idx in tqdm(range(n_examples)):
         ids_arr[idx] = tokenized[idx]["input_ids"]
         mask_arr[idx] = tokenized[idx]["attention_mask"]
@@ -186,13 +201,7 @@ def create_datasets(config):
     return train_data, val_data
 
 
-def strip_labels(it):
-    for batch in it:
-        batch.transformer_data.labels = None
-        yield batch
-
-
-def get_prompt_dataloaders(config, inference=False):
+def get_prompt_dataloaders(config):
     train_data, val_data = create_datasets(config)
 
     train_loader = create_infinite_dataloader(
@@ -200,6 +209,4 @@ def get_prompt_dataloaders(config, inference=False):
     )
     val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
 
-    if inference:
-        return strip_labels(train_loader), strip_labels(val_loader)
     return train_loader, val_loader
