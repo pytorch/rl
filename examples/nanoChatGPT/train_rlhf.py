@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase, set_skip_existing
+from tensordict.nn import TensorDictModuleBase
 from torchrl.data.replay_buffers import (
     LazyTensorStorage,
     SamplerWithoutReplacement,
@@ -182,9 +182,8 @@ def main():
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
-    model = init_transformer(config, inference=True)
     reward_model = init_reward_model(config)
-    actor, critic, critic_head = init_actor_critic(config)
+    actor, critic, critic_head, model = init_actor_critic(config)
     critic.eval()
 
     adv_fn = GAE(

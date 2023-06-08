@@ -92,14 +92,6 @@ def init_reward_model(config):
     else:
         raise ValueError(f"option {config['init_reward_from']=} not recognised")
 
-    # crop down the model block size if desired, using model surgery
-    # if config["block_size"] < model.config.n_positions:
-    #     print(
-    #         f"cropping model from block_size {model.config.n_positions} to {config['block_size']}"
-    #     )
-    #     crop_block_size(model, config["block_size"])
-    #     print_trainable_parameters(model)
-
     model.to(config["device"])
     # compile the model
     if config["compile"]:
@@ -112,23 +104,3 @@ def init_reward_model(config):
         out_keys=["rewards", "end_scores"],
     )
     return model
-
-
-# FIXME: out of date
-# if __name__ == "__main__":
-#     # FIXME: this relative import breaks when running this file
-#     # below code gives an example of usage but is not easily runnable
-#     from .utils import load_and_update_config
-
-#     enc = tiktoken.get_encoding("gpt2")
-
-#     HERE = Path(__file__).parent
-#     config = load_and_update_config(HERE.parent / "config" / "train_reward.yaml")
-#     reward_model = init_reward_model(config)
-
-#     prompt = enc.encode("this is a hard-coded prompt!")
-#     # add singleton leading dimension to simulate batch dimension
-#     prompt = torch.tensor(prompt)[None, :]
-
-#     reward = reward_model.forward_reward(prompt)
-#     print(reward)

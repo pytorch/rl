@@ -10,7 +10,6 @@ import os
 import time
 from pathlib import Path
 
-import evaluate
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,38 +27,21 @@ def init_scaler(config):
     return torch.cuda.amp.GradScaler(enabled=(config["dtype"] == "float16"))
 
 
-def compute_rouge(batch_td, tokenizer, rouge_fn):
-    labels_ids = batch_td.transformer_data.labels[:, 1:]
-    pred_ids = batch_td.transformer_data.logits.argmax(dim=-1)[:, :-1]
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-    result = rouge_fn.compute(predictions=pred_str, references=label_str)
-    return result
-
-
 def create_loss_estimator(config, ctx):
     # helps estimate an arbitrarily accurate loss over either split using many batches
-    rouge_fn = evaluate.load("rouge")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
     @torch.no_grad()
-    def estimate_loss(model, dataloader, return_rouge=False):
+    def estimate_loss(model, dataloader):
         model.eval()
         losses = torch.zeros(config["eval_iters"])
-        if return_rouge:
-            rouge1 = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
-            if return_rouge:
-                rouge = compute_rouge(batch, tokenizer, rouge_fn)
-                rouge1[k] = rouge["rouge1"]
         model.train()
-        if return_rouge:
-            return losses.mean(), rouge1.mean()
         return losses.mean()
 
     return estimate_loss
@@ -161,19 +143,21 @@ def main():
             print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
 
     f, ax = plt.subplots(figsize=(8, 6))
-    plt.title('Supervised Fine Tuning: Loss')
-    ax.plot(np.arange(0, config["max_iters"], config["log_interval"]), train_losses, label="train loss")
-    ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_losses, label="valid loss")
-    ax.set_yscale('log')
+    plt.title("Supervised Fine Tuning: Loss")
+    ax.plot(
+        np.arange(0, config["max_iters"], config["log_interval"]),
+        train_losses,
+        label="train loss",
+    )
+    ax.plot(
+        np.arange(0, config["max_iters"], config["eval_interval"]),
+        val_losses,
+        label="valid loss",
+    )
+    ax.set_yscale("log")
     ax.legend()
     f.savefig("figures/train_curve.png", dpi=150)
 
-    # f, ax = plt.subplots(figsize=(8, 6))
-    # plt.title('Supervised Fine Tuning: Rouge')
-    # ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), train_rouges, label="train rouge")
-    # ax.plot(np.arange(0, config["max_iters"], config["eval_interval"]), val_rouges, label="valid rouge")
-    # ax.legend()
-    # f.savefig("figures/train_curve_rouge.png", dpi=150)
 
 if __name__ == "__main__":
     main()
