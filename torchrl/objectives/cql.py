@@ -10,7 +10,7 @@ from typing import Tuple, Union
 
 import numpy as np
 import torch
-from tensordict.nn import TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -72,16 +72,16 @@ class CQLLoss(LossModule):
             networks from the Q value networks used for data collection.
             Default is ``True``.
         gamma (float, optional): Discount factor. Default is ``None``.
-        temperature (float, optional): CQL temperature. Default is ``1.0``.
-        min_q_weight (float, optional): Minimum Q weight. Default is ``1.0``.
+        temperature (float, optional): CQL temperature. Default is 1.0.
+        min_q_weight (float, optional): Minimum Q weight. Default is 1.0.
         max_q_backup (bool, optional): Whether to use the max-min Q backup.
             Default is ``False``.
         deterministic_backup (bool, optional): Whether to use the deterministic. Default is ``True``.
         num_random (int, optional): Number of random actions to sample for the CQL loss.
-            Default is ``10``.
+            Default is 10.
         with_lagrange (bool, optional): Whether to use the Lagrange multiplier.
             Default is ``False``.
-        lagrange_thresh (float, optional): Lagrange threshold. Default is ``0.0``.
+        lagrange_thresh (float, optional): Lagrange threshold. Default is 0.0.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
@@ -281,6 +281,38 @@ class CQLLoss(LossModule):
             "At least one of the networks of CQLLoss must have trainable " "parameters."
         )
 
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+        ]
+
+        return list(set(keys))
+
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = [
+                "loss_actor",
+                "loss_qvalue",
+                "loss_alpha",
+                "loss_alpha_prime",
+                "alpha",
+                "entropy",
+            ]
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
