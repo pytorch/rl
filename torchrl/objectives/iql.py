@@ -153,7 +153,7 @@ class IQLLoss(LossModule):
         >>> loss = IQLLoss(actor, qvalue, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvlaue, loss_value, entropy = loss(
+        >>> loss_actor, loss_qvalue, loss_value, entropy = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
@@ -161,6 +161,19 @@ class IQLLoss(LossModule):
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
 
+
+    The output keys can also be filtered using the :meth:`IQLLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
     """
 
     @dataclass

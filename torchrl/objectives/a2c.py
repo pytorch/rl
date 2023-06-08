@@ -150,6 +150,19 @@ class A2CLoss(LossModule):
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
+
+    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_objective', 'loss_critic')
+        >>> loss_obj, loss_critic = loss(
+        ...     observation = torch.randn(*batch, n_obs),
+        ...     action = spec.rand(batch),
+        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_reward = torch.randn(*batch, 1),
+        ...     next_observation = torch.randn(*batch, n_obs))
+        >>> loss_obj.backward()
     """
 
     @dataclass

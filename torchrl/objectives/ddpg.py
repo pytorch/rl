@@ -117,6 +117,19 @@ class DDPGLoss(LossModule):
         ...     next_reward=torch.randn(1))
         >>> loss_actor.backward()
 
+    The output keys can also be filtered using the :meth:`DDPGLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_value')
+        >>> loss_actor, loss_value = loss(
+        ...     observation=torch.randn(n_obs),
+        ...     action=spec.rand(),
+        ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_observation=torch.randn(n_obs),
+        ...     next_reward=torch.randn(1))
+        >>> loss_actor.backward()
+
     """
 
     @dataclass
