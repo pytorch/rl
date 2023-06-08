@@ -7,7 +7,7 @@ import argparse
 import pytest
 import torch
 
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
@@ -408,7 +408,7 @@ class TestQValue:
         assert (values == in_values).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy(device):
     torch.manual_seed(0)
     obs_dim = 4
@@ -481,7 +481,7 @@ def test_qvalactor_construct(
     QValueActor(**kwargs)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy_categorical(device):
     torch.manual_seed(0)
     obs_dim = 4
@@ -512,7 +512,7 @@ def test_value_based_policy_categorical(device):
     assert (0 <= action).all() and (action < action_dim).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_actorcritic(device):
     common_module = SafeModule(
         module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None

@@ -18,3 +18,5 @@ dependencies:
     - scipy
     - hydra-core
     - jumanji
+    - jax<=0.4.10
+    - jaxlib<=0.4.10

@@ -17,7 +17,7 @@ root_dir="$(git rev-parse --show-toplevel)"
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 
-#MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
-MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 20 --ignore test/test_distributed.py
+#MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 200
+MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py
 coverage combine
 coverage xml -i

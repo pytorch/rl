@@ -16,7 +16,7 @@ import yaml
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
-    get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -184,7 +184,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
@@ -264,7 +264,7 @@ class TestModelBasedEnvBase:
             ),
         )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_rollout(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -287,7 +287,7 @@ class TestModelBasedEnvBase:
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -340,9 +340,7 @@ class TestParallel:
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
         parallel_env = ParallelEnv(num_parallel_env, lambda: env)
-        parallel_env.start()
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
-        parallel_env.close()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -444,10 +442,11 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [False, True])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: faster execution
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
@@ -495,9 +494,10 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env_with_policy(
         self,
         env_name,
@@ -574,31 +574,13 @@ class TestParallel:
         "env_name",
         [
             PENDULUM_VERSIONED,
-            PONG_VERSIONED,
         ],
-    )
-    @pytest.mark.parametrize("frame_skip", [4, 1])
+    )  # PONG_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize(
-        "transformed_in",
-        [
-            True,
-            False,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "transformed_out",
-        [
-            False,
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "static_seed",
-        [
-            False,
-            True,
-        ],
-    )
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: effociency
+    @pytest.mark.parametrize("static_seed", [False, True])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
@@ -673,10 +655,17 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("open_before", [False, True])
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: Skip PONG for efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out,open_before",
+        [  # 1226: efficiency
+            [True, True, True],
+            [True, True, False],
+            [False, False, True],
+        ],
+    )
     def test_parallel_env_cast(
         self,
         env_name,
@@ -768,9 +757,14 @@ class TestParallel:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out",
+        [  # 1226
+            [True, True],
+            [False, False],
+        ],
+    )
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
@@ -805,9 +799,14 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: No pong for efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize(
+        "device",
+        [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+    )
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
         env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
@@ -857,7 +856,7 @@ class TestParallel:
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel):
-        num_env = 3
+        num_env = 2
 
         def make_make_env():
             def make_transformed_env(seed=None):
@@ -1067,7 +1066,7 @@ def test_steptensordict(
         assert out is next_tensordict
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked(device):
     env = MockBatchedLockedEnv(device)
     assert env.batch_locked
@@ -1085,7 +1084,7 @@ def test_batch_locked(device):
         env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked(device):
     env = MockBatchedUnLockedEnv(device)
     assert not env.batch_locked
@@ -1100,7 +1099,7 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1124,7 +1123,7 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_info_dict_reader(device, seed=0):
     try:
         import gymnasium as gym
