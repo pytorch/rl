@@ -49,7 +49,7 @@ class ActorCritic(ActorValueOperator):
 
 def init_actor_critic(config):
     base_model = init_transformer(
-        config, as_tensordictmodule=False, skip_compilation=True, inference=True
+        config, as_tensordictmodule=False, skip_compilation=False, inference=True
     )
     a2c_model = ActorCritic(base_model)
     a2c_model.to(config["device"])

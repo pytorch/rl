@@ -1,4 +1,5 @@
 datasets
+matplotlib
 numpy
 PyYAML
 requests
