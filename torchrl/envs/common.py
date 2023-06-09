@@ -1243,7 +1243,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict = tensordict.to(env_device)
             tensordict = self.step(tensordict)
 
-            tensordicts.append(tensordict.clone())
+            tensordicts.append(tensordict.clone(False))
             done = tensordict.get(("next", *done_key))
             truncated = tensordict.get(
                 ("next", "truncated"),
