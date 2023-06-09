@@ -194,7 +194,7 @@ def step_mdp(
         out_keys = set(out.keys())
         td_keys = set(tensordict.keys()) - out_keys
         if exclude_action:
-            td_keys.remove("action")
+            td_keys = td_keys - {"action"}
     elif not exclude_action:
         td_keys = {"action"}
 
