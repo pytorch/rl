@@ -758,7 +758,7 @@ class ParallelEnv(_BatchedEnv):
         # this is faster than update_ but won't work for lazy stacks
         for key in self.env_input_keys:
             self.shared_tensordict_parent._set(
-                tensordict.get(key), inplace=True,
+                key, tensordict.get(key), inplace=True,
             )
         if self.event is not None:
             self.event.record()
