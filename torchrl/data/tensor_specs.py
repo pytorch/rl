@@ -1129,7 +1129,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         m = torch.randint(n, (*shape, 1), device=self.device)
         out = torch.zeros((*shape, n), device=self.device, dtype=self.dtype)
         if shape:
-            out.scatter_(-2, m, 1.0)
+            out.scatter_(-2, m, 1)
         else:
             out[m] = 1
         return out
