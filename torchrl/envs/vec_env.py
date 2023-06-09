@@ -1041,7 +1041,7 @@ def _run_worker_pipe_shared_mem(
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            shared_tensordict.update_(local_tensordict.select("next"))
+            shared_tensordict.get("next").update_(local_tensordict.get("next"))
             if event is not None:
                 event.record()
                 event.synchronize()
