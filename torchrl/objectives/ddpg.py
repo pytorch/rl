@@ -179,6 +179,7 @@ class DDPGLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
     ) -> None:
+        self._in_keys = None
         super().__init__()
         self.delay_actor = delay_actor
         self.delay_value = delay_value
@@ -218,9 +219,9 @@ class DDPGLoss(LossModule):
                 reward=self._tensor_keys.reward,
                 done=self._tensor_keys.done,
             )
+        self._set_in_keys()
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
@@ -228,8 +229,17 @@ class DDPGLoss(LossModule):
             *[("next", key) for key in self.actor_in_keys],
             *self.value_network.in_keys,
         ]
-        keys = list(set(keys))
-        return keys
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
