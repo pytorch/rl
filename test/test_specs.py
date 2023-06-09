@@ -1115,7 +1115,7 @@ class TestSpec:
         torch.manual_seed(0)
         action_spec = OneHotDiscreteTensorSpec(10)
 
-        sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
+        sample = action_spec.rand((100000,))
 
         sample_list = sample.argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
@@ -2115,7 +2115,7 @@ class TestStack:
         assert (val.numpy() == val_np).all()
 
         with pytest.raises(AssertionError):
-            c.to_numpy(val + 1)
+            c.to_numpy(val + 1, safe=True)
 
 
 class TestStackComposite:
@@ -2379,7 +2379,7 @@ class TestStackComposite:
 
         td_fail = TensorDict({"a": torch.rand((2, 1, 3)) + 1}, [2, 1, 3])
         with pytest.raises(AssertionError):
-            c.to_numpy(td_fail)
+            c.to_numpy(td_fail, safe=True)
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.

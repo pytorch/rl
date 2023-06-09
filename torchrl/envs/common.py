@@ -819,11 +819,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.lock_()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         # this tensordict should contain a "next" key
-        next_tensordict_out = tensordict_out.get("next", None)
-        if next_tensordict_out is None:
+        try:
+            next_tensordict_out = tensordict_out.get("next")
+        except KeyError:
             raise RuntimeError(
                 "The value returned by env._step must be a tensordict where the "
                 "values at t+1 have been written under a 'next' entry. This "
@@ -835,7 +835,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
-        tensordict.unlock_()
 
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
@@ -865,7 +864,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
             next_tensordict_out.set(self.done_key, done)
-
         tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
@@ -1015,9 +1013,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if tensordict.batch_size != self.batch_size and (
+        if (
             self.batch_locked or self.batch_size != torch.Size([])
-        ):
+        ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
@@ -1237,13 +1235,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             done_key = (done_key,)
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device)
+                tensordict = tensordict.to(policy_device, non_blocking=True)
             tensordict = policy(tensordict)
             if auto_cast_to_device:
-                tensordict = tensordict.to(env_device)
+                tensordict = tensordict.to(env_device, non_blocking=True)
             tensordict = self.step(tensordict)
 
-            tensordicts.append(tensordict.clone())
+            tensordicts.append(tensordict.clone(False))
             done = tensordict.get(("next", *done_key))
             truncated = tensordict.get(
                 ("next", "truncated"),
@@ -1268,9 +1266,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
         out_td = torch.stack(tensordicts, len(batch_size))
-        out_td.refine_names(..., "time")
         if return_contiguous:
-            return out_td.contiguous()
+            out_td = out_td.contiguous()
+        out_td.refine_names(..., "time")
         return out_td
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
