@@ -2697,6 +2697,8 @@ class CompositeSpec(TensorSpec):
     ) -> Dict[str, torch.Tensor]:
         if isinstance(vals, TensorDict):
             out = vals.select()  # create and empty tensordict similar to vals
+        elif isinstance(vals, dict):
+            out = {}
         else:
             out = TensorDict({}, torch.Size([]), _run_checks=False)
         for key, item in vals.items():
