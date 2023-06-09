@@ -150,6 +150,19 @@ class A2CLoss(LossModule):
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
+
+    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_objective', 'loss_critic')
+        >>> loss_obj, loss_critic = loss(
+        ...     observation = torch.randn(*batch, n_obs),
+        ...     action = spec.rand(batch),
+        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_reward = torch.randn(*batch, 1),
+        ...     next_observation = torch.randn(*batch, n_obs))
+        >>> loss_obj.backward()
     """
 
     @dataclass
@@ -200,6 +213,7 @@ class A2CLoss(LossModule):
         advantage_key: str = None,
         value_target_key: str = None,
     ):
+        self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
@@ -243,13 +257,19 @@ class A2CLoss(LossModule):
 
     @property
     def out_keys(self):
-        outs = ["loss_objective"]
-        if self.critic_coef:
-            outs.append("loss_critic")
-        if self.entropy_bonus:
-            outs.append("entropy")
-            outs.append("loss_entropy")
-        return outs
+        if self._out_keys is None:
+            outs = ["loss_objective"]
+            if self.critic_coef:
+                outs.append("loss_critic")
+            if self.entropy_bonus:
+                outs.append("entropy")
+                outs.append("loss_entropy")
+            self._out_keys = outs
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:

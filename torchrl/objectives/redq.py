@@ -11,7 +11,7 @@ from typing import Union
 import numpy as np
 import torch
 
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -78,6 +78,108 @@ class REDQLoss(LossModule):
             for prioritized replay buffers. Default is
             ``"td_error"``.
 
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.redq import REDQLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> loss = REDQLoss(actor, qvalue)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                action_log_prob_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy",
+        "state_action_value_actor", "action_log_prob_actor", "next.state_value", "target_value",]``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.redq import REDQLoss
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> loss = REDQLoss(actor, qvalue)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> # filter output keys to "loss_actor", and "loss_qvalue"
+        >>> _ = loss.select_out_keys("loss_actor", "loss_qvalue")
+        >>> loss_actor, loss_qvalue = loss(
+        ...         observation=torch.randn(*batch, n_obs),
+        ...         action=action,
+        ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_reward=torch.randn(*batch, 1),
+        ...         next_observation=torch.randn(*batch, n_obs))
+        >>> loss_actor.backward()
+
     """
 
     @dataclass
@@ -97,6 +199,11 @@ class REDQLoss(LossModule):
                 priority is written to. Defaults to ``"td_error"``.
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected. Defaults to ``"state_action_value"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         action: NestedKey = "action"
@@ -104,10 +211,23 @@ class REDQLoss(LossModule):
         sample_log_prob: NestedKey = "sample_log_prob"
         priority: NestedKey = "td_error"
         state_action_value: NestedKey = "state_action_value"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     delay_actor: bool = False
     default_value_estimator = ValueEstimators.TD0
+    out_keys = [
+        "loss_actor",
+        "loss_qvalue",
+        "loss_alpha",
+        "alpha",
+        "entropy",
+        "state_action_value_actor",
+        "action_log_prob_actor",
+        "next.state_value",
+        "target_value",
+    ]
 
     def __init__(
         self,
@@ -131,6 +251,7 @@ class REDQLoss(LossModule):
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
 
         super().__init__()
+        self._in_keys = None
         self._set_deprecated_ctor_keys(priority_key=priority_key)
 
         self.convert_to_functional(
@@ -200,7 +321,10 @@ class REDQLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
     @property
     def alpha(self):
@@ -209,6 +333,29 @@ class REDQLoss(LossModule):
             alpha = self.log_alpha.exp()
         return alpha
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            self.tensor_keys.sample_log_prob,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+        ]
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_select = tensordict.clone(False).select(
@@ -395,5 +542,9 @@ class REDQLoss(LossModule):
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
-        tensor_keys = {"value": self.tensor_keys.value}
+        tensor_keys = {
+            "value": self.tensor_keys.value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
+        }
         self._value_estimator.set_keys(**tensor_keys)

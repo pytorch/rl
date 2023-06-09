@@ -153,7 +153,7 @@ class IQLLoss(LossModule):
         >>> loss = IQLLoss(actor, qvalue, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> loss_actor, loss_qvlaue, loss_value, entropy = loss(
+        >>> loss_actor, loss_qvalue, loss_value, entropy = loss(
         ...     observation=torch.randn(*batch, n_obs),
         ...     action=action,
         ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
@@ -161,6 +161,19 @@ class IQLLoss(LossModule):
         ...     next_reward=torch.randn(*batch, 1))
         >>> loss_actor.backward()
 
+
+    The output keys can also be filtered using the :meth:`IQLLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
     """
 
     @dataclass
@@ -199,6 +212,12 @@ class IQLLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+    out_keys = [
+        "loss_actor",
+        "loss_qvalue",
+        "loss_value",
+        "entropy",
+    ]
 
     def __init__(
         self,
@@ -213,6 +232,8 @@ class IQLLoss(LossModule):
         gamma: float = None,
         priority_key: str = None,
     ) -> None:
+        self._in_keys = None
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -264,8 +285,7 @@ class IQLLoss(LossModule):
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
@@ -275,8 +295,17 @@ class IQLLoss(LossModule):
             *self.qvalue_network.in_keys,
             *self.value_network.in_keys,
         ]
+        self._in_keys = list(set(keys))
 
-        return list(set(keys))
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
@@ -291,15 +320,9 @@ class IQLLoss(LossModule):
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
-    @dispatch(
-        dest=[
-            "loss_actor",
-            "loss_qvalue",
-            "loss_value",
-            "entropy",
-        ]
-    )
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
