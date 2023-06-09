@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import warnings
+
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
@@ -41,7 +43,7 @@ class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
-
+#@profile
 def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
@@ -145,40 +147,29 @@ def step_mdp(
             is_shared=False)
 
     """
-    other_keys = []
-    prohibited = set()
-    if exclude_action:
-        prohibited.add("action")
-    else:
-        other_keys.append("action")
+    out = tensordict.get("next")
+    excluded = set()
     if exclude_done:
-        prohibited.add("done")
-    else:
-        other_keys.append("done")
+        excluded.add("done")
     if exclude_reward:
-        prohibited.add("reward")
+        excluded.add("reward")
+    if excluded:
+        out = out.exclude(*excluded)
     else:
-        other_keys.append("reward")
-
-    prohibited.add("next")
-    if keep_other:
-        # TODO: make this work with nested keys
-        other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, strict=False)
-    excluded = []
-    if exclude_reward:
-        excluded.append("reward")
-    if exclude_done:
-        excluded.append("done")
-    next_td = tensordict.get("next")
-    if len(excluded):
-        next_td = next_td.exclude(*excluded)
-    select_tensordict = select_tensordict.update(next_td)
-
+        out = out.clone(False)
+    # TODO: make it work with LazyStackedTensorDict
+    if keep_other or not exclude_action:
+        for key in tensordict.keys():
+            if key == "next" or key in out.keys():
+                continue
+            if exclude_action and key == "action":
+                continue
+            if keep_other or key == "action":
+                out.set(key, tensordict.get(key))
     if next_tensordict is not None:
-        return next_tensordict.update(select_tensordict)
+        return next_tensordict.update(out)
     else:
-        return select_tensordict
+        return out
 
 
 def get_available_libraries():

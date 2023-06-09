@@ -800,7 +800,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 self.input_spec["_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
-
+    #@profile
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -819,7 +819,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict.lock_()  # make sure _step does not modify the tensordict
+        # tensordict.lock_()  # make sure _step does not modify the tensordict
         tensordict_out = self._step(tensordict)
         # this tensordict should contain a "next" key
         next_tensordict_out = tensordict_out.get("next", None)
@@ -835,7 +835,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
-        tensordict.unlock_()
+        # tensordict.unlock_()
 
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
@@ -1080,7 +1080,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             input_spec=self.input_spec,
             shape=self.batch_size,
         ).lock_()
-
+    #@profile
     def rollout(
         self,
         max_steps: int,
