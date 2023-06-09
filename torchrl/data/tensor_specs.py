@@ -1128,10 +1128,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         n = self.space.n
         m = torch.randint(n, (*shape, 1), device=self.device)
         out = torch.zeros((*shape, n), device=self.device, dtype=self.dtype)
-        if shape:
-            out.scatter_(-2, m, 1)
-        else:
-            out.scatter_(-1, m, 1)
+        out.scatter_(-1, m, 1)
         return out
         # return torch.nn.functional.gumbel_softmax(
         #     torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
