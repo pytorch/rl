@@ -1125,11 +1125,19 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = self.shape[:-1]
         else:
             shape = torch.Size([*shape, *self.shape[:-1]])
-        return torch.nn.functional.gumbel_softmax(
-            torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
-            hard=True,
-            dim=-1,
-        ).to(torch.long)
+        n = self.space.n
+        m = torch.randint(n, (*shape, 1), device=self.device)
+        out = torch.zeros((*shape, n), device=self.device, dtype=self.dtype)
+        if shape:
+            out.scatter_(-2, m, 1.0)
+        else:
+            out[m] = 1.0
+        return out
+        # return torch.nn.functional.gumbel_softmax(
+        #     torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
+        #     hard=True,
+        #     dim=-1,
+        # ).to(torch.long)
 
     def encode(
         self,
