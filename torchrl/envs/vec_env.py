@@ -278,27 +278,18 @@ class _BatchedEnv(EnvBase):
             device = self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
 
-            _input_spec = {}
+            input_spec = []
             for md in meta_data:
-                _input_spec.update(md.specs["input_spec"])
-            input_spec = CompositeSpec(
-                _input_spec, shape=meta_data[0].batch_size, device=device
-            )
-            input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(
-                device
-            )
+                input_spec.append(md.specs["input_spec"])
+            input_spec = torch.stack(input_spec, 0)
+            output_spec = []
+            for md in meta_data:
+                output_spec.append(md.specs["output_spec"])
+            output_spec = torch.stack(output_spec, 0)
+
             self.action_spec = input_spec["_action_spec"]
             self.state_spec = input_spec["_state_spec"]
 
-            _output_spec = {}
-            for md in meta_data:
-                _output_spec.update(md.specs["output_spec"])
-            output_spec = CompositeSpec(
-                _output_spec, shape=meta_data[0].batch_size, device=device
-            )
-            output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(
-                device
-            )
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
@@ -755,12 +746,17 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._assert_tensordict_shape(tensordict)
-        # this is faster than update_ but won't work for lazy stacks
-        for key in self.env_input_keys:
-            self.shared_tensordict_parent._set(
-                key,
-                tensordict.get(key),
-                inplace=True,
+        if self._single_task:
+            # this is faster than update_ but won't work for lazy stacks
+            for key in self.env_input_keys:
+                self.shared_tensordict_parent._set(
+                    key,
+                    tensordict.get(key),
+                    inplace=True,
+                )
+        else:
+            self.shared_tensordict_parent.update_(
+                tensordict.select(*self.env_input_keys, strict=False)
             )
         if self.event is not None:
             self.event.record()
@@ -779,9 +775,15 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
-        for key in self._selected_step_keys:
-            out._set(key, self.shared_tensordict_parent.get(key).clone())
+        if self._single_task:
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_step_keys:
+                out._set(key, self.shared_tensordict_parent.get(key).clone())
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = self.shared_tensordict_parent.select(
+                *self._selected_step_keys, strict=False
+            ).clone()
         return out
 
     @_check_start
@@ -834,14 +836,17 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
-        return TensorDict(
-            {
-                key: self.shared_tensordict_parent.get(key).clone()
-                for key in self._selected_reset_keys
-                if key != "_reset"
-            },
-            batch_size=self.shared_tensordict_parent.shape,
-        )
+        if self._single_task:
+            # select + clone creates 2 tds, but we can create one only
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_reset_keys:
+                if key != "_reset":
+                    out._set(key, self.shared_tensordict_parent.get(key).clone())
+            return out
+        else:
+            return self.shared_tensordict_parent.select(
+                *self._selected_reset_keys, strict=False
+            ).clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:

@@ -1266,9 +1266,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
         out_td = torch.stack(tensordicts, len(batch_size))
-        out_td.refine_names(..., "time")
         if return_contiguous:
-            return out_td.contiguous()
+            out_td = out_td.contiguous()
+        out_td.refine_names(..., "time")
         return out_td
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:

@@ -2640,7 +2640,7 @@ class CompositeSpec(TensorSpec):
                 _idx = idx + (slice(None),) * (
                     len(v.shape) - len(self.shape) - protected_dims
                 )
-            indexed_specs[k] = v[_idx]
+            indexed_specs[k] = v[_idx] if v is not None else None
 
         try:
             device = self.device
@@ -3018,7 +3018,10 @@ class CompositeSpec(TensorSpec):
             device = self._device
 
         return CompositeSpec(
-            {key: value.unsqueeze(dim) for key, value in self.items()},
+            {
+                key: value.unsqueeze(dim) if value is not None else None
+                for key, value in self.items()
+            },
             shape=shape,
             device=device,
         )
