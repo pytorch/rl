@@ -178,7 +178,7 @@ class GymLikeEnv(_EnvWrapper):
             observations = {key: observations}
         observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
-    #@profile
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action")
         action_np = self.read_action(action)

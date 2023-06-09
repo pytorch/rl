@@ -8,11 +8,6 @@
 
 #include <iostream>
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-
-namespace py = pybind11;
-
 using namespace torch::autograd;
 
 class SafeTanh : public Function<SafeTanh> {
@@ -61,29 +56,4 @@ class SafeInvTanh : public Function<SafeInvTanh> {
 
 torch::Tensor safeatanh(torch::Tensor input, float eps = 1e-6) {
   return SafeInvTanh::apply(input, eps);
-}
-
-py::object unravel_keys(const py::object& key, bool make_tuple = false) {
-    if (py::isinstance<py::str>(key)) {
-        if (make_tuple) {
-            return py::make_tuple(key);
-        }
-        return key;
-    }
-    if (py::isinstance<py::tuple>(key)) {
-        py::list newkey;
-        for (const auto& subkey : key) {
-            if (py::isinstance<py::str>(subkey)) {
-                newkey.append(subkey);
-            } else {
-                auto _key = unravel_keys(subkey.cast<py::object>());
-                for (const auto& k : _key) {
-                    newkey.append(k);
-                }
-            }
-        }
-        return py::tuple(newkey);
-    } else {
-        throw std::runtime_error("key should be a Sequence<NestedKey>");
-    }
 }

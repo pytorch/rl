@@ -800,7 +800,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 self.input_spec["_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
-    #@profile
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1080,7 +1080,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             input_spec=self.input_spec,
             shape=self.batch_size,
         ).lock_()
-    #@profile
+
     def rollout(
         self,
         max_steps: int,

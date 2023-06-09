@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
-
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
@@ -18,7 +16,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -43,7 +41,7 @@ class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
-#@profile
+
 def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
@@ -147,6 +145,29 @@ def step_mdp(
             is_shared=False)
 
     """
+    if isinstance(tensordict, LazyStackedTensorDict):
+        if next_tensordict is not None:
+            next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
+        else:
+            next_tensordicts = [None] * len(tensordict.tensordicts)
+        out = torch.stack(
+            [
+                step_mdp(
+                    td,
+                    next_tensordict=ntd,
+                    keep_other=keep_other,
+                    exclude_reward=exclude_reward,
+                    exclude_done=exclude_done,
+                    exclude_action=exclude_action,
+                )
+                for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
+            ],
+            tensordict.stack_dim,
+        )
+        if next_tensordict is not None:
+            next_tensordict.update(out)
+            return next_tensordict
+        return out
     out = tensordict.get("next")
     excluded = set()
     if exclude_done:
@@ -158,13 +179,23 @@ def step_mdp(
     else:
         out = out.clone(False)
     # TODO: make it work with LazyStackedTensorDict
+    # def _valid_key(key):
+    #     if key == "next" or key in out.keys():
+    #         return False
+    #     if exclude_action and key == "action":
+    #         return False
+    #     if keep_other or key == "action":
+    #         return True
+    #     return False
+
     if keep_other or not exclude_action:
+        # out.update(tensordict.select(*(key for key in tensordict.keys() if _valid_key(key))))
         for key in tensordict.keys():
             if key == "next" or key in out.keys():
                 continue
             if exclude_action and key == "action":
                 continue
-            if keep_other or key == "action":
+            if key not in out.keys() and (keep_other or key == "action"):
                 out.set(key, tensordict.get(key))
     if next_tensordict is not None:
         return next_tensordict.update(out)

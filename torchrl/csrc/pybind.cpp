@@ -24,5 +24,4 @@ PYBIND11_MODULE(_torchrl, m) {
 
   m.def("safetanh", &safetanh, "Safe Tanh");
   m.def("safeatanh", &safeatanh, "Safe Inverse Tanh");
-  m.def("unravel_keys", &unravel_keys, py::arg("key"), py::arg("make_tuple") = false);
 }
