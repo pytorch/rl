@@ -1131,7 +1131,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if shape:
             out.scatter_(-2, m, 1)
         else:
-            out[m] = 1
+            out.scatter_(-1, m, 1)
         return out
         # return torch.nn.functional.gumbel_softmax(
         #     torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
