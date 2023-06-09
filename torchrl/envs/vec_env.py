@@ -755,10 +755,11 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._assert_tensordict_shape(tensordict)
-
-        self.shared_tensordict_parent.update_(
-            tensordict.select(*self.env_input_keys, strict=False)
-        )
+        # this is faster than update_ but won't work for lazy stacks
+        for key in self.env_input_keys:
+            self.shared_tensordict_parent._set(
+                tensordict.get(key), inplace=True,
+            )
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
@@ -778,7 +779,7 @@ class ParallelEnv(_BatchedEnv):
         # will be modified in-place at further steps
         return (
             self.shared_tensordict_parent.select(*self._selected_step_keys)
-            .exclude("_reset")
+            # .exclude("_reset")
             .clone()
         )
 
