@@ -758,7 +758,9 @@ class ParallelEnv(_BatchedEnv):
         # this is faster than update_ but won't work for lazy stacks
         for key in self.env_input_keys:
             self.shared_tensordict_parent._set(
-                key, tensordict.get(key), inplace=True,
+                key,
+                tensordict.get(key),
+                inplace=True,
             )
         if self.event is not None:
             self.event.record()
@@ -777,9 +779,13 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return TensorDict({
-            key: self.shared_tensordict_parent.get(key).clone() for key in self._selected_step_keys
-        }, batch_size=self.shared_tensordict_parent.shape)
+        return TensorDict(
+            {
+                key: self.shared_tensordict_parent.get(key).clone()
+                for key in self._selected_step_keys
+            },
+            batch_size=self.shared_tensordict_parent.shape,
+        )
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -831,9 +837,14 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
-        return TensorDict({
-            key: self.shared_tensordict_parent.get(key).clone() for key in self._selected_reset_keys if key != "_reset"
-        }, batch_size=self.shared_tensordict_parent.shape)
+        return TensorDict(
+            {
+                key: self.shared_tensordict_parent.get(key).clone()
+                for key in self._selected_reset_keys
+                if key != "_reset"
+            },
+            batch_size=self.shared_tensordict_parent.shape,
+        )
 
     @_check_start
     def _shutdown_workers(self) -> None:
