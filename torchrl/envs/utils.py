@@ -169,11 +169,13 @@ def step_mdp(
             return next_tensordict
         return out
     out = tensordict.get("next")
-    excluded = set()
-    if exclude_done:
-        excluded.add("done")
-    if exclude_reward:
-        excluded.add("reward")
+    excluded = None
+    if exclude_done and exclude_reward:
+        excluded = {"done", "reward"}
+    elif exclude_reward:
+        excluded = {"reward"}
+    elif exclude_done:
+        excluded = {"done"}
     if excluded:
         out = out.exclude(*excluded)
     else:
@@ -187,16 +189,17 @@ def step_mdp(
     #     if keep_other or key == "action":
     #         return True
     #     return False
+    td_keys = None
+    if keep_other:
+        out_keys = set(out.keys())
+        td_keys = set(tensordict.keys()) - out_keys
+        if exclude_action:
+            td_keys.remove("action")
+    elif not exclude_action:
+        td_keys = {"action"}
 
-    if keep_other or not exclude_action:
-        # out.update(tensordict.select(*(key for key in tensordict.keys() if _valid_key(key))))
-        for key in tensordict.keys():
-            if key == "next" or key in out.keys():
-                continue
-            if exclude_action and key == "action":
-                continue
-            if key not in out.keys() and (keep_other or key == "action"):
-                out.set(key, tensordict.get(key))
+    if td_keys:
+        out.update(tensordict.select(*td_keys))
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
