@@ -715,8 +715,7 @@ class ParallelEnv(_BatchedEnv):
             channel2.close()
             self.parent_channels.append(channel1)
             self._workers.append(w)
-            # we make sure that the process is fully started before launching
-            # the next one
+        for channel1 in self.parent_channels:
             msg = channel1.recv()
             assert msg == "started"
 
