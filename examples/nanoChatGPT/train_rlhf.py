@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
@@ -16,7 +18,6 @@ from transformers import GPT2Tokenizer, GenerationConfig
 from data import get_prompt_dataloaders
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
-from models.transformer import init_transformer
 from utils import get_file_logger, load_config
 
 EOS_TOKEN_ID = 50256
@@ -40,8 +41,17 @@ class VmapCritic(TensorDictModuleBase):
         return tensordict.update(td)
 
 
+def logprobs_of_labels(logits, labels):
+    """Log probabilities of the labels
+
+    These are calculated from the logits."""
+    logprobs = F.log_softmax(logits, dim=-1)
+    logprobs_labels = torch.gather(logprobs, dim=-1, index=labels.unsqueeze(-1))
+    return logprobs_labels.squeeze(-1)
+
+
 @torch.no_grad()
-def generate(model, batch, max_new_tokens=50):
+def generate(model, batch, ref_model=None, max_new_tokens=50):
     input_ids = batch.transformer_data.input_ids.clone()
     # mask the portion of input_ids that corresponds to the label
     prompt_rindex = batch.transformer_data.prompt_rindex
@@ -59,10 +69,10 @@ def generate(model, batch, max_new_tokens=50):
 
     # generate and capture scores
     generation_config = GenerationConfig(
-        output_scores=True,
-        return_dict_in_generate=True,
         pad_token_id=EOS_TOKEN_ID,
         max_new_tokens=max_new_tokens,
+        return_dict_in_generate=True,
+        output_scores=True,
     )
     outputs = model.generate(
         input_ids=input_ids,
@@ -85,16 +95,42 @@ def generate(model, batch, max_new_tokens=50):
 
     # get the scores and normalise for log probabilities
     scores = torch.stack(outputs.scores, 1)
-    log_probs = F.pad(
-        scores.max(dim=-1).values - torch.logsumexp(scores, dim=-1),
+    log_probs_gen = F.pad(
+        F.log_softmax(scores, dim=-1).max(dim=-1).values,
         (0, max_new_tokens - scores.shape[1]),
         value=0,
     )
-    return generated, log_probs
+
+    if ref_model is not None:
+        # get the scores and normalise for log probabilities
+        attention_mask = (generated != EOS_TOKEN_ID).to(torch.int64)
+        logits = model(
+            input_ids=generated, attention_mask=attention_mask, return_dict=True
+        ).logits
+        logprobs = logprobs_of_labels(logits[:, :-1], generated[:, 1:])
+        ref_logits = ref_model(
+            input_ids=generated.to(ref_model.device),
+            attention_mask=attention_mask.to(ref_model.device),
+            return_dict=True,
+        ).logits.to(logits.device)
+        ref_logprobs = logprobs_of_labels(ref_logits[:, :-1], generated[:, 1:])
+        log_ratio = (logprobs - ref_logprobs) * attention_mask[:, :-1]
+        log_ratio = torch.stack(
+            [
+                row[rindex - 1 : rindex + max_new_tokens - 1]
+                for row, rindex in zip(log_ratio, batch.transformer_data.prompt_rindex)
+            ],
+            dim=0,
+        )
+    else:
+        log_ratio = None
+    return generated, log_probs_gen, log_ratio
 
 
 @torch.no_grad()
-def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=50):
+def create_rollout_td(
+    batch, generated, reward_model, log_probs, log_ratio, max_new_tokens=50, kl_coef=0.1
+):
     """
     This function takes a batch plus the generated tokens and replicates the tensordict
     structure that would have been obtained from a rollout with a TorchRL env that
@@ -152,7 +188,10 @@ def create_rollout_td(batch, generated, reward_model, log_probs, max_new_tokens=
     )
     # TODO: add KL penalty in reward
     # the reward is zero except for the timestep where we reached a stopping condition
-    reward = done * (end_scores - end_scores_labels)[:, None, None]
+    reward = (
+        done * (end_scores - end_scores_labels)[:, None, None]
+        - kl_coef * log_ratio[..., None]
+    )
     td = {
         "action": action,
         "input_ids": rollout_generated[:, :-1].clone(),
@@ -180,7 +219,7 @@ def flatten_td(td):
     return td[mask]
 
 
-def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None):
+def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None, ref_model=None):
     test_rindex = batch.prompt_rindex[0]
     test_prompt_ids = batch.input_ids[:, :test_rindex]
     test_label_ids = batch.input_ids[:, test_rindex:]
@@ -200,8 +239,8 @@ def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None):
         rewards = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
-            generated, log_probs = generate(model, batch)
-            td = create_rollout_td(batch, generated, reward_model, log_probs)
+            generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
+            td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
@@ -246,6 +285,19 @@ def main():
     actor, critic, critic_head, model = init_actor_critic(config)
     critic.eval()
 
+    ref_model = deepcopy(model).to("cuda:1")
+    ref_model.eval()
+    ref_model.requires_grad_(False)
+
+    reward_model.eval()
+    reward_model.requires_grad_(False)
+
+    layers = model.transformer.h
+    num_layers = len(layers)
+    num_unfrozen = int(0.3 * num_layers)
+    for layer in layers[:-num_unfrozen]:
+        layer.requires_grad_(False)
+
     adv_fn = GAE(
         value_network=VmapCritic(critic), gamma=0.99, lmbda=0.95, average_gae=True
     )
@@ -255,7 +307,7 @@ def main():
 
     test_prompt = next(vdl).transformer_data[:1]
     estimate_loss = create_loss_estimator(
-        config, reward_model, test_prompt, tokenizer, logger=query_logger
+        config, reward_model, test_prompt, tokenizer, logger=query_logger, ref_model=ref_model
     )
 
     lr = config["learning_rate"]
@@ -279,10 +331,10 @@ def main():
 
     for i in trange(config["max_iters"]):
         batch = next(tdl)
-        generated, log_probs = generate(model, batch)
+        generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
         # generate the tensordict structure expected from a rollout using the generated
         # tokens from the huggingface model
-        td = create_rollout_td(batch, generated, reward_model, log_probs)
+        td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
         with torch.no_grad():
             adv_fn(td)
         # it's possible we didn't fill the replay buffer in the last iteration if
