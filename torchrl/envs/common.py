@@ -1013,7 +1013,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
-        if (self.batch_locked or self.batch_size != torch.Size([])) and tensordict.batch_size != self.batch_size:
+        if (
+            self.batch_locked or self.batch_size != torch.Size([])
+        ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
                 f"got {tensordict.batch_size} and {self.batch_size}"
@@ -1233,10 +1235,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             done_key = (done_key,)
         for i in range(max_steps):
             if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device)
+                tensordict = tensordict.to(policy_device, non_blocking=True)
             tensordict = policy(tensordict)
             if auto_cast_to_device:
-                tensordict = tensordict.to(env_device)
+                tensordict = tensordict.to(env_device, non_blocking=True)
             tensordict = self.step(tensordict)
 
             tensordicts.append(tensordict.clone(False))
