@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 from tensordict import TensorDict
@@ -16,7 +17,7 @@ from data import get_prompt_dataloaders
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from models.transformer import init_transformer
-from utils import load_config
+from utils import get_file_logger, load_config
 
 EOS_TOKEN_ID = 50256
 
@@ -74,7 +75,10 @@ def generate(model, batch, max_new_tokens=50):
     generated_shape = torch.Size(
         [input_ids.shape[0], input_ids.shape[1] + max_new_tokens]
     )
-    generated = torch.ones(generated_shape, dtype=input_ids.dtype, device=input_ids.device) * EOS_TOKEN_ID
+    generated = (
+        torch.ones(generated_shape, dtype=input_ids.dtype, device=input_ids.device)
+        * EOS_TOKEN_ID
+    )
     for i, sample in enumerate(samples):
         mask = sample != EOS_TOKEN_ID
         generated[i, : mask.sum()] = sample[mask]
@@ -176,8 +180,64 @@ def flatten_td(td):
     return td[mask]
 
 
+def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None):
+    test_rindex = batch.prompt_rindex[0]
+    test_prompt_ids = batch.input_ids[:, :test_rindex]
+    test_label_ids = batch.input_ids[:, test_rindex:]
+    generation_config = GenerationConfig(
+        pad_token_id=EOS_TOKEN_ID, max_new_tokens=config["episode_length"]
+    )
+    test_prompt = tokenizer.decode(test_prompt_ids[0, :test_rindex].tolist())
+    test_label = tokenizer.decode(
+        test_label_ids[0, test_label_ids[0] != EOS_TOKEN_ID].tolist()
+    )
+    _, test_label_reward = reward_model(
+        input_ids=batch.input_ids, attention_mask=batch.attention_mask
+    )
+
+    @torch.no_grad()
+    def estimate_loss(model, dataloader):
+        rewards = torch.zeros(config["eval_iters"])
+        for k in range(config["eval_iters"]):
+            batch = next(dataloader)
+            generated, log_probs = generate(model, batch)
+            td = create_rollout_td(batch, generated, reward_model, log_probs)
+            rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
+        test_reward = rewards.mean()
+
+        if logger:
+            response_ids = model.generate(
+                input_ids=test_prompt_ids, generation_config=generation_config
+            )
+            _, response_reward = reward_model(
+                input_ids=response_ids,
+                attention_mask=(response_ids != EOS_TOKEN_ID).to(torch.int64),
+            )
+            reward = (response_reward - test_label_reward).item()
+            response_ids = response_ids[0, test_rindex:]
+            response = tokenizer.decode(
+                response_ids[response_ids != tokenizer.eos_token_id].tolist()
+            )
+            string_to_write = (
+                f"Query:\n{test_prompt}\n"
+                f"Response:\n{response}\n"
+                f"Actual response:\n{test_label}\n"
+                f"{reward=:4.4f}, "
+                f"{test_reward=:4.4f}\n"
+                f"====================================================\n"
+            )
+            logger.debug(string_to_write)
+
+        return reward
+
+    return estimate_loss
+
+
 def main():
     config = load_config("config/train_rlhf.yaml")
+
+    query_logger = get_file_logger("query_logger", "query_logger.log")
+    test_reward_logger = get_file_logger("test_reward_logger", "test_rewards.log")
 
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
@@ -191,9 +251,12 @@ def main():
     )
 
     loss_fn = ClipPPOLoss(actor, critic_head)
+    tdl, vdl = get_prompt_dataloaders(config)
 
-    # TODO: setup validation loader for evaluation in training loop
-    tdl, _ = get_prompt_dataloaders(config)
+    test_prompt = next(vdl).transformer_data[:1]
+    estimate_loss = create_loss_estimator(
+        config, reward_model, test_prompt, tokenizer, logger=query_logger
+    )
 
     lr = config["learning_rate"]
     wd = config["weight_decay"]
@@ -211,8 +274,10 @@ def main():
         sampler=SamplerWithoutReplacement(),
     )
     losses = []
+    rewards = []
+    test_rewards = []
 
-    for _ in trange(config["max_iters"]):
+    for i in trange(config["max_iters"]):
         batch = next(tdl)
         generated, log_probs = generate(model, batch)
         # generate the tensordict structure expected from a rollout using the generated
@@ -222,24 +287,41 @@ def main():
             adv_fn(td)
         # it's possible we didn't fill the replay buffer in the last iteration if
         # generation stopped early, so we empty first before repopulating
+        rewards.append(td.get(("next", "reward")).mean().cpu().item())
         rb.empty()
         rb.extend(flatten_td(td))
 
-        for batch in rb:
-            optimizer.zero_grad()
-            loss_vals = loss_fn(batch.to(config["device"]))
+        if i % config["eval_interval"] == 0:
+            test_rewards.append(estimate_loss(model, vdl))
+            test_reward_logger.debug(test_rewards[-1])
 
-            loss_val = sum(
-                value for key, value in loss_vals.items() if key.startswith("loss")
-            )
-            loss_val.backward()
-            losses.append(loss_val.detach().cpu())
-            gn = torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
-            optimizer.step()
-            # TODO: restore logging / evaluation code
+        epoch_losses = []
+        for epoch in range(config["num_epochs"]):
+            for minibatch in rb:
+                optimizer.zero_grad()
+                loss_vals = loss_fn(minibatch.to(config["device"]))
+                loss_val = sum(
+                    value for key, value in loss_vals.items() if key.startswith("loss")
+                )
+                loss_val.backward()
+                epoch_losses.append(loss_val.detach().cpu())
+                torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
+                optimizer.step()
+        losses.append(torch.tensor(epoch_losses).mean().item())
 
-    # TODO: make configurable
-    model.save_pretrained("out_rlhf")
+    f, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(rewards, label="reward")
+    ax.plot(losses, label="loss")
+    ax.plot(
+        torch.arange(0, config["max_iters"], config["eval_interval"]).numpy(),
+        test_rewards,
+        label="test reward",
+    )
+    ax.legend()
+
+    f.savefig("figures/rlhf-training-curves.png", dpi=150)
+
+    model.save_pretrained(config["out_dir_rlhf"])
 
 
 if __name__ == "__main__":
