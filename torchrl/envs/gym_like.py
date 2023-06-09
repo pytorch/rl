@@ -176,7 +176,9 @@ class GymLikeEnv(_EnvWrapper):
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        observations = self.observation_spec.encode(observations, ignore_device=True)
+        for key, val in observations.items():
+            observations[key] = self.observation_spec[key].encode(val, ignore_device=True)
+        # observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
