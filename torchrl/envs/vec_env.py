@@ -779,13 +779,10 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return TensorDict(
-            {
-                key: self.shared_tensordict_parent.get(key).clone()
-                for key in self._selected_step_keys
-            },
-            batch_size=self.shared_tensordict_parent.shape,
-        )
+        out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+        for key in self._selected_step_keys:
+            out._set(key, self.shared_tensordict_parent.get(key).clone())
+        return out
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
