@@ -836,35 +836,35 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "tensordict.select()) inside _step before writing new tensors onto this new instance."
             )
 
-        # # TODO: Refactor this using reward spec
-        # reward = next_tensordict_out.get(self.reward_key)
-        # # unsqueeze rewards if needed
-        # # the input tensordict may have more leading dimensions than the batch_size
-        # # e.g. in model-based contexts.
-        # batch_size = self.batch_size
-        # dims = len(batch_size)
-        # leading_batch_size = (
-        #     next_tensordict_out.batch_size[:-dims]
-        #     if dims
-        #     else next_tensordict_out.shape
-        # )
-        # expected_reward_shape = torch.Size(
-        #     [*leading_batch_size, *self.reward_spec.shape]
-        # )
-        # actual_reward_shape = reward.shape
-        # if actual_reward_shape != expected_reward_shape:
-        #     reward = reward.view(expected_reward_shape)
-        #     next_tensordict_out.set(self.reward_key, reward)
-        #
-        # # TODO: Refactor this using done spec
-        # done = next_tensordict_out.get(self.done_key)
-        # # unsqueeze done if needed
-        # expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
-        # actual_done_shape = done.shape
-        # if actual_done_shape != expected_done_shape:
-        #     done = done.view(expected_done_shape)
-        #     next_tensordict_out.set(self.done_key, done)
-        # tensordict_out.set("next", next_tensordict_out)
+        # TODO: Refactor this using reward spec
+        reward = next_tensordict_out.get(self.reward_key)
+        # unsqueeze rewards if needed
+        # the input tensordict may have more leading dimensions than the batch_size
+        # e.g. in model-based contexts.
+        batch_size = self.batch_size
+        dims = len(batch_size)
+        leading_batch_size = (
+            next_tensordict_out.batch_size[:-dims]
+            if dims
+            else next_tensordict_out.shape
+        )
+        expected_reward_shape = torch.Size(
+            [*leading_batch_size, *self.reward_spec.shape]
+        )
+        actual_reward_shape = reward.shape
+        if actual_reward_shape != expected_reward_shape:
+            reward = reward.view(expected_reward_shape)
+            next_tensordict_out.set(self.reward_key, reward)
+
+        # TODO: Refactor this using done spec
+        done = next_tensordict_out.get(self.done_key)
+        # unsqueeze done if needed
+        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
+        actual_done_shape = done.shape
+        if actual_done_shape != expected_done_shape:
+            done = done.view(expected_done_shape)
+            next_tensordict_out.set(self.done_key, done)
+        tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
             for key in self._select_observation_keys(tensordict_out):
