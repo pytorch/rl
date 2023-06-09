@@ -168,7 +168,7 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-    out = tensordict.get("next")
+    out = tensordict.get("next").clone(False)
     excluded = None
     if exclude_done and exclude_reward:
         excluded = {"done", "reward"}
@@ -177,9 +177,7 @@ def step_mdp(
     elif exclude_done:
         excluded = {"done"}
     if excluded:
-        out = out.exclude(*excluded)
-    else:
-        out = out.clone(False)
+        out = out.exclude(*excluded, inplace=True)
     # TODO: make it work with LazyStackedTensorDict
     # def _valid_key(key):
     #     if key == "next" or key in out.keys():
@@ -192,7 +190,7 @@ def step_mdp(
     td_keys = None
     if keep_other:
         out_keys = set(out.keys())
-        td_keys = set(tensordict.keys()) - out_keys
+        td_keys = set(tensordict.keys()) - out_keys - {"next"}
         if exclude_action:
             td_keys = td_keys - {"action"}
     elif not exclude_action:

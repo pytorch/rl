@@ -1638,6 +1638,7 @@ class TestLSTMModule:
         td = lstm_module(td)
         td_next = step_mdp(td, keep_other=True)
         td_next = lstm_module(td_next)
+
         assert not torch.isclose(
             td_next["next", "hidden0"], td["next", "hidden0"]
         ).any()
