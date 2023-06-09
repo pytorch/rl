@@ -1002,6 +1002,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             shared_tensordict = data
+            next_shared_tensordict = shared_tensordict.get("next")
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -1032,16 +1033,15 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             if local_tensordict is not None:
-                local_tensordict = local_tensordict.update(
-                    shared_tensordict.select(*env_input_keys),
-                )
+                for key in env_input_keys:
+                    local_tensordict._set(key, shared_tensordict.get(key))
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
             local_tensordict = env._step(local_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            shared_tensordict.get("next").update_(local_tensordict.get("next"))
+            next_shared_tensordict.update_(local_tensordict.get("next"))
             if event is not None:
                 event.record()
                 event.synchronize()
