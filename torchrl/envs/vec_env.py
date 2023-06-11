@@ -547,11 +547,16 @@ class SerialEnv(_BatchedEnv):
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return (
-            self.shared_tensordict_parent.select(*self._selected_step_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_step_keys:
+                out._set(key, self.shared_tensordict_parent.get(key).clone())
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = self.shared_tensordict_parent.select(
+                *self._selected_step_keys, strict=False
+            ).clone()
+        return out
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -609,11 +614,17 @@ class SerialEnv(_BatchedEnv):
                 _td.select(*self._selected_keys, strict=False)
             )
 
-        return (
-            self.shared_tensordict_parent.select(*self._selected_reset_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            # select + clone creates 2 tds, but we can create one only
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_reset_keys:
+                if key != "_reset":
+                    out._set(key, self.shared_tensordict_parent.get(key).clone())
+            return out
+        else:
+            return self.shared_tensordict_parent.select(
+                *self._selected_reset_keys, "_reset", strict=False
+            ).clone()
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -845,7 +856,7 @@ class ParallelEnv(_BatchedEnv):
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys, strict=False
+                *self._selected_reset_keys, "_reset", strict=False
             ).clone()
 
     @_check_start
