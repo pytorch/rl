@@ -623,7 +623,8 @@ class SerialEnv(_BatchedEnv):
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys, "_reset", strict=False
+                *[key for key in self._selected_reset_keys if key != "_reset"],
+                strict=False,
             ).clone()
 
     def __getattr__(self, attr: str) -> Any:
@@ -856,7 +857,8 @@ class ParallelEnv(_BatchedEnv):
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys, "_reset", strict=False
+                *[key for key in self._selected_reset_keys if key != "_reset"],
+                strict=False,
             ).clone()
 
     @_check_start
