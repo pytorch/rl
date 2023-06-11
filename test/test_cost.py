@@ -4374,6 +4374,8 @@ class TestA2C(LossModuleTestBase):
 
 
 class TestReinforce(LossModuleTestBase):
+    seed = 0
+
     @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
     @pytest.mark.parametrize("advantage", ["gae", "td", "td_lambda", None])
@@ -4501,6 +4503,8 @@ class TestReinforce(LossModuleTestBase):
             "value_target": "value_target",
             "value": "state_value",
             "sample_log_prob": "sample_log_prob",
+            "reward": "reward",
+            "done": "done",
         }
 
         self.tensordict_keys_test(
@@ -4522,8 +4526,60 @@ class TestReinforce(LossModuleTestBase):
             "advantage": ("advantage", "advantage_test"),
             "value_target": ("value_target", "value_target_test"),
             "value": ("value", "state_value_test"),
+            "reward": ("reward", "reward_test"),
+            "done": ("done", ("done", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("action_key", ["action", "action2"])
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    def test_reinforce_notensordict(
+        self, action_key, observation_key, reward_key, done_key
+    ):
+        torch.manual_seed(self.seed)
+        n_obs = 3
+        n_act = 5
+        batch = 4
+        value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=[observation_key])
+        net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        actor_net = ProbabilisticActor(
+            module,
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            in_keys=["loc", "scale"],
+            spec=UnboundedContinuousTensorSpec(n_act),
+        )
+        loss = ReinforceLoss(actor=actor_net, critic=value_net)
+        loss.set_keys(reward=reward_key, done=done_key, action=action_key)
+
+        observation = torch.randn(batch, n_obs)
+        action = torch.randn(batch, n_act)
+        next_observation = torch.randn(batch, n_obs)
+        next_reward = torch.randn(batch, 1)
+        next_observation = torch.randn(batch, n_obs)
+        next_done = torch.zeros(batch, 1, dtype=torch.bool)
+
+        kwargs = {
+            action_key: action,
+            observation_key: observation,
+            f"next_{reward_key}": next_reward,
+            f"next_{done_key}": next_done,
+            f"next_{observation_key}": next_observation,
+        }
+        td = TensorDict(kwargs, [batch]).unflatten_keys("_")
+
+        loss_val = loss(**kwargs)
+        loss_val_td = loss(td)
+        torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+        torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[1])
+        # test select
+        torch.manual_seed(self.seed)
+        loss.select_out_keys("loss_actor")
+        loss_actor = loss(**kwargs)
+        assert loss_actor == loss_val_td["loss_actor"]
 
 
 @pytest.mark.parametrize("device", get_default_devices())
