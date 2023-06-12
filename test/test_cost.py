@@ -1000,7 +1000,15 @@ class TestDDPG(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
         # test select
         loss.select_out_keys("loss_actor", "target_value")
-        loss_actor, target_value = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, target_value = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, target_value = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert (target_value == loss_val_td["target_value"]).all()
 
@@ -1415,7 +1423,16 @@ class TestTD3(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
         # test select
         loss.select_out_keys("loss_actor", "loss_qvalue")
-        loss_actor, loss_qvalue = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_qvalue = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_qvalue = loss(**kwargs)
+            return
+
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_qvalue == loss_val_td["loss_qvalue"]
 
@@ -1982,7 +1999,15 @@ class TestSAC(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -2438,7 +2463,15 @@ class TestDiscreteSAC(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -3040,7 +3073,15 @@ class TestREDQ(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -4044,7 +4085,15 @@ class TestPPO(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_objective", "loss_critic")
-        loss_obj, loss_crit = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_obj, loss_crit = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_obj, loss_crit = loss(**kwargs)
+            return
         assert loss_obj == loss_val_td.get("loss_objective")
         assert loss_crit == loss_val_td.get("loss_critic")
 
@@ -4434,7 +4483,15 @@ class TestA2C(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_objective", "loss_critic")
-        loss_objective, loss_critic = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_objective, loss_critic = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_obj, loss_crit = loss(**kwargs)
+            return
         assert loss_objective == loss_val_td["loss_objective"]
         assert loss_critic == loss_val_td["loss_critic"]
 
@@ -4644,7 +4701,15 @@ class TestReinforce(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor")
-        loss_actor = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
 
 
@@ -5555,7 +5620,15 @@ class TestIQL(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_value")
-        loss_actor, loss_value = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_value = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_value = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_value == loss_val_td["loss_value"]
 
