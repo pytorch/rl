@@ -51,3 +51,6 @@ python -c "import tensordict"
 printf "* Installing torchrl\n"
 python setup.py develop
 python -c "import torchrl"
+
+# Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
+pip install -U --force-reinstall charset-normalizer
