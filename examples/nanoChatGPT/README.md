@@ -1,6 +1,6 @@
-# nanoChatGPT
+# RLHF example
 
-This is a toy implementation of a chatGPT-like model.
+This example uses RLHF (Reinforcement Learning with Human Feedback) to train a language model to summarize Reddit posts.
 
 ## Getting started
 
@@ -13,15 +13,6 @@ pip install -r requirements.txt
 ```
 
 ## Training the models
-
-### Preparing the data
-
-First you must prepare the data you wish to train on. For example
-
-```sh
-python models/nanoGPT/data/shakespeare/prepare.py
-```
-
 ### Training the transformer
 
 Once the data has been prepared, you can train the GPT model.
