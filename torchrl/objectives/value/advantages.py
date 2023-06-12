@@ -5,8 +5,9 @@
 import abc
 import functools
 import warnings
+from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Union
 
 import torch
 from tensordict.nn import (
@@ -17,6 +18,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
 )
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn, Tensor
 
 from torchrl.envs.utils import step_mdp
@@ -64,8 +66,38 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     """
 
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+
+        Attributes:
+            advantage (NestedKey): The input tensordict key where the advantage is written to.
+                Will be used for the underlying value estimator. Defaults to ``"advantage"``.
+            value_target (NestedKey): The input tensordict key where the target state value is written to.
+                Will be used for the underlying value estimator Defaults to ``"value_target"``.
+            value_key (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            reward_key (NestedKey): The input tensordict key where the reward is written to.
+                Defaults to ``"reward"``.
+            done_key (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done.  Defaults to ``"done"``.
+            steps_to_next_obs_key (NestedKey): The key in the input tensordict
+                that indicates the number of steps to the next observation.
+                Defaults to ``"steps_to_next_obs"``.
+        """
+
+        advantage: NestedKey = "advantage"
+        value_target: NestedKey = "value_target"
+        value: NestedKey = "state_value"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+        steps_to_next_obs: NestedKey = "steps_to_next_obs"
+
+    default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
-    value_key: Union[Tuple[str], str]
 
     @abc.abstractmethod
     def forward(
@@ -100,39 +132,101 @@ class ValueEstimatorBase(TensorDictModuleBase):
         *,
         value_network: TensorDictModule,
         differentiable: bool = False,
-        advantage_key: Union[str, Tuple] = "advantage",
-        value_target_key: Union[str, Tuple] = "value_target",
-        value_key: Union[str, Tuple] = "state_value",
         skip_existing: Optional[bool] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__()
+        self._tensor_keys = None
         self.differentiable = differentiable
         self.skip_existing = skip_existing
         self.value_network = value_network
-        self.value_key = value_key
-        if (
-            hasattr(value_network, "out_keys")
-            and value_key not in value_network.out_keys
-        ):
-            raise KeyError(
-                f"value key '{value_key}' not found in value network out_keys."
+        self.dep_keys = {}
+
+        if advantage_key is not None:
+            warnings.warn(
+                "Setting 'advantage_key' via ctor is deprecated, use .set_keys(advantage_key='some_key') instead.",
+                category=DeprecationWarning,
             )
+            self.dep_keys["advantage"] = advantage_key
+        if value_target_key is not None:
+            warnings.warn(
+                "Setting 'value_target_key' via ctor is deprecated, use .set_keys(value_target_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.dep_keys["value_target"] = value_target_key
+        if value_key is not None:
+            warnings.warn(
+                "Setting 'value_key' via ctor is deprecated, use .set_keys(value_key='some_key') instead.",
+                category=DeprecationWarning,
+            )
+            self.dep_keys["value"] = value_key
 
-        self.advantage_key = advantage_key
-        self.value_target_key = value_target_key
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        if self._tensor_keys is None:
+            self.set_keys()
+        return self._tensor_keys
 
+    @tensor_keys.setter
+    def tensor_keys(self, value):
+        if not isinstance(value, type(self._AcceptedKeys)):
+            raise ValueError("value must be an instance of _AcceptedKeys")
+        self._keys = value
+
+    @property
+    def in_keys(self):
         try:
-            self.in_keys = (
-                value_network.in_keys
-                + [("next", "reward"), ("next", "done")]
-                + [("next", in_key) for in_key in value_network.in_keys]
+            in_keys = (
+                self.value_network.in_keys
+                + [
+                    ("next", self.tensor_keys.reward),
+                    ("next", self.tensor_keys.done),
+                ]
+                + [("next", in_key) for in_key in self.value_network.in_keys]
             )
         except AttributeError:
             # value network does not have an `in_keys` attribute
-            self.in_keys = []
+            in_keys = []
             pass
+        return in_keys
 
-        self.out_keys = [self.advantage_key, self.value_target_key]
+    @property
+    def out_keys(self):
+        return [
+            self.tensor_keys.advantage,
+            self.tensor_keys.value_target,
+        ]
+
+    def set_keys(self, **kwargs) -> None:
+        """Set tensordict key names."""
+        for key, value in kwargs.items():
+            if not isinstance(value, (str, tuple)):
+                raise ValueError(
+                    f"key name must be of type NestedKey (Union[str, Tuple[str]]) but got {type(value)}"
+                )
+            if value is None:
+                raise ValueError("tensordict keys cannot be None")
+            if key not in self._AcceptedKeys.__dict__:
+                raise KeyError(
+                    f"{key} it not an accepted tensordict key for advantages"
+                )
+            if (
+                key == "value"
+                and hasattr(self.value_network, "out_keys")
+                and (value not in self.value_network.out_keys)
+            ):
+                raise KeyError(
+                    f"value key '{value}' not found in value network out_keys {self.value_network.out_keys}"
+                )
+        if self._tensor_keys is None:
+            conf = asdict(self.default_keys)
+            conf.update(self.dep_keys)
+        else:
+            conf = asdict(self._tensor_keys)
+        conf.update(kwargs)
+        self._tensor_keys = self._AcceptedKeys(**conf)
 
     def value_estimate(
         self,
@@ -142,7 +236,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
     ):
         """Gets a value estimate, usually used as a target value for the value network.
 
-        If the state value key is present under ``tensordict.get(("next", self.value_key))``
+        If the state value key is present under ``tensordict.get(("next", self.tensor_keys.value))``
         then this value will be used without recurring to the value network.
 
         Args:
@@ -192,16 +286,16 @@ class TD0Estimator(ValueEstimatorBase):
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
 
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -212,9 +306,9 @@ class TD0Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        advantage_key: Union[str, Tuple] = "advantage",
-        value_target_key: Union[str, Tuple] = "value_target",
-        value_key: Union[str, Tuple] = "state_value",
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
         skip_existing: Optional[bool] = None,
     ):
         super().__init__(
@@ -307,13 +401,13 @@ class TD0Estimator(ValueEstimatorBase):
             kwargs["params"] = params.detach()
         with hold_out_net(self.value_network):
             self.value_network(tensordict, **kwargs)
-            value = tensordict.get(self.value_key)
+            value = tensordict.get(self.tensor_keys.value)
 
         if params is not None and target_params is None:
             target_params = params.detach()
         value_target = self.value_estimate(tensordict, target_params=target_params)
-        tensordict.set("advantage", value_target - value)
-        tensordict.set("value_target", value_target)
+        tensordict.set(self.tensor_keys.advantage, value_target - value)
+        tensordict.set(self.tensor_keys.value_target, value_target)
         return tensordict
 
     def value_estimate(
@@ -322,10 +416,10 @@ class TD0Estimator(ValueEstimatorBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-        reward = tensordict.get(("next", "reward"))
+        reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma = self.gamma.to(device)
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
@@ -333,7 +427,7 @@ class TD0Estimator(ValueEstimatorBase):
             reward = reward - reward.mean()
             reward = reward / reward.std().clamp_min(1e-4)
             tensordict.set(
-                ("next", "reward"), reward
+                ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
         if self.value_network is not None:
@@ -341,9 +435,9 @@ class TD0Estimator(ValueEstimatorBase):
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
                 self.value_network(step_td, **kwargs)
-        next_value = step_td.get(self.value_key)
+        next_value = step_td.get(self.tensor_keys.value)
 
-        done = tensordict.get(("next", "done"))
+        done = tensordict.get(("next", self.tensor_keys.done))
         value_target = td0_return_estimate(
             gamma=gamma, next_state_value=next_value, reward=reward, done=done
         )
@@ -366,16 +460,16 @@ class TD1Estimator(ValueEstimatorBase):
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
 
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -386,10 +480,10 @@ class TD1Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         average_rewards: bool = False,
         differentiable: bool = False,
-        advantage_key: Union[str, Tuple] = "advantage",
-        value_target_key: Union[str, Tuple] = "value_target",
-        value_key: Union[str, Tuple] = "state_value",
         skip_existing: Optional[bool] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -482,13 +576,13 @@ class TD1Estimator(ValueEstimatorBase):
         if self.value_network is not None:
             with hold_out_net(self.value_network):
                 self.value_network(tensordict, **kwargs)
-        value = tensordict.get(self.value_key)
+        value = tensordict.get(self.tensor_keys.value)
 
         if params is not None and target_params is None:
             target_params = params.detach()
         value_target = self.value_estimate(tensordict, target_params=target_params)
-        tensordict.set("advantage", value_target - value)
-        tensordict.set("value_target", value_target)
+        tensordict.set(self.tensor_keys.advantage, value_target - value)
+        tensordict.set(self.tensor_keys.value_target, value_target)
         return tensordict
 
     def value_estimate(
@@ -497,10 +591,10 @@ class TD1Estimator(ValueEstimatorBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-        reward = tensordict.get(("next", "reward"))
+        reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma = self.gamma.to(device)
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
@@ -508,7 +602,7 @@ class TD1Estimator(ValueEstimatorBase):
             reward = reward - reward.mean()
             reward = reward / reward.std().clamp_min(1e-4)
             tensordict.set(
-                ("next", "reward"), reward
+                ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code
         step_td = step_mdp(tensordict)
         if self.value_network is not None:
@@ -516,9 +610,9 @@ class TD1Estimator(ValueEstimatorBase):
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
                 self.value_network(step_td, **kwargs)
-        next_value = step_td.get(self.value_key)
+        next_value = step_td.get(self.tensor_keys.value)
 
-        done = tensordict.get(("next", "done"))
+        done = tensordict.get(("next", self.tensor_keys.done))
         value_target = vec_td1_return_estimate(
             gamma, next_value, reward, done, time_dim=tensordict.ndim - 1
         )
@@ -544,16 +638,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     """
 
@@ -566,10 +660,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         average_rewards: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        advantage_key: Union[str, Tuple] = "advantage",
-        value_target_key: Union[str, Tuple] = "value_target",
-        value_key: Union[str, Tuple] = "state_value",
         skip_existing: Optional[bool] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -665,13 +759,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if self.value_network is not None:
             with hold_out_net(self.value_network):
                 self.value_network(tensordict, **kwargs)
-        value = tensordict.get(self.value_key)
+        value = tensordict.get(self.tensor_keys.value)
         if params is not None and target_params is None:
             target_params = params.detach()
         value_target = self.value_estimate(tensordict, target_params=target_params)
 
-        tensordict.set(self.advantage_key, value_target - value)
-        tensordict.set(self.value_target_key, value_target)
+        tensordict.set(self.tensor_keys.advantage, value_target - value)
+        tensordict.set(self.tensor_keys.value_target, value_target)
         return tensordict
 
     def value_estimate(
@@ -680,10 +774,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         target_params: Optional[TensorDictBase] = None,
         **kwargs,
     ):
-        reward = tensordict.get(("next", "reward"))
+        reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma = self.gamma.to(device)
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
@@ -692,7 +786,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             reward = reward - reward.mean()
             reward = reward / reward.std().clamp_min(1e-4)
             tensordict.set(
-                ("next", "reward"), reward
+                ("next", self.tensor_keys.steps_to_next_obs), reward
             )  # we must update the rewards if they are used later in the code
 
         step_td = step_mdp(tensordict)
@@ -701,9 +795,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 kwargs["params"] = target_params
             with hold_out_net(self.value_network):
                 self.value_network(step_td, **kwargs)
-        next_value = step_td.get(self.value_key)
+        next_value = step_td.get(self.tensor_keys.value)
 
-        done = tensordict.get(("next", "done"))
+        done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
                 gamma, lmbda, next_value, reward, done, time_dim=tensordict.ndim - 1
@@ -737,20 +831,21 @@ class GAE(ValueEstimatorBase):
 
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
-        advantage_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "advantage".
-        value_target_key (str or tuple of str, optional): the key of the advantage entry.
-            Defaults to "value_target".
-        value_key (str or tuple of str, optional): the value key to read from the input tensordict.
-            Defaults to "state_value".
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
             is not affected.
+            Defaults to "state_value".
+        advantage_key (str or tuple of str, optional): [Deprecated] the key of
+            the advantage entry.  Defaults to ``"advantage"``.
+        value_target_key (str or tuple of str, optional): [Deprecated] the key
+            of the advantage entry.  Defaults to ``"value_target"``.
+        value_key (str or tuple of str, optional): [Deprecated] the value key to
+            read from the input tensordict.  Defaults to ``"state_value"``.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
-    to train the value network. Finally, if :obj:`gradient_mode` is :obj:`True`,
+    to train the value network. Finally, if :obj:`gradient_mode` is ``True``,
     an additional and differentiable :obj:`"value_error"` entry will be returned,
     which simple represents the difference between the return and the value network
     output (i.e. an additional distance loss should be applied to that signed value).
@@ -771,10 +866,10 @@ class GAE(ValueEstimatorBase):
         average_gae: bool = False,
         differentiable: bool = False,
         vectorized: bool = True,
-        advantage_key: Union[str, Tuple] = "advantage",
-        value_target_key: Union[str, Tuple] = "value_target",
-        value_key: Union[str, Tuple] = "state_value",
         skip_existing: Optional[bool] = None,
+        advantage_key: NestedKey = None,
+        value_target_key: NestedKey = None,
+        value_key: NestedKey = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -863,10 +958,10 @@ class GAE(ValueEstimatorBase):
                 "Expected input tensordict to have at least one dimensions, got "
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get(("next", "reward"))
+        reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
@@ -884,7 +979,7 @@ class GAE(ValueEstimatorBase):
                 # value net params
                 self.value_network(tensordict, **kwargs)
 
-        value = tensordict.get(self.value_key)
+        value = tensordict.get(self.tensor_keys.value)
 
         step_td = step_mdp(tensordict)
         if target_params is not None:
@@ -897,8 +992,8 @@ class GAE(ValueEstimatorBase):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 self.value_network(step_td, **kwargs)
-        next_value = step_td.get(self.value_key)
-        done = tensordict.get(("next", "done"))
+        next_value = step_td.get(self.tensor_keys.value)
+        done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
                 gamma,
@@ -926,8 +1021,8 @@ class GAE(ValueEstimatorBase):
             adv = adv - loc
             adv = adv / scale
 
-        tensordict.set(self.advantage_key, adv)
-        tensordict.set(self.value_target_key, value_target)
+        tensordict.set(self.tensor_keys.advantage, adv)
+        tensordict.set(self.tensor_keys.value_target, value_target)
 
         return tensordict
 
@@ -943,10 +1038,10 @@ class GAE(ValueEstimatorBase):
                 "Expected input tensordict to have at least one dimensions, got"
                 f"tensordict.batch_size = {tensordict.batch_size}"
             )
-        reward = tensordict.get(("next", "reward"))
+        reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
         gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
-        steps_to_next_obs = tensordict.get("steps_to_next_obs", None)
+        steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
@@ -962,7 +1057,7 @@ class GAE(ValueEstimatorBase):
                 # value net params
                 self.value_network(tensordict, **kwargs)
 
-        value = tensordict.get(self.value_key)
+        value = tensordict.get(self.tensor_keys.value)
 
         step_td = step_mdp(tensordict)
         if target_params is not None:
@@ -975,8 +1070,8 @@ class GAE(ValueEstimatorBase):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
                 self.value_network(step_td, **kwargs)
-        next_value = step_td.get(self.value_key)
-        done = tensordict.get(("next", "done"))
+        next_value = step_td.get(self.tensor_keys.value)
+        done = tensordict.get(("next", self.tensor_keys.done))
         _, value_target = vec_generalized_advantage_estimate(
             gamma, lmbda, value, next_value, reward, done, time_dim=tensordict.ndim - 1
         )

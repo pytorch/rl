@@ -9,7 +9,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from tensordict.tensordict import TensorDictBase
 from torch import autograd, nn
 from torchrl.modules import (
@@ -22,7 +22,7 @@ from torchrl.modules.distributions import Delta, MaskedCategorical, TanhDelta
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("div_up", [1, 2])
 @pytest.mark.parametrize("div_down", [1, 2])
 def test_delta(device, div_up, div_down):
@@ -84,7 +84,7 @@ def _map_all(*tensors_or_other, device):
     "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
 )
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_tanhnormal(min, max, vecs, upscale, shape, device):
     min, max, vecs, upscale, shape = _map_all(
         min, max, vecs, upscale, shape, device=device
@@ -122,7 +122,7 @@ def test_tanhnormal(min, max, vecs, upscale, shape, device):
     "upscale", [torch.ones(3), 1, 3 * torch.tensor([1.0, 2.0, 0.5]), 3]
 )
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_truncnormal(min, max, vecs, upscale, shape, device):
     torch.manual_seed(0)
     min, max, vecs, upscale, shape = _map_all(
@@ -153,7 +153,7 @@ def test_truncnormal(min, max, vecs, upscale, shape, device):
         ),
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
     "scale_mapping",
     [
@@ -183,7 +183,7 @@ def test_normal_mapping(batch_size, device, scale_mapping, action_dim=11, state_
 
 
 @pytest.mark.parametrize("shape", [torch.Size([]), torch.Size([3, 4])])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_categorical(shape, device):
     torch.manual_seed(0)
     for i in range(100):
@@ -243,7 +243,7 @@ class TestMaskedCategorical:
             )
 
     @pytest.mark.parametrize("neg_inf", [-float(10.0), -float("inf")])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("sparse", [True, False])
     @pytest.mark.parametrize("logits", [True, False])
     def test_construction(self, neg_inf, sparse, logits, device):

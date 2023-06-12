@@ -6,6 +6,7 @@
 import argparse
 import os.path
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 import pytest
@@ -15,22 +16,29 @@ import yaml
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
-    get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
 from mocking_classes import (
     ActionObsMergeLinear,
+    ContinuousActionConvMockEnv,
+    ContinuousActionConvMockEnvNumpy,
+    ContinuousActionVecMockEnv,
+    CountingBatchedEnv,
     CountingEnv,
     DiscreteActionConvMockEnv,
+    DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
+    NestedRewardEnv,
 )
 from packaging import version
+from tensordict.nn import TensorDictModuleBase
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 
@@ -176,7 +184,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
@@ -241,11 +249,9 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
 
 
 class TestModelBasedEnvBase:
-    @pytest.mark.parametrize("device", get_available_devices())
-    def test_mb_rollout(self, device, seed=0):
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        world_model = WorldModelWrapper(
+    @staticmethod
+    def world_model():
+        return WorldModelWrapper(
             SafeModule(
                 ActionObsMergeLinear(5, 4),
                 in_keys=["hidden_observation", "action"],
@@ -257,6 +263,12 @@ class TestModelBasedEnvBase:
                 out_keys=["reward"],
             ),
         )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_mb_rollout(self, device, seed=0):
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        world_model = self.world_model()
         mb_env = DummyModelBasedEnvBase(
             world_model, device=device, batch_size=torch.Size([10])
         )
@@ -265,12 +277,17 @@ class TestModelBasedEnvBase:
         expected_keys = {
             ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
         }
-        expected_keys = expected_keys.union(set(mb_env.input_spec.keys()))
+        expected_keys = expected_keys.union(
+            set(mb_env.input_spec["_action_spec"].keys())
+        )
+        expected_keys = expected_keys.union(
+            set(mb_env.input_spec["_state_spec"].keys())
+        )
         expected_keys = expected_keys.union({"done", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -323,9 +340,7 @@ class TestParallel:
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
         parallel_env = ParallelEnv(num_parallel_env, lambda: env)
-        parallel_env.start()
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
-        parallel_env.close()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -427,10 +442,11 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [False, True])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: faster execution
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
@@ -478,9 +494,10 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env_with_policy(
         self,
         env_name,
@@ -557,31 +574,13 @@ class TestParallel:
         "env_name",
         [
             PENDULUM_VERSIONED,
-            PONG_VERSIONED,
         ],
-    )
-    @pytest.mark.parametrize("frame_skip", [4, 1])
+    )  # PONG_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize(
-        "transformed_in",
-        [
-            True,
-            False,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "transformed_out",
-        [
-            False,
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "static_seed",
-        [
-            False,
-            True,
-        ],
-    )
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: effociency
+    @pytest.mark.parametrize("static_seed", [False, True])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
@@ -656,10 +655,17 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("open_before", [False, True])
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: Skip PONG for efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out,open_before",
+        [  # 1226: efficiency
+            [True, True, True],
+            [True, True, False],
+            [False, False, True],
+        ],
+    )
     def test_parallel_env_cast(
         self,
         env_name,
@@ -696,11 +702,21 @@ class TestParallel:
         if open_before:
             td_cpu = env_serial.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
+        observation_spec = env_serial.observation_spec.clone()
+        done_spec = env_serial.done_spec.clone()
+        reward_spec = env_serial.reward_spec.clone()
+        action_spec = env_serial.action_spec.clone()
+        state_spec = env_serial.state_spec.clone()
         env_serial = env_serial.to(device)
         assert env_serial.observation_spec.device == torch.device(device)
         assert env_serial.action_spec.device == torch.device(device)
         assert env_serial.reward_spec.device == torch.device(device)
         assert env_serial.device == torch.device(device)
+        assert env_serial.observation_spec == observation_spec.to(device)
+        assert env_serial.action_spec == action_spec.to(device)
+        assert env_serial.reward_spec == reward_spec.to(device)
+        assert env_serial.done_spec == done_spec.to(device)
+        assert env_serial.state_spec == state_spec.to(device)
         td_device = env_serial.reset()
         assert td_device.device == torch.device(device), env_serial
         td_device = env_serial.rand_step()
@@ -711,11 +727,21 @@ class TestParallel:
         if open_before:
             td_cpu = env_parallel.rollout(max_steps=10)
             assert td_cpu.device == torch.device("cpu")
+        observation_spec = env_parallel.observation_spec.clone()
+        done_spec = env_parallel.done_spec.clone()
+        reward_spec = env_parallel.reward_spec.clone()
+        action_spec = env_parallel.action_spec.clone()
+        state_spec = env_parallel.state_spec.clone()
         env_parallel = env_parallel.to(device)
         assert env_parallel.observation_spec.device == torch.device(device)
         assert env_parallel.action_spec.device == torch.device(device)
         assert env_parallel.reward_spec.device == torch.device(device)
         assert env_parallel.device == torch.device(device)
+        assert env_parallel.observation_spec == observation_spec.to(device)
+        assert env_parallel.action_spec == action_spec.to(device)
+        assert env_parallel.reward_spec == reward_spec.to(device)
+        assert env_parallel.done_spec == done_spec.to(device)
+        assert env_parallel.state_spec == state_spec.to(device)
         td_device = env_parallel.reset()
         assert td_device.device == torch.device(device), env_parallel
         td_device = env_parallel.rand_step()
@@ -731,9 +757,14 @@ class TestParallel:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out",
+        [  # 1226
+            [True, True],
+            [False, False],
+        ],
+    )
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
@@ -768,9 +799,14 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: No pong for efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize(
+        "device",
+        [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+    )
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
         env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
@@ -820,7 +856,7 @@ class TestParallel:
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel):
-        num_env = 3
+        num_env = 2
 
         def make_make_env():
             def make_transformed_env(seed=None):
@@ -978,8 +1014,9 @@ def test_seed():
 @pytest.mark.parametrize("exclude_done", [True, False])
 @pytest.mark.parametrize("exclude_action", [True, False])
 @pytest.mark.parametrize("has_out", [True, False])
+@pytest.mark.parametrize("lazy_stack", [False, True])
 def test_steptensordict(
-    keep_other, exclude_reward, exclude_done, exclude_action, has_out
+    keep_other, exclude_reward, exclude_done, exclude_action, has_out, lazy_stack
 ):
     torch.manual_seed(0)
     tensordict = TensorDict(
@@ -995,7 +1032,16 @@ def test_steptensordict(
         },
         [4],
     )
+    if lazy_stack:
+        # let's spice this a little bit
+        tds = tensordict.unbind(0)
+        tds[0]["this", "one"] = torch.zeros(2)
+        tds[1]["but", "not", "this", "one"] = torch.ones(2)
+        tds[0]["next", "this", "one"] = torch.ones(2) * 2
+        tensordict = torch.stack(tds, 0)
     next_tensordict = TensorDict({}, [4]) if has_out else None
+    if has_out and lazy_stack:
+        next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
     out = step_mdp(
         tensordict,
         keep_other=keep_other,
@@ -1005,32 +1051,50 @@ def test_steptensordict(
         next_tensordict=next_tensordict,
     )
     assert "ledzep" in out.keys()
-    assert out["ledzep"] is tensordict["next", "ledzep"]
+    if lazy_stack:
+        assert (out["ledzep"] == tensordict["next", "ledzep"]).all()
+        assert (out[0]["this", "one"] == 2).all()
+        if keep_other:
+            assert (out[1]["but", "not", "this", "one"] == 1).all()
+    else:
+        assert out["ledzep"] is tensordict["next", "ledzep"]
     if keep_other:
         assert "beatles" in out.keys()
-        assert out["beatles"] is tensordict["beatles"]
+        if lazy_stack:
+            assert (out["beatles"] == tensordict["beatles"]).all()
+        else:
+            assert out["beatles"] is tensordict["beatles"]
     else:
         assert "beatles" not in out.keys()
     if not exclude_reward:
         assert "reward" in out.keys()
-        assert out["reward"] is tensordict["next", "reward"]
+        if lazy_stack:
+            assert (out["reward"] == tensordict["next", "reward"]).all()
+        else:
+            assert out["reward"] is tensordict["next", "reward"]
     else:
         assert "reward" not in out.keys()
     if not exclude_action:
         assert "action" in out.keys()
-        assert out["action"] is tensordict["action"]
+        if lazy_stack:
+            assert (out["action"] == tensordict["action"]).all()
+        else:
+            assert out["action"] is tensordict["action"]
     else:
         assert "action" not in out.keys()
     if not exclude_done:
         assert "done" in out.keys()
-        assert out["done"] is tensordict["next", "done"]
+        if lazy_stack:
+            assert (out["done"] == tensordict["next", "done"]).all()
+        else:
+            assert out["done"] is tensordict["next", "done"]
     else:
         assert "done" not in out.keys()
     if has_out:
         assert out is next_tensordict
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked(device):
     env = MockBatchedLockedEnv(device)
     assert env.batch_locked
@@ -1048,7 +1112,7 @@ def test_batch_locked(device):
         env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked(device):
     env = MockBatchedUnLockedEnv(device)
     assert not env.batch_locked
@@ -1063,7 +1127,7 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1087,7 +1151,7 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_info_dict_reader(device, seed=0):
     try:
         import gymnasium as gym
@@ -1143,7 +1207,7 @@ def test_make_spec_from_td():
 class TestConcurrentEnvs:
     """Concurrent parallel envs on multiple procs can interfere."""
 
-    class Policy(nn.Module):
+    class Policy(TensorDictModuleBase):
         in_keys = []
         out_keys = ["action"]
 
@@ -1183,14 +1247,19 @@ class TestConcurrentEnvs:
                 r_p.append(env_s.rollout(100, break_when_any_done=False, policy=policy))
                 r_s.append(env_p.rollout(100, break_when_any_done=False, policy=policy))
 
-        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+        td_equals = torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()
+        if td_equals.all():
             if q is not None:
-                q.put("passed")
+                q.put(("passed", j))
             else:
                 pass
         else:
             if q is not None:
-                q.put("failed")
+                s = ""
+                for key, item in td_equals.items(True, True):
+                    if not item.all():
+                        s = s + f"\t{key}"
+                q.put((f"failed: {s}", j))
             else:
                 raise RuntimeError()
 
@@ -1226,24 +1295,37 @@ class TestConcurrentEnvs:
         r_s = []
         for _ in range(N):
             with torch.no_grad():
-                r_p.append(next(collector))
+                r_p.append(next(collector).clone())
                 r_s.append(torch.cat([next(sc) for sc in single_collectors]))
 
-        if (torch.stack(r_p).contiguous() == torch.stack(r_s).contiguous()).all():
+        r_p = torch.stack(r_p).contiguous()
+        r_s = torch.stack(r_s).contiguous()
+        td_equals = r_p == r_s
+
+        if td_equals.all():
             if q is not None:
-                q.put("passed")
+                q.put(("passed", j))
             else:
                 pass
         else:
             if q is not None:
-                q.put("failed")
+                s = ""
+                for key, item in td_equals.items(True, True):
+                    if not item.all():
+                        print(key, "failed")
+                        print("r_p", r_p.get(key)[~item])
+                        print("r_s", r_s.get(key)[~item])
+                        s = s + f"\t{key}"
+                q.put((f"failed: {s}", j))
             else:
                 raise RuntimeError()
 
-    @pytest.mark.parametrize("nproc", [1, 3])
+    @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_concurrent(self, nproc):
         if nproc == 1:
             self.main_penv(3)
+            self.main_penv(6)
+            self.main_penv(9)
         else:
             from torch import multiprocessing as mp
 
@@ -1255,32 +1337,98 @@ class TestConcurrentEnvs:
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get(timeout=100)
-                    assert msg == "passed"
+                    msg, j = q.get(timeout=100)
+                    assert msg == "passed", j
             finally:
                 for p in ps:
                     p.join()
 
-    @pytest.mark.parametrize("nproc", [1, 3])
+    @pytest.mark.parametrize("nproc", [3, 1])
     def test_mp_collector(self, nproc):
         if nproc == 1:
             self.main_collector(3)
+            self.main_collector(6)
+            self.main_collector(9)
         else:
             from torch import multiprocessing as mp
 
             q = mp.Queue(3)
             ps = []
             try:
-                for k in range(3, 10, 3):
-                    p = mp.Process(target=type(self).main_collector, args=(k, q))
+                for j in range(3, 10, 3):
+                    p = mp.Process(target=type(self).main_collector, args=(j, q))
                     ps.append(p)
                     p.start()
                 for _ in range(3):
-                    msg = q.get(timeout=100)
-                    assert msg == "passed"
+                    msg, j = q.get(timeout=100)
+                    assert msg == "passed", j
             finally:
                 for p in ps:
                     p.join(timeout=2)
+
+
+class TestNestedSpecs:
+    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedRewardEnv"])
+    def test_nested_reward(self, envclass):
+        from mocking_classes import NestedRewardEnv
+
+        if envclass == "CountingEnv":
+            env = CountingEnv()
+        elif envclass == "NestedRewardEnv":
+            env = NestedRewardEnv()
+        else:
+            raise NotImplementedError
+        reset = env.reset()
+        assert not isinstance(env.done_spec, CompositeSpec)
+        assert not isinstance(env.reward_spec, CompositeSpec)
+        assert env.done_spec == env.output_spec[("_done_spec", *env.done_key)]
+        assert env.reward_spec == env.output_spec[("_reward_spec", *env.reward_key)]
+        if envclass == "NestedRewardEnv":
+            assert env.done_key == ("data", "done")
+            assert env.reward_key == ("data", "reward")
+            assert ("data", "done") in reset.keys(True)
+            assert ("data", "states") in reset.keys(True)
+            assert ("data", "reward") not in reset.keys(True)
+        assert env.done_key in reset.keys(True)
+        assert env.reward_key not in reset.keys(True)
+
+        next_state = env.rand_step()
+        if envclass == "NestedRewardEnv":
+            assert ("next", "data", "done") in next_state.keys(True)
+            assert ("next", "data", "states") in next_state.keys(True)
+            assert ("next", "data", "reward") in next_state.keys(True)
+        assert ("next", *env.done_key) in next_state.keys(True)
+        assert ("next", *env.reward_key) in next_state.keys(True)
+
+        check_env_specs(env)
+
+
+@pytest.mark.parametrize(
+    "envclass",
+    [
+        ContinuousActionConvMockEnv,
+        ContinuousActionConvMockEnvNumpy,
+        ContinuousActionVecMockEnv,
+        CountingBatchedEnv,
+        CountingEnv,
+        DiscreteActionConvMockEnv,
+        DiscreteActionConvMockEnvNumpy,
+        DiscreteActionVecMockEnv,
+        partial(
+            DummyModelBasedEnvBase, world_model=TestModelBasedEnvBase.world_model()
+        ),
+        MockBatchedLockedEnv,
+        MockBatchedUnLockedEnv,
+        MockSerialEnv,
+        NestedRewardEnv,
+    ],
+)
+def test_mocking_envs(envclass):
+    env = envclass()
+    env.set_seed(100)
+    reset = env.reset()
+    _ = env.rand_step(reset)
+    check_env_specs(env, seed=100)
 
 
 if __name__ == "__main__":

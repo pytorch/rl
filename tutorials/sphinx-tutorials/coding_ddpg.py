@@ -184,7 +184,7 @@ def _init(
     # we put them together in a single actor-critic container.
     actor_critic = ActorCriticWrapper(actor_network, value_network)
     self.actor_critic = actor_critic
-    self.loss_funtion = "l2"
+    self.loss_function = "l2"
 
 
 ###############################################################################
@@ -316,7 +316,7 @@ def _loss_value(
     ).squeeze(-1)
 
     # Computes the value loss: L2, L1 or smooth L1 depending on self.loss_funtion
-    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_funtion)
+    loss_value = distance_loss(pred_val, target_value, loss_function=self.loss_function)
     td_error = (pred_val - target_value).pow(2)
 
     return loss_value, td_error, pred_val, target_value
@@ -724,8 +724,7 @@ def make_ddpg_actor(
     proof_environment.transform[2].init_stats(3)
     proof_environment.transform[2].load_state_dict(transform_state_dict)
 
-    env_specs = proof_environment.specs
-    out_features = env_specs["input_spec"]["action"].shape[-1]
+    out_features = proof_environment.action_spec.shape[-1]
 
     actor_net = DdpgMlpActor(
         action_dim=out_features,
@@ -744,7 +743,7 @@ def make_ddpg_actor(
         actor,
         distribution_class=TanhDelta,
         in_keys=["param"],
-        spec=CompositeSpec(action=env_specs["input_spec"]["action"]),
+        spec=CompositeSpec(action=proof_environment.action_spec),
     ).to(device)
 
     q_net = DdpgMlpQNet()

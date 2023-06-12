@@ -302,16 +302,19 @@ print("normalization constant shape:", env.transform[0].loc.shape)
 #
 # Nevertheless, let's see a concrete example using our transformed
 # environment by looking at its specs.
-# There are three specs to look at: ``observation_spec`` which defines what
+# There are five specs to look at: ``observation_spec`` which defines what
 # is to be expected when executing an action in the environment,
-# ``reward_spec`` which indicates the reward domain and finally the
-# ``input_spec`` (which contains the ``action_spec``) and which represents
-# everything an environment requires to execute a single step.
+# ``reward_spec`` which indicates the reward domain,
+# ``done_spec`` which indicates the done state of an environment,
+# the ``action_spec`` which defines the action space, dtype and device and
+# the ``state_spec`` which groups together the specs of all the other inputs
+# (if any) to the environment.
 #
 print("observation_spec:", env.observation_spec)
 print("reward_spec:", env.reward_spec)
-print("input_spec:", env.input_spec)
-print("action_spec (as defined by input_spec):", env.action_spec)
+print("done_spec:", env.done_spec)
+print("action_spec:", env.action_spec)
+print("state_spec:", env.state_spec)
 
 ######################################################################
 # the :func:`check_env_specs` function runs a small rollout and compares its output against the environemnt

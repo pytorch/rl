@@ -7,22 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 from torchrl.modules import ActorCriticOperator, ActorValueOperator
-from torchrl.objectives import (
-    A2CLoss,
-    ClipPPOLoss,
-    DDPGLoss,
-    DistributionalDQNLoss,
-    DQNLoss,
-    HardUpdate,
-    KLPENPPOLoss,
-    PPOLoss,
-    SACLoss,
-    SoftUpdate,
-)
+from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import REDQLoss_deprecated
-
-# from torchrl.objectives.redq import REDQLoss
 
 from torchrl.objectives.utils import TargetNetUpdater
 
@@ -34,11 +21,12 @@ def make_target_updater(
     if cfg.loss == "double":
         if not cfg.hard_update:
             target_net_updater = SoftUpdate(
-                loss_module, 1 - 1 / cfg.value_network_update_interval
+                loss_module, eps=1 - 1 / cfg.value_network_update_interval
             )
         else:
             target_net_updater = HardUpdate(
-                loss_module, cfg.value_network_update_interval
+                loss_module,
+                value_network_update_interval=cfg.value_network_update_interval,
             )
     else:
         if cfg.hard_update:
@@ -48,56 +36,6 @@ def make_target_updater(
             )
         target_net_updater = None
     return target_net_updater
-
-
-def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
-    """Builds the SAC loss module."""
-    loss_kwargs = {}
-    if hasattr(cfg, "distributional") and cfg.distributional:
-        raise NotImplementedError
-    else:
-        loss_kwargs.update({"loss_function": cfg.loss_function})
-        loss_kwargs.update(
-            {
-                "target_entropy": cfg.target_entropy
-                if cfg.target_entropy is not None
-                else "auto"
-            }
-        )
-        loss_class = SACLoss
-        if cfg.loss == "double":
-            loss_kwargs.update(
-                {
-                    "delay_actor": False,
-                    "delay_qvalue": True,
-                    "delay_value": True,
-                }
-            )
-        elif cfg.loss == "single":
-            loss_kwargs.update(
-                {
-                    "delay_actor": False,
-                    "delay_qvalue": False,
-                    "delay_value": False,
-                }
-            )
-        else:
-            raise NotImplementedError(
-                f"cfg.loss {cfg.loss} unsupported. Consider chosing from 'double' or 'single'"
-            )
-
-    actor_model, qvalue_model, value_model = model
-
-    loss_module = loss_class(
-        actor_network=actor_model,
-        qvalue_network=qvalue_model,
-        value_network=value_model,
-        num_qvalue_nets=cfg.num_q_values,
-        **loss_kwargs,
-    )
-    loss_module.make_value_estimator(gamma=cfg.gamma)
-    target_net_updater = make_target_updater(cfg, loss_module)
-    return loss_module, target_net_updater
 
 
 def make_redq_loss(
@@ -136,25 +74,6 @@ def make_redq_loss(
     return loss_module, target_net_updater
 
 
-def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
-    """Builds the DDPG loss module."""
-    actor, value_net = model
-    loss_kwargs = {}
-    if cfg.distributional:
-        raise NotImplementedError
-    else:
-        loss_kwargs.update({"loss_function": cfg.loss_function})
-        loss_class = DDPGLoss
-    if cfg.loss not in ("single", "double"):
-        raise NotImplementedError
-    double_loss = cfg.loss == "double"
-    loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
-    loss_module = loss_class(actor, value_net, **loss_kwargs)
-    loss_module.make_value_estimator(gamma=cfg.gamma)
-    target_net_updater = make_target_updater(cfg, loss_module)
-    return loss_module, target_net_updater
-
-
 def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     """Builds the DQN loss module."""
     loss_kwargs = {}
@@ -170,62 +89,6 @@ def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
-
-
-def make_a2c_loss(model, cfg) -> A2CLoss:
-    """Builds the A2C loss module."""
-    actor_model = model.get_policy_operator()
-    critic_model = model.get_value_operator()
-
-    kwargs = {
-        "actor": actor_model,
-        "critic": critic_model,
-        "loss_critic_type": cfg.critic_loss_function,
-        "entropy_coef": cfg.entropy_coef,
-    }
-
-    loss_module = A2CLoss(**kwargs)
-
-    return loss_module
-
-
-def make_ppo_loss(model, cfg) -> PPOLoss:
-    """Builds the PPO loss module."""
-    loss_dict = {
-        "clip": ClipPPOLoss,
-        "kl": KLPENPPOLoss,
-        "base": PPOLoss,
-        "": PPOLoss,
-    }
-    actor_model = model.get_policy_operator()
-    critic_model = model.get_value_operator()
-
-    kwargs = {
-        "actor": actor_model,
-        "critic": critic_model,
-        "loss_critic_type": cfg.loss_function,
-        "entropy_coef": cfg.entropy_coef,
-    }
-
-    if cfg.loss == "clip":
-        kwargs.update(
-            {
-                "clip_epsilon": cfg.clip_epsilon,
-            }
-        )
-    elif cfg.loss == "kl":
-        kwargs.update(
-            {
-                "dtarg": cfg.dtarg,
-                "beta": cfg.beta,
-                "increment": cfg.increment,
-                "decrement": cfg.decrement,
-                "samples_mc_kl": cfg.samples_mc_kl,
-            }
-        )
-
-    loss_module = loss_dict[cfg.loss](**kwargs)
-    return loss_module
 
 
 @dataclass

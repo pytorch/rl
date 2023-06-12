@@ -5,15 +5,17 @@
 import argparse
 from numbers import Number
 
+import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
-from torchrl.data.tensor_specs import BoundedTensorSpec
-from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, ValueOperator
+from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
+from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, TanhModule, ValueOperator
+from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -55,7 +57,7 @@ def double_prec_fixture():
 @pytest.mark.parametrize("bias_last_layer", [True, False])
 @pytest.mark.parametrize("single_bias_last_layer", [True, False])
 @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_mlp(
     in_features,
     out_features,
@@ -116,7 +118,7 @@ def test_mlp(
     [(SquashDims, {})],
 )
 @pytest.mark.parametrize("squeeze_output", [False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch", [(2,), (2, 2)])
 def test_convnet(
     batch,
@@ -171,7 +173,7 @@ def test_convnet(
         NoisyLazyLinear,
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_noisy(layer_class, device, seed=0):
     torch.manual_seed(seed)
     layer = layer_class(3, 4, device=device)
@@ -185,7 +187,7 @@ def test_noisy(layer_class, device, seed=0):
         torch.testing.assert_close(y1, y2)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 4])
 @pytest.mark.parametrize("hidden_size", [8, 9])
 @pytest.mark.parametrize("num_layers", [1, 2])
@@ -268,7 +270,7 @@ def test_lstm_net(
     )
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 5])
 @pytest.mark.parametrize("hidden_size", [3, 5])
 def test_lstm_net_nobatch(device, out_features, hidden_size):
@@ -320,7 +322,7 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
@@ -380,7 +382,7 @@ class TestPlanner:
                 assert torch.allclose(td[key], td_copy[key])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [[], [3], [5]])
 @pytest.mark.skipif(
     version.parse(torch.__version__) < version.parse("1.11.0"),
@@ -405,7 +407,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_encoder(self, device, temporal_size, batch_size, depth):
-        encoder = ObsEncoder(depth=depth).to(device)
+        encoder = ObsEncoder(channels=depth).to(device)
         obs = torch.randn(*batch_size, *temporal_size, 3, 64, 64, device=device)
         emb = encoder(obs)
         assert emb.shape == (*batch_size, *temporal_size, depth * 8 * 4)
@@ -417,7 +419,7 @@ class TestDreamerComponents:
     def test_dreamer_decoder(
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
     ):
-        decoder = ObsDecoder(depth=depth).to(device)
+        decoder = ObsDecoder(channels=depth).to(device)
         stoch_state = torch.randn(
             *batch_size, *temporal_size, stoch_size, device=device
         )
@@ -604,6 +606,134 @@ class TestDreamerComponents:
         assert torch.allclose(
             rollout["next", "posterior_std"], rollout_bis["next", "posterior_std"]
         )
+
+
+class TestTanh:
+    def test_errors(self):
+        with pytest.raises(
+            ValueError, match="in_keys and out_keys should have the same length"
+        ):
+            TanhModule(in_keys=["a", "b"], out_keys=["a"])
+        with pytest.raises(ValueError, match=r"The minimum value \(-2\) provided"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhModule(in_keys=["act"], low=-2, spec=spec)
+        with pytest.raises(ValueError, match=r"The maximum value \(-2\) provided to"):
+            spec = BoundedTensorSpec(-1, 1, shape=())
+            TanhModule(in_keys=["act"], high=-2, spec=spec)
+        with pytest.raises(ValueError, match="Got high < low"):
+            TanhModule(in_keys=["act"], high=-2, low=-1)
+
+    def test_minmax(self):
+        mod = TanhModule(
+            in_keys=["act"],
+            high=2,
+        )
+        assert isinstance(mod.act_high, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            low=-2,
+        )
+        assert isinstance(mod.act_low, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            high=np.ones((1,)),
+        )
+        assert isinstance(mod.act_high, torch.Tensor)
+        mod = TanhModule(
+            in_keys=["act"],
+            low=-np.ones((1,)),
+        )
+        assert isinstance(mod.act_low, torch.Tensor)
+
+    @pytest.mark.parametrize("clamp", [True, False])
+    def test_boundaries(self, clamp):
+        torch.manual_seed(0)
+        eps = torch.finfo(torch.float).resolution
+        for _ in range(10):
+            min, max = (5 * torch.randn(2)).sort()[0]
+            mod = TanhModule(in_keys=["act"], low=min, high=max, clamp=clamp)
+            assert mod.non_trivial
+            td = TensorDict({"act": (2 * torch.rand(100) - 1) * 10}, [])
+            mod(td)
+            # we should have a good proportion of samples close to the boundaries
+            assert torch.isclose(td["act"], max).any()
+            assert torch.isclose(td["act"], min).any()
+            if not clamp:
+                assert (td["act"] <= max + eps).all()
+                assert (td["act"] >= min - eps).all()
+            else:
+                assert (td["act"] < max + eps).all()
+                assert (td["act"] > min - eps).all()
+
+    @pytest.mark.parametrize("out_keys", [[("a", "c"), "b"], None])
+    @pytest.mark.parametrize("has_spec", [[True, True], [True, False], [False, False]])
+    def test_multi_inputs(self, out_keys, has_spec):
+        in_keys = [("x", "z"), "y"]
+        real_out_keys = out_keys if out_keys is not None else in_keys
+
+        if any(has_spec):
+            spec = {}
+            if has_spec[0]:
+                spec.update({real_out_keys[0]: BoundedTensorSpec(-2.0, 2.0, shape=())})
+                low, high = -2.0, 2.0
+            if has_spec[1]:
+                spec.update({real_out_keys[1]: BoundedTensorSpec(-3.0, 3.0, shape=())})
+                low, high = None, None
+            spec = CompositeSpec(spec)
+        else:
+            spec = None
+            low, high = -2.0, 2.0
+
+        mod = TanhModule(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            low=low,
+            high=high,
+            spec=spec,
+            clamp=False,
+        )
+        data = TensorDict({in_key: torch.randn(100) * 100 for in_key in in_keys}, [])
+        mod(data)
+        assert all(out_key in data.keys(True, True) for out_key in real_out_keys)
+        eps = torch.finfo(torch.float).resolution
+
+        for out_key in real_out_keys:
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            low_key = f"{key}_low"
+            high_key = f"{key}_high"
+            min, max = getattr(mod, low_key), getattr(mod, high_key)
+            assert torch.isclose(data[out_key], max).any()
+            assert torch.isclose(data[out_key], min).any()
+            assert (data[out_key] <= max + eps).all()
+            assert (data[out_key] >= min - eps).all()
+
+
+@pytest.mark.parametrize("use_vmap", [False, True])
+@pytest.mark.parametrize("scale", range(10))
+def test_tanh_atanh(use_vmap, scale):
+    if use_vmap:
+        try:
+            from torch import vmap
+        except ImportError:
+            try:
+                from functorch import vmap
+            except ImportError:
+                raise pytest.skip("functorch not found")
+
+    torch.manual_seed(0)
+    x = (torch.randn(10, dtype=torch.double) * scale).requires_grad_(True)
+    if not use_vmap:
+        y = safetanh(x, 1e-6)
+    else:
+        y = vmap(safetanh, (0, None))(x, 1e-6)
+
+    if not use_vmap:
+        xp = safeatanh(y, 1e-6)
+    else:
+        xp = vmap(safeatanh, (0, None))(y, 1e-6)
+
+    xp.sum().backward()
+    torch.testing.assert_close(x.grad, torch.ones_like(x))
 
 
 if __name__ == "__main__":

@@ -200,8 +200,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         for key, spec in env.observation_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
             dataset["next", key] = dataset["next", key].to(spec.dtype)
-        for key, spec in env.input_spec.items(True, True):
-            dataset[key] = dataset[key].to(spec.dtype)
+        dataset["action"] = dataset["action"].to(env.action_spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
         dataset["done"] = dataset["done"].bool()
 
@@ -272,8 +271,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
             dataset[key] = dataset[key].to(spec.dtype)
-        for key, spec in env.input_spec.items(True, True):
-            dataset[key] = dataset[key].to(spec.dtype)
+        dataset["action"] = dataset["action"].to(env.action_spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
         dataset["done"] = dataset["done"].bool()
 

@@ -159,7 +159,7 @@ def make_env_transforms(
         selected_keys = [
             key
             for key in env.observation_spec.keys(True, True)
-            if ("pixels" not in key) and (key not in env.input_spec.keys(True, True))
+            if ("pixels" not in key) and (key not in env.state_spec.keys(True, True))
         ]
 
         # even if there is a single tensor, it'll be renamed in "observation_vector"
@@ -213,6 +213,17 @@ def make_env_transforms(
     env.append_transform(InitTracker())
 
     return env
+
+
+def get_norm_state_dict(env):
+    """Gets the normalization loc and scale from the env state_dict."""
+    sd = env.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    return sd
 
 
 def transformed_env_constructor(
