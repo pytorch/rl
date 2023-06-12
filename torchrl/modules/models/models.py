@@ -1143,9 +1143,13 @@ class LSTMNet(nn.Module):
 class OnlineDTActor(nn.Module):
     """Online Decision Transformer Actor class.
 
-    Presented in "Online Decision Transformer",
-    https://arxiv.org/abs/2202.05607.pdf
+    Actor class for the Online Decision Transformer to sample actions from gaussian distribution as presented inresented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
 
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict): config for the GPT2 transformer.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
     """
 
@@ -1204,10 +1208,14 @@ class OnlineDTActor(nn.Module):
 class DTActor(nn.Module):
     """Decision Transformer Actor class.
 
-    Presented in "Decision Transformer",
-    https://arxiv.org/abs/2202.05607.pdf
+    Actor class for the Decision Transformer to output deterministic action as presented in `"Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
 
 
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict): config for the GPT2 transformer.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
     """
 
     def __init__(
