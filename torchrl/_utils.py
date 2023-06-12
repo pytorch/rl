@@ -216,22 +216,22 @@ class implement_for:
         to_version: version from which implementation is no longer compatible. Can be open (None).
 
     Examples:
-        >>> @implement_for(“gym”, “0.13”, “0.14”)
+        >>> @implement_for("gym", "0.13", "0.14")
         >>> def fun(self, x):
         ...     # Older gym versions will return x + 1
         ...     return x + 1
         ...
-        >>> @implement_for(“gym”, “0.14”, "0.23")
+        >>> @implement_for("gym", "0.14", "0.23")
         >>> def fun(self, x):
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for(lambda: import_module(“gym”), “0.23", None)
+        >>> @implement_for(lambda: import_module("gym"), "0.23", None)
         >>> def fun(self, x):
         ...     # More recent gym versions will return x + 2
         ...     return x + 2
         ...
-        >>> @implement_for(“gymnasium”, “0.27”, None)
+        >>> @implement_for("gymnasium", "0.27", None)
         >>> def fun(self, x):
         ...     # If gymnasium is to be used instead of gym, x+3 will be returned
         ...     return x + 3
