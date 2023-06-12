@@ -113,10 +113,12 @@ def _call_value_nets(
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0)
             data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
-            data
         else:
-            value_est = data.update(torch.vmap(value_net, (0,))(data_in)).get(value_key)
+            data_out = torch.vmap(value_net, (0,))(data_in)
+        value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
+        data.set(value_key, value)
+        data.set(("next", value_key), value_)
     if detach_next:
         value_ = value_.detach()
     return value, value_
