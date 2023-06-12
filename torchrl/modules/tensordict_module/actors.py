@@ -1719,9 +1719,14 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         # forward pass
         tensordict = self.td_module.forward(tensordict)
         # get last action prediciton
-        out_action = tensordict.get(self.action_key)[:, -1]
+        out_action = tensordict.get(self.action_key)
+        idx = (slice(None),) * tensordict.ndim + (-1,)
+        out_action = out_action[idx]
         tensordict.set(self.action_key, out_action)
-        out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
+        # out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
+        out_rtg = tensordict.get(self.return_to_go_key)
+        idx = (slice(None),) * tensordict.ndim + (-1,)
+        out_rtg = out_rtg[idx]
         tensordict.set(self.return_to_go_key, out_rtg)
         # set unmasked observation
         tensordict.set(

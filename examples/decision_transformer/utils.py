@@ -400,7 +400,8 @@ def make_dt_model(cfg):
 def make_odt_loss(loss_cfg, actor_network):
     loss = OnlineDTLoss(
         actor_network,
-        loss_cfg.alpha_init,
+        alpha_init=loss_cfg.alpha_init,
+        target_entropy=loss_cfg.target_entropy,
     )
     return loss
 

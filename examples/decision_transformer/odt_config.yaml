@@ -52,6 +52,7 @@ optim:
 # loss
 loss: 
   alpha_init: 0.1
+  target_entropy: auto
 
 transformer:
   n_embd: 512
