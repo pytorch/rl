@@ -176,7 +176,11 @@ class GymLikeEnv(_EnvWrapper):
         if not isinstance(observations, (TensorDict, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        observations = self.observation_spec.encode(observations, ignore_device=True)
+        for key, val in observations.items():
+            observations[key] = self.observation_spec[key].encode(
+                val, ignore_device=True
+            )
+        # observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -228,15 +232,16 @@ class GymLikeEnv(_EnvWrapper):
         # done = self._to_tensor(done, dtype=torch.bool)
         obs_dict["reward"] = reward
         obs_dict["done"] = done
+        obs_dict = {("next", key): val for key, val in obs_dict.items()}
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
         )
 
         if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out)
+            self.info_dict_reader(info, tensordict_out.get("next"))
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs

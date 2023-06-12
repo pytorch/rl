@@ -24,12 +24,16 @@ class Writer(ABC):
     @abstractmethod
     def add(self, data: Any) -> int:
         """Inserts one piece of data at an appropriate index, and returns that index."""
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     def extend(self, data: Sequence) -> torch.Tensor:
         """Inserts a series of data points at appropriate indices, and returns a tensor containing the indices."""
-        raise NotImplementedError
+        ...
+
+    @abstractmethod
+    def _empty(self):
+        ...
 
     def state_dict(self) -> Dict[str, Any]:
         return {}
@@ -72,6 +76,9 @@ class RoundRobinWriter(Writer):
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         self._cursor = state_dict["_cursor"]
+
+    def _empty(self):
+        self._cursor = 0
 
 
 class TensorDictRoundRobinWriter(RoundRobinWriter):
