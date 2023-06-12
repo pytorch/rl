@@ -52,14 +52,7 @@ def logprobs_of_labels(logits, labels):
 
 @torch.no_grad()
 def generate(model, batch, ref_model, max_new_tokens=50):
-    input_ids = batch.input_ids.clone()
-    # mask the portion of input_ids that corresponds to the label
-    prompt_rindex = batch.prompt_rindex
-    label_idx = (
-        torch.arange(input_ids.shape[1], device=prompt_rindex.device)
-        >= prompt_rindex[:, None]
-    )
-    input_ids[label_idx] = EOS_TOKEN_ID
+    input_ids = batch.mask_label().input_ids
 
     # move padding tokens to left pad
     # huggingface models expect left padding for generation
