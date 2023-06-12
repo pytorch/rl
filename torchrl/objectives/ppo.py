@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -117,6 +117,96 @@ class PPOLoss(LossModule):
 
       This will work regardless of whether separate_losses is activated or not.
 
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.ppo import PPOLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> base_layer = nn.Linear(n_obs, 5)
+        >>> net = NormalParamWrapper(nn.Sequential(base_layer, nn.Linear(5, 2 * n_act)))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     distribution_class=TanhNormal,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec)
+        >>> module = nn.Sequential(base_layer, nn.Linear(5, 1))
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = PPOLoss(actor, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "sample_log_prob", "next_reward", "next_done"]`` + in_keys of the actor and value network.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
+                           + ``"loss_critic"`` if critic_coef is not None.
+    The output keys can also be filtered using :meth:`PPOLoss.select_out_keys` method.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.ppo import PPOLoss
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> base_layer = nn.Linear(n_obs, 5)
+        >>> net = NormalParamWrapper(nn.Sequential(base_layer, nn.Linear(5, 2 * n_act)))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     distribution_class=TanhNormal,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec)
+        >>> module = nn.Sequential(base_layer, nn.Linear(5, 1))
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = PPOLoss(actor, value)
+        >>> loss.set_keys(sample_log_prob="sampleLogProb")
+        >>> _ = loss.select_out_keys("loss_objective")
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> loss_objective = loss(
+        ...         observation=torch.randn(*batch, n_obs),
+        ...         action=action,
+        ...         sampleLogProb=torch.randn_like(action[..., 1]) / 10,
+        ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_reward=torch.randn(*batch, 1),
+        ...         next_observation=torch.randn(*batch, n_obs))
+        >>> loss_objective.backward()
+
     """
 
     @dataclass
@@ -137,6 +227,11 @@ class PPOLoss(LossModule):
                sample log probability is expected.  Defaults to ``"sample_log_prob"``.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -144,6 +239,8 @@ class PPOLoss(LossModule):
         value: NestedKey = "state_value"
         sample_log_prob: NestedKey = "sample_log_prob"
         action: NestedKey = "action"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -165,6 +262,8 @@ class PPOLoss(LossModule):
         value_target_key: str = None,
         value_key: str = None,
     ):
+        self._in_keys = None
+        self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key,
@@ -197,13 +296,53 @@ class PPOLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            self.tensor_keys.sample_log_prob,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor.in_keys,
+            *[("next", key) for key in self.actor.in_keys],
+            *self.critic.in_keys,
+        ]
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = ["loss_objective"]
+            if self.entropy_bonus:
+                keys.extend(["entropy", "loss_entropy"])
+            if self.loss_critic:
+                keys.append("loss_critic")
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage=self._tensor_keys.advantage,
-                value_target=self._tensor_keys.value_target,
-                value=self._tensor_keys.value,
+                advantage=self.tensor_keys.advantage,
+                value_target=self.tensor_keys.value_target,
+                value=self.tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
     def reset(self) -> None:
         pass
@@ -272,6 +411,7 @@ class PPOLoss(LossModule):
         )
         return self.critic_coef * loss_value
 
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
@@ -322,6 +462,8 @@ class PPOLoss(LossModule):
             "advantage": self.tensor_keys.advantage,
             "value": self.tensor_keys.value,
             "value_target": self.tensor_keys.value_target,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)
 
@@ -450,6 +592,23 @@ class ClipPPOLoss(PPOLoss):
             math.log1p(self.clip_epsilon),
         )
 
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = ["loss_objective"]
+            if self.entropy_bonus:
+                keys.extend(["entropy", "loss_entropy"])
+            if self.loss_critic:
+                keys.append("loss_critic")
+            keys.append("ESS")
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
@@ -645,6 +804,22 @@ class KLPENPPOLoss(PPOLoss):
         self.decrement = decrement
         self.samples_mc_kl = samples_mc_kl
 
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            keys = ["loss_objective", "kl"]
+            if self.entropy_bonus:
+                keys.extend(["entropy", "loss_entropy"])
+            if self.loss_critic:
+                keys.append("loss_critic")
+            self._out_keys = keys
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, values):
+        self._out_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)

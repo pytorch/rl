@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 import torchrl.data.tensor_specs
-from _utils_internal import get_available_devices, set_global_var
+from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
@@ -310,7 +310,7 @@ def test_multi_discrete(shape, ns, dtype):
         99,
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
     "shape",
     [
@@ -352,7 +352,7 @@ def test_discrete_conversion(n, device, shape):
         torch.Size([4, 5]),
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
     one_hot = MultiOneHotDiscreteTensorSpec(ns, device=device)
@@ -366,7 +366,7 @@ def test_multi_discrete_conversion(ns, shape, device):
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
 class TestComposite:
     @staticmethod
@@ -1115,7 +1115,7 @@ class TestSpec:
         torch.manual_seed(0)
         action_spec = OneHotDiscreteTensorSpec(10)
 
-        sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
+        sample = action_spec.rand((100000,))
 
         sample_list = sample.argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
@@ -2115,7 +2115,7 @@ class TestStack:
         assert (val.numpy() == val_np).all()
 
         with pytest.raises(AssertionError):
-            c.to_numpy(val + 1)
+            c.to_numpy(val + 1, safe=True)
 
 
 class TestStackComposite:
@@ -2379,7 +2379,7 @@ class TestStackComposite:
 
         td_fail = TensorDict({"a": torch.rand((2, 1, 3)) + 1}, [2, 1, 3])
         with pytest.raises(AssertionError):
-            c.to_numpy(td_fail)
+            c.to_numpy(td_fail, safe=True)
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.

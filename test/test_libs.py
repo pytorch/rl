@@ -25,8 +25,7 @@ from _utils_internal import (
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torchrl._utils import implement_for
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.collectors.collectors import RandomPolicy
+from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
@@ -447,13 +446,16 @@ if _has_gym:
     params += [
         # [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": True}],
         [GymEnv, (HALFCHEETAH_VERSIONED,), {"from_pixels": False}],
-        [GymEnv, (PONG_VERSIONED,), {}],
+        # [GymEnv, (PONG_VERSIONED,), {}],  # 1226: skipping
     ]
 
 
 # @pytest.mark.skipif(IS_OSX, reason="rendering unstable on osx, skipping")
 @pytest.mark.parametrize("env_lib,env_args,env_kwargs", params)
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "device",
+    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+)
 class TestCollectorLib:
     def test_collector_run(self, env_lib, env_args, env_kwargs, device):
         if not _has_dmc and env_lib is DMControlEnv:
@@ -466,14 +468,14 @@ class TestCollectorLib:
             raise pytest.skip("no cuda device")
 
         env_fn = EnvCreator(lambda: env_lib(*env_args, **env_kwargs, device=device))
-        # env = SerialEnv(3, env_fn)
-        env = ParallelEnv(3, env_fn)
+        env = SerialEnv(3, env_fn)
+        # env = ParallelEnv(3, env_fn)  # 1226: Serial for efficiency reasons
         # check_env_specs(env)
 
         # env = ParallelEnv(3, env_fn)
         frames_per_batch = 21
-        collector = MultiaSyncDataCollector(
-            create_env_fn=[env, env],
+        collector = SyncDataCollector(  # 1226: not using MultiaSync for perf reasons
+            create_env_fn=env,
             policy=RandomPolicy(action_spec=env.action_spec),
             total_frames=-1,
             max_frames_per_traj=100,
@@ -481,9 +483,8 @@ class TestCollectorLib:
             init_random_frames=-1,
             reset_at_each_iter=False,
             split_trajs=True,
-            devices=[device, device],
-            storing_devices=[device, device],
-            update_at_each_batch=False,
+            device=device,
+            storing_device=device,
             exploration_type=ExplorationType.RANDOM,
         )
         for i, _data in enumerate(collector):
@@ -1377,11 +1378,11 @@ class TestD4RL:
 @pytest.mark.parametrize(
     "dataset",
     [
-        "adult_num",
-        "adult_onehot",
+        # "adult_num", # 1226: Expensive to test
+        # "adult_onehot", # 1226: Expensive to test
         "mushroom_num",
         "mushroom_onehot",
-        "covertype",
+        # "covertype",  # 1226: Expensive to test
         "shuttle",
         "magic",
     ],

@@ -1843,7 +1843,7 @@ class TanhModule(TensorDictModuleBase):
             )
 
         leaf_specs = [spec[out_key] for out_key in self.out_keys]
-        self._spec = spec
+        self.spec = spec
         self.non_trivial = {}
         for out_key, leaf_spec in zip(out_keys, leaf_specs):
             _low, _high = self._make_low_high(low, high, leaf_spec)

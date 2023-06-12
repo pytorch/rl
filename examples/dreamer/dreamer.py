@@ -18,6 +18,8 @@ from hydra.core.config_store import ConfigStore
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+
+from torchrl.envs import EnvBase
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -67,7 +69,7 @@ def retrieve_stats_from_state_dict(obs_norm_state_dict):
     }
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
@@ -170,6 +172,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+    if isinstance(create_env_fn, EnvBase):
+        create_env_fn.rollout(2)
+    else:
+        create_env_fn().rollout(2)
 
     # Create the replay buffer
 

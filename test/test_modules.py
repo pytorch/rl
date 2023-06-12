@@ -8,7 +8,7 @@ from numbers import Number
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
@@ -57,7 +57,7 @@ def double_prec_fixture():
 @pytest.mark.parametrize("bias_last_layer", [True, False])
 @pytest.mark.parametrize("single_bias_last_layer", [True, False])
 @pytest.mark.parametrize("layer_class", [nn.Linear, NoisyLinear])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_mlp(
     in_features,
     out_features,
@@ -118,7 +118,7 @@ def test_mlp(
     [(SquashDims, {})],
 )
 @pytest.mark.parametrize("squeeze_output", [False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch", [(2,), (2, 2)])
 def test_convnet(
     batch,
@@ -173,7 +173,7 @@ def test_convnet(
         NoisyLazyLinear,
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_noisy(layer_class, device, seed=0):
     torch.manual_seed(seed)
     layer = layer_class(3, 4, device=device)
@@ -187,7 +187,7 @@ def test_noisy(layer_class, device, seed=0):
         torch.testing.assert_close(y1, y2)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 4])
 @pytest.mark.parametrize("hidden_size", [8, 9])
 @pytest.mark.parametrize("num_layers", [1, 2])
@@ -270,7 +270,7 @@ def test_lstm_net(
     )
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("out_features", [3, 5])
 @pytest.mark.parametrize("hidden_size", [3, 5])
 def test_lstm_net_nobatch(device, out_features, hidden_size):
@@ -322,7 +322,7 @@ def test_lstm_net_nobatch(device, out_features, hidden_size):
     torch.testing.assert_close(tds_vec["hidden1_out"][-1], tds_loop["hidden1_out"][-1])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [3, 5])
 class TestPlanner:
     def test_CEM_model_free_env(self, device, batch_size, seed=1):
@@ -382,7 +382,7 @@ class TestPlanner:
                 assert torch.allclose(td[key], td_copy[key])
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("batch_size", [[], [3], [5]])
 @pytest.mark.skipif(
     version.parse(torch.__version__) < version.parse("1.11.0"),
@@ -407,7 +407,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("depth", [32, 64])
     @pytest.mark.parametrize("temporal_size", [[], [2], [4]])
     def test_dreamer_encoder(self, device, temporal_size, batch_size, depth):
-        encoder = ObsEncoder(depth=depth).to(device)
+        encoder = ObsEncoder(channels=depth).to(device)
         obs = torch.randn(*batch_size, *temporal_size, 3, 64, 64, device=device)
         emb = encoder(obs)
         assert emb.shape == (*batch_size, *temporal_size, depth * 8 * 4)
@@ -419,7 +419,7 @@ class TestDreamerComponents:
     def test_dreamer_decoder(
         self, device, batch_size, temporal_size, depth, stoch_size, deter_size
     ):
-        decoder = ObsDecoder(depth=depth).to(device)
+        decoder = ObsDecoder(channels=depth).to(device)
         stoch_state = torch.randn(
             *batch_size, *temporal_size, stoch_size, device=device
         )
