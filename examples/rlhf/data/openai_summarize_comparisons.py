@@ -4,9 +4,9 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset
 from datasets import Dataset as HFDataset
 from tensordict import tensorclass
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from .utils import create_infinite_dataloader, create_memmaps

@@ -3,6 +3,10 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
+
+from data import get_prompt_dataloader
+from models.actor_critic import init_actor_critic
+from models.reward import init_reward_model
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModuleBase
 from torchrl.data.replay_buffers import (
@@ -13,11 +17,7 @@ from torchrl.data.replay_buffers import (
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import trange
-from transformers import GPT2Tokenizer, GenerationConfig
-
-from data import get_prompt_dataloader
-from models.actor_critic import init_actor_critic
-from models.reward import init_reward_model
+from transformers import GenerationConfig, GPT2Tokenizer
 from utils import get_file_logger, load_config
 
 EOS_TOKEN_ID = 50256
@@ -334,7 +334,9 @@ def main():
         rollout_rewards = []
         for _ in range(0, config["num_rollouts"], config["batch_size"]):
             batch = next(tdl)
-            generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
+            generated, log_probs, log_ratio = generate(
+                model, batch, ref_model=ref_model
+            )
             # generate the tensordict structure expected from a rollout using the generated
             # tokens from the huggingface model
             td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
@@ -351,7 +353,7 @@ def main():
             test_reward_logger.debug(test_rewards[-1])
 
         epoch_losses = []
-        for epoch in range(config["num_epochs"]):
+        for _epoch in range(config["num_epochs"]):
             for minibatch in rb:
                 optimizer.zero_grad()
                 loss_vals = loss_fn(minibatch.to(config["device"]))
