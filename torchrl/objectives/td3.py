@@ -323,7 +323,7 @@ class TD3Loss(LossModule):
         tensordict_actor_grad = tensordict.select(
             *obs_keys
         )  # to avoid overwriting keys
-        next_td_actor = step_mdp(tensordict).select(
+        next_td_actor = step_mdp(tensordict, keep_other=False).select(
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
