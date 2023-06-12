@@ -22,6 +22,7 @@ from torchrl.modules.distributions import Delta, MaskedCategorical, TanhDelta
 from torchrl.modules.distributions.continuous import SafeTanhTransform
 
 
+@pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("div_up", [1, 2])
 @pytest.mark.parametrize("div_down", [1, 2])
