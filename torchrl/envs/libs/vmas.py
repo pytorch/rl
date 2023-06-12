@@ -213,9 +213,6 @@ class VmasWrapper(_EnvWrapper):
             device=self.device,
         )  # shape = (n_agents, 1)
 
-        self.action_spec = multi_agent_action_spec.expand(
-            *self.batch_size, *multi_agent_action_spec.shape
-        )
         if len(info_specs):
             multi_agent_info_spec = torch.stack(info_specs, dim=0)
             observation_spec = CompositeSpec(
@@ -224,6 +221,14 @@ class VmasWrapper(_EnvWrapper):
         else:
             observation_spec = CompositeSpec(observation=multi_agent_observation_spec)
 
+        self.unbatched_action_spec = multi_agent_action_spec
+        self.unbatched_observation_spec = observation_spec
+        self.unbatched_reward_spec = multi_agent_reward_spec
+        self.unbatched_done_spec = done_spec
+
+        self.action_spec = multi_agent_action_spec.expand(
+            *self.batch_size, *multi_agent_action_spec.shape
+        )
         self.observation_spec = observation_spec.expand(
             *self.batch_size, *observation_spec.shape
         )

@@ -34,7 +34,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = True
+    log = False
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -124,12 +124,12 @@ def train(seed):
     )
     policy = ProbabilisticActor(
         module=policy_module,
-        spec=env.unbatched_input_spec["action"],
+        spec=env.unbatched_action_spec,
         in_keys=["loc", "scale"],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.unbatched_input_spec["action"].space.minimum,
-            "max": env.unbatched_input_spec["action"].space.maximum,
+            "min": env.unbatched_action_spec.space.minimum,
+            "max": env.unbatched_action_spec.space.maximum,
         },
         return_log_prob=True,
     )
@@ -173,7 +173,6 @@ def train(seed):
     loss_module = ClipPPOLoss(
         actor=policy,
         critic=value_module,
-        advantage_key="advantage",
         clip_epsilon=config["clip_epsilon"],
         entropy_coef=config["entropy_eps"],
         normalize_advantage=False,
