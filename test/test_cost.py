@@ -771,7 +771,8 @@ class TestDDPG(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ddpg(self, delay_actor, delay_value, device, td_est):
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_ddpg(self, delay_actor, delay_value, device, td_est, separate_losses):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
         value = self._create_mock_value(device=device)
@@ -782,6 +783,7 @@ class TestDDPG(LossModuleTestBase):
             loss_function="l2",
             delay_actor=delay_actor,
             delay_value=delay_value,
+            separate_losses=separate_losses,
         )
         if td_est is ValueEstimators.GAE:
             with pytest.raises(NotImplementedError):
@@ -1106,6 +1108,7 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("use_action_spec", [True, False])
+    @pytest.mark.parametrize("separate_losses", [False, True])
     def test_td3(
         self,
         delay_actor,
@@ -1115,6 +1118,7 @@ class TestTD3(LossModuleTestBase):
         noise_clip,
         td_est,
         use_action_spec,
+        separate_losses
     ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(device=device)
@@ -1136,6 +1140,7 @@ class TestTD3(LossModuleTestBase):
             noise_clip=noise_clip,
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
+            separate_losses = separate_losses
         )
         if td_est is ValueEstimators.GAE:
             with pytest.raises(NotImplementedError):
@@ -1190,6 +1195,100 @@ class TestTD3(LossModuleTestBase):
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "delay_actor, delay_qvalue", [(False, False), (True, True)]
+    )
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
+    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
+    @pytest.mark.parametrize("use_action_spec", [True, False])
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_td3_separate_losses(
+            self,
+            delay_actor,
+            delay_qvalue,
+            device,
+            policy_noise,
+            noise_clip,
+            td_est,
+            use_action_spec,
+            separate_losses
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        td = self._create_mock_data_td3(device=device)
+        if use_action_spec:
+            action_spec = actor.spec
+            bounds = None
+        else:
+            bounds = (-1, 1)
+            action_spec = None
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+            separate_losses=separate_losses
+        )
+        if td_est is ValueEstimators.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with _check_td_steady(td):
+            loss = loss_fn(td)
+
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.qvalue_network_params.values(True, True)
+        )
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.actor_network_params.values(True, True)
+        )
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(True, True)
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(True, True)
+                )
+            elif k == "loss_qvalue":
+                if separate_losses:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                else:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(True, True)
+                )
+
+
+            else:
+                raise NotImplementedError(k)
+
+
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
@@ -1460,6 +1559,7 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("separate_losses", [False, True])
     def test_sac(
         self,
         delay_value,
@@ -1469,6 +1569,7 @@ class TestSAC(LossModuleTestBase):
         device,
         version,
         td_est,
+        separate_losses
     ):
         if (delay_actor or delay_qvalue) and not delay_value:
             pytest.skip("incompatible config")
@@ -1497,6 +1598,7 @@ class TestSAC(LossModuleTestBase):
             value_network=value,
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            separate_losses = separate_losses,
             **kwargs,
         )
 
@@ -2843,7 +2945,8 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est, separate_losses):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_ppo(device=device)
 
@@ -2866,7 +2969,7 @@ class TestPPO(LossModuleTestBase):
         else:
             raise NotImplementedError
 
-        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn = loss_class(actor, value, loss_critic_type="l2", separate_losses=separate_losses)
         if advantage is not None:
             advantage(td)
         else:
