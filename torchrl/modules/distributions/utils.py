@@ -153,12 +153,12 @@ if version.parse(torch.__version__) >= version.parse("2.0.0"):
 
 else:
 
-    def safetanh(x, eps):
+    def safetanh(x, eps):  # noqa: D103
         lim = 1.0 - eps
         y = x.tanh()
         return y.clamp(-lim, lim)
 
-    def safeatanh(y, eps):
+    def safeatanh(y, eps):  # noqa: D103
         lim = 1.0 - eps
         y = y.clone()
         return y.clamp(-lim, lim)
