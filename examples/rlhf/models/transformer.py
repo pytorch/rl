@@ -33,7 +33,7 @@ def init_transformer(
             in_keys={
                 "input_ids": "input_ids",
                 "attention_mask": "attention_mask",
-                "labels": "labels"
+                "labels": "labels",
             },
             out_keys=["logits"] if inference else ["loss", "logits"],
         )

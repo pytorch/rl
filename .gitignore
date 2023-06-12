@@ -170,6 +170,3 @@ log
 # macOS
 .DS_Store
 Roms
-
-# model checkpoints
-*.pt
