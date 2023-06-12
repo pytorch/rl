@@ -275,7 +275,9 @@ def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
 
 def make_odt_model(cfg):
     env_cfg = cfg.env
-    proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    proof_environment = make_transformed_env(
+        make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
+    )
 
     action_spec = proof_environment.action_spec
     for key, value in proof_environment.observation_spec.items():
@@ -335,7 +337,9 @@ def make_odt_model(cfg):
 
 def make_dt_model(cfg):
     env_cfg = cfg.env
-    proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    proof_environment = make_transformed_env(
+        make_base_env(env_cfg), env_cfg, obs_loc=0, obs_std=1
+    )
 
     action_spec = proof_environment.action_spec
     for key, value in proof_environment.observation_spec.items():

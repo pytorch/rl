@@ -11,15 +11,16 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import distributions as d
 from torchrl.modules import ProbabilisticActor
-from torchrl.objectives.utils import distance_loss
 
-from .common import LossModule
+from torchrl.objectives.common import LossModule
+from torchrl.objectives.utils import distance_loss
 
 
 class OnlineDTLoss(LossModule):
     r"""TorchRL implementation of the Online Decision Transformer loss.
 
-    Presented in "Online Decision Transformer" https://arxiv.org/abs/2202.05607
+    Presented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607>`
+
     Args:
         actor_network (ProbabilisticActor): stochastic actor
         alpha_init (float): initial value of the temperature parameter
@@ -58,15 +59,6 @@ class OnlineDTLoss(LossModule):
         )
         self.samples_mc_entropy = samples_mc_entropy
 
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        raise RuntimeError(
-            "At least one of the networks of OnlineDTLoss must have trainable "
-            "parameters."
-        )
-
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         x = dist.rsample((self.samples_mc_entropy,))
         log_p = dist.log_prob(x)
@@ -101,7 +93,8 @@ class OnlineDTLoss(LossModule):
 class DTLoss(LossModule):
     r"""TorchRL implementation of the Online Decision Transformer loss.
 
-    Presented in "Decision Transformer: Reinforcement Learning via Sequence Modeling" https://arxiv.org/abs/2106.01345
+    Presented in `"Decision Transformer: Reinforcement Learning via Sequence Modeling" <https://arxiv.org/abs/2106.01345>`
+
     Args:
         actor_network (ProbabilisticActor): stochastic actor
 
@@ -119,15 +112,6 @@ class DTLoss(LossModule):
             "actor_network",
             create_target_params=False,
             funs_to_decorate=["forward"],
-        )
-
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        raise RuntimeError(
-            "At least one of the networks of OnlineDTLoss must have trainable "
-            "parameters."
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
