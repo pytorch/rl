@@ -261,7 +261,7 @@ without shared parameters. It is mainly intended as a replacement for
     ActorCriticWrapper
     ActorValueOperator
     ValueOperator
-
+    DecisionTransformerInferenceWrapper
 
 Other modules
 ~~~~~~~~~~~~~
