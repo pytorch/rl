@@ -332,7 +332,7 @@ class IQLLoss(LossModule):
             tensordict_reshape = tensordict
 
         device = self.device
-        td_device = tensordict_reshape.to(device).clone()
+        td_device = tensordict_reshape.to(device)
 
         loss_actor = self._loss_actor(td_device)
         loss_qvalue, priority = self._loss_qvalue(td_device)
