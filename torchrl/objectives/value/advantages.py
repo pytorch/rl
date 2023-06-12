@@ -131,6 +131,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
+        shifted: bool=False,
         differentiable: bool = False,
         skip_existing: Optional[bool] = None,
         advantage_key: NestedKey = None,
@@ -143,6 +144,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.skip_existing = skip_existing
         self.value_network = value_network
         self.dep_keys = {}
+        self.shifted = shifted
 
         if advantage_key is not None:
             warnings.warn(
@@ -276,6 +278,13 @@ class TD0Estimator(ValueEstimatorBase):
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve
             the value estimates.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -304,6 +313,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: Union[float, torch.Tensor],
         value_network: TensorDictModule,
+        shifted: bool=False,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: NestedKey = None,
@@ -314,6 +324,7 @@ class TD0Estimator(ValueEstimatorBase):
         super().__init__(
             value_network=value_network,
             differentiable=differentiable,
+            shifted=shifted,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
