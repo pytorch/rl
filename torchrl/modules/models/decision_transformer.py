@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import transformers
-from torchrl.modules.models.gpt2_transformer import GPT2Model
+from transformers.models.gpt2.modeling_gpt2 import GPT2Model
 
 
 class DecisionTransformer(nn.Module):
