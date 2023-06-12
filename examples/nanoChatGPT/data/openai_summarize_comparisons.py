@@ -5,14 +5,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from datasets import load_dataset, Dataset as HFDataset
+from datasets import Dataset as HFDataset
 from tensordict import tensorclass
 from tqdm import tqdm
-from transformers import AutoTokenizer
 
-from .utils import create_infinite_dataloader
+from .utils import create_infinite_dataloader, create_memmaps
 
-NUM_PROC = 8
 HERE = Path(__file__).parent
 DATASET = "CarperAI/openai_summarize_comparisons"
 
@@ -50,12 +48,7 @@ def make_process_fn(tokenizer, max_length):
     return process
 
 
-def create_comparisons_dataset(split="train"):
-    dataset = load_dataset(DATASET, split=split)
-    if split.startswith("valid"):
-        # reduce size of validation dataset
-        dataset = dataset.select(range(2_000))
-
+def pre_tokenization_hook(dataset):
     chosen = []
     rejected = []
     for sample in tqdm(dataset):
@@ -68,47 +61,8 @@ def create_comparisons_dataset(split="train"):
             continue
         chosen.append({"text": prompt + "\n" + chosen_summary})
         rejected.append({"text": prompt + "\n" + rejected_summary})
+
     return HFDataset.from_list(chosen + rejected)
-
-
-def create_comparisons_memmaps(split, max_length):
-    dataset = create_comparisons_dataset(split)
-
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
-    # tokenize the dataset
-    tokenized = dataset.map(
-        make_process_fn(tokenizer, max_length=max_length),
-        remove_columns=["text"],
-        desc=f"Tokenizing {split} data",
-        num_proc=NUM_PROC,
-        batched=True,
-    )
-    tokenized.set_format("torch", columns=["input_ids", "attention_mask"])
-
-    # concatenate all the ids in each dataset into one large file we can use for training
-    n_examples = len(tokenized)
-
-    data_dir = HERE / "comparisons"
-    if not data_dir.exists():
-        data_dir.mkdir()
-    ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
-    mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
-
-    dtype = np.int32  # (can do since enc.max_token_value == 50256 is < 2**16)
-    ids_arr = np.memmap(
-        ids_filename, dtype=dtype, mode="w+", shape=(n_examples, max_length)
-    )
-    mask_arr = np.memmap(
-        mask_filename, dtype=dtype, mode="w+", shape=(n_examples, max_length)
-    )
-
-    print(f"writing {ids_filename} and {mask_filename}...")
-    for idx, example in tqdm(enumerate(tokenized), total=len(tokenized)):
-        ids_arr[idx] = example["input_ids"]
-        mask_arr[idx] = example["attention_mask"]
-    ids_arr.flush()
-    mask_arr.flush()
 
 
 class PairwiseDataset(Dataset):
@@ -116,10 +70,13 @@ class PairwiseDataset(Dataset):
         data_dir = HERE / "comparisons"
         ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
         mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
+
         if not all(
             (data_dir / file).exists() for file in (ids_filename, mask_filename)
         ):
-            create_comparisons_memmaps(split, max_length)
+            create_memmaps(
+                split, max_length, DATASET, make_process_fn, pre_tokenization_hook
+            )
 
         self.input_ids = np.memmap(ids_filename, dtype=np.int32, mode="r+")
         self.mask = np.memmap(mask_filename, dtype=np.int32, mode="r+")
@@ -152,19 +109,6 @@ class PairwiseDataset(Dataset):
         return chosen_data, rejected_data
 
 
-def create_datasets(config):
-    train_data = PairwiseDataset("train", max_length=config["block_size"])
-    val_data = PairwiseDataset("valid1", max_length=config["block_size"])
-
-    return train_data, val_data
-
-
-def get_reward_dataloaders(config):
-    train_data, val_data = create_datasets(config)
-
-    train_loader = create_infinite_dataloader(
-        train_data, config, Collate(config["device"])
-    )
-    val_loader = create_infinite_dataloader(val_data, config, Collate(config["device"]))
-
-    return train_loader, val_loader
+def get_reward_dataloader(config, split="train"):
+    data = PairwiseDataset(split, max_length=config["block_size"])
+    return create_infinite_dataloader(data, config, Collate(config["device"]))

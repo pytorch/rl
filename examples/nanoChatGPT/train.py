@@ -14,7 +14,7 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 
-from data.openai_summarize_tldr import get_prompt_dataloaders
+from data.openai_summarize_tldr import get_prompt_dataloader
 from models.transformer import init_transformer
 from utils import create_lr_scheduler, load_and_update_config, setup
 from transformers import AutoTokenizer
@@ -67,7 +67,8 @@ def main():
 
     estimate_loss = create_loss_estimator(config, ctx)
 
-    train_loader, val_loader = get_prompt_dataloaders(config)
+    train_loader = get_prompt_dataloader(config, split="train")
+    val_loader = get_prompt_dataloader(config, split="valid")
 
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
@@ -121,20 +122,10 @@ def main():
             train_losses.append(train_loss)
             val_losses.append(val_loss)
 
-            if val_loss < best_val_loss or config["always_save_checkpoint"]:
+            if it > 0 and (val_loss < best_val_loss or config["always_save_checkpoint"]):
                 best_val_loss = val_loss
-                if it > 0:
-                    checkpoint = {
-                        "optimizer": optimizer.state_dict(),
-                        "iter_num": it,
-                        "best_val_loss": best_val_loss,
-                        "config": config,
-                    }
-                    print(f"saving checkpoint to {config['out_dir']}")
-                    model.module.save_pretrained(config["out_dir"])
-                    torch.save(
-                        checkpoint, os.path.join(config["out_dir"], "ckpt_status.pt")
-                    )
+                print(f"saving checkpoint to {config['out_dir']}")
+                model.module.save_pretrained(config["out_dir"])
 
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point

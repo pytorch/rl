@@ -15,7 +15,7 @@ from torchrl.objectives.value import GAE
 from tqdm import trange
 from transformers import GPT2Tokenizer, GenerationConfig
 
-from data import get_prompt_dataloaders
+from data import get_prompt_dataloader
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from utils import get_file_logger, load_config
@@ -51,10 +51,10 @@ def logprobs_of_labels(logits, labels):
 
 
 @torch.no_grad()
-def generate(model, batch, ref_model=None, max_new_tokens=50):
-    input_ids = batch.transformer_data.input_ids.clone()
+def generate(model, batch, ref_model, max_new_tokens=50):
+    input_ids = batch.input_ids.clone()
     # mask the portion of input_ids that corresponds to the label
-    prompt_rindex = batch.transformer_data.prompt_rindex
+    prompt_rindex = batch.prompt_rindex
     label_idx = (
         torch.arange(input_ids.shape[1], device=prompt_rindex.device)
         >= prompt_rindex[:, None]
@@ -101,29 +101,26 @@ def generate(model, batch, ref_model=None, max_new_tokens=50):
         value=0,
     )
 
-    if ref_model is not None:
-        # get the scores and normalise for log probabilities
-        attention_mask = (generated != EOS_TOKEN_ID).to(torch.int64)
-        logits = model(
-            input_ids=generated, attention_mask=attention_mask, return_dict=True
-        ).logits
-        logprobs = logprobs_of_labels(logits[:, :-1], generated[:, 1:])
-        ref_logits = ref_model(
-            input_ids=generated.to(ref_model.device),
-            attention_mask=attention_mask.to(ref_model.device),
-            return_dict=True,
-        ).logits.to(logits.device)
-        ref_logprobs = logprobs_of_labels(ref_logits[:, :-1], generated[:, 1:])
-        log_ratio = (logprobs - ref_logprobs) * attention_mask[:, :-1]
-        log_ratio = torch.stack(
-            [
-                row[rindex - 1 : rindex + max_new_tokens - 1]
-                for row, rindex in zip(log_ratio, batch.transformer_data.prompt_rindex)
-            ],
-            dim=0,
-        )
-    else:
-        log_ratio = None
+    # get the scores and normalise for log probabilities
+    attention_mask = (generated != EOS_TOKEN_ID).to(torch.int64)
+    logits = model(
+        input_ids=generated, attention_mask=attention_mask, return_dict=True
+    ).logits
+    logprobs = logprobs_of_labels(logits[:, :-1], generated[:, 1:])
+    ref_logits = ref_model(
+        input_ids=generated.to(ref_model.device),
+        attention_mask=attention_mask.to(ref_model.device),
+        return_dict=True,
+    ).logits.to(logits.device)
+    ref_logprobs = logprobs_of_labels(ref_logits[:, :-1], generated[:, 1:])
+    log_ratio = (logprobs - ref_logprobs) * attention_mask[:, :-1]
+    log_ratio = torch.stack(
+        [
+            row[rindex - 1 : rindex + max_new_tokens - 1]
+            for row, rindex in zip(log_ratio, batch.prompt_rindex)
+        ],
+        dim=0,
+    )
     return generated, log_probs_gen, log_ratio
 
 
@@ -151,7 +148,7 @@ def create_rollout_td(
                     for i in range(max_new_tokens + 1)
                 ]
             )
-            for rindex, row in zip(batch.transformer_data.prompt_rindex, generated)
+            for rindex, row in zip(batch.prompt_rindex, generated)
         ],
     )
     rollout_attention_mask = (rollout_generated != EOS_TOKEN_ID).to(torch.int64)
@@ -159,7 +156,7 @@ def create_rollout_td(
     # done is True when we either first sample an EOS token or reach the maximum number
     # of generated tokens
     done_idx = torch.minimum(
-        (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.transformer_data.prompt_rindex,
+        (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
         torch.tensor(max_new_tokens),
     )
     done = (
@@ -170,7 +167,7 @@ def create_rollout_td(
     action_idx = torch.stack(
         [
             torch.arange(i, i + max_new_tokens, device=generated.device)
-            for i in batch.transformer_data.prompt_rindex
+            for i in batch.prompt_rindex
         ]
     )
     action = generated[
@@ -183,8 +180,8 @@ def create_rollout_td(
         input_ids=rollout_generated[:, -1], attention_mask=rollout_attention_mask[:, -1]
     )
     _, end_scores_labels = reward_model(
-        input_ids=batch.transformer_data.input_ids,
-        attention_mask=batch.transformer_data.attention_mask,
+        input_ids=batch.input_ids,
+        attention_mask=batch.attention_mask,
     )
     # TODO: add KL penalty in reward
     # the reward is zero except for the timestep where we reached a stopping condition
@@ -219,7 +216,9 @@ def flatten_td(td):
     return td[mask]
 
 
-def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None, ref_model=None):
+def create_loss_estimator(
+    config, reward_model, batch, tokenizer, logger=None, ref_model=None
+):
     test_rindex = batch.prompt_rindex[0]
     test_prompt_ids = batch.input_ids[:, :test_rindex]
     test_label_ids = batch.input_ids[:, test_rindex:]
@@ -239,7 +238,9 @@ def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None, r
         rewards = torch.zeros(config["eval_iters"])
         for k in range(config["eval_iters"]):
             batch = next(dataloader)
-            generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
+            generated, log_probs, log_ratio = generate(
+                model, batch, ref_model=ref_model
+            )
             td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
@@ -267,7 +268,7 @@ def create_loss_estimator(config, reward_model, batch, tokenizer, logger=None, r
             )
             logger.debug(string_to_write)
 
-        return reward
+        return test_reward
 
     return estimate_loss
 
@@ -303,11 +304,17 @@ def main():
     )
 
     loss_fn = ClipPPOLoss(actor, critic_head)
-    tdl, vdl = get_prompt_dataloaders(config)
+    tdl = get_prompt_dataloader(config, split="train")
+    vdl = get_prompt_dataloader(config, split="valid")
 
-    test_prompt = next(vdl).transformer_data[:1]
+    test_prompt = next(vdl)[:1]
     estimate_loss = create_loss_estimator(
-        config, reward_model, test_prompt, tokenizer, logger=query_logger, ref_model=ref_model
+        config,
+        reward_model,
+        test_prompt,
+        tokenizer,
+        logger=query_logger,
+        ref_model=ref_model,
     )
 
     lr = config["learning_rate"]
@@ -321,7 +328,7 @@ def main():
     )
 
     rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(config["episode_length"] * config["batch_size"]),
+        storage=LazyTensorStorage(config["episode_length"] * config["num_rollouts"]),
         batch_size=config["ppo_batch_size"],
         sampler=SamplerWithoutReplacement(),
     )
@@ -330,18 +337,21 @@ def main():
     test_rewards = []
 
     for i in trange(config["max_iters"]):
-        batch = next(tdl)
-        generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
-        # generate the tensordict structure expected from a rollout using the generated
-        # tokens from the huggingface model
-        td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
-        with torch.no_grad():
-            adv_fn(td)
-        # it's possible we didn't fill the replay buffer in the last iteration if
-        # generation stopped early, so we empty first before repopulating
-        rewards.append(td.get(("next", "reward")).mean().cpu().item())
         rb.empty()
-        rb.extend(flatten_td(td))
+        rollout_rewards = []
+        for _ in range(0, config["num_rollouts"], config["batch_size"]):
+            batch = next(tdl)
+            generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
+            # generate the tensordict structure expected from a rollout using the generated
+            # tokens from the huggingface model
+            td = create_rollout_td(batch, generated, reward_model, log_probs, log_ratio)
+            with torch.no_grad():
+                adv_fn(td)
+            # it's possible we didn't fill the replay buffer in the last iteration if
+            # generation stopped early, so we empty first before repopulating
+            rb.extend(flatten_td(td))
+            rollout_rewards.append(td.get(("next", "reward")).mean().cpu().item())
+        rewards.append(torch.tensor(rollout_rewards).mean().cpu().item())
 
         if i % config["eval_interval"] == 0:
             test_rewards.append(estimate_loss(model, vdl))
