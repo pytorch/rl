@@ -11,6 +11,7 @@ import hydra
 import torch
 import tqdm
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
 from utils import (
     make_env,
@@ -32,14 +33,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     test_env = make_env(cfg.env, obs_loc, obs_std)
 
-    inference_actor, actor = make_odt_model(cfg)
+    actor = make_odt_model(cfg)
     policy = actor.to(model_device)
-    inference_policy = inference_actor.to(model_device)
 
     loss_module = make_odt_loss(cfg.loss, actor)
     transformer_optim, temperature_optim, scheduler = make_odt_optimizer(
         cfg.optim, policy, loss_module
     )
+    inference_policy = DecisionTransformerInferenceWrapper(
+        policy=policy,
+        loss_module=loss_module,
+        inference_context=cfg.env.inference_context,
+    ).to(model_device)
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
 

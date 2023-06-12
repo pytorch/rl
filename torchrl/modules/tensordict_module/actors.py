@@ -1652,29 +1652,27 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self,
         policy: TensorDictModule,
         *,
+        loss_module: TensorDictModule,
         inference_context: int = 5,
-        observation_key: str = "observation",
-        action_key: str = "action",
-        return_to_go_key: str = "return_to_go",
         spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
-        self.observation_key = observation_key
-        self.action_key = action_key
-        self.return_to_go_key = return_to_go_key
+        self.observation_key = loss_module.tensor_keys.observation
+        self.action_key = loss_module.tensor_keys.action
+        self.return_to_go_key = loss_module.tensor_keys.return_to_go
         self.inference_context = inference_context
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
-                spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
+                spec = CompositeSpec({self.action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
         elif hasattr(self.td_module, "_spec"):
             self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
+            if self.action_key not in self._spec.keys():
+                self._spec[self.action_key] = None
         elif hasattr(self.td_module, "spec"):
             self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys():
-                self._spec[action_key] = None
+            if self.action_key not in self._spec.keys():
+                self._spec[self.action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
 

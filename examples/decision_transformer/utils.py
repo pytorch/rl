@@ -32,7 +32,7 @@ from torchrl.modules import (
     TanhDelta,
     TanhNormal,
 )
-from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
+
 from torchrl.objectives import DTLoss, OnlineDTLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
@@ -328,11 +328,7 @@ def make_odt_model(cfg):
         td["action"] = td["next", "action"]
         actor(td)
 
-    inference_actor = DecisionTransformerInferenceWrapper(
-        actor,
-        inference_context=cfg.env.inference_context,
-    )
-    return inference_actor, actor
+    return actor
 
 
 def make_dt_model(cfg):
@@ -386,10 +382,7 @@ def make_dt_model(cfg):
         td["action"] = td["next", "action"]
         actor(td)
 
-    inference_actor = DecisionTransformerInferenceWrapper(
-        actor,
-    )
-    return inference_actor, actor
+    return actor
 
 
 # ====================================================================

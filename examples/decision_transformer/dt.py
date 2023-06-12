@@ -11,6 +11,7 @@ import hydra
 import torch
 import tqdm
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
 from utils import (
     make_dt_loss,
@@ -26,18 +27,21 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
 
-    test_env = make_env(cfg.env)
     logger = make_logger(cfg)
-    offline_buffer = make_offline_replay_buffer(
+    offline_buffer, obs_loc, obs_std = make_offline_replay_buffer(
         cfg.replay_buffer, cfg.env.reward_scaling
     )
-
-    inference_actor, actor = make_dt_model(cfg)
+    test_env = make_env(cfg.env, obs_loc, obs_std)
+    actor = make_dt_model(cfg)
     policy = actor.to(model_device)
-    inference_policy = inference_actor.to(model_device)
 
     loss_module = make_dt_loss(actor)
-    transformer_optim, scheduler = make_dt_optimizer(cfg.optim, policy, loss_module)
+    transformer_optim, scheduler = make_dt_optimizer(cfg.optim, policy)
+    inference_policy = DecisionTransformerInferenceWrapper(
+        policy=policy,
+        loss_module=loss_module,
+        inference_context=cfg.env.inference_context,
+    ).to(model_device)
 
     pbar = tqdm.tqdm(total=cfg.optim.pretrain_gradient_steps)
 
@@ -56,7 +60,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         data = offline_buffer.sample()
         # loss
-        loss_vals = loss_module(data)
+        loss_vals = loss_module(data.to(model_device))
         # backprop
         transformer_loss = loss_vals["loss"]
 
