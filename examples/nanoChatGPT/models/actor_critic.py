@@ -1,7 +1,3 @@
-import copy
-
-import torch
-
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch.distributions.categorical import Categorical

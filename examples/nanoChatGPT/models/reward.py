@@ -13,13 +13,8 @@ class RewardModel(nn.Module):
         model = GPT2LMHeadModel.from_pretrained(model_path, return_dict=False)
 
         self.config = model.config
-        # `gpt-neo(x)` models use `hidden_size` attribute names instead of `n_embd``
-        self.config.n_embd = (
-            self.config.hidden_size
-            if hasattr(self.config, "hidden_size")
-            else self.config.n_embd
-        )
         self.transformer = model.transformer
+
         # replace last layer with the reward layer
         self.lm_head = nn.Linear(self.config.n_embd, 1, bias=False)
         self.PAD_ID = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id

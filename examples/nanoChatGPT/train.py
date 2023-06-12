@@ -6,7 +6,6 @@ To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
 
-import os
 import time
 from pathlib import Path
 
@@ -29,8 +28,6 @@ def init_scaler(config):
 
 def create_loss_estimator(config, ctx):
     # helps estimate an arbitrarily accurate loss over either split using many batches
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
 
     @torch.no_grad()
     def estimate_loss(model, dataloader):
@@ -51,10 +48,10 @@ def main():
     config = load_and_update_config("config/train.yaml")
     ctx = setup(config)
 
-    # ######## INIT MODELS ########
+    # ---- INIT MODELS ----
     model = init_transformer(config)
 
-    # ######## INIT TRAINING FUNCTIONS ########
+    # ---- INIT TRAINING FUNCTIONS ----
     scaler = init_scaler(config)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -85,10 +82,8 @@ def main():
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
-        # FIXME: do we need gradient accumulation steps? why we are doing this only in train?
-
-        # forward backward update, with optional gradient accumulation to simulate larger batch size
-        # and using the GradScaler if data type is float16
+        # forward backward update, with optional gradient accumulation to simulate
+        # larger batch size
         for _ in range(config["gradient_accumulation_steps"]):
             batch = next_batch
             with ctx:
@@ -97,18 +92,19 @@ def main():
             next_batch = next(train_loader)
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(batch.loss).backward()
+
         # clip the gradient
         if config["grad_clip"] != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
+
         # step the optimizer and scaler if training in fp16
         scaler.step(optimizer)
         scaler.update()
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
 
-        # ########### EVALUATE MODEL AND CHECKPOINT ###############
-        # timing and logging
+        # ---- EVALUATE MODEL AND CHECKPOINT ----
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
