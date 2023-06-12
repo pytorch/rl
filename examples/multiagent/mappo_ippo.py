@@ -34,7 +34,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -107,7 +107,7 @@ def train(seed):
     # Policy
     actor_net = nn.Sequential(
         MultiAgentMLP(
-            n_agent_inputs=env.observation_spec["observation"].shape[-1],
+            n_agent_inputs=env.observation_spec[("agents", "observation")].shape[-1],
             n_agent_outputs=2 * env.action_spec.shape[-1],
             n_agents=env.n_agents,
             centralised=False,
@@ -120,23 +120,26 @@ def train(seed):
         NormalParamExtractor(),
     )
     policy_module = TensorDictModule(
-        actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+        actor_net,
+        in_keys=[("agents", "observation")],
+        out_keys=[("agents", "loc"), ("agents", "scale")],
     )
     policy = ProbabilisticActor(
         module=policy_module,
         spec=env.unbatched_action_spec,
-        in_keys=["loc", "scale"],
+        in_keys={"loc": ("agents", "loc"), "scale": ("agents", "scale")},
+        out_keys=[("agents", "action")],
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": env.unbatched_action_spec.space.minimum,
-            "max": env.unbatched_action_spec.space.maximum,
+            "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
+            "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
         },
         return_log_prob=True,
     )
 
     # Critic
     module = MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["observation"].shape[-1],
+        n_agent_inputs=env.observation_spec[("agents", "observation")].shape[-1],
         n_agent_outputs=1,
         n_agents=env.n_agents,
         centralised=model_config["centralised_critic"],
@@ -148,7 +151,7 @@ def train(seed):
     )
     value_module = ValueOperator(
         module=module,
-        in_keys=["observation"],
+        in_keys=[("agents", "observation")],
     )
 
     value_module(policy(env.reset().to(training_device)))
@@ -177,7 +180,7 @@ def train(seed):
         entropy_coef=config["entropy_eps"],
         normalize_advantage=False,
     )
-
+    loss_module.set_keys(reward=env.reward_key, action=env.action_key)
     loss_module.make_value_estimator(
         ValueEstimators.GAE, gamma=config["gamma"], lmbda=config["lmbda"]
     )
@@ -208,6 +211,12 @@ def train(seed):
 
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
+
+        tensordict_data[("next", "done")] = (
+            tensordict_data[("next", "done")]
+            .unsqueeze(-1)
+            .expand(tensordict_data[env.reward_key].shape)
+        )
 
         with torch.no_grad():
             loss_module.value_estimator(

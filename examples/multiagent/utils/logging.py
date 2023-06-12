@@ -29,19 +29,21 @@ def log_training(
         logger.experiment.log(
             {
                 f"train/info/{key}": value.mean().item()
-                for key, value in sampling_td["info"].items()
+                for key, value in sampling_td["agents", "info"].items()
             },
             commit=False,
         )
 
     logger.experiment.log(
         {
-            "train/reward/reward_min": sampling_td["next", "reward"]
+            "train/reward/reward_min": sampling_td["next", "agents", "reward"]
             .mean(-2)  # Agents
             .min()
             .item(),
-            "train/reward/reward_mean": sampling_td["next", "reward"].mean().item(),
-            "train/reward/reward_max": sampling_td["next", "reward"]
+            "train/reward/reward_mean": sampling_td["next", "agents", "reward"]
+            .mean()
+            .item(),
+            "train/reward/reward_max": sampling_td["next", "agents", "reward"]
             .mean(-2)  # Agents
             .max()
             .item(),
@@ -84,13 +86,13 @@ def log_evaluation(
     logger.experiment.log(
         {
             "eval/episode_reward_min": min(
-                [td["next", "reward"].sum(0).mean() for td in rollouts]
+                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
             ),
             "eval/episode_reward_max": max(
-                [td["next", "reward"].sum(0).mean() for td in rollouts]
+                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
             ),
             "eval/episode_reward_mean": sum(
-                [td["next", "reward"].sum(0).mean() for td in rollouts]
+                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
             )
             / len(rollouts),
             "eval/episode_len_mean": sum([td.batch_size[0] for td in rollouts])
