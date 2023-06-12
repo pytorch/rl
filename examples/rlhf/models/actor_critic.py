@@ -1,5 +1,3 @@
-import copy
-
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch.distributions.categorical import Categorical
@@ -17,21 +15,17 @@ __all__ = ["ActorCritic", "init_actor_critic"]
 
 class ActorCritic(ActorValueOperator):
     def __init__(self, base_model):
-        base_model = copy.deepcopy(base_model)
-        n_embd = base_model.lm_head.in_features
-
-        # actor network
-        # extract last layer to be reused by actor
         actor_head = base_model.lm_head
-        base_model.lm_head = nn.Identity()
+        value_head = nn.Linear(actor_head.in_features, 1, bias=False)
 
-        # TODO: compile base_model here?
-
-        # critic network
-        value_head = nn.Linear(n_embd, 1, bias=False)
-
-        common = TensorDictModule(base_model, in_keys=["prompt"], out_keys=["x"])
-
+        common = TensorDictSequential(
+            TensorDictModule(
+                base_model.transformer,
+                in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
+                out_keys=["x"],
+            ),
+            TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
+        )
         actor_head = TensorDictModule(actor_head, in_keys=["x"], out_keys=["logits"])
         actor_head = SafeProbabilisticTensorDictSequential(
             actor_head,
@@ -42,26 +36,21 @@ class ActorCritic(ActorValueOperator):
                 return_log_prob=True,
             ),
         )
-        value_head = TensorDictSequential(
-            TensorDictModule(value_head, in_keys=["x"], out_keys=["state_value"]),
-            TensorDictModule(
-                lambda x: x[:, -1, :], in_keys=["state_value"], out_keys=["state_value"]
-            ),
+        value_head = TensorDictModule(
+            value_head, in_keys=["x"], out_keys=["state_value"]
         )
 
         super().__init__(common, actor_head, value_head)
 
 
 def init_actor_critic(config):
-    model_base, _ = init_transformer(
-        config, as_tensordictmodule=False, skip_compilation=True
+    base_model = init_transformer(
+        config, as_tensordictmodule=False, skip_compilation=False, inference=True
     )
-    a2c_model = ActorCritic(model_base)
+    a2c_model = ActorCritic(base_model)
     a2c_model.to(config["device"])
     actor = a2c_model.get_policy_operator()
     critic = a2c_model.get_value_operator()
     critic_head = a2c_model.get_value_head()
 
-    # FIXME: we are missing compile...
-    # but we would compile TDModule...check performance issues
-    return actor, critic, critic_head
+    return actor, critic, critic_head, base_model

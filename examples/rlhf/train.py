@@ -6,16 +6,17 @@ To run on a single GPU, example:
 $ python train.py --batch_size=32 --compile=False
 """
 
-import os
 import time
 from pathlib import Path
 
 import torch
+import matplotlib.pyplot as plt
+import numpy as np
 
-from data import get_prompt_dataloaders
-from models.transformer import init_optimizer, init_transformer
-from shared import create_lr_scheduler, setup
-from utils import load_and_update_config
+from data.openai_summarize_tldr import get_prompt_dataloader
+from models.transformer import init_transformer
+from utils import create_lr_scheduler, load_and_update_config, setup
+from transformers import AutoTokenizer
 
 HERE = Path(__file__).parent
 
@@ -27,6 +28,7 @@ def init_scaler(config):
 
 def create_loss_estimator(config, ctx):
     # helps estimate an arbitrarily accurate loss over either split using many batches
+
     @torch.no_grad()
     def estimate_loss(model, dataloader):
         model.eval()
@@ -36,9 +38,8 @@ def create_loss_estimator(config, ctx):
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
-        loss = losses.mean()
         model.train()
-        return loss
+        return losses.mean()
 
     return estimate_loss
 
@@ -47,22 +48,31 @@ def main():
     config = load_and_update_config("config/train.yaml")
     ctx = setup(config)
 
-    # ######## INIT MODELS ########
-    model, model_kwargs = init_transformer(config)
+    # ---- INIT MODELS ----
+    model = init_transformer(config)
 
-    # ######## INIT TRAINING FUNCTIONS ########
+    # ---- INIT TRAINING FUNCTIONS ----
     scaler = init_scaler(config)
-    optimizer = init_optimizer(model, config)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config["learning_rate"],
+        weight_decay=config["weight_decay"],
+        betas=(config["beta1"], config["beta2"]),
+    )
+
     lr_scheduler = create_lr_scheduler(config)
 
     estimate_loss = create_loss_estimator(config, ctx)
 
-    train_loader, val_loader = get_prompt_dataloaders(config)
+    train_loader = get_prompt_dataloader(config, split="train")
+    val_loader = get_prompt_dataloader(config, split="valid")
 
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
     best_val_loss = config.setdefault("best_val_loss", 1e9)
 
+    train_losses = []
+    val_losses = []
     # ######## TRAINING LOOP ########
     t0 = time.time()
     next_batch = next(train_loader)  # fetch the very first batch
@@ -72,10 +82,8 @@ def main():
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
-        # FIXME: do we need gradient accumulation steps? why we are doing this only in train?
-
-        # forward backward update, with optional gradient accumulation to simulate larger batch size
-        # and using the GradScaler if data type is float16
+        # forward backward update, with optional gradient accumulation to simulate
+        # larger batch size
         for _ in range(config["gradient_accumulation_steps"]):
             batch = next_batch
             with ctx:
@@ -84,18 +92,19 @@ def main():
             next_batch = next(train_loader)
             # backward pass, with gradient scaling if training in fp16
             scaler.scale(batch.loss).backward()
+
         # clip the gradient
         if config["grad_clip"] != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), config["grad_clip"])
+
         # step the optimizer and scaler if training in fp16
         scaler.step(optimizer)
         scaler.update()
         # flush the gradients as soon as we can, no need for this memory anymore
         optimizer.zero_grad(set_to_none=True)
 
-        # ########### EVALUATE MODEL AND CHECKPOINT ###############
-        # timing and logging
+        # ---- EVALUATE MODEL AND CHECKPOINT ----
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
@@ -106,25 +115,35 @@ def main():
             print(
                 f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}"
             )
-            if val_loss < best_val_loss or config["always_save_checkpoint"]:
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+
+            if it > 0 and (val_loss < best_val_loss or config["always_save_checkpoint"]):
                 best_val_loss = val_loss
-                if it > 0:
-                    checkpoint = {
-                        "model": model.module._orig_mod.state_dict()
-                        if config["compile"]
-                        else model.module.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "model_kwargs": model_kwargs,
-                        "iter_num": it,
-                        "best_val_loss": best_val_loss,
-                        "config": config,
-                    }
-                    print(f"saving checkpoint to {config['out_dir']}")
-                    torch.save(checkpoint, os.path.join(config["out_dir"], "ckpt.pt"))
+                print(f"saving checkpoint to {config['out_dir']}")
+                model.module.save_pretrained(config["out_dir"])
+
         elif it % config["log_interval"] == 0:
             # loss as float. note: this is a CPU-GPU sync point
             lossf = batch.loss.item()
+            train_losses.append(lossf)
             print(f"iter {it}: train loss {lossf:.4f}, time {dt*1000:.2f}ms")
+
+    f, ax = plt.subplots(figsize=(8, 6))
+    plt.title("Supervised Fine Tuning: Loss")
+    ax.plot(
+        np.arange(0, config["max_iters"], config["log_interval"]),
+        train_losses,
+        label="train loss",
+    )
+    ax.plot(
+        np.arange(0, config["max_iters"], config["eval_interval"]),
+        val_losses,
+        label="valid loss",
+    )
+    ax.set_yscale("log")
+    ax.legend()
+    f.savefig("figures/train_curve.png", dpi=150)
 
 
 if __name__ == "__main__":
