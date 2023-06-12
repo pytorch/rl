@@ -4,7 +4,7 @@ episode_length: 50
 out_dir: out
 out_dir_reward: out_reward # used if restoring multihead
 out_dir_rlhf: out_rlhf
-eval_interval: 10
+eval_interval: 2
 log_interval: 2
 eval_iters: 10
 always_save_checkpoint: True # if True, always save a checkpoint after each eval
@@ -20,7 +20,7 @@ block_size: 550
 dropout: 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # optimizer
 learning_rate: 5.0e-6 # max learning rate
-max_iters: 300 # total number of training iterations
+max_iters: 50 # total number of training iterations
 weight_decay: 1.0e-2
 beta1: 0.9
 beta2: 0.999
@@ -37,3 +37,4 @@ compile: True # use PyTorch 2.0 to compile the model to be faster
 verbose: False
 ppo_batch_size: 16
 num_epochs: 2
+num_rollouts: 64

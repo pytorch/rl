@@ -5,7 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from data import get_reward_dataloaders
+from data import get_reward_dataloader
 from models.reward import init_reward_model
 from utils import create_lr_scheduler, load_and_update_config, setup
 
@@ -60,7 +60,7 @@ def main():
 
     estimate_loss = create_loss_estimator(config, ctx)
 
-    train_loader, val_loader = get_reward_dataloaders(config)
+    train_loader, val_loader = get_reward_dataloader(config)
 
     # these will already have been set if resuming from previous checkpoint
     iter_num = config.setdefault("iter_num", 0)
