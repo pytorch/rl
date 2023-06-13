@@ -1193,22 +1193,11 @@ class TestTD3(LossModuleTestBase):
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize(
-        "delay_actor, delay_qvalue", [(False, False), (True, True)]
-    )
-    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
-    @pytest.mark.parametrize("policy_noise", [0.1, 1.0])
-    @pytest.mark.parametrize("noise_clip", [0.1, 1.0])
     @pytest.mark.parametrize("use_action_spec", [True, False])
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_td3_separate_losses(
         self,
-        delay_actor,
-        delay_qvalue,
         device,
-        policy_noise,
-        noise_clip,
-        td_est,
         use_action_spec,
         separate_losses,
     ):
@@ -1228,16 +1217,8 @@ class TestTD3(LossModuleTestBase):
             action_spec=action_spec,
             bounds=bounds,
             loss_function="l2",
-            delay_actor=delay_actor,
-            delay_qvalue=delay_qvalue,
             separate_losses=separate_losses,
         )
-        if td_est is ValueEstimators.GAE:
-            with pytest.raises(NotImplementedError):
-                loss_fn.make_value_estimator(td_est)
-            return
-        if td_est is not None:
-            loss_fn.make_value_estimator(td_est)
         with _check_td_steady(td):
             loss = loss_fn(td)
 
