@@ -78,19 +78,22 @@ class RewardModel(nn.Module):
         torch.save(self, save_dir / "reward_model.pt")
 
 
-def init_reward_model(config):
-    if config["init_reward_from"] == "scratch":
-        model = RewardModel(config["out_dir"])
-    elif config["init_reward_from"] == "resume":
-        model = RewardModel.from_pretrained(config["out_dir_reward"])
+def init_reward_model(
+    transformer_path=None, reward_model_path=None, device=None, compile_=False
+):
+    if not ((transformer_path is None) ^ (reward_model_path is None)):
+        raise ValueError(
+            "Exactly one of transformer_path or reward_model_path should be specified"
+        )
+    if transformer_path is not None:
+        model = RewardModel(transformer_path)
     else:
-        raise ValueError(f"option {config['init_reward_from']=} not recognised")
+        model = RewardModel.from_pretrained(reward_model_path)
 
-    model.to(config["device"])
-    # compile the model
-    if config["compile"]:
-        print("compiling the model... (takes a ~minute)")
-        model = torch.compile(model)  # requires PyTorch 2.0
+    model.to(device)
+    if compile_:
+        print("Compiling the reward model...")
+        model = torch.compile(model)
 
     model = TensorDictModule(
         model,

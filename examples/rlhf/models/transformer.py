@@ -8,21 +8,25 @@ HERE = Path(__file__).parent
 
 
 def init_transformer(
-    config, as_tensordictmodule=True, skip_compilation=False, inference=False
+    name_or_path,
+    dropout,
+    device,
+    compile_,
+    as_tensordictmodule=True,
+    inference=False,
 ):
     model_kwargs = {
-        "resid_pdrop": config["dropout"],
-        "embd_pdrop": config["dropout"],
-        "attn_pdrop": config["dropout"],
-        "summary_first_dropout": config["dropout"],
+        "resid_pdrop": dropout,
+        "embd_pdrop": dropout,
+        "attn_pdrop": dropout,
+        "summary_first_dropout": dropout,
     }
     model = GPT2LMHeadModel.from_pretrained(
-        config["transformer_name_or_path"], return_dict=False, **model_kwargs
+        name_or_path, return_dict=False, **model_kwargs
     )
-    model.to(config["device"])
+    model.to(device)
 
-    # compile the model
-    if not skip_compilation and config["compile"]:
+    if compile_:
         # TODO: logging instead of printing?
         print("Compiling transformer model...")
         model = torch.compile(model)

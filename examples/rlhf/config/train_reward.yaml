@@ -1,31 +1,32 @@
-## I/O
-eval_interval: 200
-log_interval: 50
-eval_iters: 100
-always_save_checkpoint: False # if True, always save a checkpoint after each eval
-## data
-gradient_accumulation_steps: 2 # used to simulate larger batch sizes
-batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
-block_size: 550
-## model
-out_dir: out
-dropout: 0.0 # for pretraining 0 is good, for finetuning try 0.1+
-## reward model
-out_dir_reward: out_reward
-init_reward_from: scratch  # 'scratch' or 'resume' - if "resume" model will be loaded from out_dir_reward
-## optimizer
-learning_rate: 1.0e-5 # max learning rate
-max_iters: 10000 # total number of training iterations
-weight_decay: 1.0e-1
-beta1: 0.9
-beta2: 0.95
-grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
-## learning rate decay settings
-decay_lr: False # whether to decay the learning rate
-warmup_iters: 50 # how many steps to warm up for
-lr_decay_iters: 10000 # should be ~= max_iters per Chinchilla
-min_lr: 1.0e-6 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
-## system settings
-device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
-dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-compile: True # use PyTorch 2.0 to compile the model to be faster
+io:
+  eval_interval: 200
+  log_interval: 50
+  eval_iters: 100
+data:
+  batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+  block_size: 550
+model:
+  name_or_path: out
+  dropout: 0.0 # for pretraining 0 is good, for finetuning try 0.1+
+reward_model:
+  out_dir: out_reward
+  init_from: scratch  # 'scratch' or 'resume' - if "resume" model will be loaded from out_dir_reward
+train:
+  grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
+  max_iters: 15001 # total number of training iterations
+  gradient_accumulation_steps: 2 # used to simulate larger batch sizes
+  always_save_checkpoint: False # if True, always save a checkpoint after each eval
+  decay_lr: False # whether to decay the learning rate
+  optimizer:
+    # keyword arguments for torch.optim.AdamW
+    lr: 1.0e-5
+    weight_decay: 1.0e-1
+    betas: [0.9, 0.95]
+  scheduler:
+    # keyword arguments for torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: 15001
+    eta_min: 1.0e-6
+sys:
+  device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+  dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+  compile: True # use PyTorch 2.0 to compile the model to be faster
