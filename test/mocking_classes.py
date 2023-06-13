@@ -1160,36 +1160,37 @@ class HeteroEnv(EnvBase):
     def __init__(self, device="cpu"):
         self.observation_spec = CompositeSpec(
             agent_features=torch.stack(
-                [CompositeSpec(
-                    observation=UnboundedContinuousTensorSpec(shape=(3,))
-                ),
+                [
+                    CompositeSpec(
+                        observation=UnboundedContinuousTensorSpec(shape=(3,))
+                    ),
                     CompositeSpec(
                         observation=UnboundedContinuousTensorSpec(shape=(2,))
-                    )],
-                dim=0
+                    ),
+                ],
+                dim=0,
             ),
             common_features=UnboundedContinuousTensorSpec(shape=(5,)),
-            shape=()
+            shape=(),
         )
         self.action_spec = CompositeSpec(
-            agent_features=torch.stack(
-            [CompositeSpec(
-                action=UnboundedContinuousTensorSpec(shape=(3,), )
-            ),
-                CompositeSpec(
-                    action=UnboundedContinuousTensorSpec(shape=(2,), )
-                )], dim=0
-        ), shape=())
+            agent_features=CompositeSpec(
+                action=UnboundedContinuousTensorSpec(
+                    shape=(2, 3),
+                ),
+                shape=(2,),
+            )
+        )
         self.reward_spec = CompositeSpec(
             agent_features=CompositeSpec(
-                reward=UnboundedContinuousTensorSpec(shape=(2,)),
-                shape=(2,)
-                ), shape=()
+                reward=UnboundedContinuousTensorSpec(shape=(2,)), shape=(2,)
+            ),
+            shape=(),
         )
         self.done_spec = CompositeSpec(
             agent_features=CompositeSpec(
                 done=DiscreteTensorSpec(n=2, shape=(2,), dtype=torch.bool)
-                )
+            )
         )
         super().__init__(device=device)
 
@@ -1203,8 +1204,7 @@ class HeteroEnv(EnvBase):
     ) -> TensorDictBase:
         self.counter = 0
         td = self.observation_spec.zero()
-        td.update(self.output_spec['_done_spec'].zero())
-        td.update(self.output_spec['_reward_spec'].zero())
+        td.update(self.output_spec["_done_spec"].zero())
         return td
 
     def _step(
@@ -1213,6 +1213,6 @@ class HeteroEnv(EnvBase):
     ) -> TensorDictBase:
         td = self.observation_spec.zero()
         td.apply_(lambda x: x + self.counter)
-        td.update(self.output_spec['_done_spec'].zero())
-        td.update(self.output_spec['_reward_spec'].zero())
+        td.update(self.output_spec["_done_spec"].zero())
+        td.update(self.output_spec["_reward_spec"].zero())
         return td.select().set("next", td)

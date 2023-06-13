@@ -32,6 +32,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    HeteroEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -1404,31 +1405,35 @@ class TestNestedSpecs:
 
 
 @pytest.mark.parametrize(
-    "envclass",
+    "envclass,return_contiguous",
     [
-        ContinuousActionConvMockEnv,
-        ContinuousActionConvMockEnvNumpy,
-        ContinuousActionVecMockEnv,
-        CountingBatchedEnv,
-        CountingEnv,
-        DiscreteActionConvMockEnv,
-        DiscreteActionConvMockEnvNumpy,
-        DiscreteActionVecMockEnv,
-        partial(
-            DummyModelBasedEnvBase, world_model=TestModelBasedEnvBase.world_model()
-        ),
-        MockBatchedLockedEnv,
-        MockBatchedUnLockedEnv,
-        MockSerialEnv,
-        NestedRewardEnv,
+        [HeteroEnv, False],
+        [ContinuousActionConvMockEnv, True],
+        [ContinuousActionConvMockEnvNumpy, True],
+        [ContinuousActionVecMockEnv, True],
+        [CountingBatchedEnv, True],
+        [CountingEnv, True],
+        [DiscreteActionConvMockEnv, True],
+        [DiscreteActionConvMockEnvNumpy, True],
+        [DiscreteActionVecMockEnv, True],
+        [
+            partial(
+                DummyModelBasedEnvBase, world_model=TestModelBasedEnvBase.world_model()
+            ),
+            True,
+        ],
+        [MockBatchedLockedEnv, True],
+        [MockBatchedUnLockedEnv, True],
+        [MockSerialEnv, True],
+        [NestedRewardEnv, True],
     ],
 )
-def test_mocking_envs(envclass):
+def test_mocking_envs(envclass, return_contiguous):
     env = envclass()
     env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
-    check_env_specs(env, seed=100)
+    check_env_specs(env, seed=100, return_contiguous=return_contiguous)
 
 
 if __name__ == "__main__":

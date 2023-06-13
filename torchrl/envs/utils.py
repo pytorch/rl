@@ -63,18 +63,21 @@ def step_mdp(
         next_tensordict (TensorDictBase, optional): destination tensordict
         keep_other (bool, optional): if ``True``, all keys that do not start with :obj:`'next_'` will be kept.
             Default is ``True``.
-        exclude_reward (bool, optional): if ``True``, the :obj:`"reward"` key will be discarded
+        exclude_reward (bool or key, optional): if ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present).
+            from the ``"next"`` entry (if present). If a key is provided,
+            this key will be excluded.
             Default is ``True``.
-        exclude_done (bool, optional): if ``True``, the :obj:`"done"` key will be discarded
+        exclude_done (bool or key, optional): if ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present).
+            from the ``"next"`` entry (if present). If a key is provided,
+            this key will be excluded.
             Default is ``False``.
-        exclude_action (bool, optional): if ``True``, the :obj:`"action"` key will
+        exclude_action (bool or key, optional): if ``True``, the :obj:`"action"` key will
             be discarded from the resulting tensordict. If ``False``, it will
             be kept in the root tensordict (since it should not be present in
-            the ``"next"`` entry).
+            the ``"next"`` entry). If a key is provided,
+            this key will be excluded.
             Default is ``True``.
 
     Returns:
@@ -170,12 +173,15 @@ def step_mdp(
         return out
     out = tensordict.get("next").clone(False)
     excluded = None
+    done_key = "done" if exclude_done is True else exclude_done
+    reward_key = "reward" if exclude_reward is True else exclude_reward
+    action_key = "action" if exclude_action is True else exclude_action
     if exclude_done and exclude_reward:
-        excluded = {"done", "reward"}
+        excluded = {done_key, reward_key}
     elif exclude_reward:
-        excluded = {"reward"}
+        excluded = {reward_key}
     elif exclude_done:
-        excluded = {"done"}
+        excluded = {done_key}
     if excluded:
         out = out.exclude(*excluded, inplace=True)
     # TODO: make it work with LazyStackedTensorDict
@@ -192,9 +198,9 @@ def step_mdp(
         out_keys = set(out.keys())
         td_keys = set(tensordict.keys()) - out_keys - {"next"}
         if exclude_action:
-            td_keys = td_keys - {"action"}
+            td_keys = td_keys - {action_key}
     elif not exclude_action:
-        td_keys = {"action"}
+        td_keys = {action_key}
 
     if td_keys:
         # update does some checks that we can spare
@@ -268,6 +274,39 @@ SUPPORTED_LIBRARIES = {
 }
 
 
+def _per_level_env_check(data0, data1, check_dtype):
+    """Checks shape and dtype of two tensordicts, accounting for lazy stacks."""
+    if isinstance(data0, LazyStackedTensorDict) and isinstance(
+        data1, LazyStackedTensorDict
+    ):
+        if data0.stack_dim != data1.stack_dim:
+            raise AssertionError(f"Stack dimension mismatch: {data0} vs {data1}.")
+        for _data0, _data1 in zip(data0.tensordicts, data1.tensordicts):
+            _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
+        return
+    else:
+        keys0 = set(data0.keys())
+        keys1 = set(data1.keys())
+        if keys0 != keys1:
+            raise AssertionError(f"Keys mismatch: {keys0} vs {keys1}")
+        for key in keys0:
+            _data0 = data0[key]
+            _data1 = data1[key]
+            if _data0.shape != _data1.shape:
+                raise AssertionError(
+                    f"The shapes of the real and fake tensordict don't match for key {key}. "
+                    f"Got fake={_data0.shape} and real={_data0.shape}."
+                )
+            if isinstance(_data0, TensorDictBase):
+                _per_level_env_check(_data0, _data1, check_dtype=check_dtype)
+            else:
+                if check_dtype and (_data0.dtype != _data1.dtype):
+                    raise AssertionError(
+                        f"The dtypes of the real and fake tensordict don't match for key {key}. "
+                        f"Got fake={_data0.dtype} and real={_data1.dtype}."
+                    )
+
+
 def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     """Tests an environment specs against the results of short rollout.
 
@@ -295,55 +334,53 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     torch.manual_seed(seed)
     env.set_seed(seed)
 
-    fake_tensordict = env.fake_tensordict().flatten_keys(".")
+    fake_tensordict = env.fake_tensordict()  # .flatten_keys(".")
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
-    # # remove private keys
-    # real_tensordict = real_tensordict.exclude(
-    #     *[
-    #         key
-    #         for key in real_tensordict.keys(True)
-    #         if (isinstance(key, str) and key.startswith("_"))
-    #         or (
-    #             isinstance(key, tuple) and any(subkey.startswith("_") for subkey in key)
-    #         )
-    #     ]
-    # )
-    real_tensordict = real_tensordict.flatten_keys(".")
 
-    keys1 = set(fake_tensordict.keys(True))
-    keys2 = set(real_tensordict.keys(True))
-    if keys1 != keys2:
-        raise AssertionError(
-            "The keys of the fake tensordict and the one collected during rollout do not match:"
-            f"Got fake-real: {keys1-keys2} and real-fake: {keys2-keys1}"
-        )
-    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
-    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
-    fake_tensordict = fake_tensordict.to_tensordict()
+    if return_contiguous:
+        fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+        fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    else:
+        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
-    ).all():
+    ).any():
         raise AssertionError(
             "zeroing the two tensordicts did not make them identical. "
             f"Check for discrepancies:\nFake=\n{fake_tensordict}\nReal=\n{real_tensordict}"
         )
-    for key in keys2:
-        if fake_tensordict[key].shape != real_tensordict[key].shape:
-            raise AssertionError(
-                f"The shapes of the real and fake tensordict don't match for key {key}. "
-                f"Got fake={fake_tensordict[key].shape} and real={real_tensordict[key].shape}."
-            )
-        if check_dtype and (fake_tensordict[key].dtype != real_tensordict[key].dtype):
-            raise AssertionError(
-                f"The dtypes of the real and fake tensordict don't match for key {key}. "
-                f"Got fake={fake_tensordict[key].dtype} and real={real_tensordict[key].dtype}."
-            )
+    _per_level_env_check(fake_tensordict, real_tensordict, check_dtype=check_dtype)
 
     # test dtypes
-    real_tensordict = env.rollout(3)  # keep empty structures, for example dict()
-    for key, value in real_tensordict[..., -1].items():
-        _check_isin(key, value, env.observation_spec, env.input_spec)
+    # real_tensordict = env.rollout(3, return_contiguous=return_contiguous)  # keep empty structures, for example dict()
+    last_td = real_tensordict[..., -1]
+    _action_spec = env.input_spec["_action_spec"]
+    _state_spec = env.input_spec["_state_spec"]
+    _obs_spec = env.output_spec["_observation_spec"]
+    _reward_spec = env.output_spec["_reward_spec"]
+    _done_spec = env.output_spec["_done_spec"]
+    for name, spec in (
+        ("action", _action_spec),
+        ("state", _state_spec),
+        ("obs", _obs_spec),
+    ):
+        td = last_td.select(*spec.keys(True, True), strict=True)
+        if not spec.is_in(td):
+            raise AssertionError(
+                f"spec check failed at root for spec {name}={spec} and data {td}."
+            )
+    for name, spec in (
+        ("reward", _reward_spec),
+        ("done", _done_spec),
+        ("obs", _obs_spec),
+    ):
+        td = last_td.get("next").select(*spec.keys(True, True), strict=True)
+        if not spec.is_in(td):
+            raise AssertionError(
+                f"spec check failed at root for spec {name}={spec} and data {td}."
+            )
 
     print("check_env_specs succeeded!")
 
