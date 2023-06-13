@@ -107,7 +107,7 @@ def train(seed):
     # Policy
     actor_net = nn.Sequential(
         MultiAgentMLP(
-            n_agent_inputs=env.observation_spec[("agents", "observation")].shape[-1],
+            n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
             n_agent_outputs=2 * env.action_spec.shape[-1],
             n_agents=env.n_agents,
             centralised=False,
@@ -139,7 +139,7 @@ def train(seed):
 
     # Critic
     module = MultiAgentMLP(
-        n_agent_inputs=env.observation_spec[("agents", "observation")].shape[-1],
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
         n_agent_outputs=1,
         n_agents=env.n_agents,
         centralised=model_config["centralised_critic"],
@@ -212,12 +212,11 @@ def train(seed):
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
-        tensordict_data[("next", "done")] = (
-            tensordict_data[("next", "done")]
+        tensordict_data["next", "done"] = (
+            tensordict_data["next", "done"]
             .unsqueeze(-1)
             .expand(tensordict_data[env.reward_key].shape)
         )
-
         with torch.no_grad():
             loss_module.value_estimator(
                 tensordict_data,
