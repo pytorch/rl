@@ -26,7 +26,7 @@ from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -1194,7 +1194,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         tensordict_out = self._transform_step_output(step_output)
         return tensordict_out.select().set("next", tensordict_out)
 
-    def _get_action_spec(self) -> TensorSpec:
+    def _get_action_spec(self) -> TensorSpecBase:
         # local import to avoid importing gym in the script
         from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
@@ -1210,7 +1210,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action_spec = self._add_shape_to_spec(action_spec)
         return action_spec
 
-    def _get_output_spec(self) -> TensorSpec:
+    def _get_output_spec(self) -> TensorSpecBase:
         return CompositeSpec(
             _observation_spec=self._get_observation_spec(),
             _reward_spec=self._get_reward_spec(),
@@ -1219,7 +1219,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             device=self.device,
         )
 
-    def _get_observation_spec(self) -> TensorSpec:
+    def _get_observation_spec(self) -> TensorSpecBase:
         # local import to avoid importing gym in the script
         from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform
 
@@ -1238,16 +1238,16 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             device=self.device,
         )
 
-    def _add_shape_to_spec(self, spec: TensorSpec) -> TensorSpec:
+    def _add_shape_to_spec(self, spec: TensorSpecBase) -> TensorSpecBase:
         return spec.expand((self.num_workers, *spec.shape))
 
-    def _get_reward_spec(self) -> TensorSpec:
+    def _get_reward_spec(self) -> TensorSpecBase:
         return UnboundedContinuousTensorSpec(
             device=self.device,
             shape=self.batch_size,
         )
 
-    def _get_done_spec(self) -> TensorSpec:
+    def _get_done_spec(self) -> TensorSpecBase:
         return DiscreteTensorSpec(
             2,
             device=self.device,

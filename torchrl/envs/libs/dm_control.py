@@ -14,7 +14,7 @@ import torch
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
@@ -52,7 +52,7 @@ def _dmcontrol_to_torchrl_spec_transform(
     spec,
     dtype: Optional[torch.dtype] = None,
     device: DEVICE_TYPING = None,
-) -> TensorSpec:
+) -> TensorSpecBase:
     if isinstance(spec, collections.OrderedDict):
         spec = {
             k: _dmcontrol_to_torchrl_spec_transform(item, device=device)

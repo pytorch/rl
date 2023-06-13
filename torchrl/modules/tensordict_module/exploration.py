@@ -11,7 +11,7 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import TensorSpecBase
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
@@ -38,7 +38,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
-        spec (TensorSpec, optional): if provided, the sampled action will be
+        spec (TensorSpecBase, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
 
@@ -82,7 +82,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         action_key: str = "action",
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
     ):
         super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
@@ -169,10 +169,10 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
-        spec (TensorSpec, optional): if provided, the sampled action will be
+        spec (TensorSpecBase, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
-        safe (boolean, optional): if False, the TensorSpec can be None. If it
+        safe (boolean, optional): if False, the TensorSpecBase can be None. If it
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
@@ -197,7 +197,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         mean: float = 0.0,
         std: float = 1.0,
         action_key: str = "action",
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         safe: Optional[bool] = True,
     ):
         super().__init__(policy)
@@ -340,11 +340,11 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             default: 1000
         action_key (str): key of the action to be modified.
             default: "action"
-        spec (TensorSpec, optional): if provided, the sampled action will be
+        spec (TensorSpecBase, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
         safe (bool): if ``True``, actions that are out of bounds given the action specs will be projected in the space
-            given the :obj:`TensorSpec.project` heuristic.
+            given the :obj:`TensorSpecBase.project` heuristic.
             default: True
 
     Examples:
@@ -385,7 +385,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         sigma_min: Optional[float] = None,
         n_steps_annealing: int = 1000,
         action_key: str = "action",
-        spec: TensorSpec = None,
+        spec: TensorSpecBase = None,
         safe: bool = True,
         key: str = None,
     ):

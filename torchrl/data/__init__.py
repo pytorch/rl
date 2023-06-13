@@ -31,6 +31,7 @@ from .tensor_specs import (
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )

@@ -4,7 +4,7 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
 )
 
 ACTION_SPACE_MAP = {}
@@ -23,7 +23,7 @@ ACTION_SPACE_MAP["categorical"] = "categorical"
 
 
 def _find_action_space(action_space):
-    if isinstance(action_space, TensorSpec):
+    if isinstance(action_space, TensorSpecBase):
         if isinstance(action_space, CompositeSpec):
             action_space = action_space["action"]
         action_space = type(action_space)

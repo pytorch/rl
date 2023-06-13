@@ -15,7 +15,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data.tensor_specs import TensorSpec, UnboundedContinuousTensorSpec
+from torchrl.data.tensor_specs import TensorSpecBase, UnboundedContinuousTensorSpec
 from torchrl.envs.common import _EnvWrapper
 
 
@@ -29,7 +29,7 @@ class BaseInfoDictReader(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractproperty
-    def info_spec(self) -> Dict[str, TensorSpec]:
+    def info_spec(self) -> Dict[str, TensorSpecBase]:
         raise NotImplementedError
 
 
@@ -56,7 +56,7 @@ class default_info_dict_reader(BaseInfoDictReader):
     def __init__(
         self,
         keys: List[str] = None,
-        spec: Union[Sequence[TensorSpec], Dict[str, TensorSpec]] = None,
+        spec: Union[Sequence[TensorSpecBase], Dict[str, TensorSpecBase]] = None,
     ):
         if keys is None:
             keys = []
@@ -91,7 +91,7 @@ class default_info_dict_reader(BaseInfoDictReader):
         return tensordict
 
     @property
-    def info_spec(self) -> Dict[str, TensorSpec]:
+    def info_spec(self) -> Dict[str, TensorSpecBase]:
         return self._info_spec
 
 

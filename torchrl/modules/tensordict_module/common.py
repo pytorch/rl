@@ -16,7 +16,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpecBase
 
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -102,7 +102,7 @@ def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
 
 
 class SafeModule(TensorDictModule):
-    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.TensorDictModule` subclass that accepts a :class:`~torchrl.data.TensorSpecBase` as argument to control the output domain.
 
     Args:
         module (nn.Module): a nn.Module used to map the input to the output
@@ -118,14 +118,14 @@ class SafeModule(TensorDictModule):
             The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a
             key avoid writing tensor to output.
-        spec (TensorSpec, optional): specs of the output tensor. If the module
+        spec (TensorSpecBase, optional): specs of the output tensor. If the module
             outputs multiple output tensors,
             spec characterize the space of the first output tensor.
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :obj:`TensorSpecBase.project`
             method. Default is ``False``.
 
     Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
@@ -202,14 +202,14 @@ class SafeModule(TensorDictModule):
         ],
         in_keys: Iterable[str],
         out_keys: Iterable[str],
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         safe: bool = False,
     ):
         super().__init__(module, in_keys, out_keys)
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
-        if spec is not None and not isinstance(spec, TensorSpec):
+        if spec is not None and not isinstance(spec, TensorSpecBase):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:

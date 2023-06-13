@@ -19,7 +19,7 @@ from torchrl._utils import prod, seed_generator
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
@@ -130,7 +130,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             observation_spec. Therefore, "observation_spec" should be thought as
             a generic data container for environment outputs that are not done
             or reward data.
-        reward_spec (TensorSpec): the (leaf) spec of the reward. If the reward
+        reward_spec (TensorSpecBase): the (leaf) spec of the reward. If the reward
             is nested within a tensordict, its location can be accessed via
             the ``reward_key`` attribute:
 
@@ -140,7 +140,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 >>> # accessing reward:
                 >>> reward = env.fake_tensordict()[('next', *env.reward_key)]
 
-        done_spec (TensorSpec): the (leaf) spec of the done. If the done
+        done_spec (TensorSpecBase): the (leaf) spec of the done. If the done
             is nested within a tensordict, its location can be accessed via
             the ``done_key`` attribute.
 
@@ -150,7 +150,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 >>> # accessing done:
                 >>> done = env.fake_tensordict()[('next', *env.done_key)]
 
-        action_spec (TensorSpec): the ampling spec of the actions. This attribute
+        action_spec (TensorSpecBase): the ampling spec of the actions. This attribute
             is contained in input_spec.
 
                 >>> # accessing action spec:
@@ -397,7 +397,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Parent specs: input and output spec.
     @property
-    def input_spec(self) -> TensorSpec:
+    def input_spec(self) -> TensorSpecBase:
         input_spec = self.__dict__.get("_input_spec", None)
         if input_spec is None:
             input_spec = CompositeSpec(
@@ -409,11 +409,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return input_spec
 
     @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
+    def input_spec(self, value: TensorSpecBase) -> None:
         raise RuntimeError("input_spec is protected.")
 
     @property
-    def output_spec(self) -> TensorSpec:
+    def output_spec(self) -> TensorSpecBase:
         output_spec = self.__dict__.get("_output_spec", None)
         if output_spec is None:
             output_spec = CompositeSpec(
@@ -424,7 +424,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return output_spec
 
     @output_spec.setter
-    def output_spec(self, value: TensorSpec) -> None:
+    def output_spec(self, value: TensorSpecBase) -> None:
         raise RuntimeError("output_spec is protected.")
 
     # Action spec
@@ -456,7 +456,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Action spec: action specs belong to input_spec
     @property
-    def action_spec(self) -> TensorSpec:
+    def action_spec(self) -> TensorSpecBase:
         """The ``action`` leaf spec.
 
         This property will always return the leaf spec of the action attribute,
@@ -486,7 +486,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return out
 
     @action_spec.setter
-    def action_spec(self, value: TensorSpec) -> None:
+    def action_spec(self, value: TensorSpecBase) -> None:
         try:
             self.input_spec.unlock_()
             device = self.input_spec.device
@@ -542,7 +542,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Done spec: reward specs belong to output_spec
     @property
-    def reward_spec(self) -> TensorSpec:
+    def reward_spec(self) -> TensorSpecBase:
         """The ``reward`` leaf spec.
 
         This property will always return the leaf spec of the reward attribute,
@@ -581,7 +581,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return out
 
     @reward_spec.setter
-    def reward_spec(self, value: TensorSpec) -> None:
+    def reward_spec(self, value: TensorSpecBase) -> None:
         try:
             self.output_spec.unlock_()
             device = self.output_spec.device
@@ -654,7 +654,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Done spec: done specs belong to output_spec
     @property
-    def done_spec(self) -> TensorSpec:
+    def done_spec(self) -> TensorSpecBase:
         """The ``done`` leaf spec.
 
         This property will always return the leaf spec of the done attribute,
@@ -692,7 +692,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return out
 
     @done_spec.setter
-    def done_spec(self, value: TensorSpec) -> None:
+    def done_spec(self, value: TensorSpecBase) -> None:
         try:
             self.output_spec.unlock_()
             device = self.output_spec.device
@@ -748,7 +748,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return observation_spec
 
     @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
+    def observation_spec(self, value: TensorSpecBase) -> None:
         try:
             self.output_spec.unlock_()
             device = self.output_spec.device

@@ -14,7 +14,7 @@ from tensordict.tensordict import make_tensordict, TensorDictBase
 from torch.utils import dlpack as torch_dlpack
 from torchrl.data.tensor_specs import (
     CompositeSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
@@ -105,7 +105,9 @@ def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     return type(object_example)(**t)
 
 
-def _extract_spec(data: Union[torch.Tensor, TensorDictBase], key=None) -> TensorSpec:
+def _extract_spec(
+    data: Union[torch.Tensor, TensorDictBase], key=None
+) -> TensorSpecBase:
     if isinstance(data, torch.Tensor):
         shape = data.shape
         if key in ("reward", "done"):

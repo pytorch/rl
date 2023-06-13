@@ -14,14 +14,14 @@ from tensordict.nn import (
 )
 from tensordict.tensordict import TensorDictBase
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpecBase
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
-    """:class:`tensordict.nn.ProbabilisticTensorDictModule` subclass that accepts a :class:`~torchrl.envs.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.ProbabilisticTensorDictModule` subclass that accepts a :class:`~torchrl.envs.TensorSpecBase` as argument to control the output domain.
 
     `SafeProbabilisticModule` is a non-parametric module representing a
     probability distribution. It reads the distribution parameters from an input
@@ -58,14 +58,14 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         out_keys (str or iterable of str): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
-        spec (TensorSpec): specs of the first output tensor. Used when calling
+        spec (TensorSpecBase): specs of the first output tensor. Used when calling
             td_module.random() to generate random values in the target space.
         safe (bool, optional): if ``True``, the value of the sample is checked against the
             input spec. Out-of-domain sampling can occur because of exploration policies
             or numerical under/overflow issues. As for the :obj:`spec` argument, this
             check will only occur for the distribution sample, but not the other tensors
             returned by the input module. If the sample is out of bounds, it is
-            projected back onto the desired space using the `TensorSpec.project` method.
+            projected back onto the desired space using the `TensorSpecBase.project` method.
             Default is ``False``.
         default_interaction_type (str, optional): default method to be used to retrieve
             the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
@@ -99,7 +99,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         self,
         in_keys: Union[str, Sequence[str], dict],
         out_keys: Union[str, Sequence[str]],
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         safe: bool = False,
         default_interaction_mode: str = None,
         default_interaction_type: str = InteractionType.MODE,
@@ -121,7 +121,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             n_empirical_estimate=n_empirical_estimate,
         )
 
-        if spec is not None and not isinstance(spec, TensorSpec):
+        if spec is not None and not isinstance(spec, TensorSpecBase):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
             if len(self.out_keys) > 1:
@@ -196,7 +196,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
 class SafeProbabilisticTensorDictSequential(
     ProbabilisticTensorDictSequential, SafeSequential
 ):
-    """:class:`tensordict.nn.ProbabilisticTensorDictSequential` subclass that accepts a :class:`~torchrl.envs.TensorSpec` as argument to control the output domain.
+    """:class:`tensordict.nn.ProbabilisticTensorDictSequential` subclass that accepts a :class:`~torchrl.envs.TensorSpecBase` as argument to control the output domain.
 
     Similarly to :obj:`TensorDictSequential`, but enforces that the final module in the
     sequence is an :obj:`ProbabilisticTensorDictModule` and also exposes ``get_dist``

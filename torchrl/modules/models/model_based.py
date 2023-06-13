@@ -263,7 +263,7 @@ class RSSMPrior(nn.Module):
     Reference: https://arxiv.org/abs/1811.04551
 
     Args:
-        action_spec (TensorSpec): Action spec.
+        action_spec (TensorSpecBase): Action spec.
         hidden_dim (int, optional): Number of hidden units in the linear network. Input size of the recurrent network.
             Defaults to 200.
         rnn_hidden_dim (int, optional): Number of hidden units in the recurrent network. Also size of the belief.

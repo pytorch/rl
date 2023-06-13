@@ -26,7 +26,7 @@ from torchrl.data.tensor_specs import (
     DEVICE_TYPING,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
-    TensorSpec,
+    TensorSpecBase,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
@@ -274,7 +274,7 @@ class Transform(nn.Module):
         This method should generally be left untouched. Changes should be implemented using
         :meth:`~.transform_observation_spec`, :meth:`~.transform_reward_spec` and :meth:`~.transform_done_spec`.
         Args:
-            output_spec (TensorSpec): spec before the transform
+            output_spec (TensorSpecBase): spec before the transform
 
         Returns:
             expected spec after the transform
@@ -294,11 +294,11 @@ class Transform(nn.Module):
             )
         return output_spec
 
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    def transform_input_spec(self, input_spec: TensorSpecBase) -> TensorSpecBase:
         """Transforms the input spec such that the resulting spec matches transform mapping.
 
         Args:
-            input_spec (TensorSpec): spec before the transform
+            input_spec (TensorSpecBase): spec before the transform
 
         Returns:
             expected spec after the transform
@@ -306,11 +306,13 @@ class Transform(nn.Module):
         """
         return input_spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         """Transforms the observation spec such that the resulting spec matches transform mapping.
 
         Args:
-            observation_spec (TensorSpec): spec before the transform
+            observation_spec (TensorSpecBase): spec before the transform
 
         Returns:
             expected spec after the transform
@@ -318,11 +320,11 @@ class Transform(nn.Module):
         """
         return observation_spec
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         """Transforms the reward spec such that the resulting spec matches transform mapping.
 
         Args:
-            reward_spec (TensorSpec): spec before the transform
+            reward_spec (TensorSpecBase): spec before the transform
 
         Returns:
             expected spec after the transform
@@ -330,11 +332,11 @@ class Transform(nn.Module):
         """
         return reward_spec
 
-    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+    def transform_done_spec(self, done_spec: TensorSpecBase) -> TensorSpecBase:
         """Transforms the done spec such that the resulting spec matches transform mapping.
 
         Args:
-            done_spec (TensorSpec): spec before the transform
+            done_spec (TensorSpecBase): spec before the transform
 
         Returns:
             expected spec after the transform
@@ -565,7 +567,7 @@ but got an object of type {type(transform)}."""
         return self.base_env._inplace_update
 
     @property
-    def output_spec(self) -> TensorSpec:
+    def output_spec(self) -> TensorSpecBase:
         """Observation spec of the transformed environment."""
         if self.__dict__.get("_output_spec", None) is None or not self.cache_specs:
             output_spec = self.base_env.output_spec.clone()
@@ -579,12 +581,12 @@ but got an object of type {type(transform)}."""
         return output_spec
 
     @property
-    def action_spec(self) -> TensorSpec:
+    def action_spec(self) -> TensorSpecBase:
         """Action spec of the transformed environment."""
         return self.input_spec[("_action_spec", *self.action_key)]
 
     @property
-    def input_spec(self) -> TensorSpec:
+    def input_spec(self) -> TensorSpecBase:
         """Action spec of the transformed environment."""
         if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
             input_spec = self.base_env.input_spec.clone()
@@ -598,12 +600,12 @@ but got an object of type {type(transform)}."""
         return input_spec
 
     @property
-    def reward_spec(self) -> TensorSpec:
+    def reward_spec(self) -> TensorSpecBase:
         """Reward spec of the transformed environment."""
         return self.output_spec[("_reward_spec", *self.reward_key)]
 
     @property
-    def observation_spec(self) -> TensorSpec:
+    def observation_spec(self) -> TensorSpecBase:
         """Observation spec of the transformed environment."""
         observation_spec = self.output_spec["_observation_spec"]
         if observation_spec is None:
@@ -611,7 +613,7 @@ but got an object of type {type(transform)}."""
         return observation_spec
 
     @property
-    def state_spec(self) -> TensorSpec:
+    def state_spec(self) -> TensorSpecBase:
         """State spec of the transformed environment."""
         state_spec = self.input_spec["_state_spec"]
         if state_spec is None:
@@ -619,7 +621,7 @@ but got an object of type {type(transform)}."""
         return state_spec
 
     @property
-    def done_spec(self) -> TensorSpec:
+    def done_spec(self) -> TensorSpecBase:
         """Done spec of the transformed environment."""
         return self.output_spec[("_done_spec", *self.done_key)]
 
@@ -849,22 +851,24 @@ class Compose(Transform):
             tensordict = t._inv_call(tensordict)
         return tensordict
 
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    def transform_input_spec(self, input_spec: TensorSpecBase) -> TensorSpecBase:
         for t in self.transforms[::-1]:
             input_spec = t.transform_input_spec(input_spec)
         return input_spec
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         for t in self.transforms:
             observation_spec = t.transform_observation_spec(observation_spec)
         return observation_spec
 
-    def transform_output_spec(self, output_spec: TensorSpec) -> TensorSpec:
+    def transform_output_spec(self, output_spec: TensorSpecBase) -> TensorSpecBase:
         for t in self.transforms:
             output_spec = t.transform_output_spec(output_spec)
         return output_spec
 
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         for t in self.transforms:
             reward_spec = t.transform_reward_spec(reward_spec)
         return reward_spec
@@ -1016,7 +1020,9 @@ class ToTensorImage(ObservationTransform):
         return observation
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         observation_spec = self._pixel_observation(observation_spec)
         unsqueeze_dim = [1] if self._should_unsqueeze(observation_spec) else []
         observation_spec.shape = torch.Size(
@@ -1031,7 +1037,7 @@ class ToTensorImage(ObservationTransform):
         observation_spec.dtype = self.dtype
         return observation_spec
 
-    def _should_unsqueeze(self, observation_like: torch.FloatTensor | TensorSpec):
+    def _should_unsqueeze(self, observation_like: torch.FloatTensor | TensorSpecBase):
         has_3_dimensions = False
         if isinstance(observation_like, torch.FloatTensor):
             has_3_dimensions = observation_like.ndimension() == 3
@@ -1039,7 +1045,7 @@ class ToTensorImage(ObservationTransform):
             has_3_dimensions = len(observation_like.shape) == 3
         return has_3_dimensions and self.unsqueeze
 
-    def _pixel_observation(self, spec: TensorSpec) -> None:
+    def _pixel_observation(self, spec: TensorSpecBase) -> None:
         if isinstance(spec.space, ContinuousBox):
             spec.space.maximum = self._apply_transform(spec.space.maximum)
             spec.space.minimum = self._apply_transform(spec.space.minimum)
@@ -1242,7 +1248,7 @@ class RewardClipping(Transform):
         return reward
 
     @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
             return BoundedTensorSpec(
                 self.clamp_min,
@@ -1286,7 +1292,7 @@ class BinarizeReward(Transform):
         return (reward > 0.0).to(torch.long)
 
     @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         return BinaryDiscreteTensorSpec(
             n=1, device=reward_spec.device, shape=reward_spec.shape
         )
@@ -1342,7 +1348,9 @@ class Resize(ObservationTransform):
         return observation
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1394,7 +1402,9 @@ class CenterCrop(ObservationTransform):
         return observation
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1472,7 +1482,9 @@ class FlattenObservation(ObservationTransform):
     forward = ObservationTransform._call
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
 
         if isinstance(space, ContinuousBox):
@@ -1554,7 +1566,7 @@ class UnsqueezeTransform(Transform):
         observation = observation.squeeze(self.unsqueeze_dim)
         return observation
 
-    def _transform_spec(self, spec: TensorSpec) -> None:
+    def _transform_spec(self, spec: TensorSpecBase) -> None:
         space = spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1564,7 +1576,7 @@ class UnsqueezeTransform(Transform):
             spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
 
-    def _inv_transform_spec(self, spec: TensorSpec) -> None:
+    def _inv_transform_spec(self, spec: TensorSpecBase) -> None:
         space = spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._inv_apply_transform(space.minimum)
@@ -1575,17 +1587,19 @@ class UnsqueezeTransform(Transform):
         return spec
 
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    def transform_input_spec(self, input_spec: TensorSpecBase) -> TensorSpecBase:
         return self._inv_transform_spec(input_spec)
 
     @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         if "reward" in self.in_keys:
             reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         return self._transform_spec(observation_spec)
 
     def __repr__(self) -> str:
@@ -1650,7 +1664,9 @@ class GrayScale(ObservationTransform):
         return observation
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1911,7 +1927,9 @@ class ObservationNorm(ObservationTransform):
             return obs * scale + loc
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1919,7 +1937,7 @@ class ObservationNorm(ObservationTransform):
         return observation_spec
 
     @_apply_to_composite_inv
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    def transform_input_spec(self, input_spec: TensorSpecBase) -> TensorSpecBase:
         space = input_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -2137,7 +2155,9 @@ class CatFrames(ObservationTransform):
         return tensordict
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = torch.cat([space.minimum] * self.N, self.dim)
@@ -2280,7 +2300,7 @@ class RewardScaling(Transform):
             return reward
 
     @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         if isinstance(reward_spec, UnboundedContinuousTensorSpec):
             return reward_spec
         else:
@@ -2345,7 +2365,7 @@ class DoubleToFloat(Transform):
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(torch.double)
 
-    def _transform_spec(self, spec: TensorSpec) -> None:
+    def _transform_spec(self, spec: TensorSpecBase) -> None:
         if isinstance(spec, CompositeSpec):
             for key in spec:
                 self._transform_spec(spec[key])
@@ -2356,7 +2376,7 @@ class DoubleToFloat(Transform):
                 space.minimum = space.minimum.to(torch.float)
                 space.maximum = space.maximum.to(torch.float)
 
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    def transform_input_spec(self, input_spec: TensorSpecBase) -> TensorSpecBase:
         action_spec = input_spec["_action_spec"]
         state_spec = input_spec["_state_spec"]
         for key in self.in_keys_inv:
@@ -2374,7 +2394,7 @@ class DoubleToFloat(Transform):
         return input_spec
 
     @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+    def transform_reward_spec(self, reward_spec: TensorSpecBase) -> TensorSpecBase:
         if "reward" in self.in_keys:
             if reward_spec.dtype is not torch.double:
                 raise TypeError("reward_spec.dtype is not double")
@@ -2383,7 +2403,9 @@ class DoubleToFloat(Transform):
         return reward_spec
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         self._transform_spec(observation_spec)
         return observation_spec
 
@@ -2509,7 +2531,9 @@ class CatTensors(Transform):
 
     forward = _call
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         # check that all keys are in observation_spec
         if len(self.in_keys) > 1 and not isinstance(observation_spec, CompositeSpec):
             raise ValueError(
@@ -2808,7 +2832,7 @@ class TensorDictPrimer(Transform):
         primers (dict, optional): a dictionary containing key-spec pairs which will
             be used to populate the input tensordict.
         random (bool, optional): if ``True``, the values will be drawn randomly from
-            the TensorSpec domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
+            the TensorSpecBase domain (or a unit Gaussian if unbounded). Otherwise a fixed value will be assumed.
             Defaults to `False`.
         default_value (float, optional): if non-random filling is chosen, this
             value will be used to populate the tensors. Defaults to `0.0`.
@@ -2876,7 +2900,7 @@ class TensorDictPrimer(Transform):
 
         # sanity check
         for spec in self.primers.values():
-            if not isinstance(spec, TensorSpec):
+            if not isinstance(spec, TensorSpecBase):
                 raise ValueError(
                     "The values of the primers must be a subtype of the TensorSpec class. "
                     f"Got {type(spec)} instead."
@@ -3418,7 +3442,9 @@ class RewardSum(Transform):
         tensordict.set("next", next_tensordict)
         return tensordict
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         """Transforms the observation spec, adding the new keys generated by RewardSum."""
         # Retrieve parent reward spec
         reward_spec = self.parent.reward_spec
@@ -3624,7 +3650,9 @@ class ExcludeTransform(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.exclude(*self.excluded_keys)
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         if any(key in observation_spec.keys(True, True) for key in self.excluded_keys):
             return CompositeSpec(
                 **{
@@ -3680,7 +3708,9 @@ class SelectTransform(Transform):
             *self.selected_keys, "reward", "done", *input_keys, strict=False
         )
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         return CompositeSpec(
             **{
                 key: value
@@ -3794,7 +3824,9 @@ class TimeMaxPool(Transform):
         return tensordict
 
     @_apply_to_composite
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3955,7 +3987,9 @@ class InitTracker(Transform):
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+    def transform_observation_spec(
+        self, observation_spec: TensorSpecBase
+    ) -> TensorSpecBase:
         observation_spec[self.out_keys[0]] = DiscreteTensorSpec(
             2,
             dtype=torch.bool,

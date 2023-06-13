@@ -367,7 +367,7 @@ def _reset(self, tensordict):
 # In other words, the ``observation_spec`` and related properties are
 # convenient shortcuts to the content of the output and input spec containers.
 #
-# TorchRL offers multiple :class:`~torchrl.data.TensorSpec`
+# TorchRL offers multiple :class:`~torchrl.data.TensorSpecBase`
 # `subclasses <https://pytorch.org/rl/reference/data.html#tensorspec>`_ to
 # encode the environment's input and output characteristics.
 #

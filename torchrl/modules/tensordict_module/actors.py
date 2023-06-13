@@ -15,7 +15,7 @@ from tensordict.nn import (
 )
 from torch import nn
 
-from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpecBase
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
@@ -46,7 +46,7 @@ class Actor(SafeModule):
             number of tensors returned by the embedded module. Using "_" as a
             key avoid writing tensor to output.
             Defaults to ``["action"]``.
-        spec (TensorSpec, optional): Keyword-only argument.
+        spec (TensorSpecBase, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
             spec characterize the space of the first output tensor.
@@ -55,7 +55,7 @@ class Actor(SafeModule):
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :obj:`TensorSpecBase.project`
             method. Default is ``False``.
 
     Examples:
@@ -92,7 +92,7 @@ class Actor(SafeModule):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         **kwargs,
     ):
         if in_keys is None:
@@ -135,14 +135,14 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         out_keys (str or iterable of str): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
-        spec (TensorSpec, optional): keyword-only argument containing the specs
+        spec (TensorSpecBase, optional): keyword-only argument containing the specs
             of the output tensor. If the module outputs multiple output tensors,
             spec characterize the space of the first output tensor.
         safe (bool): keyword-only argument. if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow
             issues. If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :obj:`TensorSpecBase.project`
             method. Default is ``False``.
         default_interaction_type=InteractionType.RANDOM (str, optional): keyword-only argument.
             Default method to be used to retrieve
@@ -214,7 +214,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         in_keys: Union[str, Sequence[str]],
         out_keys: Optional[Sequence[str]] = None,
         *,
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         **kwargs,
     ):
         if out_keys is None:
@@ -318,7 +318,7 @@ class QValueModule(TensorDictModuleBase):
     It works with both tensordict and regular tensors.
 
     Args:
-        action_space (str or TensorSpec, optional): Action space. Must be one of
+        action_space (str or TensorSpecBase, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
             :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
@@ -333,14 +333,14 @@ class QValueModule(TensorDictModuleBase):
         var_nums (int, optional): if ``action_space = "mult-one-hot"``,
             this value represents the cardinality of each
             action component.
-        spec (TensorSpec, optional): if provided, the specs of the action (and/or
+        spec (TensorSpecBase, optional): if provided, the specs of the action (and/or
             other outputs). This is exclusive with ``action_space``, as the spec
             conditions the action space.
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :obj:`TensorSpecBase.project`
             method. Default is ``False``.
 
     Returns:
@@ -376,11 +376,11 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[Union[str, TensorSpec]],
+        action_space: Optional[Union[str, TensorSpecBase]],
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
         var_nums: Optional[int] = None,
-        spec: Optional[TensorSpec] = None,
+        spec: Optional[TensorSpecBase] = None,
         safe: bool = False,
     ):
         action_space, spec = _process_action_space_spec(action_space, spec)
@@ -509,7 +509,7 @@ class DistributionalQValueModule(QValueModule):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        action_space (str or TensorSpec, optional): Action space. Must be one of
+        action_space (str or TensorSpecBase, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
             or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
             :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
@@ -525,14 +525,14 @@ class DistributionalQValueModule(QValueModule):
         var_nums (int, optional): if ``action_space = "mult-one-hot"``,
             this value represents the cardinality of each
             action component.
-        spec (TensorSpec, optional): if provided, the specs of the action (and/or
+        spec (TensorSpecBase, optional): if provided, the specs of the action (and/or
             other outputs). This is exclusive with ``action_space``, as the spec
             conditions the action space.
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
             If this value is out of bounds, it is projected back onto the
-            desired space using the :obj:`TensorSpec.project`
+            desired space using the :obj:`TensorSpecBase.project`
             method. Default is ``False``.
 
     Examples:
@@ -576,7 +576,7 @@ class DistributionalQValueModule(QValueModule):
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
         var_nums: Optional[int] = None,
-        spec: TensorSpec = None,
+        spec: TensorSpecBase = None,
         safe: bool = False,
     ):
         if action_value_key is None:
@@ -690,13 +690,13 @@ def _process_action_space_spec(action_space, spec):
             raise ValueError("action_space cannot be of type CompositeSpec.")
         if (
             spec is not None
-            and isinstance(action_space, TensorSpec)
+            and isinstance(action_space, TensorSpecBase)
             and action_space is not spec
         ):
             raise ValueError(
                 "Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match."
             )
-        if isinstance(action_space, TensorSpec):
+        if isinstance(action_space, TensorSpecBase):
             spec = action_space
         action_space = _find_action_space(action_space)
         # check that the spec and action_space match
@@ -887,7 +887,7 @@ class QValueActor(SafeSequential):
             list of keys indicates what observations need to be passed to the
             wrapped module to get the action values.
             Defaults to ``["observation"]``.
-        spec (TensorSpec, optional): Keyword-only argument.
+        spec (TensorSpecBase, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
             spec characterize the space of the first output tensor.
