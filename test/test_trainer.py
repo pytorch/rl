@@ -943,6 +943,7 @@ class TestRecorder:
                 stats={"loc": 0, "scale": 1},
                 logger=logger,
             )()
+            environment.rollout(2)
 
             recorder = Recorder(
                 record_frames=args.record_frames,

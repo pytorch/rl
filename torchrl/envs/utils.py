@@ -16,7 +16,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -145,40 +145,66 @@ def step_mdp(
             is_shared=False)
 
     """
-    other_keys = []
-    prohibited = set()
-    if exclude_action:
-        prohibited.add("action")
-    else:
-        other_keys.append("action")
-    if exclude_done:
-        prohibited.add("done")
-    else:
-        other_keys.append("done")
-    if exclude_reward:
-        prohibited.add("reward")
-    else:
-        other_keys.append("reward")
-
-    prohibited.add("next")
+    if isinstance(tensordict, LazyStackedTensorDict):
+        if next_tensordict is not None:
+            next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
+        else:
+            next_tensordicts = [None] * len(tensordict.tensordicts)
+        out = torch.stack(
+            [
+                step_mdp(
+                    td,
+                    next_tensordict=ntd,
+                    keep_other=keep_other,
+                    exclude_reward=exclude_reward,
+                    exclude_done=exclude_done,
+                    exclude_action=exclude_action,
+                )
+                for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
+            ],
+            tensordict.stack_dim,
+        )
+        if next_tensordict is not None:
+            next_tensordict.update(out)
+            return next_tensordict
+        return out
+    out = tensordict.get("next").clone(False)
+    excluded = None
+    if exclude_done and exclude_reward:
+        excluded = {"done", "reward"}
+    elif exclude_reward:
+        excluded = {"reward"}
+    elif exclude_done:
+        excluded = {"done"}
+    if excluded:
+        out = out.exclude(*excluded, inplace=True)
+    # TODO: make it work with LazyStackedTensorDict
+    # def _valid_key(key):
+    #     if key == "next" or key in out.keys():
+    #         return False
+    #     if exclude_action and key == "action":
+    #         return False
+    #     if keep_other or key == "action":
+    #         return True
+    #     return False
+    td_keys = None
     if keep_other:
-        # TODO: make this work with nested keys
-        other_keys = [key for key in tensordict.keys() if key not in prohibited]
-    select_tensordict = tensordict.select(*other_keys, strict=False)
-    excluded = []
-    if exclude_reward:
-        excluded.append("reward")
-    if exclude_done:
-        excluded.append("done")
-    next_td = tensordict.get("next")
-    if len(excluded):
-        next_td = next_td.exclude(*excluded)
-    select_tensordict = select_tensordict.update(next_td)
+        out_keys = set(out.keys())
+        td_keys = set(tensordict.keys()) - out_keys - {"next"}
+        if exclude_action:
+            td_keys = td_keys - {"action"}
+    elif not exclude_action:
+        td_keys = {"action"}
 
+    if td_keys:
+        # update does some checks that we can spare
+        # out.update(tensordict.select(*td_keys))
+        for key in td_keys:
+            out._set(key, tensordict.get(key))
     if next_tensordict is not None:
-        return next_tensordict.update(select_tensordict)
+        return next_tensordict.update(out)
     else:
-        return select_tensordict
+        return out
 
 
 def get_available_libraries():
