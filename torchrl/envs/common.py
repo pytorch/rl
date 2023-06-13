@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 from torchrl._utils import prod, seed_generator
 
@@ -1033,13 +1033,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         shape = torch.Size([])
-        if tensordict is None:
-            tensordict = TensorDict(
-                {}, device=self.device, batch_size=self.batch_size, _run_checks=False
-            )
-
-        if not self.batch_locked and not self.batch_size:
+        if not self.batch_locked and not self.batch_size and tensordict is not None:
             shape = tensordict.shape
+        elif not self.batch_locked and not self.batch_size:
+            shape = torch.Size([])
         elif not self.batch_locked and tensordict.shape != self.batch_size:
             raise RuntimeError(
                 "The input tensordict and the env have a different batch size: "
@@ -1047,8 +1044,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Non batch-locked environment require the env batch-size to be either empty or to"
                 f" match the tensordict one."
             )
-        action = self.action_spec.rand(shape)
-        tensordict.set("action", action)
+        r = self.input_spec["_action_spec"].rand(shape)
+        if tensordict is None:
+            tensordict = r.select()
+        tensordict.update(r)
         return tensordict
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
@@ -1254,6 +1253,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
+                exclude_reward=True,
+                reward_key=self.reward_key,
+                action_key=self.action_key,
             )
             if not break_when_any_done and done.any():
                 _reset = done.clone()
@@ -1306,14 +1308,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         state_spec = self.state_spec
         observation_spec = self.observation_spec
         action_spec = self.input_spec["_action_spec"]
+        # instantiates reward_spec if needed
         _ = self.reward_spec
         reward_spec = self.output_spec["_reward_spec"]
+        # instantiates done_spec if needed
         _ = self.done_spec
         done_spec = self.output_spec["_done_spec"]
 
         fake_obs = observation_spec.zero()
+
         fake_input = state_spec.zero()
-        fake_input = fake_input.update(action_spec.zero())
+
+        action_zero = action_spec.zero()
+
+        fake_input = fake_input.update(action_zero)
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
@@ -1325,17 +1333,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         next_output = fake_obs.clone()
         next_output.update(fake_reward)
         next_output.update(fake_done)
-
         fake_in_out.update(fake_done.clone())
 
-        fake_td = TensorDict(
-            {
-                **fake_in_out,
-                "next": next_output,
-            },
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        fake_td = fake_in_out.clone().set("next", next_output)
+        fake_td.batch_size = self.batch_size
+        fake_td = fake_td.to(self.device)
         return fake_td
 
 
