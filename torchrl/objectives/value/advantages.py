@@ -5,6 +5,7 @@
 import abc
 import functools
 import warnings
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
 from typing import Callable, List, Optional, Union
@@ -85,7 +86,6 @@ def _call_value_nets(
             ],
             -1,
         )
-        print("single", data)
         # next_params should be None or be identical to params
         if next_params is not None and next_params is not params:
             raise ValueError(
@@ -111,12 +111,26 @@ def _call_value_nets(
                 "params and next_params must be either both provided or not."
             )
         elif params is not None:
-            params_stack = torch.stack([params, next_params], 0)
-            data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
+            if params.shape == next_params.shape:
+                stack = True
+                params_stack = torch.stack([params, next_params], 0)
+            elif params.ndim == next_params.ndim - 1:
+                stack = False
+                params_stack = torch.cat([params.unsqueeze(0), next_params], 0)
+            else:
+                raise ValueError(f"params and next_params have incongruent shapes: {params.shape} vs {next_params.shape}")
+            # data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
+            data_out = torch.vmap(value_net)(data_in, params_stack)
+            value_est = data_out.get(value_key)
+            if stack:
+                value, value_ = value_est[0], value_est[1]
+            else:
+                value, value_ = value_est[0], value_est[1:]
+
         else:
             data_out = torch.vmap(value_net, (0,))(data_in)
-        value_est = data_out.get(value_key)
-        value, value_ = value_est[0], value_est[1]
+            value_est = data_out.get(value_key)
+            value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
         data.set(("next", value_key), value_)
     if detach_next:
@@ -203,6 +217,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_network: TensorDictModule,
         shifted: bool = False,
         differentiable: bool = False,
+        detach_params: bool = None,
+        detach_target_params: bool = True,
         skip_existing: Optional[bool] = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
@@ -211,6 +227,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
         super().__init__()
         self._tensor_keys = None
         self.differentiable = differentiable
+        if detach_params is None:
+            detach_params = differentiable
+        self.detach_params = detach_params
+        self.detach_target_params = detach_target_params
+        if (
+            not (self.detach_target_params and self.detach_params)
+            and not self.differentiable
+        ):
+            raise ValueError(
+                "Got contrasting values for differentiable and detach_params. "
+                "Params can be included in the computational graph only if the operations are differentiable."
+            )
         self.skip_existing = skip_existing
         self.value_network = value_network
         self.dep_keys = {}
@@ -346,7 +374,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and target_params is None else nullcontext():
                 self.value_network(step_td, **kwargs)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -370,14 +400,6 @@ class TD0Estimator(ValueEstimatorBase):
             parameters are to be used). Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated through
-            the computation of the value function. Default is ``False``.
-
-            .. note::
-              The proper way to make the function call non-differentiable is to
-              decorate it in a `torch.no_grad()` context manager/decorator or
-              pass detached parameters for functional modules.
-
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
@@ -388,6 +410,18 @@ class TD0Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Default is ``False``.
+
+            .. note::
+              ``differentiable`` only affects the :meth:`~.forward` method,
+              but not the :meth:`~.value_estimate` method.
+
+        detach_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to the value of
+            ``differentiable``.
+        detach_target_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to ``False``.
 
     """
 
@@ -398,16 +432,19 @@ class TD0Estimator(ValueEstimatorBase):
         value_network: TensorDictModule,
         shifted: bool = False,
         average_rewards: bool = False,
-        differentiable: bool = False,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
         skip_existing: Optional[bool] = None,
+        differentiable: bool = False,
+        detach_params: bool = None,
+        detach_target_params: bool = True,
     ):
         super().__init__(
             value_network=value_network,
             differentiable=differentiable,
             shifted=shifted,
+            detach_params=detach_params,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
@@ -491,13 +528,18 @@ class TD0Estimator(ValueEstimatorBase):
                 "Expected params to be passed to advantage module but got none."
             )
         if self.value_network is not None:
-            if params is not None:
-                params = params.detach()
-                if target_params is None:
-                    target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and params is None else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
+                if params is not None:
+                    if self.detach_params:
+                        params = params.detach()
+                if target_params is None and params is not None:
+                    target_params = params
+                if target_params is not None and self.detach_target_params:
+                    target_params = target_params.detach()
                 value, next_value = _call_value_nets(
                     value_net=self.value_network,
                     data=tensordict,
@@ -505,7 +547,7 @@ class TD0Estimator(ValueEstimatorBase):
                     next_params=target_params,
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
-                    detach_next=True,
+                    detach_next=False,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -554,14 +596,6 @@ class TD1Estimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated through
-            the computation of the value function. Default is ``False``.
-
-            .. note::
-              The proper way to make the function call non-differentiable is to
-              decorate it in a `torch.no_grad()` context manager/decorator or
-              pass detached parameters for functional modules.
-
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
@@ -572,6 +606,18 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Default is ``False``.
+
+            .. note::
+              ``differentiable`` only affects the :meth:`~.forward` method,
+              but not the :meth:`~.value_estimate` method.
+
+        detach_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to the value of
+            ``differentiable``.
+        detach_target_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to ``False``.
 
     """
 
@@ -581,15 +627,18 @@ class TD1Estimator(ValueEstimatorBase):
         gamma: Union[float, torch.Tensor],
         value_network: TensorDictModule,
         average_rewards: bool = False,
-        differentiable: bool = False,
         skip_existing: Optional[bool] = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        differentiable: bool = False,
+        detach_params: bool = None,
+        detach_target_params: bool = True,
     ):
         super().__init__(
             value_network=value_network,
             differentiable=differentiable,
+            detach_params=detach_params,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
@@ -673,13 +722,18 @@ class TD1Estimator(ValueEstimatorBase):
                 "Expected params to be passed to advantage module but got none."
             )
         if self.value_network is not None:
-            if params is not None:
-                params = params.detach()
-                if target_params is None:
-                    target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and params is None else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
+                if params is not None:
+                    if self.detach_params:
+                        params = params.detach()
+                if target_params is None and params is not None:
+                    target_params = params
+                if target_params is not None and self.detach_target_params:
+                    target_params = target_params.detach()
                 value, next_value = _call_value_nets(
                     value_net=self.value_network,
                     data=tensordict,
@@ -687,7 +741,7 @@ class TD1Estimator(ValueEstimatorBase):
                     next_params=target_params,
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
-                    detach_next=True,
+                    detach_next=False,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -738,14 +792,6 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
-        differentiable (bool, optional): if ``True``, gradients are propagated through
-            the computation of the value function. Default is ``False``.
-
-            .. note::
-              The proper way to make the function call non-differentiable is to
-              decorate it in a `torch.no_grad()` context manager/decorator or
-              pass detached parameters for functional modules.
-
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         skip_existing (bool, optional): if ``True``, the value network will skip
@@ -758,6 +804,18 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Default is ``False``.
+
+            .. note::
+              ``differentiable`` only affects the :meth:`~.forward` method,
+              but not the :meth:`~.value_estimate` method.
+
+        detach_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to the value of
+            ``differentiable``.
+        detach_target_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to ``False``.
 
     """
 
@@ -768,16 +826,19 @@ class TDLambdaEstimator(ValueEstimatorBase):
         lmbda: Union[float, torch.Tensor],
         value_network: TensorDictModule,
         average_rewards: bool = False,
-        differentiable: bool = False,
         vectorized: bool = True,
         skip_existing: Optional[bool] = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        differentiable: bool = False,
+        detach_params: bool = None,
+        detach_target_params: bool = True,
     ):
         super().__init__(
             value_network=value_network,
             differentiable=differentiable,
+            detach_params=detach_params,
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
@@ -864,13 +925,18 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 "Expected params to be passed to advantage module but got none."
             )
         if self.value_network is not None:
-            if params is not None:
-                params = params.detach()
-                if target_params is None:
-                    target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and params is None else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
+                if params is not None:
+                    if self.detach_params:
+                        params = params.detach()
+                if target_params is None and params is not None:
+                    target_params = params
+                if target_params is not None and self.detach_target_params:
+                    target_params = target_params.detach()
                 value, next_value = _call_value_nets(
                     value_net=self.value_network,
                     data=tensordict,
@@ -878,7 +944,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
                     next_params=target_params,
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
-                    detach_next=True,
+                    detach_next=False,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -938,14 +1004,6 @@ class GAE(ValueEstimatorBase):
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
-        differentiable (bool, optional): if ``True``, gradients are propagated through
-            the computation of the value function. Default is ``False``.
-
-            .. note::
-              The proper way to make the function call non-differentiable is to
-              decorate it in a `torch.no_grad()` context manager/decorator or
-              pass detached parameters for functional modules.
-
         vectorized (bool, optional): whether to use the vectorized version of the
             lambda return. Default is `True`.
         skip_existing (bool, optional): if ``True``, the value network will skip
@@ -959,6 +1017,18 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        differentiable (bool, optional): if ``True``, gradients are propagated through
+            the computation of the value function. Default is ``False``.
+
+            .. note::
+              ``differentiable`` only affects the :meth:`~.forward` method,
+              but not the :meth:`~.value_estimate` method.
+
+        detach_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to the value of
+            ``differentiable``.
+        detach_target_params (bool, optional): if ``False``, the parameters will be
+            included in the computational graph. Defaults to ``False``.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -981,12 +1051,14 @@ class GAE(ValueEstimatorBase):
         lmbda: float,
         value_network: TensorDictModule,
         average_gae: bool = False,
-        differentiable: bool = False,
         vectorized: bool = True,
         skip_existing: Optional[bool] = None,
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        differentiable: bool = False,
+        detach_params: bool = None,
+        detach_target_params: bool = True,
     ):
         super().__init__(
             value_network=value_network,
@@ -1083,13 +1155,18 @@ class GAE(ValueEstimatorBase):
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
         if self.value_network is not None:
-            if params is not None:
-                params = params.detach()
-                if target_params is None:
-                    target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and params is None else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
+                if params is not None:
+                    if self.detach_params:
+                        params = params.detach()
+                if target_params is None and params is not None:
+                    target_params = params
+                if target_params is not None and self.detach_target_params:
+                    target_params = target_params.detach()
                 value, next_value = _call_value_nets(
                     value_net=self.value_network,
                     data=tensordict,
@@ -1097,7 +1174,7 @@ class GAE(ValueEstimatorBase):
                     next_params=target_params,
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
-                    detach_next=True,
+                    detach_next=False,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
@@ -1160,13 +1237,18 @@ class GAE(ValueEstimatorBase):
                 "Expected params to be passed to advantage module but got none."
             )
         if self.value_network is not None:
-            if params is not None:
-                params = params.detach()
-                if target_params is None:
-                    target_params = params.clone(False)
-            with hold_out_net(self.value_network):
+            with hold_out_net(
+                self.value_network
+            ) if self.detach_params and params is None else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
+                if params is not None:
+                    if self.detach_params:
+                        params = params.detach()
+                if target_params is None and params is not None:
+                    target_params = params
+                if target_params is not None and self.detach_target_params:
+                    target_params = target_params.detach()
                 value, next_value = _call_value_nets(
                     value_net=self.value_network,
                     data=tensordict,
@@ -1174,7 +1256,7 @@ class GAE(ValueEstimatorBase):
                     next_params=target_params,
                     single_call=self.shifted,
                     value_key=self.tensor_keys.value,
-                    detach_next=True,
+                    detach_next=False,
                 )
         else:
             value = tensordict.get(self.tensor_keys.value)
