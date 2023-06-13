@@ -373,7 +373,7 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {"reward": n, "done": done, "observation": n},
+            {"done": done, "observation": n},
             [
                 *leading_batch_size,
                 *batch_size,

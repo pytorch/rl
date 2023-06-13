@@ -37,8 +37,7 @@ from torchrl.modules import (
 from torchrl.objectives import A2CLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.envs import LIBS
-
+from torchrl.trainers.helpers.envs import get_norm_state_dict, LIBS
 
 DEFAULT_REWARD_SCALING = {
     "Hopper-v1": 5,
@@ -166,13 +165,13 @@ def make_parallel_env(env_cfg, state_dict):
     for t in env.transform:
         if isinstance(t, ObservationNorm):
             t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
-    env.load_state_dict(state_dict)
+    env.load_state_dict(state_dict, strict=False)
     return env
 
 
 def get_stats(env_cfg):
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    return env.state_dict()
+    return get_norm_state_dict(env)
 
 
 def init_stats(env, n_samples_stats, from_pixels):

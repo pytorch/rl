@@ -153,7 +153,7 @@ def _is_consistent_device_type(
     _os_is_windows and _python_is_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
-@pytest.mark.parametrize("num_env", [1, 2])
+@pytest.mark.parametrize("num_env", [2])
 @pytest.mark.parametrize("device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("policy_device", ["cuda", "cpu", None])
 @pytest.mark.parametrize("storing_device", ["cuda", "cpu", None])
@@ -185,7 +185,9 @@ def test_output_device_consistency(
     else:
 
         def env_fn(seed):
-            env = ParallelEnv(
+            # 1226: faster execution
+            # env = ParallelEnv(
+            env = SerialEnv(
                 num_workers=num_env,
                 create_env_fn=make_make_env("vec"),
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
@@ -476,8 +478,16 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize("env_name", ["vec", "conv"])
-def test_collector_batch_size(num_env, env_name, seed=100):
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        "vec",
+    ],
+)  # 1226: for efficiency, we just test vec, not "conv"
+def test_collector_batch_size(
+    num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
+):
+    """Tests that there are 'frames_per_batch' frames in each batch of a collection."""
     if num_env == 3 and _os_is_windows:
         pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
@@ -489,17 +499,16 @@ def test_collector_batch_size(num_env, env_name, seed=100):
     else:
 
         def env_fn():
-            env = ParallelEnv(
-                num_workers=num_env, create_env_fn=make_make_env(env_name)
-            )
+            # 1226: For efficiency, we don't use Parallel but Serial
+            # env = ParallelEnv(
+            env = SerialEnv(num_workers=num_env, create_env_fn=make_make_env(env_name))
             return env
 
     policy = make_policy(env_name)
 
     torch.manual_seed(0)
     np.random.seed(0)
-    num_workers = 2
-    frames_per_batch = 20
+
     ccollector = MultiaSyncDataCollector(
         create_env_fn=[env_fn for _ in range(num_workers)],
         policy=policy,
@@ -644,8 +653,13 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize("collector_class", [SyncDataCollector, aSyncDataCollector])
-@pytest.mark.parametrize("env_name", ["conv", "vec"])
+@pytest.mark.parametrize(
+    "collector_class",
+    [
+        SyncDataCollector,
+    ],
+)  # aSyncDataCollector])
+@pytest.mark.parametrize("env_name", ["vec"])  # 1226: removing "conv" for efficiency
 def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     """Tests that various frames_per_batch lead to the same results."""
 
@@ -668,9 +682,6 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     max_frames_per_traj = 20
 
     policy = make_policy(env_name)
-
-    def make_frames_per_batch(frames_per_batch):
-        return -(-frames_per_batch // num_env) * num_env
 
     collector1 = collector_class(
         create_env_fn=env_fn,
@@ -925,9 +936,10 @@ def test_excluded_keys(collector_class, exclude):
         MultiSyncDataCollector,
     ],
 )
-@pytest.mark.parametrize("init_random_frames", [0, 50])
-@pytest.mark.parametrize("explicit_spec", [False, True])
-@pytest.mark.parametrize("split_trajs", [True, False])
+@pytest.mark.parametrize("init_random_frames", [50])  # 1226: faster execution
+@pytest.mark.parametrize(
+    "explicit_spec,split_trajs", [[True, True], [False, False]]
+)  # 1226: faster execution
 def test_collector_output_keys(
     collector_class, init_random_frames, explicit_spec, split_trajs
 ):
@@ -1265,7 +1277,9 @@ class TestPreemptiveThreshold:
             assert batch["collector"]["traj_ids"][0] != -1
             assert batch["collector"]["traj_ids"][1] == -1
 
-    @pytest.mark.parametrize("env_name", ["conv", "vec"])
+    @pytest.mark.parametrize(
+        "env_name", ["vec"]
+    )  # 1226: removing "conv" for efficiency
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
 
         frames_per_batch = 800
@@ -1393,10 +1407,10 @@ class TestUpdateParams:
         [
             ["cpu", "cuda"],
             ["cuda", "cpu"],
-            ["cpu", "cuda:0"],
-            ["cuda:0", "cpu"],
-            ["cuda", "cuda:0"],
-            ["cuda:0", "cuda"],
+            # ["cpu", "cuda:0"],  # 1226: faster execution
+            # ["cuda:0", "cpu"],
+            # ["cuda", "cuda:0"],
+            # ["cuda:0", "cuda"],
         ],
     )
     def test_param_sync(self, give_weights, collector, policy_device, env_device):
