@@ -695,18 +695,6 @@ class TD1Estimator(ValueEstimatorBase):
 
         value_target = self.value_estimate(tensordict, next_value=next_value)
 
-        # value_target = self.value_estimate(tensordict, next_value=next_value)
-        #
-        # if params is not None:
-        #     kwargs["params"] = params.detach()
-        # if self.value_network is not None:
-        #     with hold_out_net(self.value_network):
-        #         self.value_network(tensordict, **kwargs)
-        # value = tensordict.get(self.tensor_keys.value)
-        #
-        # if params is not None and target_params is None:
-        #     target_params = params.detach()
-        # value_target = self.value_estimate(tensordict, target_params=target_params)
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
         return tensordict
@@ -1115,34 +1103,6 @@ class GAE(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        # kwargs = {}
-        # if self.is_stateless and params is None:
-        #     raise RuntimeError(
-        #         "Expected params to be passed to advantage module but got none."
-        #     )
-        # if params is not None:
-        #     kwargs["params"] = params
-        #
-        # if self.value_network is not None:
-        #     with hold_out_net(self.value_network):
-        #         # we may still need to pass gradient, but we don't want to assign grads to
-        #         # value net params
-        #         self.value_network(tensordict, **kwargs)
-        #
-        # value = tensordict.get(self.tensor_keys.value)
-        #
-        # step_td = step_mdp(tensordict)
-        # if target_params is not None:
-        #     # we assume that target parameters are not differentiable
-        #     kwargs["params"] = target_params
-        # elif "params" in kwargs:
-        #     kwargs["params"] = kwargs["params"].detach()
-        # if self.value_network is not None:
-        #     with hold_out_net(self.value_network):
-        #         # we may still need to pass gradient, but we don't want to assign grads to
-        #         # value net params
-        #         self.value_network(step_td, **kwargs)
-        # next_value = step_td.get(self.tensor_keys.value)
         done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:
             adv, value_target = vec_generalized_advantage_estimate(
@@ -1199,28 +1159,6 @@ class GAE(ValueEstimatorBase):
             raise RuntimeError(
                 "Expected params to be passed to advantage module but got none."
             )
-        # if params is not None:
-        #     kwargs["params"] = params
-        # if self.value_network is not None:
-        #     with hold_out_net(self.value_network):
-        #         # we may still need to pass gradient, but we don't want to assign grads to
-        #         # value net params
-        #         self.value_network(tensordict, **kwargs)
-        #
-        # value = tensordict.get(self.tensor_keys.value)
-        #
-        # step_td = step_mdp(tensordict)
-        # if target_params is not None:
-        #     # we assume that target parameters are not differentiable
-        #     kwargs["params"] = target_params
-        # elif "params" in kwargs:
-        #     kwargs["params"] = kwargs["params"].detach()
-        # if self.value_network is not None:
-        #     with hold_out_net(self.value_network):
-        #         # we may still need to pass gradient, but we don't want to assign grads to
-        #         # value net params
-        #         self.value_network(step_td, **kwargs)
-        # next_value = step_td.get(self.tensor_keys.value)
         if self.value_network is not None:
             if params is not None:
                 params = params.detach()
