@@ -1117,14 +1117,14 @@ class TestVmas:
         env.close()
 
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["observation"].shape[1] == env.n_agents
-        assert tdreset["done"].shape[1] == env.n_agents
+        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdrollout["observation"].shape[2] == env.n_agents
-        assert tdrollout["next", "reward"].shape[2] == env.n_agents
-        assert tdrollout["action"].shape[2] == env.n_agents
-        assert tdrollout["done"].shape[2] == env.n_agents
+        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
+        assert tdrollout["agents", "action"].shape[2] == env.n_agents
+        assert tdrollout["done"].shape[2] == 1
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
