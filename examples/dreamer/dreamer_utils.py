@@ -369,12 +369,22 @@ def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn
         recorder_rm = recorder
 
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        sd = create_env_fn.state_dict()["worker0"]
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        _env = create_env_fn()
+        _env.rollout(2)
+        sd = _env.state_dict()
+        del _env
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        sd = create_env_fn.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    if not len(sd):
+        raise ValueError("Empty state dict")
+    recorder_rm.load_state_dict(sd, strict=False)
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):

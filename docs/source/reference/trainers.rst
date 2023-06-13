@@ -192,21 +192,12 @@ Builders
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    make_a2c_loss
-    make_a2c_model
     make_collector_offpolicy
     make_collector_onpolicy
-    make_ddpg_actor
-    make_ddpg_loss
-    make_dqn_actor
     make_dqn_loss
-    make_ppo_loss
-    make_ppo_model
     make_redq_loss
     make_redq_model
     make_replay_buffer
-    make_sac_loss
-    make_sac_model
     make_target_updater
     make_trainer
     parallel_env_constructor

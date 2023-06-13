@@ -165,7 +165,7 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
   test-wheel-windows:
@@ -221,5 +221,5 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import torchrl; print(torchrl.__version__)"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 20
+          pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS

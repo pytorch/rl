@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import distributions as d
@@ -67,6 +67,102 @@ class A2CLoss(LossModule):
       The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters
       dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.
 
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.a2c import A2CLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = A2CLoss(actor, value, loss_critic_type="l2")
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and critic.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_objective"]``
+        + ``["loss_critic"]`` if critic_coef is not None
+        + ``["entropy", "loss_entropy"]`` if entropy_bonus is True and critic_coef is not None
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.a2c import A2CLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = A2CLoss(actor, value, loss_critic_type="l2")
+        >>> batch = [2, ]
+        >>> loss_obj, loss_critic, entropy, loss_entropy = loss(
+        ...     observation = torch.randn(*batch, n_obs),
+        ...     action = spec.rand(batch),
+        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_reward = torch.randn(*batch, 1),
+        ...     next_observation = torch.randn(*batch, n_obs))
+        >>> loss_obj.backward()
+
+    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_objective', 'loss_critic')
+        >>> loss_obj, loss_critic = loss(
+        ...     observation = torch.randn(*batch, n_obs),
+        ...     action = spec.rand(batch),
+        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_reward = torch.randn(*batch, 1),
+        ...     next_observation = torch.randn(*batch, n_obs))
+        >>> loss_obj.backward()
     """
 
     @dataclass
@@ -85,12 +181,19 @@ class A2CLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
         action: NestedKey = "action"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
@@ -110,6 +213,7 @@ class A2CLoss(LossModule):
         advantage_key: str = None,
         value_target_key: str = None,
     ):
+        self._out_keys = None
         super().__init__()
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
@@ -138,12 +242,43 @@ class A2CLoss(LossModule):
             self.gamma = gamma
         self.loss_critic_type = loss_critic_type
 
+    @property
+    def in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor.in_keys,
+            *[("next", key) for key in self.actor.in_keys],
+        ]
+        if self.critic_coef:
+            keys.extend(self.critic.in_keys)
+        return list(set(keys))
+
+    @property
+    def out_keys(self):
+        if self._out_keys is None:
+            outs = ["loss_objective"]
+            if self.critic_coef:
+                outs.append("loss_critic")
+            if self.entropy_bonus:
+                outs.append("entropy")
+                outs.append("loss_entropy")
+            self._out_keys = outs
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage=self._tensor_keys.advantage,
-                value_target=self._tensor_keys.value_target,
-                value=self._tensor_keys.value,
+                advantage=self.tensor_keys.advantage,
+                value_target=self.tensor_keys.value_target,
+                value=self.tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
 
     def reset(self) -> None:
@@ -198,6 +333,7 @@ class A2CLoss(LossModule):
             )
         return self.critic_coef * loss_value
 
+    @dispatch()
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         advantage = tensordict.get(self.tensor_keys.advantage, None)
@@ -243,5 +379,7 @@ class A2CLoss(LossModule):
             "advantage": self.tensor_keys.advantage,
             "value": self.tensor_keys.value,
             "value_target": self.tensor_keys.value_target,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)

@@ -20,13 +20,15 @@ from torchrl._torchrl import (
 from .storages import Storage
 from .utils import _to_numpy, INT_CLASSES
 
+_EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
+
 
 class Sampler(ABC):
     """A generic sampler base class for composable Replay Buffers."""
 
     @abstractmethod
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
-        raise NotImplementedError
+        ...
 
     def add(self, index: int) -> None:
         return
@@ -57,6 +59,10 @@ class Sampler(ABC):
         # by default, samplers never run out
         return False
 
+    @abstractmethod
+    def _empty(self):
+        ...
+
 
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
@@ -68,8 +74,13 @@ class RandomSampler(Sampler):
     """
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[torch.Tensor, dict]:
+        if len(storage) == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
         index = torch.randint(0, len(storage), (batch_size,))
         return index, {}
+
+    def _empty(self):
+        pass
 
 
 class SamplerWithoutReplacement(Sampler):
@@ -115,6 +126,8 @@ class SamplerWithoutReplacement(Sampler):
 
     def sample(self, storage: Storage, batch_size: int) -> Tuple[Any, dict]:
         len_storage = len(storage)
+        if len_storage == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
         if not len_storage:
             raise RuntimeError("An empty storage was passed")
         if self.len_storage != len_storage or self._sample_list is None:
@@ -140,6 +153,11 @@ class SamplerWithoutReplacement(Sampler):
     @ran_out.setter
     def ran_out(self, value):
         self._ran_out = value
+
+    def _empty(self):
+        self._sample_list = None
+        self.len_storage = 0
+        self._ran_out = False
 
 
 class PrioritizedSampler(Sampler):
@@ -182,23 +200,32 @@ class PrioritizedSampler(Sampler):
         self._beta = beta
         self._eps = eps
         self.reduction = reduction
-        if dtype in (torch.float, torch.FloatType, torch.float32):
+        self.dtype = dtype
+        self._init()
+
+    def _init(self):
+        if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
-        elif dtype in (torch.double, torch.DoubleTensor, torch.float64):
+        elif self.dtype in (torch.double, torch.DoubleTensor, torch.float64):
             self._sum_tree = SumSegmentTreeFp64(self._max_capacity)
             self._min_tree = MinSegmentTreeFp64(self._max_capacity)
         else:
             raise NotImplementedError(
-                f"dtype {dtype} not supported by PrioritizedSampler"
+                f"dtype {self.dtype} not supported by PrioritizedSampler"
             )
         self._max_priority = 1.0
+
+    def _empty(self):
+        self._init()
 
     @property
     def default_priority(self) -> float:
         return (self._max_priority + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
+        if len(storage) == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
         p_sum = self._sum_tree.query(0, len(storage))
         p_min = self._min_tree.query(0, len(storage))
         if p_sum <= 0:

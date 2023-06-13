@@ -278,27 +278,18 @@ class _BatchedEnv(EnvBase):
             device = self._device = meta_data[0].device
             # TODO: check that all action_spec and reward spec match (issue #351)
 
-            _input_spec = {}
+            input_spec = []
             for md in meta_data:
-                _input_spec.update(md.specs["input_spec"])
-            input_spec = CompositeSpec(
-                _input_spec, shape=meta_data[0].batch_size, device=device
-            )
-            input_spec = input_spec.expand(self.num_workers, *input_spec.shape).to(
-                device
-            )
+                input_spec.append(md.specs["input_spec"])
+            input_spec = torch.stack(input_spec, 0)
+            output_spec = []
+            for md in meta_data:
+                output_spec.append(md.specs["output_spec"])
+            output_spec = torch.stack(output_spec, 0)
+
             self.action_spec = input_spec["_action_spec"]
             self.state_spec = input_spec["_state_spec"]
 
-            _output_spec = {}
-            for md in meta_data:
-                _output_spec.update(md.specs["output_spec"])
-            output_spec = CompositeSpec(
-                _output_spec, shape=meta_data[0].batch_size, device=device
-            )
-            output_spec = output_spec.expand(self.num_workers, *output_spec.shape).to(
-                device
-            )
             self.observation_spec = output_spec["_observation_spec"]
             self.reward_spec = output_spec["_reward_spec"]
             self.done_spec = output_spec["_done_spec"]
@@ -556,11 +547,16 @@ class SerialEnv(_BatchedEnv):
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return (
-            self.shared_tensordict_parent.select(*self._selected_step_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_step_keys:
+                out._set(key, self.shared_tensordict_parent.get(key).clone())
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = self.shared_tensordict_parent.select(
+                *self._selected_step_keys, strict=False
+            ).clone()
+        return out
 
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
@@ -618,11 +614,18 @@ class SerialEnv(_BatchedEnv):
                 _td.select(*self._selected_keys, strict=False)
             )
 
-        return (
-            self.shared_tensordict_parent.select(*self._selected_reset_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            # select + clone creates 2 tds, but we can create one only
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_reset_keys:
+                if key != "_reset":
+                    out._set(key, self.shared_tensordict_parent.get(key).clone())
+            return out
+        else:
+            return self.shared_tensordict_parent.select(
+                *[key for key in self._selected_reset_keys if key != "_reset"],
+                strict=False,
+            ).clone()
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -715,8 +718,7 @@ class ParallelEnv(_BatchedEnv):
             channel2.close()
             self.parent_channels.append(channel1)
             self._workers.append(w)
-            # we make sure that the process is fully started before launching
-            # the next one
+        for channel1 in self.parent_channels:
             msg = channel1.recv()
             assert msg == "started"
 
@@ -756,10 +758,18 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._assert_tensordict_shape(tensordict)
-
-        self.shared_tensordict_parent.update_(
-            tensordict.select(*self.env_input_keys, strict=False)
-        )
+        if self._single_task:
+            # this is faster than update_ but won't work for lazy stacks
+            for key in self.env_input_keys:
+                self.shared_tensordict_parent._set(
+                    key,
+                    tensordict.get(key),
+                    inplace=True,
+                )
+        else:
+            self.shared_tensordict_parent.update_(
+                tensordict.select(*self.env_input_keys, strict=False)
+            )
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
@@ -777,11 +787,16 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        return (
-            self.shared_tensordict_parent.select(*self._selected_step_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_step_keys:
+                out._set(key, self.shared_tensordict_parent.get(key).clone())
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            out = self.shared_tensordict_parent.select(
+                *self._selected_step_keys, strict=False
+            ).clone()
+        return out
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -833,11 +848,18 @@ class ParallelEnv(_BatchedEnv):
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
             if data is not None:
                 self.shared_tensordicts[i].update_(data)
-        return (
-            self.shared_tensordict_parent.select(*self._selected_reset_keys)
-            .exclude("_reset")
-            .clone()
-        )
+        if self._single_task:
+            # select + clone creates 2 tds, but we can create one only
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            for key in self._selected_reset_keys:
+                if key != "_reset":
+                    out._set(key, self.shared_tensordict_parent.get(key).clone())
+            return out
+        else:
+            return self.shared_tensordict_parent.select(
+                *[key for key in self._selected_reset_keys if key != "_reset"],
+                strict=False,
+            ).clone()
 
     @_check_start
     def _shutdown_workers(self) -> None:
@@ -1003,6 +1025,7 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("worker already initialized")
             i = 0
             shared_tensordict = data
+            next_shared_tensordict = shared_tensordict.get("next")
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -1033,16 +1056,15 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             if local_tensordict is not None:
-                local_tensordict = local_tensordict.update(
-                    shared_tensordict.select(*env_input_keys),
-                )
+                for key in env_input_keys:
+                    local_tensordict._set(key, shared_tensordict.get(key))
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
             local_tensordict = env._step(local_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            shared_tensordict.update_(local_tensordict.select("next"))
+            next_shared_tensordict.update_(local_tensordict.get("next"))
             if event is not None:
                 event.record()
                 event.synchronize()

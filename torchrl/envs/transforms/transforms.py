@@ -14,9 +14,8 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
 from tensordict.nn import dispatch
-from tensordict.nn.common import _seq_of_nested_key_check
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, unravel_keys
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -423,6 +422,10 @@ class Transform(nn.Module):
     def missing_tolerance(self):
         return self._missing_tolerance
 
+    def to(self, *args, **kwargs):
+        self.empty_cache()
+        return super().to(*args, **kwargs)
+
 
 class TransformedEnv(EnvBase):
     """A transformed_in environment.
@@ -750,7 +753,7 @@ but got an object of type {type(transform)}."""
 
     def to(self, device: DEVICE_TYPING) -> TransformedEnv:
         self.base_env.to(device)
-        self.transform.to(device)
+        self.transform = self.transform.to(device)
 
         if self.cache_specs:
             self.__dict__["_input_spec"] = None
@@ -820,6 +823,13 @@ class Compose(Transform):
         self.transforms = nn.ModuleList(transforms)
         for t in transforms:
             t.set_container(self)
+
+    def to(self, *args, **kwargs):
+        # because Module.to(...) does not call to(...) on sub-modules, we have
+        # manually call it:
+        for t in self.transforms:
+            t.to(*args, **kwargs)
+        return super().to(*args, **kwargs)
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in self.transforms:
@@ -915,11 +925,6 @@ class Compose(Transform):
         transform.eval()
         self.transforms.insert(index, transform)
         transform.set_container(self)
-
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> Compose:
-        for t in self.transforms:
-            t.to(dest)
-        return super().to(dest)
 
     def __iter__(self):
         yield from self.transforms
@@ -1862,14 +1867,18 @@ class ObservationNorm(ObservationTransform):
         data = torch.cat(data, cat_dim)
         if isinstance(reduce_dim, int):
             reduce_dim = [reduce_dim]
+        # make all reduce_dim and keep_dims negative
+        reduce_dim = sorted(dim if dim < 0 else dim - data.ndim for dim in reduce_dim)
+
         if keep_dims is not None:
+            keep_dims = sorted(dim if dim < 0 else dim - data.ndim for dim in keep_dims)
             if not all(k in reduce_dim for k in keep_dims):
                 raise ValueError("keep_dim elements must be part of reduce_dim list.")
         else:
             keep_dims = []
         loc = data.mean(reduce_dim, keepdim=True)
         scale = data.std(reduce_dim, keepdim=True)
-        for r in sorted(reduce_dim, reverse=True):
+        for r in reduce_dim:
             if r not in keep_dims:
                 loc = loc.squeeze(r)
                 scale = scale.squeeze(r)
@@ -2054,8 +2063,7 @@ class CatFrames(ObservationTransform):
         self.padding = padding
         for in_key in self.in_keys:
             buffer_name = f"_cat_buffers_{in_key}"
-            setattr(
-                self,
+            self.register_buffer(
                 buffer_name,
                 torch.nn.parameter.UninitializedBuffer(
                     device=torch.device("cpu"), dtype=torch.get_default_dtype()
@@ -2068,12 +2076,15 @@ class CatFrames(ObservationTransform):
         """Resets _buffers."""
         _reset = tensordict.get("_reset", None)
         if _reset is None:
+            parent = self.parent
+            if parent is not None:
+                parent_device = parent.device
+            else:
+                parent_device = None
             _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
-                device=tensordict.device
-                if tensordict.device is not None
-                else torch.device("cpu"),
+                device=parent_device,
             )
         _reset = _reset.sum(
             tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
@@ -3622,7 +3633,7 @@ class ExcludeTransform(Transform):
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            _seq_of_nested_key_check(excluded_keys)
+            excluded_keys = [unravel_keys(key) for key in excluded_keys]
         except ValueError:
             raise ValueError(
                 "excluded keys must be a list or tuple of strings or tuples of strings."
@@ -3670,7 +3681,7 @@ class SelectTransform(Transform):
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            _seq_of_nested_key_check(selected_keys)
+            selected_keys = [unravel_keys(key) for key in selected_keys]
         except ValueError:
             raise ValueError(
                 "selected keys must be a list or tuple of strings or tuples of strings."
