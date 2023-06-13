@@ -708,6 +708,7 @@ class TestTanh:
             assert (data[out_key] >= min - eps).all()
 
 
+@pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")
 @pytest.mark.parametrize("use_vmap", [False, True])
 @pytest.mark.parametrize("scale", range(10))
 def test_tanh_atanh(use_vmap, scale):
