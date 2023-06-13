@@ -11,7 +11,7 @@ from time import sleep
 
 import pytest
 import torch
-from _utils_internal import generate_seeds, get_available_devices
+from _utils_internal import generate_seeds, get_default_devices
 from torchrl._utils import timeit
 
 try:
@@ -83,7 +83,7 @@ def dreamer_constructor_fixture():
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("noisy", [(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [(), ("distributional=True",)])
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
@@ -162,7 +162,7 @@ def test_dqn_maker(
 @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 @pytest.mark.parametrize("gsde", [(), ("gSDE=True",)])
 @pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
@@ -282,7 +282,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
 requires one-dimensional batches (for RNN and Conv nets for instance). If you'd like
 to see torch < 1.11 supported for dreamer, please submit an issue.""",
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("tanh_loc", [(), ("tanh_loc=True",)])
 @pytest.mark.parametrize("exploration", [ExplorationType.MODE, ExplorationType.RANDOM])
 def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture):
@@ -466,7 +466,7 @@ def test_transformed_env_constructor_with_state_dict(from_pixels):
         torch.testing.assert_close(obs_transform.state_dict(), state_dict)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("keys", [None, ["observation", "observation_orig"]])
 @pytest.mark.parametrize("composed", [True, False])
 @pytest.mark.parametrize("initialized", [True, False])
@@ -514,7 +514,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     assert len(post_init_state_dict) == len(pre_init_state_dict) + expected_dict_size
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_initialize_stats_from_non_obs_transform(device):
     env = MockSerialEnv(device=device)
     env.set_seed(1)
@@ -539,7 +539,7 @@ def test_initialize_obs_transform_stats_raise_exception():
         initialize_observation_norm_transforms(proof_environment=t_env, num_iter=100)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("composed", [True, False])
 def test_retrieve_observation_norms_state_dict(device, composed):
     env = MockSerialEnv(device=device)

@@ -41,8 +41,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     model_device = cfg.optim.device
     actor, critic, critic_head = make_ppo_models(cfg)
-    print("actor", actor)
-    print("critic", critic)
 
     collector, state_dict = make_collector(cfg, policy=actor)
     data_buffer = make_data_buffer(cfg)

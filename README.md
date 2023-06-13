@@ -12,6 +12,10 @@
 
 # TorchRL
 
+<p align="center">
+  <img src="docs/source/_static/img/icon.png"  width="200" >
+</p>
+
 [**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
 [**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Citation**](#citation) | [**Installation**](#installation) |
 [**Asking a question**](#asking-a-question) | [**Contributing**](#contributing)

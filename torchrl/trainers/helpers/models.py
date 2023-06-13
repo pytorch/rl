@@ -200,7 +200,8 @@ def make_dqn_actor(
 
     # init
     with torch.no_grad():
-        td = proof_environment.rollout(max_steps=1000)
+        td = proof_environment.fake_tensordict()
+        td = td.unsqueeze(-1)
         model(td.to(device))
     return model
 
@@ -434,7 +435,8 @@ def make_redq_model(
 
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        td = proof_environment.rollout(1000)
+        td = proof_environment.fake_tensordict()
+        td = td.unsqueeze(-1)
         td = td.to(device)
         for net in model:
             net(td)
@@ -502,7 +504,7 @@ def make_dreamer(
         obs_encoder, obs_decoder, rssm_prior, rssm_posterior, reward_module
     ).to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = proof_environment.rollout(4)
+        tensordict = proof_environment.fake_tensordict().unsqueeze(-1)
         tensordict = tensordict.to_tensordict().to(device)
         tensordict = tensordict.to(device)
         world_model(tensordict)
@@ -531,7 +533,7 @@ def make_dreamer(
     value_model = _dreamer_make_value_model(cfg.mlp_num_units, value_key)
     value_model = value_model.to(device)
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-        tensordict = model_based_env.rollout(4)
+        tensordict = model_based_env.fake_tensordict().unsqueeze(-1)
         tensordict = tensordict.to(device)
         tensordict = actor_simulator(tensordict)
         value_model(tensordict)

@@ -550,7 +550,6 @@ class SyncDataCollector(DataCollectorBase):
         else:
             self.policy_weights = TensorDict({}, [])
 
-        print("sending env to device", self.device)
         self.env: EnvBase = self.env.to(self.device)
         self.max_frames_per_traj = max_frames_per_traj
         if self.max_frames_per_traj > 0:
