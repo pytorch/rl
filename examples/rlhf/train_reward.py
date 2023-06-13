@@ -1,13 +1,11 @@
-import os
 import time
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from data import get_reward_dataloader
 from models.reward import init_reward_model
-from utils import create_lr_scheduler, load_and_update_config, setup
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from utils import load_and_update_config, setup
 
 HERE = Path(__file__).parent
 
@@ -20,13 +18,13 @@ def _accuracy(chosen_end_scores, rejected_end_scores):
 
 # TODO: eliminate redundant repeated definition
 # helps estimate an arbitrarily accurate loss over either split using many batches
-def create_loss_estimator(config, ctx):
+def create_loss_estimator(eval_iters, ctx):
     @torch.no_grad()
     def estimate_loss(model, dataloader):
         model.eval()
-        losses = torch.zeros(config["eval_iters"])
-        accs = torch.zeros(config["eval_iters"])
-        for k in range(config["eval_iters"]):
+        losses = torch.zeros(eval_iters)
+        accs = torch.zeros(eval_iters)
+        for k in range(eval_iters):
             chosen_batch, rejected_batch = next(dataloader)
             with ctx:
                 model(chosen_batch)
@@ -41,11 +39,41 @@ def create_loss_estimator(config, ctx):
 
 def main():
     config = load_and_update_config("config/train_reward.yaml")
-    ctx = setup(config)
 
-    # ######## INIT MODELS ########
-    model = init_reward_model(config)
+    data_config = config["data"]
+    model_config = config["model"]
+    reward_model_config = config["reward_model"]
+    train_config = config["train"]
 
+    eval_interval = config["io"]["eval_interval"]
+    log_interval = config["io"]["log_interval"]
+    eval_iters = config["io"]["eval_iters"]
+    reward_out_dir = reward_model_config["out_dir"]
+
+    max_iters = train_config["max_iters"]
+    always_save_checkpoint = train_config["always_save_checkpoint"]
+
+    device = config["sys"]["device"]
+    dtype = config["sys"]["dtype"]
+    compile_ = config["sys"]["compile"]
+
+    ctx = setup(device=device, dtype=dtype)
+
+    train_loader = get_reward_dataloader(data_config, device=device, split="train")
+    val_loader = get_reward_dataloader(data_config, device=device, split="valid1")
+
+    if reward_model_config["init_from"] == "resume":
+        model = init_reward_model(
+            reward_model_path=reward_model_config["out_dir"],
+            device=device,
+            compile_=compile_,
+        )
+    else:
+        model = init_reward_model(
+            transformer_path=model_config["name_or_path"],
+            device=device,
+            compile_=compile_,
+        )
     # Freeze the first 70% of the hidden layers of the reward model backbone
     layers = model.transformer.h
     num_layers = len(layers)
@@ -55,118 +83,48 @@ def main():
 
     # ######## INIT TRAINING FUNCTIONS ########
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    lr_scheduler = create_lr_scheduler(config)
+    optimizer = torch.optim.AdamW(model.parameters(), **train_config["optimizer"])
+    scheduler = None
+    if train_config["decay_lr"]:
+        scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
 
-    estimate_loss = create_loss_estimator(config, ctx)
+    estimate_loss = create_loss_estimator(eval_iters, ctx)
 
-    train_loader, val_loader = get_reward_dataloader(config)
+    best_val_loss = float("inf")
 
-    # these will already have been set if resuming from previous checkpoint
-    iter_num = config.setdefault("iter_num", 0)
-    best_val_loss = config.setdefault("best_val_loss", 1e9)
-
-    train_losses = []
-    val_losses = []
-    train_accs = []
-    val_accs = []
-
-    # ######## TRAINING LOOP ########
     t0 = time.time()
-    for it in range(iter_num, config["max_iters"]):
-        # get and update the learning rate
-        lr = lr_scheduler(it)
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = lr
-
+    for it in range(1, max_iters + 1):
         chosen_batch, rejected_batch = next(train_loader)
 
-        # TODO: check why is different from std model (missing micro gradients)
-
-        model(chosen_batch)
-        model(rejected_batch)
+        with ctx:
+            model(chosen_batch)
+            model(rejected_batch)
         optimizer.zero_grad(set_to_none=True)
         loss = model.compute_reward_loss(chosen_batch, rejected_batch)
         loss.backward()
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
 
-        # ########### EVALUATE MODEL AND CHECKPOINT ###############
-        # timing and logging
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
-        if it % config["eval_interval"] == 0:
-            # evaluate the loss on train/val sets and write checkpoints
+        if it % eval_interval == 0:
             val_loss, val_acc = estimate_loss(model, val_loader)
             train_loss, train_acc = estimate_loss(model, train_loader)
-            train_accs.append(train_acc)
-            val_accs.append(val_acc)
             print(
-                f"Evaluation: iter {it}: train loss {train_loss:.4f}, val loss {val_loss:.4f}, "
-                f"train acc {train_acc:.4f}, val acc {val_acc:.4f}"
+                f"Evaluation: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
+                f"{train_acc=:.4f}, {val_acc=:.4f}"
             )
-            if val_loss < best_val_loss or config["always_save_checkpoint"]:
+            if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
-                    checkpoint = {
-                        "optimizer": optimizer.state_dict(),
-                        "iter_num": it,
-                        "best_val_loss": best_val_loss,
-                        "config": config,
-                    }
-                    print(f"saving checkpoint to {config['out_dir_reward']}")
-                    model.module.save_pretrained(config["out_dir_reward"])
-                    torch.save(
-                        checkpoint,
-                        os.path.join(config["out_dir_reward"], "ckpt_status.pt"),
-                    )
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-
-        elif it % config["log_interval"] == 0:
-            # loss as float. note: this is a CPU-GPU sync point
-            lossf = loss.item()
-            train_losses.append(lossf)
-            train_accs.append(
-                _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
-            )
-            print(
-                f"iter {it}: train loss {lossf:.4f}, accuracy {train_accs[-1]:.4f} time {dt*1000:.2f}ms"
-            )
-
-    f, ax = plt.subplots(figsize=(8, 6))
-    plt.title("Reward Model: Loss")
-    ax.plot(
-        np.arange(0, config["max_iters"], config["log_interval"]),
-        train_losses,
-        label="train loss",
-    )
-    ax.plot(
-        np.arange(0, config["max_iters"], config["eval_interval"]),
-        val_losses,
-        label="valid loss",
-    )
-    ax.set_yscale("log")
-    ax.legend()
-
-    f.savefig("figures/reward_curve_loss.png", dpi=150)
-
-    f, ax = plt.subplots(figsize=(8, 6))
-    plt.title("Reward Model: Accuracy")
-    ax.plot(
-        np.arange(0, config["max_iters"], config["log_interval"]),
-        train_accs,
-        label="train accs",
-    )
-    ax.plot(
-        np.arange(0, config["max_iters"], config["eval_interval"]),
-        val_accs,
-        label="valid accs",
-    )
-    ax.set_yscale("log")
-    ax.legend()
-
-    f.savefig("figures/reward_curve_accuracy.png", dpi=150)
+                    print(f"saving checkpoint to {reward_out_dir}")
+                    model.module.save_pretrained(reward_out_dir)
+        elif it % log_interval == 0:
+            loss = loss.item()
+            acc = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+            print(f"{it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms")
 
 
 if __name__ == "__main__":

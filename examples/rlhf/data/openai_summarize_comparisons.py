@@ -109,6 +109,6 @@ class PairwiseDataset(Dataset):
         return chosen_data, rejected_data
 
 
-def get_reward_dataloader(config, split="train"):
+def get_reward_dataloader(config, device, split="train"):
     data = PairwiseDataset(split, max_length=config["block_size"])
-    return create_infinite_dataloader(data, config, Collate(config["device"]))
+    return create_infinite_dataloader(data, config, Collate(device))

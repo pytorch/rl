@@ -1,5 +1,6 @@
+import torch
 import torch.nn as nn
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from torch.distributions.categorical import Categorical
 
 from torchrl.modules import (
@@ -11,6 +12,24 @@ from torchrl.modules import (
 from .transformer import init_transformer
 
 __all__ = ["ActorCritic", "init_actor_critic"]
+
+
+class VmapCritic(TensorDictModuleBase):
+    def __init__(self, critic):
+        super().__init__()
+        self.in_keys = critic.in_keys
+        self.out_keys = critic.out_keys
+        self.module = critic
+
+    def forward(self, tensordict):
+        ndim = tensordict.ndim
+        training = self.module.training
+        self.module.eval()
+        td = torch.vmap(self.module, (ndim - 1,))(tensordict)
+        self.module.train(training)
+        # vmap sends this dim to the beginning so we need to send it back where it belongs
+        td = td.permute(*range(1, ndim), 0)
+        return tensordict.update(td)
 
 
 class ActorCritic(ActorValueOperator):
@@ -43,14 +62,19 @@ class ActorCritic(ActorValueOperator):
         super().__init__(common, actor_head, value_head)
 
 
-def init_actor_critic(config):
+def init_actor_critic(transformer_name_or_path, dropout, device, compile_):
     base_model = init_transformer(
-        config, as_tensordictmodule=False, skip_compilation=False, inference=True
+        transformer_name_or_path,
+        dropout,
+        device,
+        as_tensordictmodule=False,
+        compile_=compile_,
+        inference=True,
     )
     a2c_model = ActorCritic(base_model)
-    a2c_model.to(config["device"])
+    a2c_model.to(device)
     actor = a2c_model.get_policy_operator()
     critic = a2c_model.get_value_operator()
     critic_head = a2c_model.get_value_head()
 
-    return actor, critic, critic_head, base_model
+    return actor, VmapCritic(critic), critic_head, base_model
