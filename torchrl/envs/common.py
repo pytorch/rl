@@ -1047,8 +1047,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         r = self.input_spec["_action_spec"].rand(shape)
         if tensordict is None:
             tensordict = r.select()
-        print(r, type(r))
-        print(tensordict, type(tensordict))
         tensordict.update(r)
         return tensordict
 
@@ -1255,7 +1253,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
-                exclude_reward=self.reward_key,
+                exclude_reward=True,
+                reward_key=self.reward_key,
+                action_key=self.action_key,
             )
             if not break_when_any_done and done.any():
                 _reset = done.clone()

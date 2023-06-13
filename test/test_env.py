@@ -1014,10 +1014,21 @@ def test_seed():
 @pytest.mark.parametrize("exclude_reward", [True, False])
 @pytest.mark.parametrize("exclude_done", [True, False])
 @pytest.mark.parametrize("exclude_action", [True, False])
+@pytest.mark.parametrize("reward_key", ["reward", ("some", "other", "reward")])
+@pytest.mark.parametrize("done_key", ["done", ("some", "other", "done")])
+@pytest.mark.parametrize("action_key", ["action", ("some", "other", "action")])
 @pytest.mark.parametrize("has_out", [True, False])
 @pytest.mark.parametrize("lazy_stack", [False, True])
 def test_steptensordict(
-    keep_other, exclude_reward, exclude_done, exclude_action, has_out, lazy_stack
+    keep_other,
+    exclude_reward,
+    exclude_done,
+    exclude_action,
+    has_out,
+    lazy_stack,
+    reward_key,
+    action_key,
+    done_key,
 ):
     torch.manual_seed(0)
     tensordict = TensorDict(
@@ -1025,11 +1036,11 @@ def test_steptensordict(
             "ledzep": torch.randn(4, 2),
             "next": {
                 "ledzep": torch.randn(4, 2),
-                "reward": torch.randn(4, 1),
-                "done": torch.zeros(4, 1, dtype=torch.bool),
+                reward_key: torch.randn(4, 1),
+                done_key: torch.zeros(4, 1, dtype=torch.bool),
             },
             "beatles": torch.randn(4, 1),
-            "action": torch.randn(4, 2),
+            action_key: torch.randn(4, 2),
         },
         [4],
     )
@@ -1050,6 +1061,9 @@ def test_steptensordict(
         exclude_done=exclude_done,
         exclude_action=exclude_action,
         next_tensordict=next_tensordict,
+        reward_key=reward_key,
+        done_key=done_key,
+        action_key=action_key,
     )
     assert "ledzep" in out.keys()
     if lazy_stack:
@@ -1066,31 +1080,31 @@ def test_steptensordict(
         else:
             assert out["beatles"] is tensordict["beatles"]
     else:
-        assert "beatles" not in out.keys()
+        assert "beatles" not in out.keys(True)
     if not exclude_reward:
-        assert "reward" in out.keys()
+        assert reward_key in out.keys(True)
         if lazy_stack:
-            assert (out["reward"] == tensordict["next", "reward"]).all()
+            assert (out[reward_key] == tensordict["next", reward_key]).all()
         else:
-            assert out["reward"] is tensordict["next", "reward"]
+            assert out[reward_key] is tensordict["next", reward_key]
     else:
-        assert "reward" not in out.keys()
+        assert reward_key not in out.keys(True)
     if not exclude_action:
-        assert "action" in out.keys()
+        assert action_key in out.keys(True)
         if lazy_stack:
-            assert (out["action"] == tensordict["action"]).all()
+            assert (out[action_key] == tensordict[action_key]).all()
         else:
-            assert out["action"] is tensordict["action"]
+            assert out[action_key] is tensordict[action_key]
     else:
-        assert "action" not in out.keys()
+        assert action_key not in out.keys(True)
     if not exclude_done:
-        assert "done" in out.keys()
+        assert done_key in out.keys(True)
         if lazy_stack:
-            assert (out["done"] == tensordict["next", "done"]).all()
+            assert (out[done_key] == tensordict["next", done_key]).all()
         else:
-            assert out["done"] is tensordict["next", "done"]
+            assert out[done_key] is tensordict["next", done_key]
     else:
-        assert "done" not in out.keys()
+        assert done_key not in out.keys(True)
     if has_out:
         assert out is next_tensordict
 

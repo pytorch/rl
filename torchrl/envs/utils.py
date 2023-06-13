@@ -16,7 +16,8 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from torchrl.data.tensor_specs import CompositeSpec
 
 __all__ = [
     "exploration_mode",
@@ -49,6 +50,9 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
+    reward_key: NestedKey = "reward",
+    done_key: NestedKey = "done",
+    action_key: NestedKey = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
@@ -65,20 +69,23 @@ def step_mdp(
             Default is ``True``.
         exclude_reward (bool or key, optional): if ``True``, the :obj:`"reward"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present). If a key is provided,
-            this key will be excluded.
+            from the ``"next"`` entry (if present).
             Default is ``True``.
         exclude_done (bool or key, optional): if ``True``, the :obj:`"done"` key will be discarded
             from the resulting tensordict. If ``False``, it will be copied (and replaced)
-            from the ``"next"`` entry (if present). If a key is provided,
-            this key will be excluded.
+            from the ``"next"`` entry (if present).
             Default is ``False``.
         exclude_action (bool or key, optional): if ``True``, the :obj:`"action"` key will
             be discarded from the resulting tensordict. If ``False``, it will
             be kept in the root tensordict (since it should not be present in
-            the ``"next"`` entry). If a key is provided,
-            this key will be excluded.
+            the ``"next"`` entry).
             Default is ``True``.
+        reward_key (key, optional): the key where the reward is written. Defaults
+            to "reward".
+        done_key (key, optional): the key where the done is written. Defaults
+            to "done".
+        action_key (key, optional): the key where the action is written. Defaults
+            to "action".
 
     Returns:
          A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
@@ -162,6 +169,9 @@ def step_mdp(
                     exclude_reward=exclude_reward,
                     exclude_done=exclude_done,
                     exclude_action=exclude_action,
+                    reward_key=reward_key,
+                    done_key=done_key,
+                    action_key=action_key,
                 )
                 for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
             ],
@@ -173,9 +183,6 @@ def step_mdp(
         return out
     out = tensordict.get("next").clone(False)
     excluded = None
-    done_key = "done" if exclude_done is True else exclude_done
-    reward_key = "reward" if exclude_reward is True else exclude_reward
-    action_key = "action" if exclude_action is True else exclude_action
     if exclude_done and exclude_reward:
         excluded = {done_key, reward_key}
     elif exclude_reward:
@@ -184,21 +191,16 @@ def step_mdp(
         excluded = {done_key}
     if excluded:
         out = out.exclude(*excluded, inplace=True)
-    # TODO: make it work with LazyStackedTensorDict
-    # def _valid_key(key):
-    #     if key == "next" or key in out.keys():
-    #         return False
-    #     if exclude_action and key == "action":
-    #         return False
-    #     if keep_other or key == "action":
-    #         return True
-    #     return False
     td_keys = None
     if keep_other:
-        out_keys = set(out.keys())
-        td_keys = set(tensordict.keys()) - out_keys - {"next"}
-        if exclude_action:
-            td_keys = td_keys - {action_key}
+        out_keys = set(out.keys(True, True))
+        td_keys = {
+            key
+            for key in tensordict.keys(True, True)
+            if not (isinstance(key, tuple) and key[0] == "next")
+            and not (key in out_keys)
+            and (not exclude_action or key != action_key)
+        }
     elif not exclude_action:
         td_keys = {action_key}
 
@@ -366,6 +368,8 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         ("state", _state_spec),
         ("obs", _obs_spec),
     ):
+        if spec is None:
+            spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
         if not spec.is_in(td):
             raise AssertionError(
@@ -376,6 +380,8 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         ("done", _done_spec),
         ("obs", _obs_spec),
     ):
+        if spec is None:
+            spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.get("next").select(*spec.keys(True, True), strict=True)
         if not spec.is_in(td):
             raise AssertionError(
