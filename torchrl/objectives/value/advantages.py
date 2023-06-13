@@ -118,7 +118,9 @@ def _call_value_nets(
                 stack = False
                 params_stack = torch.cat([params.unsqueeze(0), next_params], 0)
             else:
-                raise ValueError(f"params and next_params have incongruent shapes: {params.shape} vs {next_params.shape}")
+                raise ValueError(
+                    f"params and next_params have incongruent shapes: {params.shape} vs {next_params.shape}"
+                )
             # data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
             data_out = torch.vmap(value_net)(data_in, params_stack)
             value_est = data_out.get(value_key)

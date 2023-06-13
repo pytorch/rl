@@ -299,32 +299,28 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        # # value loss
-        # td_copy = tensordict.select(*self.value_network.in_keys).detach()
-        # self.value_network(
-        #     td_copy,
-        #     params=self.value_network_params,
-        # )
-        # pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
-        #
-        # target_params = TensorDict(
-        #     {
-        #         "module": {
-        #             "0": self.target_actor_network_params,
-        #             "1": self.target_value_network_params,
-        #         }
-        #     },
-        #     batch_size=self.target_actor_network_params.batch_size,
-        #     device=self.target_actor_network_params.device,
-        # )
-        # target_value = self.value_estimator.value_estimate(
-        #     tensordict, target_params=target_params
-        # ).squeeze(-1)
-        tensordict = tensordict.clone(False)
-        self.actor_network(tensordict.get("next"), self.target_actor_network_params)
-        self.value_estimator(tensordict, params=self.value_network_params, target_params=self.target_value_network_params)
-        pred_val = tensordict.get(self.tensor_keys.state_action_value).squeeze(-1)
-        target_value = tensordict.get(("next", self.tensor_keys.state_action_value)).squeeze(-1)
+        # value loss
+        td_copy = tensordict.select(*self.value_network.in_keys).detach()
+        self.value_network(
+            td_copy,
+            params=self.value_network_params,
+        )
+        pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
+
+        target_params = TensorDict(
+            {
+                "module": {
+                    "0": self.target_actor_network_params,
+                    "1": self.target_value_network_params,
+                }
+            },
+            batch_size=self.target_actor_network_params.batch_size,
+            device=self.target_actor_network_params.device,
+        )
+        target_value = self.value_estimator.value_estimate(
+            tensordict, target_params=target_params
+        ).squeeze(-1)
+
         # td_error = pred_val - target_value
         loss_value = distance_loss(
             pred_val, target_value, loss_function=self.loss_function
@@ -340,12 +336,10 @@ class DDPGLoss(LossModule):
         if hasattr(self, "gamma"):
             hp["gamma"] = self.gamma
         hp.update(hyperparams)
-        hp['detach_params'] = False
-        hp['differentiable'] = True
         if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.value_network, **hp)
+            self._value_estimator = TD1Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.value_network, **hp)
+            self._value_estimator = TD0Estimator(value_network=self.actor_critic, **hp)
         elif value_type == ValueEstimators.GAE:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."

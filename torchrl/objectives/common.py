@@ -392,30 +392,30 @@ class LossModule(TensorDictModuleBase):
     def _param_getter(self, network_name):
         name = "_" + network_name + "_params"
         param_name = network_name + "_params"
-        if name in self.__dict__:
+        try:
             params = getattr(self, name)
-            if params is not None:
-                # get targets and update
-                for key in params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(self, self.SEP.join([network_name, *key]))
-                    if isinstance(value_to_set, str):
-                        if value_to_set.endswith("_detached"):
-                            value_to_set = value_to_set[:-9]
-                            value_to_set = getattr(self, value_to_set).detach()
-                        else:
-                            value_to_set = getattr(self, value_to_set)
-                    params._set(key, value_to_set)
-                return params
-            else:
-                params = getattr(self, param_name)
-                return params.detach()
-
-        else:
+        except AttributeError:
             raise RuntimeError(
                 f"{self.__class__.__name__} does not have the target param {name}"
             )
+
+        if params is not None:
+            # get targets and update
+            for key in params.keys(True, True):
+                if not isinstance(key, tuple):
+                    key = (key,)
+                value_to_set = getattr(self, self.SEP.join([network_name, *key]))
+                if isinstance(value_to_set, str):
+                    if value_to_set.endswith("_detached"):
+                        value_to_set = value_to_set[:-9]
+                        value_to_set = getattr(self, value_to_set).detach()
+                    else:
+                        value_to_set = getattr(self, value_to_set)
+                params._set(key, value_to_set)
+            return params
+        else:
+            params = getattr(self, param_name)
+            return params.detach()
 
     def _target_param_getter(self, network_name):
         target_name = "_target_" + network_name + "_params"
