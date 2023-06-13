@@ -25,7 +25,7 @@ def log_training(
         },
         commit=False,
     )
-    if "info" in sampling_td.keys():
+    if "info" in sampling_td["agents"].keys():
         logger.experiment.log(
             {
                 f"train/info/{key}": value.mean().item()

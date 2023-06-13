@@ -214,18 +214,30 @@ class VmasWrapper(_EnvWrapper):
         )  # shape = (n_agents, 1)
 
         self.unbatched_action_spec = CompositeSpec(
-            {("agents", "action"): multi_agent_action_spec}, shape=(self.n_agents,)
+            {
+                "agents": CompositeSpec(
+                    {"action": multi_agent_action_spec}, shape=(self.n_agents,)
+                )
+            }
         )
         self.unbatched_observation_spec = CompositeSpec(
-            {("agents", "observation"): multi_agent_observation_spec},
-            shape=(self.n_agents,),
+            {
+                "agents": CompositeSpec(
+                    {"observation": multi_agent_observation_spec},
+                    shape=(self.n_agents,),
+                )
+            }
         )
         if len(info_specs):
             multi_agent_info_spec = torch.stack(info_specs, dim=0)
             self.unbatched_observation_spec[("agents", "info")] = multi_agent_info_spec
 
         self.unbatched_reward_spec = CompositeSpec(
-            {("agents", "reward"): multi_agent_reward_spec}, shape=(self.n_agents,)
+            {
+                "agents": CompositeSpec(
+                    {"reward": multi_agent_reward_spec}, shape=(self.n_agents,)
+                )
+            }
         )
         self.unbatched_done_spec = done_spec
 

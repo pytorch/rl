@@ -1323,7 +1323,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         fake_done = done_spec.zero()
 
         next_output = fake_obs.clone()
-        next_output.batch_size = self.batch_size
         next_output.update(fake_reward)
         next_output.update(fake_done)
 
