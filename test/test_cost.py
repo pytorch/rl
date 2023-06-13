@@ -103,7 +103,12 @@ from torchrl.objectives.utils import (
     SoftUpdate,
     ValueEstimators,
 )
-from torchrl.objectives.value.advantages import GAE, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value.advantages import (
+    _call_value_nets,
+    GAE,
+    TD1Estimator,
+    TDLambdaEstimator,
+)
 from torchrl.objectives.value.functional import (
     _transpose_time,
     generalized_advantage_estimate,
@@ -1000,7 +1005,15 @@ class TestDDPG(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
         # test select
         loss.select_out_keys("loss_actor", "target_value")
-        loss_actor, target_value = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, target_value = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, target_value = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert (target_value == loss_val_td["target_value"]).all()
 
@@ -1415,7 +1428,16 @@ class TestTD3(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
         # test select
         loss.select_out_keys("loss_actor", "loss_qvalue")
-        loss_actor, loss_qvalue = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_qvalue = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_qvalue = loss(**kwargs)
+            return
+
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_qvalue == loss_val_td["loss_qvalue"]
 
@@ -1982,7 +2004,15 @@ class TestSAC(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -2438,7 +2468,15 @@ class TestDiscreteSAC(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -3040,7 +3078,15 @@ class TestREDQ(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
-        loss_actor, loss_alpha = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_alpha = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_alpha = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_alpha == loss_val_td["loss_alpha"]
 
@@ -4044,7 +4090,15 @@ class TestPPO(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_objective", "loss_critic")
-        loss_obj, loss_crit = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_obj, loss_crit = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_obj, loss_crit = loss(**kwargs)
+            return
         assert loss_obj == loss_val_td.get("loss_objective")
         assert loss_crit == loss_val_td.get("loss_critic")
 
@@ -4434,7 +4488,15 @@ class TestA2C(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_objective", "loss_critic")
-        loss_objective, loss_critic = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_objective, loss_critic = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_obj, loss_crit = loss(**kwargs)
+            return
         assert loss_objective == loss_val_td["loss_objective"]
         assert loss_critic == loss_val_td["loss_critic"]
 
@@ -4644,7 +4706,15 @@ class TestReinforce(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor")
-        loss_actor = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
 
 
@@ -5555,7 +5625,15 @@ class TestIQL(LossModuleTestBase):
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_value")
-        loss_actor, loss_value = loss(**kwargs)
+        if torch.__version__ >= "2.0.0":
+            loss_actor, loss_value = loss(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor, loss_value = loss(**kwargs)
+            return
         assert loss_actor == loss_val_td["loss_actor"]
         assert loss_value == loss_val_td["loss_value"]
 
@@ -7092,6 +7170,7 @@ class TestAdv:
                 },
             },
             [1, 10],
+            names=[None, "time"],
         )
         td = module(td.clone(False))
         if has_value_net and not skip_existing:
@@ -7386,6 +7465,59 @@ def test_updater_warning(updater, kwarg):
         updater(dqn, **kwarg)
     with warnings.catch_warnings():
         dqn.target_value_network_params
+
+
+class TestSingleCall:
+    def _mock_value_net(self, has_target, value_key):
+        model = nn.Linear(3, 1)
+        module = TensorDictModule(model, in_keys=["obs"], out_keys=[value_key])
+        params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(".")
+        if has_target:
+            return (
+                module,
+                params,
+                params.apply(lambda x: x.detach() + torch.randn_like(x)),
+            )
+        return module, params, params
+
+    def _mock_data(self):
+        return TensorDict(
+            {
+                "obs": torch.randn(10, 3),
+                ("next", "obs"): torch.randn(10, 3),
+                ("next", "reward"): torch.randn(10, 1),
+                ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+            },
+            [10],
+            names=["time"],
+        )
+
+    @pytest.mark.parametrize("has_target", [True, False])
+    @pytest.mark.parametrize("single_call", [True, False])
+    @pytest.mark.parametrize("value_key", ["value", ("some", "other", "key")])
+    def test_single_call(self, has_target, value_key, single_call, detach_next=True):
+        torch.manual_seed(0)
+        value_net, params, next_params = self._mock_value_net(has_target, value_key)
+        data = self._mock_data()
+        if single_call and has_target:
+            with pytest.raises(
+                ValueError,
+                match=r"without recurring to vmap when both params and next params are passed",
+            ):
+                _call_value_nets(
+                    value_net,
+                    data,
+                    params,
+                    next_params,
+                    single_call,
+                    value_key,
+                    detach_next,
+                )
+            return
+        value, value_ = _call_value_nets(
+            value_net, data, params, next_params, single_call, value_key, detach_next
+        )
+        assert (value != value_).all()
 
 
 if __name__ == "__main__":

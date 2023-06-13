@@ -2578,6 +2578,8 @@ class CompositeSpec(TensorSpec):
                     f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
                 )
             for k, item in argdict.items():
+                if isinstance(item, dict):
+                    item = CompositeSpec(item, shape=shape)
                 if item is not None:
                     if self._device is None:
                         self._device = item.device
