@@ -5,6 +5,7 @@ from data import get_prompt_dataloader
 from env import rollout
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchrl.data.replay_buffers import (
     LazyTensorStorage,
     SamplerWithoutReplacement,
@@ -165,6 +166,9 @@ def main():
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), **train_config["optimizer"])
+    scheduler = None
+    if train_config["decay_lr"]:
+        scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
 
     rb = TensorDictReplayBuffer(
         storage=LazyTensorStorage(episode_length * num_rollouts),
@@ -201,6 +205,9 @@ def main():
                 epoch_losses.append(loss_val.detach().cpu())
                 torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
                 optimizer.step()
+
+        if scheduler is not None:
+            scheduler.step()
 
         if it % eval_interval == 0:
             val_reward = estimate_loss(model, val_loader)
