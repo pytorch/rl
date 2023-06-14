@@ -37,10 +37,13 @@ def apply_env_transforms(env, reward_scaling=1.0):
 
 def make_environment(cfg):
     """Make environments for training and evaluation."""
-    single_env = env_maker(task=cfg.env.name)
-    single_env.set_seed(cfg.env.seed)
+    parallel_env = ParallelEnv(
+        cfg.collector.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+    )
+    parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(single_env)
+    train_env = apply_env_transforms(parallel_env)
 
     eval_env = TransformedEnv(
         ParallelEnv(
@@ -60,7 +63,7 @@ def make_environment(cfg):
 def make_collector(cfg, train_env, actor_model_explore):
     """Make collector."""
     collector = MultiaSyncDataCollector(
-        [train_env] * cfg.collector.env_per_collector,
+        [train_env] * cfg.collector.num_workers,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
