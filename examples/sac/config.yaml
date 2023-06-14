@@ -15,7 +15,7 @@ collector:
   max_frames_per_traj: 1000
   init_env_steps: 1000
   async_collection: 1
-  collector_device: cpu
+  collector_device: cuda:0
   env_per_collector: 1
   num_workers: 1
 
