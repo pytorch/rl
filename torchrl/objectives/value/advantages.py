@@ -85,7 +85,6 @@ def _call_value_nets(
             ],
             -1,
         )
-        print("single", data)
         # next_params should be None or be identical to params
         if next_params is not None and next_params is not params:
             raise ValueError(
