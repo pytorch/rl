@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -34,7 +34,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end (scalar, optional): final epsilon value.
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
-        action_key (str, optional): if the policy module has more than one output key,
+        action_key (str, Tuple[str], optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
@@ -81,7 +81,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        action_key: str = "action",
+        action_key: NestedKey = "action",
         spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
@@ -131,11 +131,19 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            out = tensordict.get(self.action_key)
+            if isinstance(self.action_key, tuple):
+                action_tensordict = tensordict.get(self.action_key[:-1])
+                action_key = self.action_key[-1]
+            else:
+                action_tensordict = tensordict
+                action_key = self.action_key
+
+            out = action_tensordict.get(action_key)
             eps = self.eps.item()
-            cond = (torch.rand(tensordict.shape, device=tensordict.device) < eps).to(
-                out.dtype
-            )
+            cond = (
+                torch.rand(action_tensordict.shape, device=action_tensordict.device)
+                < eps
+            ).to(out.dtype)
             cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
@@ -146,7 +154,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 raise RuntimeError(
                     "spec must be provided by the policy or directly to the exploration wrapper."
                 )
-            tensordict.set(self.action_key, out)
+            action_tensordict.set(action_key, out)
         return tensordict
 
 
