@@ -2,12 +2,19 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector, MultiaSyncDataCollector
+from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
+from torchrl.envs import (
+    Compose,
+    DoubleToFloat,
+    EnvCreator,
+    InitTracker,
+    ParallelEnv,
+    RewardScaling,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
@@ -28,6 +35,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
+            InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
         ),
@@ -85,7 +93,9 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
-    collate_fn = lambda td: td.as_tensor().to(device, non_blocking=True)
+    def collate_fn(data):
+        return data.as_tensor().to(device, non_blocking=True)
+
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,

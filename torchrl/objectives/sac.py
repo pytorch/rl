@@ -22,9 +22,10 @@ from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
+    cache_values,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators, cache_values,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -516,7 +517,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.detached_qvalue_params # should we clone?
+            td_q, self.detached_qvalue_params  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
