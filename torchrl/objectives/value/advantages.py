@@ -78,7 +78,7 @@ def _call_value_nets(
         ndim = i + 1
     if single_call:
         # get data at t and last of t+1
-        data = torch.cat(
+        data_in = torch.cat(
             [
                 data.select(*in_keys, value_key, strict=False),
                 data.get("next").select(*in_keys, value_key, strict=False)[..., -1:],
@@ -91,9 +91,9 @@ def _call_value_nets(
                 "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
             )
         if params is not None:
-            value_est = value_net(data, params).get(value_key)
+            value_est = value_net(data_in, params).get(value_key)
         else:
-            value_est = value_net(data).get(value_key)
+            value_est = value_net(data_in).get(value_key)
         idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
         idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
         value, value_ = value_est[idx], value_est[idx_]
@@ -116,8 +116,8 @@ def _call_value_nets(
             data_out = torch.vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
-        data.set(value_key, value)
-        data.set(("next", value_key), value_)
+    data.set(value_key, value)
+    data.set(("next", value_key), value_)
     if detach_next:
         value_ = value_.detach()
     return value, value_
