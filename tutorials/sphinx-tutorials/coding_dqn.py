@@ -438,8 +438,9 @@ def get_collector(
 
 
 def get_loss_module(actor, gamma):
-    loss_module = DQNLoss(actor, gamma=gamma, delay_value=True)
-    target_updater = SoftUpdate(loss_module)
+    loss_module = DQNLoss(actor, delay_value=True)
+    loss_module.make_value_estimator(gamma=gamma)
+    target_updater = SoftUpdate(loss_module, eps=0.995)
     return loss_module, target_updater
 
 
@@ -617,7 +618,7 @@ recorder = Recorder(
     frame_skip=1,
     policy_exploration=actor_explore,
     environment=test_env,
-    exploration_type="mode",
+    exploration_type=ExplorationType.MODE,
     log_keys=[("next", "reward")],
     out_keys={("next", "reward"): "rewards"},
     log_pbar=True,

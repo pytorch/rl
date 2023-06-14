@@ -4,6 +4,8 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y git wget gcc g++
+#apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
 set -e
 
@@ -42,7 +44,7 @@ pip install git+https://github.com/pytorch-labs/tensordict.git
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-pip3 install -e .
+python setup.py develop
 
 # smoke test
 python -c "import torchrl"
