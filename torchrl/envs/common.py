@@ -1050,7 +1050,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f" match the tensordict one."
             )
         action = self.action_spec.rand(shape)
-        tensordict.set("action", action)
+        tensordict.set(self.action_key, action)
         return tensordict
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:

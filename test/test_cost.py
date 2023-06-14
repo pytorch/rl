@@ -103,7 +103,12 @@ from torchrl.objectives.utils import (
     SoftUpdate,
     ValueEstimators,
 )
-from torchrl.objectives.value.advantages import GAE, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value.advantages import (
+    _call_value_nets,
+    GAE,
+    TD1Estimator,
+    TDLambdaEstimator,
+)
 from torchrl.objectives.value.functional import (
     _transpose_time,
     generalized_advantage_estimate,
@@ -7096,7 +7101,8 @@ class TestAdv:
             [TDLambdaEstimator, {"lmbda": 0.95}],
         ],
     )
-    def test_non_differentiable(self, adv, kwargs):
+    @pytest.mark.parametrize("shifted", [True, False])
+    def test_non_differentiable(self, adv, shifted, kwargs):
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
@@ -7104,6 +7110,7 @@ class TestAdv:
             gamma=0.98,
             value_network=value_net,
             differentiable=False,
+            shifted=shifted,
             **kwargs,
         )
         td = TensorDict(
@@ -7130,12 +7137,14 @@ class TestAdv:
     )
     @pytest.mark.parametrize("has_value_net", [True, False])
     @pytest.mark.parametrize("skip_existing", [True, False, None])
+    @pytest.mark.parametrize("shifted", [True, False])
     def test_skip_existing(
         self,
         adv,
         kwargs,
         has_value_net,
         skip_existing,
+        shifted,
     ):
         if has_value_net:
             value_net = TensorDictModule(
@@ -7150,6 +7159,7 @@ class TestAdv:
             gamma=0.98,
             value_network=value_net,
             differentiable=True,
+            shifted=shifted,
             skip_existing=skip_existing,
             **kwargs,
         )
@@ -7165,6 +7175,7 @@ class TestAdv:
                 },
             },
             [1, 10],
+            names=[None, "time"],
         )
         td = module(td.clone(False))
         if has_value_net and not skip_existing:
@@ -7459,6 +7470,59 @@ def test_updater_warning(updater, kwarg):
         updater(dqn, **kwarg)
     with warnings.catch_warnings():
         dqn.target_value_network_params
+
+
+class TestSingleCall:
+    def _mock_value_net(self, has_target, value_key):
+        model = nn.Linear(3, 1)
+        module = TensorDictModule(model, in_keys=["obs"], out_keys=[value_key])
+        params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(".")
+        if has_target:
+            return (
+                module,
+                params,
+                params.apply(lambda x: x.detach() + torch.randn_like(x)),
+            )
+        return module, params, params
+
+    def _mock_data(self):
+        return TensorDict(
+            {
+                "obs": torch.randn(10, 3),
+                ("next", "obs"): torch.randn(10, 3),
+                ("next", "reward"): torch.randn(10, 1),
+                ("next", "done"): torch.zeros(10, 1, dtype=torch.bool),
+            },
+            [10],
+            names=["time"],
+        )
+
+    @pytest.mark.parametrize("has_target", [True, False])
+    @pytest.mark.parametrize("single_call", [True, False])
+    @pytest.mark.parametrize("value_key", ["value", ("some", "other", "key")])
+    def test_single_call(self, has_target, value_key, single_call, detach_next=True):
+        torch.manual_seed(0)
+        value_net, params, next_params = self._mock_value_net(has_target, value_key)
+        data = self._mock_data()
+        if single_call and has_target:
+            with pytest.raises(
+                ValueError,
+                match=r"without recurring to vmap when both params and next params are passed",
+            ):
+                _call_value_nets(
+                    value_net,
+                    data,
+                    params,
+                    next_params,
+                    single_call,
+                    value_key,
+                    detach_next,
+                )
+            return
+        value, value_ = _call_value_nets(
+            value_net, data, params, next_params, single_call, value_key, detach_next
+        )
+        assert (value != value_).all()
 
 
 if __name__ == "__main__":
