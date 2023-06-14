@@ -78,23 +78,22 @@ def _call_value_nets(
         ndim = i + 1
     if single_call:
         # get data at t and last of t+1
-        data = torch.cat(
+        data_in = torch.cat(
             [
                 data.select(*in_keys, value_key, strict=False),
                 data.get("next").select(*in_keys, value_key, strict=False)[..., -1:],
             ],
             -1,
         )
-        print("single", data)
         # next_params should be None or be identical to params
         if next_params is not None and next_params is not params:
             raise ValueError(
                 "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
             )
         if params is not None:
-            value_est = value_net(data, params).get(value_key)
+            value_est = value_net(data_in, params).get(value_key)
         else:
-            value_est = value_net(data).get(value_key)
+            value_est = value_net(data_in).get(value_key)
         idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
         idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
         value, value_ = value_est[idx], value_est[idx_]
@@ -117,8 +116,8 @@ def _call_value_nets(
             data_out = torch.vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
-        data.set(value_key, value)
-        data.set(("next", value_key), value_)
+    data.set(value_key, value)
+    data.set(("next", value_key), value_)
     if detach_next:
         value_ = value_.detach()
     return value, value_
@@ -572,6 +571,13 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
 
     """
 
@@ -586,6 +592,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        shifted: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -593,6 +600,7 @@ class TD1Estimator(ValueEstimatorBase):
             advantage_key=advantage_key,
             value_target_key=value_target_key,
             value_key=value_key,
+            shifted=shifted,
             skip_existing=skip_existing,
         )
         try:
@@ -758,6 +766,13 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
 
     """
 
@@ -774,6 +789,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        shifted: bool = False,
     ):
         super().__init__(
             value_network=value_network,
@@ -782,6 +798,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             value_target_key=value_target_key,
             value_key=value_key,
             skip_existing=skip_existing,
+            shifted=shifted,
         )
         try:
             device = next(value_network.parameters()).device
@@ -959,6 +976,13 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
 
     GAE will return an :obj:`"advantage"` entry containing the advange value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -987,8 +1011,10 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
+        shifted: bool = False,
     ):
         super().__init__(
+            shifted=shifted,
             value_network=value_network,
             differentiable=differentiable,
             advantage_key=advantage_key,
