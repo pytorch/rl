@@ -28,6 +28,7 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 python -c "import brax"
 python -c "import brax.envs"
 python -c "import jax"
+python3 -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestBrax --error-for-skips
 coverage combine

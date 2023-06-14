@@ -28,6 +28,9 @@ jobs:
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
 
+        nvidia-smi
+
+
         # docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION -e PYTHON_VERSION pytorch/manylinux-cuda117 .circleci/unittest/linux_libs/scripts_brax/run_all.sh
         bash .circleci/unittest/linux_libs/scripts_brax/run_all.sh
 
