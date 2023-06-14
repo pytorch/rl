@@ -37,10 +37,13 @@ def apply_env_transforms(env, reward_scaling=1.0):
 
 def make_environment(cfg):
     """Make environments for training and evaluation."""
-    parallel_env = ParallelEnv(
-        cfg.collector.env_per_collector,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
-    )
+    if cfg.collector.env_per_collector > 1:
+        parallel_env = ParallelEnv(
+            cfg.collector.env_per_collector,
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        )
+    else:
+        parallel_env = env_maker(task=cfg.env.name)
     parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env)
@@ -82,6 +85,7 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
+    collate_fn = lambda td: td.as_tensor().to(device, non_blocking=True)
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
@@ -91,9 +95,10 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device=device,
+                device="cpu",
             ),
             batch_size=batch_size,
+            collate_fn=collate_fn,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
@@ -102,9 +107,10 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device=device,
+                device="cpu",
             ),
             batch_size=batch_size,
+            collate_fn=collate_fn,
         )
     return replay_buffer
 

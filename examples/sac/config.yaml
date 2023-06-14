@@ -16,8 +16,8 @@ collector:
   init_env_steps: 1000
   async_collection: 1
   collector_device: cuda:1
-  env_per_collector: 2
-  num_workers: 4
+  env_per_collector: 1
+  num_workers: 8
 
 # Replay Buffer
 replay_buffer:
