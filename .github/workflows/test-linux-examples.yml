@@ -27,7 +27,7 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
         nvidia-smi
 
-        bash .circleci/unittest/linux_libs/scripts_brax/setup_env.sh
-        bash .circleci/unittest/linux_libs/scripts_brax/install.sh
-        bash .circleci/unittest/linux_libs/scripts_brax/run_test.sh
-        bash .circleci/unittest/linux_libs/scripts_brax/post_process.sh
+        bash .circleci/unittest/linux_examples/scripts/setup_env.sh
+        bash .circleci/unittest/linux_examples/scripts/install.sh
+        bash .circleci/unittest/linux_examples/scripts/run_test.sh
+        bash .circleci/unittest/linux_examples/scripts/post_process.sh
