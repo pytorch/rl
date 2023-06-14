@@ -454,6 +454,17 @@ class LossModule(TensorDictModuleBase):
                 f"{self.__class__.__name__} does not have the target param {target_name}"
             )
 
+    def _apply(self, fn):
+        # any call to apply erases the cache: the reason is that detached
+        # params will fail to be cast so we need to get the cache back
+        self._erase_cache()
+        return super()._apply(fn)
+
+    def _erase_cache(self):
+        for key in list(self.__dict__):
+            if key.startswith("_cache"):
+                del self.__dict__[key]
+
     def _networks(self) -> Iterator[nn.Module]:
         for item in self.__dir__():
             if isinstance(item, nn.Module):
