@@ -27,6 +27,7 @@ jobs:
         export CU_VERSION="11.7"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
 
         nvidia-smi
 
