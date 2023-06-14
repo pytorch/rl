@@ -450,3 +450,23 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value
+
+
+def cache_values(fun):
+    """Caches the tensordict returned by a property."""
+    name = fun.__name__
+
+    def new_fun(self, netname=None):
+        attr_name = "_cache_" + name
+        if netname is not None:
+            attr_name += "_" + netname
+        out = getattr(self, attr_name, None)
+        if out is None:
+            if netname is not None:
+                out = fun(self, netname)
+            else:
+                out = fun(self)
+            setattr(self, attr_name, out)
+        return out
+
+    return new_fun
