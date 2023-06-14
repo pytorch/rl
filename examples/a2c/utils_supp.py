@@ -35,7 +35,7 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
-from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives import A2CLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
@@ -247,7 +247,7 @@ def make_data_buffer(cfg):
 # these models is unchanged, regardless of the modality.
 
 
-def make_ppo_models(cfg):
+def make_a2c_models(cfg):
 
     env_cfg = cfg.env
     from_pixels = env_cfg.from_pixels
@@ -258,33 +258,28 @@ def make_ppo_models(cfg):
         # init_stats(
         #     proof_environment, n_samples_stats=3, from_pixels=env_cfg.from_pixels
         # )
-        common_module, policy_module, value_module = make_ppo_modules_state(
+        common_module, policy_module, value_module = make_a2c_modules_state(
             proof_environment
         )
     else:
-        common_module, policy_module, value_module = make_ppo_modules_pixels(
+        common_module, policy_module, value_module = make_a2c_modules_pixels(
             proof_environment
         )
 
-    # Wrap modules in a single ActorCritic operator
-    actor_critic = ActorValueOperator(
-        common_operator=common_module,
-        policy_operator=policy_module,
-        value_operator=value_module,
-    )
 
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = actor_critic(td)
+        td = policy_module(td)
+        td = value_module(td)
         del td
 
-    actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_head()
+    actor = policy_module
+    critic = value_module
 
     return actor, critic
 
 
-def make_ppo_modules_state(proof_environment):
+def make_a2c_modules_state(proof_environment):
 
     # Define input shape
     env_specs = proof_environment.specs
@@ -311,29 +306,21 @@ def make_ppo_modules_state(proof_environment):
     shared_features_size = 256
 
     # Define a shared Module and TensorDictModule
-    common_mlp = MLP(
+    policy_net = MLP(
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
-        activate_last_layer=True,
-        out_features=shared_features_size,
+        activate_last_layer=False,
+        out_features=num_outputs,
         num_cells=[64, 64],
-    )
-    common_module = TensorDictModule(
-        module=common_mlp,
-        in_keys=in_keys,
-        out_keys=["common_features"],
     )
 
     # Define on head for the policy
-    policy_net = MLP(
-        in_features=shared_features_size, out_features=num_outputs, num_cells=[]
-    )
     if continuous_actions:
         policy_net = NormalParamWrapper(policy_net)
 
     policy_module = TensorDictModule(
         module=policy_net,
-        in_keys=["common_features"],
+        in_keys=in_keys,
         out_keys=["loc", "scale"] if continuous_actions else ["logits"],
     )
 
@@ -350,16 +337,22 @@ def make_ppo_modules_state(proof_environment):
     )
 
     # Define another head for the value
-    value_net = MLP(in_features=shared_features_size, out_features=1, num_cells=[])
+    value_net = MLP(
+        in_features=input_shape[-1],
+        activation_class=torch.nn.Tanh,
+        activate_last_layer=False,
+        out_features=1,
+        num_cells=[64, 64],
+    )
     value_module = ValueOperator(
         value_net,
-        in_keys=["common_features"],
+        in_keys=in_keys,
     )
 
-    return common_module, policy_module, value_module
+    return None, policy_module, value_module
 
 
-def make_ppo_modules_pixels(proof_environment):
+def make_a2c_modules_pixels(proof_environment):
 
     # Define input shape
     env_specs = proof_environment.specs
@@ -431,7 +424,11 @@ def make_ppo_modules_pixels(proof_environment):
 
     # Define another head for the value
     value_net = MLP(
-        in_features=common_mlp_output.shape[-1], out_features=1, num_cells=[256]
+        in_features=input_shape[-1],
+        activation_class=torch.nn.Tanh,
+        activate_last_layer=True,
+        out_features=1,
+        num_cells=[64, 64],
     )
     value_module = ValueOperator(
         value_net,
@@ -442,7 +439,7 @@ def make_ppo_modules_pixels(proof_environment):
 
 
 # ====================================================================
-# PPO Loss
+# A2C Loss
 # ---------
 
 
@@ -458,14 +455,13 @@ def make_advantage_module(loss_cfg, value_network):
 
 def make_loss(loss_cfg, actor_network, value_network):
     advantage_module = make_advantage_module(loss_cfg, value_network)
-    loss_module = ClipPPOLoss(
+    loss_module = A2CLoss(
         actor=actor_network,
         critic=value_network,
-        clip_epsilon=loss_cfg.clip_epsilon,
         loss_critic_type=loss_cfg.loss_critic_type,
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
-        normalize_advantage=True,
+        entropy_bonus=True,
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
@@ -478,15 +474,3 @@ def make_optim(optim_cfg, actor_network, value_network):
         weight_decay=optim_cfg.weight_decay,
     )
     return optim
-
-
-# ====================================================================
-# Logging and recording
-# ---------------------
-
-
-def make_logger(logger_cfg):
-    exp_name = generate_exp_name("PPO", logger_cfg.exp_name)
-    logger_cfg.exp_name = exp_name
-    logger = get_logger(logger_cfg.backend, logger_name="ppo", experiment_name=exp_name)
-    return logger

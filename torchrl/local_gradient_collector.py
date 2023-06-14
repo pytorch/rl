@@ -20,11 +20,12 @@ class GradientCollector:
     """
     def __init__(
         self,
-        configuration: Dict,
-        make_actor_critic: Callable,
-        make_collector: Callable,
-        make_objective: Callable,
-        make_buffer: Callable,
+        actor,
+        critic,
+        collector,
+        objective,
+        advantage,
+        buffer,
         updates_per_batch: int = 1,
         device: torch.device = "cpu",
     ):
@@ -34,25 +35,22 @@ class GradientCollector:
 
         # Get Actor Critic instance
         # Could be instantiated passing class + params if necessary
-        self.policy, self.critic = make_actor_critic(configuration)
+        self.policy, self.critic = actor, critic
         self.policy.to(self.device)
         self.critic.to(self.device)
 
         # Get loss instance
         # Could be instantiated passing class + params if necessary
-        self.objective, self.advantage = make_objective(configuration.loss, actor_network=self.policy, value_network=self.critic)
-        self.params = TensorDict(dict(self.objective.named_parameters()), [])
+        self.objective = objective
+        self.advantage = advantage
 
         # Get collector instance.
         # Could be instantiated passing class + params if necessary.
-        self.collector = make_collector(configuration, policy=self.policy)
+        self.collector = collector
 
         # Get storage instance.
         # Could be instantiated passing class + params if necessary
-        self.replay_buffer = make_buffer(configuration)
-
-        # Get grads. TODO: this does not seem to work
-        self.grads = self.params.apply(lambda x: x.grad)
+        self.replay_buffer = buffer
 
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
@@ -77,12 +75,10 @@ class GradientCollector:
         #     p.data = torch.from_numpy(g).to(self.device)
         #     p.grad.zero_()
 
-        params = list(self.policy.parameters()) + list(self.critic.parameters())
+        params = itertools.chain(self.policy.parameters(), self.critic.parameters())
         for g, p in zip(weights, params):
             p.data = torch.from_numpy(g).to(self.device)
             p.grad.zero_()
-
-        self.collector.update_policy_weights_()
 
         # params = itertools.chain(self.collector.parameters())
         # for g, p in zip(weights, params):
@@ -127,21 +123,7 @@ class GradientCollector:
                 # Backprop loss
                 loss_sum.backward()
 
-                # Get gradients
-                grads = []
-                # for p in self.objective.parameters():
-                #     if p.grad is not None:
-                #         grads.append(p.grad.data.cpu().numpy())
-                #     else:
-                #         grads.append(None)
-
-                for p in list(self.policy.parameters()) + list(self.critic.parameters()):
-                    if p.grad is not None:
-                        grads.append(p.grad.data.cpu().numpy())
-                    else:
-                        grads.append(None)
-
-                yield grads
+                yield None
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return self.collector.set_seed(seed, static_seed)

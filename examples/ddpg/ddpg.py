@@ -1,198 +1,154 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-import dataclasses
-
-import hydra
-import torch.cuda
-from hydra.core.config_store import ConfigStore
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
-from torchrl.record import VideoRecorder
-from torchrl.record.loggers import generate_exp_name, get_logger
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
+import tqdm
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import GymEnv
+import torchrl
+from torchrl.envs.transforms.transforms import Compose, RewardSum, RewardScaling
+from torchrl.objectives import DDPGLoss
+from torchrl.data import ReplayBuffer, ListStorage, TensorDictReplayBuffer
+from torchrl.modules import (
+    ConvNet,
+    EGreedyWrapper,
+    LSTMModule,
+    MLP,
+    QValueModule,
+    TanhDelta,
 )
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    EnvConfig,
-    initialize_observation_norm_transforms,
-    parallel_env_constructor,
-    retrieve_observation_norms_state_dict,
-    transformed_env_constructor,
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torch import nn
+import torch
+from torchrl.envs.transforms import DoubleToFloat, TransformedEnv
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianWrapper
+from torchrl.objectives.utils import SoftUpdate, ValueEstimators
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler
+
+
+# Config
+seed = 0
+gamma = 0.99
+tau = 0.005
+frames_per_batch = 200  # Frames sampled each sampling iteration
+batch_size = 200  # in terms of rollout size
+utd = 200  # update to data ratio
+max_steps = 100
+n_iters = 500  # Number of sampling/training iterations
+warmup_frames = 100  # To prefill replay buffer
+total_frames = frames_per_batch * n_iters
+memory_size = frames_per_batch * 100
+lr = 0.001
+
+torch.manual_seed(0)
+
+
+def env():
+    env = GymEnv("HalfCheetah-v4", from_pixels=False)
+    env = TransformedEnv(
+        env, Compose(DoubleToFloat(in_keys=["observation"]), RewardSum(), RewardScaling(loc=0.0, scale=0.1))
+    )
+    return env
+
+
+proof_env = env()
+obs_size = proof_env.observation_spec["observation"].shape[0]
+act_size = proof_env.action_spec.shape[0]
+
+# Nets
+
+
+class CriticNet(nn.Module):
+    def __init__(self, obs_size, act_size):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_size + act_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, 300),
+            nn.ReLU(),
+            nn.Linear(300, 1),
+        )
+        nn.init.normal_(self.net[-1].weight, 0, 0.001)
+        self.net[-1].bias.data.zero_()
+
+    def forward(self, observation, action):
+        return self.net(torch.cat([observation, action], dim=-1))
+
+
+class ActorNet(nn.Module):
+    def __init__(self, obs_size):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, 300),
+            nn.ReLU(),
+            nn.Linear(300, 6),
+        )
+        nn.init.normal_(self.net[-1].weight, 0, 0.001)
+        self.net[-1].bias.data.zero_()
+
+    def forward(self, observation):
+        return self.net(observation)
+
+
+actor_mod = Mod(ActorNet(obs_size), in_keys=["observation"], out_keys=["param"])
+actor = ProbabilisticActor(
+    module=actor_mod,
+    spec=proof_env.action_spec,
+    in_keys=["param"],
+    distribution_class=TanhDelta,
+    distribution_kwargs={
+        "min": proof_env.action_spec.space.minimum,
+        "max": proof_env.action_spec.space.maximum,
+    },
+    return_log_prob=False,
 )
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import LossConfig, make_ddpg_loss
-from torchrl.trainers.helpers.models import DDPGModelConfig, make_ddpg_actor
-from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
+policy = AdditiveGaussianWrapper(
+    actor, annealing_num_steps=int(total_frames), sigma_end=0.1, spec=proof_env.action_spec,
+)
 
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        TrainerConfig,
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LossConfig,
-        DDPGModelConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
+critic = ValueOperator(CriticNet(obs_size, act_size), in_keys=["observation", "action"])
 
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
+collector = torchrl.collectors.SyncDataCollector(
+    env,
+    policy,
+    frames_per_batch=frames_per_batch,
+    total_frames=total_frames,
+)
+buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(memory_size), batch_size=batch_size)
 
+loss_module = DDPGLoss(
+    actor_network=actor,
+    value_network=critic,
+    delay_value=True,
+)
+loss_module.make_value_estimator(gamma=gamma)
+target_net_updater = SoftUpdate(loss_module, eps=1 - tau)
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
-def main(cfg: "DictConfig"):  # noqa: F821
+actor_opt = torch.optim.Adam(actor.parameters(), lr)
+critic_opt = torch.optim.Adam(critic.parameters(), lr)
 
-    cfg = correct_for_frame_skip(cfg)
-
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env_name, 5.0)
-
-    device = (
-        torch.device("cpu")
-        if torch.cuda.device_count() == 0
-        else torch.device("cuda:0")
-    )
-
-    exp_name = generate_exp_name("DDPG", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger, logger_name="ddpg_logging", experiment_name=exp_name
-    )
-    video_tag = exp_name if cfg.record_video else ""
-
-    key, init_env_steps, stats = None, None, None
-    if not cfg.vecnorm and cfg.norm_stats:
-        if not hasattr(cfg, "init_env_steps"):
-            raise AttributeError("init_env_steps missing from arguments.")
-        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
-        init_env_steps = cfg.init_env_steps
-        stats = {"loc": None, "scale": None}
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
-
-    proof_env = transformed_env_constructor(
-        cfg=cfg,
-        stats=stats,
-        use_env_creator=False,
-    )()
-    initialize_observation_norm_transforms(
-        proof_environment=proof_env, num_iter=init_env_steps, key=key
-    )
-    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
-
-    model = make_ddpg_actor(
-        proof_env,
-        cfg=cfg,
-        device=device,
-    )
-    loss_module, target_net_updater = make_ddpg_loss(model, cfg)
-
-    actor_model_explore = model[0]
-    if cfg.ou_exploration:
-        if cfg.gSDE:
-            raise RuntimeError("gSDE and ou_exploration are incompatible")
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore,
-            annealing_num_steps=cfg.annealing_frames,
-            sigma=cfg.ou_sigma,
-            theta=cfg.ou_theta,
-        ).to(device)
-    if device == torch.device("cpu"):
-        # mostly for debugging
-        actor_model_explore.share_memory()
-
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
-            # get dimensions to build the parallel env
-            proof_td = actor_model_explore(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
-
-    proof_env.close()
-
-    create_env_fn = parallel_env_constructor(
-        cfg=cfg,
-        obs_norm_state_dict=obs_norm_state_dict,
-        action_dim_gsde=action_dim_gsde,
-        state_dim_gsde=state_dim_gsde,
-    )
-
-    collector = make_collector_offpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=actor_model_explore,
-        cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
-    )
-
-    replay_buffer = make_replay_buffer(device, cfg)
-
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        obs_norm_state_dict=obs_norm_state_dict,
-        logger=logger,
-        use_env_creator=False,
-    )()
-    if isinstance(create_env_fn, ParallelEnv):
-        raise NotImplementedError("This behaviour is deprecated")
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder.transform[1:].load_state_dict(create_env_fn().transform.state_dict())
-    elif isinstance(create_env_fn, TransformedEnv):
-        recorder.transform = create_env_fn.transform.clone()
-    else:
-        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
-    if logger is not None and video_tag:
-        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
-
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
-
-    trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        logger,
-        cfg,
-    )
-
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
-
-    trainer.train()
-    return (logger.log_dir, trainer._log_dict)
-
-
-if __name__ == "__main__":
-    main()
+pbar = tqdm.tqdm(total=total_frames)
+for i, tensordict in enumerate(collector):
+    pbar.update(tensordict.numel())
+    buffer.extend(tensordict)
+    for j in range(utd):
+        data = buffer.sample()
+        loss = loss_module(data)
+        critic_opt.zero_grad()
+        actor_opt.zero_grad()
+        loss["loss_actor"].backward()
+        loss["loss_value"].backward()
+        critic_opt.step()
+        actor_opt.step()
+        pbar.set_description(
+            "Epoch {}: episode reward {:.2f} actor loss {:.2f}, critic loss {:.2f}".format(
+                i,
+                tensordict['next']["episode_reward"][tensordict['next']['done']].mean(),
+                loss["loss_actor"].item(),
+                loss["loss_value"].item(),
+            )
+        )
+        target_net_updater.step()
+    policy.step(tensordict.numel())
+    collector.update_policy_weights_()

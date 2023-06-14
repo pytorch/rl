@@ -42,6 +42,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_optim,
         make_ppo_models,
         make_test_env,
+        make_advantage_module,
     )
 
     # Correct for frame_skip
@@ -57,22 +58,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_actor, local_critic = make_ppo_models(cfg)
     local_actor = local_actor.to(local_model_device)
     local_critic = local_critic.to(local_model_device)
-    local_loss_module, _ = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
+    local_loss_module, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
 
+    collector = make_collector(cfg, local_actor)
+    objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
+    buffer = make_data_buffer(cfg)
+
     grad_worker = GradientCollector(
-        configuration=cfg,
-        make_actor_critic=make_ppo_models,
-        make_collector=make_collector,
-        make_objective=make_loss,
-        make_buffer=make_data_buffer,
-        updates_per_batch=num_mini_batches,
+        actor=local_actor,
+        critic=local_critic,
+        collector=collector,
+        objective=objective,
+        advantage=advantage,
+        buffer=buffer,
+        updates_per_batch=320,
         device=cfg.optim.device,
     )
-
-    # Ugly hack
-    grad_worker.policy.load_state_dict(local_actor.state_dict())
-    grad_worker.critic.load_state_dict(local_critic.state_dict())
 
     logger = None
     if cfg.logger.backend:
@@ -82,18 +84,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_in_batch = cfg.collector.frames_per_batch
     collected_frames = 0
 
-    params = TensorDict(dict(local_loss_module.named_parameters()), [])
-
     for remote_grads in grad_worker:
-
-        # for g, p in zip(remote_grads, local_loss_module.parameters()):
-        #     if g is not None:
-        #         p.grad = torch.from_numpy(g).to(local_model_device)
-
-        params = itertools.chain(local_actor.parameters(), local_critic.parameters())
-        for g, p in zip(remote_grads, params):
-            if g is not None:
-                p.grad = torch.from_numpy(g).to(local_model_device)
 
         grad_norm = torch.nn.utils.clip_grad_norm_(
             list(local_actor.parameters()) + list(local_critic.parameters()), max_norm=0.5)
@@ -103,18 +94,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         print(f"optimisation step!, grad norm {grad_norm}")
         local_optim.zero_grad()
 
-        # Update grad collector policy
-        weights = []
-        for p in local_loss_module.parameters():
-            weights.append(p.data.cpu().numpy())
-
-        for p in list(local_actor.parameters()) + list(local_critic.parameters()):
-            weights.append(p.data.cpu().numpy())
-
-        grad_worker.update_policy_weights_(weights)
-
         # Update counter
         collected_frames += frames_in_batch
+
+        collector.update_policy_weights_()
 
         # Test current policy
         if (
@@ -140,8 +123,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 local_actor.train()
                 del td_test
-
-        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

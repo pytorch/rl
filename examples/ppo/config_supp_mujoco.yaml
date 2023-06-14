@@ -1,6 +1,6 @@
 # task and env
 env:
-  env_name: HalfCheetah-v4
+  env_name: Hopper-v4
   env_task: ""
   env_library: gym
   frame_skip: 1
@@ -20,7 +20,7 @@ collector:
 # logger
 logger:
   backend: wandb
-  exp_name: ppo_halfcheetah_gym
+  exp_name: Hopper
   log_interval: 10000
 
 # Optim
