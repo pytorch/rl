@@ -24,7 +24,7 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
+    ValueEstimators, cache_values,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -499,6 +499,11 @@ class SACLoss(LossModule):
             out["loss_value"] = loss_value.mean()
         return TensorDict(out, [])
 
+    @property
+    @cache_values
+    def detached_qvalue_params(self):
+        return self.qvalue_network_params.detach()
+
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
@@ -511,7 +516,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.qvalue_network_params.detach().clone()
+            td_q, self.detached_qvalue_params # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -526,8 +531,10 @@ class SACLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         return self._alpha * log_prob - min_q_logprob
 
-    def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
-        target_params = TensorDict(
+    @property
+    @cache_values
+    def target_params_actor_value(self):
+        return TensorDict(
             {
                 "module": {
                     "0": self.target_actor_network_params,
@@ -537,6 +544,9 @@ class SACLoss(LossModule):
             torch.Size([]),
             _run_checks=False,
         )
+
+    def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+        target_params = self.target_params_actor_value
         with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params
