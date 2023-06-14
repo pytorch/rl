@@ -502,7 +502,7 @@ class SACLoss(LossModule):
 
     @property
     @cache_values
-    def detached_qvalue_params(self):
+    def __detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
@@ -517,7 +517,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.detached_qvalue_params  # should we clone?
+            td_q, self.__detached_qvalue_params  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -534,7 +534,7 @@ class SACLoss(LossModule):
 
     @property
     @cache_values
-    def target_params_actor_value(self):
+    def __target_params_actor_value(self):
         return TensorDict(
             {
                 "module": {
@@ -547,7 +547,7 @@ class SACLoss(LossModule):
         )
 
     def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
-        target_params = self.target_params_actor_value
+        target_params = self.__target_params_actor_value
         with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params

@@ -290,7 +290,7 @@ class DDPGLoss(LossModule):
         )
         td_copy = self.value_network(
             td_copy,
-            params=self.detached_value_params,
+            params=self.__detached_value_params,
         )
         return -td_copy.get(self.tensor_keys.state_action_value)
 
@@ -307,7 +307,7 @@ class DDPGLoss(LossModule):
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_value = self.value_estimator.value_estimate(
-            tensordict, target_params=self.target_params
+            tensordict, target_params=self.__target_params
         ).squeeze(-1)
 
         # td_error = pred_val - target_value
@@ -349,7 +349,7 @@ class DDPGLoss(LossModule):
 
     @property
     @cache_values
-    def target_params(self):
+    def __target_params(self):
         target_params = TensorDict(
             {
                 "module": {
@@ -364,5 +364,5 @@ class DDPGLoss(LossModule):
 
     @property
     @cache_values
-    def detached_value_params(self):
+    def __detached_value_params(self):
         return self.value_network_params.detach()

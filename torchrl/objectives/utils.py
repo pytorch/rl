@@ -178,11 +178,11 @@ class TargetNetUpdater:
             for _source in _source_names:
                 try:
                     getattr(loss_module, _source)
-                except AttributeError:
+                except AttributeError as err:
                     raise RuntimeError(
                         f"Incongruent target and source parameter lists: "
                         f"{_source} is not an attribute of the loss_module"
-                    )
+                    ) from err
 
             self._target_names = _target_names
             self._source_names = _source_names
