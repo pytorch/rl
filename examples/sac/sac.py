@@ -109,7 +109,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             (actor_losses, q_losses, alpha_losses) = ([], [], [])
             for _ in range(num_updates):
                 # sample from replay buffer
-                sampled_tensordict = replay_buffer.sample().to(device, non_blocking=True)
+                sampled_tensordict = replay_buffer.sample().as_tensor().to(device, non_blocking=True)
 
                 loss_td = loss_module(sampled_tensordict)
 
