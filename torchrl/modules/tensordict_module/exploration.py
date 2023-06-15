@@ -131,7 +131,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if isinstance(self.action_key, tuple):
+            if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
                 action_tensordict = tensordict.get(self.action_key[:-1])
                 action_key = self.action_key[-1]
             else:
