@@ -544,18 +544,21 @@ class TensorSpec:
             value = torch.Size(value)
         super().__setattr__(key, value)
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
+    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.
 
         Args:
-            val (torch.Tensor): tensor to be transformed_in to numpy
+            val (torch.Tensor): tensor to be transformed_in to numpy.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
+                Defaults to the value of the ``CHECK_SPEC_ENCODE`` environment variable.
 
         Returns:
             a np.ndarray
 
         """
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
         return val.detach().cpu().numpy()
@@ -916,7 +919,9 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         # requires unbind to be implemented
         pass
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             if val.shape[self.dim] != len(self._specs):
                 raise ValueError(
@@ -1120,11 +1125,11 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = self.shape[:-1]
         else:
             shape = torch.Size([*shape, *self.shape[:-1]])
-        return torch.nn.functional.gumbel_softmax(
-            torch.rand(torch.Size([*shape, self.space.n]), device=self.device),
-            hard=True,
-            dim=-1,
-        ).to(torch.long)
+        n = self.space.n
+        m = torch.randint(n, (*shape, 1), device=self.device)
+        out = torch.zeros((*shape, n), device=self.device, dtype=self.dtype)
+        out.scatter_(-1, m, 1)
+        return out
 
     def encode(
         self,
@@ -1153,7 +1158,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         val = torch.nn.functional.one_hot(val.long(), space.n)
         return val
 
-    def to_numpy(self, val: torch.Tensor, safe: bool = True) -> np.ndarray:
+    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             if not isinstance(val, torch.Tensor):
                 raise NotImplementedError
@@ -1211,17 +1218,20 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.use_register == other.use_register
         )
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
             val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
+                Defaults to the value of the ``CHECK_SPEC_ENCODE`` environment variable.
 
         Returns:
             The categorical tensor.
         """
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
         return val.argmax(-1)
@@ -1827,17 +1837,20 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         return torch.cat([super()._project(_val) for _val in vals], -1)
 
-    def to_categorical(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+    def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
 
         Args:
             val (torch.Tensor, optional): One-hot tensor to convert in categorical format.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
+                Defaults to the value of the ``CHECK_SPEC_ENCODE`` environment variable.
 
         Returns:
             The categorical tensor.
         """
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
         vals = self._split(val)
@@ -1991,20 +2004,23 @@ class DiscreteTensorSpec(TensorSpec):
             and self.domain == other.domain
         )
 
-    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         return super().to_numpy(val, safe)
 
-    def to_one_hot(self, val: torch.Tensor, safe: bool = True) -> torch.Tensor:
+    def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
         Args:
             val (torch.Tensor, optional): Tensor to one-hot encode.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
+                Defaults to the value of the ``CHECK_SPEC_ENCODE`` environment variable.
 
         Returns:
             The one-hot encoded tensor.
         """
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
         return torch.nn.functional.one_hot(val, self.space.n)
@@ -2303,7 +2319,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
 
     def to_one_hot(
-        self, val: torch.Tensor, safe: bool = True
+        self, val: torch.Tensor, safe: bool = None
     ) -> Union[MultiOneHotDiscreteTensorSpec, torch.Tensor]:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
 
@@ -2311,10 +2327,13 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             val (torch.Tensor, optional): Tensor to one-hot encode.
             safe (bool): boolean value indicating whether a check should be
                 performed on the value against the domain of the spec.
+                Defaults to the value of the ``CHECK_SPEC_ENCODE`` environment variable.
 
         Returns:
             The one-hot encoded tensor.
         """
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
         return torch.cat(
@@ -2559,6 +2578,8 @@ class CompositeSpec(TensorSpec):
                     f"Expected a dictionary of specs, but got an argument of type {type(argdict)}."
                 )
             for k, item in argdict.items():
+                if isinstance(item, dict):
+                    item = CompositeSpec(item, shape=shape)
                 if item is not None:
                     if self._device is None:
                         self._device = item.device
@@ -2621,7 +2642,7 @@ class CompositeSpec(TensorSpec):
                 _idx = idx + (slice(None),) * (
                     len(v.shape) - len(self.shape) - protected_dims
                 )
-            indexed_specs[k] = v[_idx]
+            indexed_specs[k] = v[_idx] if v is not None else None
 
         try:
             device = self.device
@@ -2637,7 +2658,7 @@ class CompositeSpec(TensorSpec):
     def __setitem__(self, key, value):
         if isinstance(key, tuple) and len(key) > 1:
             if key[0] not in self.keys(True):
-                self[key[0]] = CompositeSpec()
+                self[key[0]] = CompositeSpec(shape=self.shape)
             self[key[0]][key[1:]] = value
             return
         elif isinstance(key, tuple):
@@ -2880,7 +2901,7 @@ class CompositeSpec(TensorSpec):
             shape=self.shape,
         )
 
-    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def zero(self, shape=None) -> TensorDictBase:
@@ -2999,7 +3020,10 @@ class CompositeSpec(TensorSpec):
             device = self._device
 
         return CompositeSpec(
-            {key: value.unsqueeze(dim) for key, value in self.items()},
+            {
+                key: value.unsqueeze(dim) if value is not None else None
+                for key, value in self.items()
+            },
             shape=shape,
             device=device,
         )
@@ -3090,7 +3114,9 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def __eq__(self, other):
         pass
 
-    def to_numpy(self, val: TensorDict, safe: bool = True) -> dict:
+    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
         if safe:
             if val.shape[self.dim] != len(self._specs):
                 raise ValueError(

@@ -70,6 +70,7 @@ class DDPGLoss(LossModule):
         ...        "action": spec.rand(batch),
         ...        ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...        ("next", "reward"): torch.randn(*batch, 1),
+        ...        ("next", "observation"): torch.randn(*batch, n_obs),
         ...    }, batch)
         >>> loss(data)
         TensorDict(
@@ -112,13 +113,26 @@ class DDPGLoss(LossModule):
         ...     module=module,
         ...     in_keys=["observation", "action"])
         >>> loss = DDPGLoss(actor, value)
-        >>> loss_val = loss(
+        >>> loss_actor, loss_value, pred_value, target_value, pred_value_max, target_value_max = loss(
         ...     observation=torch.randn(n_obs),
         ...     action=spec.rand(),
         ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_observation=torch.randn(n_obs),
         ...     next_reward=torch.randn(1))
-        >>> loss_val
-        (tensor(-0.8247, grad_fn=<MeanBackward0>), tensor(1.3344, grad_fn=<MeanBackward0>), tensor(0.6193), tensor(1.7744), tensor(0.6193), tensor(1.7744))
+        >>> loss_actor.backward()
+
+    The output keys can also be filtered using the :meth:`DDPGLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_value')
+        >>> loss_actor, loss_value = loss(
+        ...     observation=torch.randn(n_obs),
+        ...     action=spec.rand(),
+        ...     next_done=torch.zeros(1, dtype=torch.bool),
+        ...     next_observation=torch.randn(n_obs),
+        ...     next_reward=torch.randn(1))
+        >>> loss_actor.backward()
 
     """
 
@@ -150,6 +164,14 @@ class DDPGLoss(LossModule):
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.TD0
+    out_keys = [
+        "loss_actor",
+        "loss_value",
+        "pred_value",
+        "target_value",
+        "pred_value_max",
+        "target_value_max",
+    ]
 
     def __init__(
         self,
@@ -162,6 +184,7 @@ class DDPGLoss(LossModule):
         gamma: float = None,
         separate_losses: bool = False,
     ) -> None:
+        self._in_keys = None
         super().__init__()
         self.delay_actor = delay_actor
         self.delay_value = delay_value
@@ -207,28 +230,29 @@ class DDPGLoss(LossModule):
                 reward=self._tensor_keys.reward,
                 done=self._tensor_keys.done,
             )
+        self._set_in_keys()
 
-    @property
-    def in_keys(self):
+    def _set_in_keys(self):
         keys = [
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            *self.actor_in_keys,
+            *[("next", key) for key in self.actor_in_keys],
+            *self.value_network.in_keys,
         ]
-        keys += self.value_network.in_keys
-        keys += self.actor_in_keys
-        keys = list(set(keys))
-        return keys
+        self._in_keys = list(set(keys))
 
-    @dispatch(
-        dest=[
-            "loss_actor",
-            "loss_value",
-            "pred_value",
-            "target_value",
-            "pred_value_max",
-            "target_value_max",
-        ]
-    )
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         """Computes the DDPG losses given a tensordict sampled from the replay buffer.
 

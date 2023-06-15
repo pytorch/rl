@@ -46,11 +46,11 @@ class Storage:
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get(self, index: int) -> Any:
-        raise NotImplementedError
+        ...
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -80,13 +80,19 @@ class Storage:
 
     @abc.abstractmethod
     def __len__(self):
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        ...
+
+    @abc.abstractmethod
+    def _empty(self):
+        ...
 
 
 class ListStorage(Storage):
@@ -156,6 +162,9 @@ class ListStorage(Storage):
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
                 )
+
+    def _empty(self):
+        self._storage = []
 
 
 class LazyTensorStorage(Storage):
@@ -281,6 +290,11 @@ class LazyTensorStorage(Storage):
 
     def __len__(self):
         return self._len
+
+    def _empty(self):
+        # assuming that the data structure is the same, we don't need to to
+        # anything if the cursor is reset to 0
+        self._len = 0
 
 
 class LazyMemmapStorage(LazyTensorStorage):
