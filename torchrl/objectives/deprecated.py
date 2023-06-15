@@ -194,29 +194,46 @@ class REDQLoss_deprecated(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
-        if target_entropy == "auto":
-            action_spec = (
-                action_spec
-                if action_spec is not None
-                else getattr(actor_network, "spec", None)
-            )
-            if action_spec is None:
-                raise RuntimeError(
-                    "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
-                    "action tensor in the actor network."
-                )
-            if not isinstance(action_spec, CompositeSpec):
-                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
-            target_entropy = -float(np.prod(action_spec[self.tensor_keys.action].shape))
-        self.register_buffer(
-            "target_entropy", torch.tensor(target_entropy, device=device)
-        )
+        self._target_entropy = target_entropy
+        self._action_spec = action_spec
+        self.target_entropy_buffer = None
         self.gSDE = gSDE
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @property
+    def target_entropy(self):
+        target_entropy = self.target_entropy_buffer
+        if target_entropy is None:
+            delattr(self, "target_entropy_buffer")
+            target_entropy = self._target_entropy
+            action_spec = self._action_spec
+            actor_network = self.actor_network
+            device = next(self.parameters()).device
+            if target_entropy == "auto":
+                action_spec = (
+                    action_spec
+                    if action_spec is not None
+                    else getattr(actor_network, "spec", None)
+                )
+                if action_spec is None:
+                    raise RuntimeError(
+                        "Cannot infer the dimensionality of the action. Consider providing "
+                        "the target entropy explicitely or provide the spec of the "
+                        "action tensor in the actor network."
+                    )
+                if not isinstance(action_spec, CompositeSpec):
+                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                target_entropy = -float(
+                    np.prod(action_spec[self.tensor_keys.action].shape)
+                )
+            self.register_buffer(
+                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+            )
+            return self.target_entropy_buffer
+        return target_entropy
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -260,8 +277,6 @@ class REDQLoss_deprecated(LossModule):
     def out_keys(self):
         if self._out_keys is None:
             keys = ["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]
-            if self._version == 1:
-                keys.append("loss_value")
             self._out_keys = keys
         return self._out_keys
 
@@ -294,7 +309,7 @@ class REDQLoss_deprecated(LossModule):
 
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
-        tensordict_clone = tensordict.select(*obs_keys)  # to avoid overwriting keys
+        tensordict_clone = tensordict.select(*obs_keys)
         with set_exploration_type(ExplorationType.RANDOM):
             self.actor_network(
                 tensordict_clone,
@@ -317,7 +332,9 @@ class REDQLoss_deprecated(LossModule):
         tensordict_save = tensordict
 
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.clone(False).select("next", *obs_keys, "action")
+        tensordict = tensordict.select(
+            "next", *obs_keys, self.tensor_keys.action
+        ).clone(False)
 
         selected_models_idx = torch.randperm(self.num_qvalue_nets)[
             : self.sub_sample_len
