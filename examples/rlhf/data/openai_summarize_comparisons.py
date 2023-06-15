@@ -68,8 +68,8 @@ def pre_tokenization_hook(dataset):
 class PairwiseDataset(Dataset):
     def __init__(self, split, max_length=550):
         data_dir = HERE / "comparisons"
-        ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
-        mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
+        ids_filename = data_dir / f"input_ids-{split}-{max_length}.bin"
+        mask_filename = data_dir / f"attention_mask-{split}-{max_length}.bin"
 
         if not all(
             (data_dir / file).exists() for file in (ids_filename, mask_filename)
