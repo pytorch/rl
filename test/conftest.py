@@ -15,8 +15,10 @@ Call times:
     keys = list(CALL_TIMES.keys())
     if len(keys) > 1:
         maxchar = max(*[len(key) for key in keys])
-    else:
+    elif len(keys) == 1:
         maxchar = len(keys[0])
+    else:
+        return
     for i, (key, item) in enumerate(
         sorted(CALL_TIMES.items(), key=lambda x: x[1], reverse=True)
     ):
