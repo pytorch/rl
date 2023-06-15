@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from transformers import GenerationConfig
 from tensordict import TensorDict
+from transformers import GenerationConfig
 
 EOS_TOKEN_ID = 50256
 
@@ -162,9 +162,7 @@ def create_rollout_td(
 
 
 def rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1):
-    generated, log_probs, log_ratio = generate(
-        model, batch, ref_model=ref_model
-    )
+    generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
     return create_rollout_td(
         batch, generated, reward_model, log_probs, log_ratio, max_new_tokens, kl_coef
     )

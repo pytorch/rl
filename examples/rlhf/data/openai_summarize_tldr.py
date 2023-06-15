@@ -67,17 +67,11 @@ def make_process_fn(tokenizer, max_length):
         tokenized_example["prompt_rindex"] = prompt_rindex
         # drop any examples whose total length when tokenized exceeds block size
         # with recommended block size of 550, this is only ~0.1% of available examples.
-        indices_to_drop = {
-            i
-            for i, input_ids in enumerate(tokenized_example["input_ids"])
-            if input_ids[-1] != tokenizer.eos_token_id
-        }
-        for key in tokenized_example:
-            tokenized_example[key] = [
-                item
-                for i, item in enumerate(tokenized_example[key])
-                if i not in indices_to_drop
-            ]
+        # NOTE: to mark as discarded we just save the mask as we cannot change the shape here
+        tokenized_example["valid_sample"] = [True] * len(tokenized_example["input_ids"])
+        for i, input_ids in enumerate(tokenized_example["input_ids"]):
+            if input_ids[-1] != tokenizer.eos_token_id:
+                tokenized_example["valid_sample"][i] = False
 
         return tokenized_example
 
@@ -87,9 +81,9 @@ def make_process_fn(tokenizer, max_length):
 class TLDRDataset(Dataset):
     def __init__(self, split, max_length=550):
         data_dir = HERE / "tldr"
-        ids_filename = data_dir / f"ids-{split}-{max_length}.bin"
-        mask_filename = data_dir / f"mask-{split}-{max_length}.bin"
-        rindex_filename = data_dir / f"rindex-{split}-{max_length}.bin"
+        ids_filename = data_dir / f"input_ids-{split}-{max_length}.bin"
+        mask_filename = data_dir / f"attention_mask-{split}-{max_length}.bin"
+        rindex_filename = data_dir / f"prompt_rindex-{split}-{max_length}.bin"
 
         if not all(
             (data_dir / file).exists()
