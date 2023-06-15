@@ -28,7 +28,6 @@ optim:
   device: cuda:0
   lr: 3e-4
   weight_decay: 0.0
-  batch_size: 256
   gradient_steps: 100000
 
 # Policy and model
