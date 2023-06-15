@@ -480,19 +480,45 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    def test_dqn_tensordict_keys(self):
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_dqn_tensordict_keys(self, td_est):
         torch.manual_seed(self.seed)
         action_spec_type = "one_hot"
         actor = self._create_mock_actor(action_spec_type=action_spec_type)
         loss_fn = DQNLoss(actor)
 
         default_keys = {
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "value": "chosen_action_value",
             "priority": "td_error",
             "action_value": "action_value",
             "action": "action",
+            "reward": "reward",
+            "done": "done",
         }
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+        loss_fn = DQNLoss(actor)
+        key_mapping = {
+            "advantage": ("advantage", "advantage_2"),
+            "value_target": ("value_target", ("value_target", "nested")),
+            "reward": ("reward", "reward_test"),
+            "done": ("done", ("done", "test")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, action_value_key="chosen_action_value_2"
+        )
+        loss_fn = DQNLoss(actor)
+        key_mapping = {
+            "value": ("value", "chosen_action_value_2"),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("action_spec_type", ("categorical", "one_hot"))
     @pytest.mark.parametrize(
@@ -577,37 +603,38 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
-    def test_dqn_notensordict(self):
+    @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
+    @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
+    @pytest.mark.parametrize("done_key", ["done", "done2"])
+    def test_dqn_notensordict(self, observation_key, reward_key, done_key):
         n_obs = 3
         n_action = 4
         action_spec = OneHotDiscreteTensorSpec(n_action)
-        value_network = nn.Linear(n_obs, n_action)  # a simple value model
-        dqn_loss = DQNLoss(value_network, action_space=action_spec)
+        module = nn.Linear(n_obs, n_action)  # a simple value model
+        actor = QValueActor(
+            spec=action_spec,
+            action_space="one_hot",
+            module=module,
+            in_keys=[observation_key],
+        )
+        dqn_loss = DQNLoss(actor)
+        dqn_loss.set_keys(reward=reward_key, done=done_key)
         # define data
         observation = torch.randn(n_obs)
         next_observation = torch.randn(n_obs)
         action = action_spec.rand()
         next_reward = torch.randn(1)
         next_done = torch.zeros(1, dtype=torch.bool)
-        loss_val = dqn_loss(
-            observation=observation,
-            next_observation=next_observation,
-            next_reward=next_reward,
-            next_done=next_done,
-            action=action,
-        )
-        loss_val_td = dqn_loss(
-            TensorDict(
-                {
-                    "observation": observation,
-                    "next_observation": next_observation,
-                    "next_reward": next_reward,
-                    "next_done": next_done,
-                    "action": action,
-                },
-                [],
-            ).unflatten_keys("_")
-        )
+        kwargs = {
+            observation_key: observation,
+            f"next_{observation_key}": next_observation,
+            f"next_{reward_key}": next_reward,
+            f"next_{done_key}": next_done,
+            "action": action,
+        }
+        td = TensorDict(kwargs, []).unflatten_keys("_")
+        loss_val = dqn_loss(**kwargs)
+        loss_val_td = dqn_loss(td)
         torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
 
     def test_distributional_dqn_tensordict_keys(self):
