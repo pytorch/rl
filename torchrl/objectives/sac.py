@@ -15,6 +15,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
+from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 
 from torchrl.modules import ProbabilisticActor
@@ -70,6 +71,9 @@ class SACLoss(LossModule):
             Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
             Default is None (no maximum value).
+        action_spec (TensorSpec, optional): the action tensor spec. If not provided
+            and the target entropy is ``"auto"``, it will be retrieved from
+            the actor.
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
@@ -256,6 +260,7 @@ class SACLoss(LossModule):
         alpha_init: float = 1.0,
         min_alpha: float = None,
         max_alpha: float = None,
+        action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -342,17 +347,9 @@ class SACLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
-        if target_entropy == "auto":
-            if actor_network.spec is None:
-                raise RuntimeError(
-                    "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
-                    "action tensor in the actor network."
-                )
-            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
-        self.register_buffer(
-            "target_entropy", torch.tensor(target_entropy, device=device)
-        )
+        self._target_entropy = target_entropy
+        self._action_spec = action_spec
+        self.target_entropy_buffer = None
         if self._version == 1:
             self.actor_critic = ActorCriticWrapper(
                 self.actor_network, self.value_network
@@ -361,6 +358,38 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @property
+    def target_entropy(self):
+        target_entropy = self.target_entropy_buffer
+        if target_entropy is None:
+            delattr(self, "target_entropy_buffer")
+            target_entropy = self._target_entropy
+            action_spec = self._action_spec
+            actor_network = self.actor_network
+            device = next(self.parameters()).device
+            if target_entropy == "auto":
+                action_spec = (
+                    action_spec
+                    if action_spec is not None
+                    else getattr(actor_network, "spec", None)
+                )
+                if action_spec is None:
+                    raise RuntimeError(
+                        "Cannot infer the dimensionality of the action. Consider providing "
+                        "the target entropy explicitely or provide the spec of the "
+                        "action tensor in the actor network."
+                    )
+                if not isinstance(action_spec, CompositeSpec):
+                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                target_entropy = -float(
+                    np.prod(action_spec[self.tensor_keys.action].shape)
+                )
+            self.register_buffer(
+                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+            )
+            return self.target_entropy_buffer
+        return target_entropy
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -889,7 +918,7 @@ class DiscreteSACLoss(LossModule):
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
-        num_actions: int,
+        num_actions: int,  # replace with spec?
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
