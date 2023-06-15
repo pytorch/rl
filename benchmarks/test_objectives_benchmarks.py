@@ -113,7 +113,6 @@ def test_values(benchmark, val_fn, has_lmbda, has_state_value):
 )
 def test_gae_speed(benchmark, gae_fn, gamma_tensor, batches, timesteps):
     size = (batches, timesteps, 1)
-    print(size)
 
     torch.manual_seed(0)
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
@@ -504,7 +503,7 @@ def test_a2c_speed(
 ):
     common_net = MLP(
         num_cells=ncells,
-        in_features=2 * n_obs,
+        in_features=n_obs,
         depth=3,
         out_features=n_hidden,
     )
