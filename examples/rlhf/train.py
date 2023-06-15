@@ -12,7 +12,7 @@ import torch
 from data.openai_summarize_tldr import get_prompt_dataloader
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from utils import load_and_update_config, setup
+from utils import get_file_logger, load_and_update_config, setup
 
 
 def create_loss_estimator(eval_iters, ctx):
@@ -34,6 +34,7 @@ def create_loss_estimator(eval_iters, ctx):
 
 
 def main():
+    loss_logger = get_file_logger("loss_logger", "transformer_loss_logger.log")
     # load and extract configuration
     config = load_and_update_config("config/train.yaml")
 
@@ -110,16 +111,22 @@ def main():
             # evaluate the loss on train/val sets and write checkpoints
             train_loss = estimate_loss(model, train_loader)
             val_loss = estimate_loss(model, val_loader)
-            print(f"Evaluation: {it=}: {train_loss=:.4f}, {val_loss=:.4f}")
+            msg = f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}"
+            print(msg)
+            loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
-                    print(f"saving checkpoint to {out_dir}")
+                    msg = f"saving checkpoint to {out_dir}"
+                    print(msg)
+                    loss_logger.info(msg)
                     model.module.save_pretrained(out_dir)
         elif it % log_interval == 0:
             # loss as float. note: this is a CPU-GPU sync point
             loss = batch.loss.item()
-            print(f"{it=}: {loss=:.4f}, time {dt*1000:.2f}ms")
+            msg = f"TRAIN: {it=}: {loss=:.4f}, time {dt*1000:.2f}ms"
+            print(msg)
+            loss_logger.info(msg)
 
 
 if __name__ == "__main__":

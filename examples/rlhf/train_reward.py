@@ -5,7 +5,7 @@ import torch
 from data import get_reward_dataloader
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from utils import load_and_update_config, setup
+from utils import get_file_logger, load_and_update_config, setup
 
 HERE = Path(__file__).parent
 
@@ -38,6 +38,7 @@ def create_loss_estimator(eval_iters, ctx):
 
 
 def main():
+    loss_logger = get_file_logger("loss_logger", "reward_loss_logger.log")
     config = load_and_update_config("config/train_reward.yaml")
 
     data_config = config["data"]
@@ -112,10 +113,11 @@ def main():
         if it % eval_interval == 0:
             val_loss, val_acc = estimate_loss(model, val_loader)
             train_loss, train_acc = estimate_loss(model, train_loader)
-            print(
-                f"Evaluation: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
-                f"{train_acc=:.4f}, {val_acc=:.4f}"
-            )
+
+            msg = (f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
+                   f"{train_acc=:.4f}, {val_acc=:.4f}")
+            print(msg)
+            loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
@@ -124,7 +126,9 @@ def main():
         elif it % log_interval == 0:
             loss = loss.item()
             acc = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
-            print(f"{it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms")
+            msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms"
+            print(msg)
+            loss_logger.info(msg)
 
 
 if __name__ == "__main__":
