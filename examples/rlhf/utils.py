@@ -59,7 +59,8 @@ def get_file_logger(name, filename, level=logging.DEBUG):
     logger = logging.getLogger(name)
     handler = logging.FileHandler(filename)
     handler.setFormatter(
-        logging.Formatter("%(asctime)s, %(name)s %(levelname)s %(message)s")
+        # logging.Formatter("%(asctime)s, %(name)s %(levelname)s %(message)s")
+        logging.Formatter("%(asctime)s - %(message)s")
     )
     logger.addHandler(handler)
     logger.setLevel(level)
@@ -70,6 +71,7 @@ def setup(device, dtype):
     torch.manual_seed(1337)
     torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn
+    torch._dynamo.config.cache_size_limit = 256
 
     if "cuda" not in device:
         return nullcontext()

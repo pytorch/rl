@@ -13,7 +13,7 @@ from torchrl.data.replay_buffers import (
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from tqdm import trange
+from tqdm import trange, tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
 from utils import get_file_logger, load_config, setup
 
@@ -57,7 +57,8 @@ def create_loss_estimator(
         rewards = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
-            td = rollout(batch, model, ref_model, reward_model)
+            # NOTE: disable kl for evaluation
+            td = rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
@@ -83,7 +84,7 @@ def create_loss_estimator(
                 f"{test_reward=:4.4f}\n"
                 f"====================================================\n"
             )
-            logger.debug(string_to_write)
+            logger.info(string_to_write)
 
         return test_reward
 
@@ -91,8 +92,8 @@ def create_loss_estimator(
 
 
 def main():
-    query_logger = get_file_logger("query_logger", "query_logger.log")
-    val_reward_logger = get_file_logger("val_reward_logger", "test_rewards.log")
+    query_logger = get_file_logger("query_logger", "rlhf_query_logger.log")
+    val_reward_logger = get_file_logger("val_reward_logger", "rlhf_valid_rewards.log")
 
     config = load_config("config/train_rlhf.yaml")
 
@@ -113,13 +114,13 @@ def main():
     batch_size = data_config["batch_size"]
 
     grad_clip = train_config["grad_clip"]
-    max_iters = train_config["max_iters"]
+    max_epochs = train_config["max_epochs"]
     always_save_checkpoint = train_config["always_save_checkpoint"]
 
     episode_length = ppo_config["episode_length"]
-    ppo_batch_size = ppo_config["batch_size"]
-    num_epochs = ppo_config["num_epochs"]
-    num_rollouts = ppo_config["num_rollouts"]
+    ppo_batch_size = ppo_config["ppo_batch_size"]
+    ppo_num_epochs = ppo_config["ppo_num_epochs"]
+    num_rollouts_per_epoch = ppo_config["num_rollouts_per_epoch"]
 
     device = config["sys"]["device"]
     dtype = config["sys"]["dtype"]
@@ -171,54 +172,66 @@ def main():
         scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
 
     rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(episode_length * num_rollouts),
+        storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
+        batch_size=episode_length * batch_size,
+        sampler=SamplerWithoutReplacement(),
+    )
+    rb_ppo = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(episode_length * batch_size),
         batch_size=ppo_batch_size,
         sampler=SamplerWithoutReplacement(),
     )
 
     best_val_reward = float("-inf")
+    it = 0  # it is equivalent to batch_size number of episodes
+    with tqdm(total=int(max_epochs*num_rollouts_per_epoch/batch_size)) as pbar:
+        for _epoch in range(1, max_epochs + 1):
+            rb.empty()
+            rollout_rewards = []
+            kl_coef = min(max((6 * it) / max_epochs, 0.1), 6)
+            for _ in range(0, num_rollouts_per_epoch, batch_size):
+                batch = next(train_loader)
+                td = rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
+                with torch.no_grad(), ctx:
+                    adv_fn(td)
+                # it's possible we didn't fill the replay buffer in the last iteration if
+                # generation stopped early, so we empty first before repopulating
+                rb.extend(flatten_td(td))
+                rollout_rewards.append(td.get(("next", "reward")).mean().cpu().item())
+            rollout_reward = torch.tensor(rollout_rewards).mean().cpu().item()
+            # FIXME: THIS PPO CYCLE WAS DIFFERENT wrt trlx. @tcbegley please double check
+            # they sample batch_size from rb and then do minibatches ppo_batch_size within 
 
-    for it in trange(1, max_iters + 1):
-        rb.empty()
-        rollout_rewards = []
-        for _ in range(0, num_rollouts, batch_size):
-            batch = next(train_loader)
-            td = rollout(batch, model, ref_model, reward_model)
-            with torch.no_grad(), ctx:
-                adv_fn(td)
-            # it's possible we didn't fill the replay buffer in the last iteration if
-            # generation stopped early, so we empty first before repopulating
-            rb.extend(flatten_td(td))
-            rollout_rewards.append(td.get(("next", "reward")).mean().cpu().item())
-        rollout_reward = torch.tensor(rollout_rewards).mean().cpu().item()
-
-        epoch_losses = []
-        for _epoch in range(num_epochs):
-            for minibatch in rb:
-                optimizer.zero_grad()
-                with ctx:
-                    loss_vals = loss_fn(minibatch.to(device))
-                loss_val = sum(
-                    value for key, value in loss_vals.items() if key.startswith("loss")
-                )
-                loss_val.backward()
-                epoch_losses.append(loss_val.detach().cpu())
-                torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
-                optimizer.step()
-
-        if scheduler is not None:
-            scheduler.step()
-
-        if it % eval_interval == 0:
-            val_reward = estimate_loss(model, val_loader)
-            val_reward_logger.debug(val_reward)
-            if val_reward > best_val_reward or always_save_checkpoint:
-                best_val_reward = val_reward
-                if it > 0:
-                    print(f"saving checkpoint to {rlhf_out_dir}")
-                    model.save_pretrained(rlhf_out_dir)
-        elif it % log_interval == 0:
-            print(f"{it=}: {rollout_reward=:.4f}")
+            for batch in rb:
+                rb_ppo.empty()
+                rb_ppo.extend(batch)
+                for ppo_epoch in range(ppo_num_epochs):  # PPO epochs
+                    optimizer.zero_grad()
+                    for minibatch in rb_ppo:  # GO over RB
+                        with ctx:
+                            loss_vals = loss_fn(minibatch.to(device))
+                        loss_val = sum(
+                            value for key, value in loss_vals.items() if key.startswith("loss")
+                        )
+                        loss_val.backward()
+                        torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
+                    optimizer.step()
+                    if scheduler is not None:
+                        scheduler.step()
+                it += 1
+                pbar.update(1)
+                if it % eval_interval == 0:
+                    val_reward = estimate_loss(model, val_loader)
+                    val_reward_logger.info(f"VALID: {it=}: {val_reward=:.4f}")
+                    pbar.set_description(f"VALID: {it=}: {val_reward=:.4f}")
+                    if val_reward > best_val_reward or always_save_checkpoint:
+                        best_val_reward = val_reward
+                        if it > 0:
+                            val_reward_logger.info(f"saving checkpoint to {rlhf_out_dir}")
+                            model.save_pretrained(rlhf_out_dir)
+                elif it % log_interval == 0:
+                    val_reward_logger.info(f"TRAIN: {it=}: {rollout_reward=:.4f}")
+                    pbar.set_description(f"TRAIN: {it=}: {rollout_reward=:.4f}")
 
 
 if __name__ == "__main__":
