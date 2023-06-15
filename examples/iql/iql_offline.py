@@ -70,7 +70,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         data = replay_buffer.sample()
         # loss
-        loss_vals = loss_module(data)
+        loss_vals = loss_module(data.clone())
         # backprop
         actor_loss = loss_vals["loss_actor"]
         q_loss = loss_vals["loss_qvalue"]

@@ -70,12 +70,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(i)
         data = replay_buffer.sample()
         # loss
-        loss_vals = loss_module(data)
+        loss_vals = loss_module(data.clone())
         # backprop
         actor_loss = loss_vals["loss_actor"]
         q_loss = loss_vals["loss_qvalue"]
-        value_loss = loss_vals["loss_value"]
-        loss_val = actor_loss + q_loss + value_loss
+        alpha_loss = loss_vals["loss_alpha"]
+        alpha_prime_loss = loss_vals["loss_alpha_prime"]
+        loss_val = actor_loss + q_loss + alpha_loss + alpha_prime_loss
 
         optimizer.zero_grad()
         loss_val.backward()
