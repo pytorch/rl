@@ -7101,7 +7101,8 @@ class TestAdv:
             [TDLambdaEstimator, {"lmbda": 0.95}],
         ],
     )
-    def test_non_differentiable(self, adv, kwargs):
+    @pytest.mark.parametrize("shifted", [True, False])
+    def test_non_differentiable(self, adv, shifted, kwargs):
         value_net = TensorDictModule(
             nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
         )
@@ -7109,6 +7110,7 @@ class TestAdv:
             gamma=0.98,
             value_network=value_net,
             differentiable=False,
+            shifted=shifted,
             **kwargs,
         )
         td = TensorDict(
@@ -7135,12 +7137,14 @@ class TestAdv:
     )
     @pytest.mark.parametrize("has_value_net", [True, False])
     @pytest.mark.parametrize("skip_existing", [True, False, None])
+    @pytest.mark.parametrize("shifted", [True, False])
     def test_skip_existing(
         self,
         adv,
         kwargs,
         has_value_net,
         skip_existing,
+        shifted,
     ):
         if has_value_net:
             value_net = TensorDictModule(
@@ -7155,6 +7159,7 @@ class TestAdv:
             gamma=0.98,
             value_network=value_net,
             differentiable=True,
+            shifted=shifted,
             skip_existing=skip_existing,
             **kwargs,
         )
