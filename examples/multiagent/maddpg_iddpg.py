@@ -38,7 +38,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = True
+    log = False
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -106,7 +106,7 @@ def train(seed):
 
     # Policy
     actor_net = MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["observation"].shape[-1],
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
         n_agent_outputs=env.action_spec.shape[-1],
         n_agents=env.n_agents,
         centralised=False,
@@ -117,26 +117,32 @@ def train(seed):
         activation_class=nn.Tanh,
     )
     policy_module = TensorDictModule(
-        actor_net, in_keys=["observation"], out_keys=["param"]
+        actor_net, in_keys=[("agents", "observation")], out_keys=[("agents", "param")]
     )
     policy = ProbabilisticActor(
         module=policy_module,
-        spec=env.unbatched_input_spec["action"],
-        in_keys=["param"],
+        spec=env.unbatched_action_spec,
+        in_keys={"param": ("agents", "param")},
+        out_keys=[env.action_key],
         distribution_class=TanhDelta,
         distribution_kwargs={
-            "min": env.unbatched_input_spec["action"].space.minimum,
-            "max": env.unbatched_input_spec["action"].space.maximum,
+            "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
+            "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
         },
         return_log_prob=False,
     )
-    policy = AdditiveGaussianWrapper(
-        policy, annealing_num_steps=int(total_frames * (1 / 2)), sigma_end=0.0
+
+    policy_explore = AdditiveGaussianWrapper(
+        policy,
+        annealing_num_steps=int(total_frames * (1 / 2)),
+        sigma_end=0.0,
+        action_key=env.action_key,
+        spec=env.unbatched_action_spec,
     )
 
     # Critic
     module = MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["observation"].shape[-1]
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1]
         + env.action_spec.shape[-1],  # Q critic takes action and value
         n_agent_outputs=1,
         n_agents=env.n_agents,
@@ -149,7 +155,8 @@ def train(seed):
     )
     value_module = ValueOperator(
         module=module,
-        in_keys=["observation", "action"],
+        in_keys=[("agents", "observation"), env.action_key],
+        out_keys=[("agents", "state_action_value")],
     )
 
     with set_exploration_type(ExplorationType.RANDOM):
@@ -157,7 +164,7 @@ def train(seed):
 
     collector = SyncDataCollector(
         env,
-        policy,
+        policy_explore,
         device=vmas_device,
         storing_device=training_device,
         frames_per_batch=frames_per_batch,
@@ -172,6 +179,9 @@ def train(seed):
     )
 
     loss_module = DDPGLoss(actor_network=policy, value_network=value_module)
+    loss_module.set_keys(
+        state_action_value=("agents", "state_action_value"), reward=env.reward_key
+    )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
@@ -201,6 +211,12 @@ def train(seed):
 
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
+
+        tensordict_data["next", "done"] = (
+            tensordict_data["next", "done"]
+            .unsqueeze(-1)
+            .expand(tensordict_data[env.reward_key].shape)
+        )
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
