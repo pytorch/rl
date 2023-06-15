@@ -12,7 +12,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper, QValueActor, QValueModule, SafeSequential
+from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
 from torchrl.objectives import DQNLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
@@ -33,7 +33,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -160,6 +160,7 @@ def train(seed):
         action_value=("agents", "action_value"),
         action=env.action_key,
         value=("agents", "chosen_action_value"),
+        reward=env.reward_key,
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
@@ -187,6 +188,11 @@ def train(seed):
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
+        tensordict_data["next", "done"] = (
+            tensordict_data["next", "done"]
+            .unsqueeze(-1)
+            .expand(tensordict_data[env.reward_key].shape)
+        )
         current_frames = tensordict_data.numel()
         total_frames += current_frames
         data_view = tensordict_data.reshape(-1)
@@ -212,7 +218,7 @@ def train(seed):
                 optim.step()
                 optim.zero_grad()
 
-        qnet.step(frames=current_frames)  # Update exploration annealing
+        qnet_explore.step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
