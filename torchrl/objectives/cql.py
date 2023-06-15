@@ -15,6 +15,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
+from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.modules import ProbabilisticActor
@@ -58,6 +59,9 @@ class CQLLoss(LossModule):
             Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
             Default is None (no maximum value).
+        action_spec (TensorSpec, optional): the action tensor spec. If not provided
+            and the target entropy is ``"auto"``, it will be retrieved from
+            the actor.
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
@@ -237,6 +241,7 @@ class CQLLoss(LossModule):
         alpha_init: float = 1.0,
         min_alpha: float = None,
         max_alpha: float = None,
+        action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -313,13 +318,20 @@ class CQLLoss(LossModule):
             )
 
         if target_entropy == "auto":
-            if actor_network.spec is None:
+            action_spec = (
+                action_spec
+                if action_spec is not None
+                else getattr(actor_network, "spec", None)
+            )
+            if action_spec is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
+            if not isinstance(action_spec, CompositeSpec):
+                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+            target_entropy = -float(np.prod(action_spec[self.tensor_keys.action].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
@@ -489,23 +501,26 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         return self._alpha * log_prob - min_q_logprob
 
-    def _get_policy_actions(self, observation, actor_params, num_actions=10):
-        observation = (
-            observation.unsqueeze(-1)
-            .repeat(1, num_actions, 1)
-            .view(observation.shape[0] * num_actions, observation.shape[-1])
+    def _get_policy_actions(self, data, actor_params, num_actions=10):
+        batch_size = data.batch_size
+        batch_size = list(batch_size[:-1]) + [batch_size[-1] * num_actions]
+        tensordict = data.select(*self.actor_network.in_keys).apply(
+            lambda x: x.repeat_interleave(num_actions, dim=data.ndim - 1),
+            batch_size=batch_size,
         )
-        tensordict = TensorDict({self.actor_network.in_keys[0]: observation}, [])
         with torch.no_grad():
             with set_exploration_type(ExplorationType.RANDOM):
                 dist = self.actor_network.get_dist(tensordict, params=actor_params)
                 action = dist.rsample()
                 tensordict.set(self.tensor_keys.action, action)
                 sample_log_prob = dist.log_prob(action)
-                tensordict.del_("loc")
-                tensordict.del_("scale")
+                # tensordict.del_("loc")
+                # tensordict.del_("scale")
 
-        return tensordict, sample_log_prob
+        return (
+            tensordict.select(*self.actor_network.in_keys, self.tensor_keys.action),
+            sample_log_prob,
+        )
 
     def _get_value_v(self, tensordict, _alpha, actor_params, qval_params):
         tensordict = tensordict.clone(False)
@@ -539,7 +554,7 @@ class CQLLoss(LossModule):
 
             if self.max_q_backup:
                 next_tensordict, _ = self._get_policy_actions(
-                    tensordict.get(("next", "observation")),
+                    tensordict.get("next"),
                     actor_params,
                     num_actions=self.num_random,
                 )
@@ -580,18 +595,19 @@ class CQLLoss(LossModule):
         # add CQL
         random_actions_tensor = (
             torch.FloatTensor(
-                tensordict.shape[0] * self.num_random, tensordict["action"].shape[-1]
+                tensordict.shape[0] * self.num_random,
+                tensordict[self.tensor_keys.action].shape[-1],
             )
             .uniform_(-1, 1)
             .to(tensordict.device)
         )
         curr_actions_td, curr_log_pis = self._get_policy_actions(
-            tensordict.get("observation"),
+            tensordict,
             self.actor_network_params,
             num_actions=self.num_random,
         )
         new_curr_actions_td, new_log_pis = self._get_policy_actions(
-            tensordict.get(("next", "observation")),
+            tensordict.get("next"),
             self.actor_network_params,
             num_actions=self.num_random,
         )
@@ -608,20 +624,19 @@ class CQLLoss(LossModule):
         )
         # select and stack input params
         # q value random action
-        tensordict_q_random = TensorDict(
-            {self.tensor_keys.action: random_actions_tensor}, []
-        )
-        current_observation = tensordict.get(*self.actor_network.in_keys)
-        current_observation = (
-            current_observation.unsqueeze(-2)
-            .repeat(1, self.num_random, 1)
-            .view(
-                current_observation.shape[0] * self.num_random,
-                current_observation.shape[-1],
-            )
-        )
-        tensordict_q_random.set(*self.actor_network.in_keys, current_observation)
+        tensordict_q_random = tensordict.select(*self.actor_network.in_keys)
 
+        batch_size = tensordict_q_random.batch_size
+        batch_size = list(batch_size[:-1]) + [batch_size[-1] * self.num_random]
+        tensordict_q_random = tensordict_q_random.select(
+            *self.actor_network.in_keys
+        ).apply(
+            lambda x: x.repeat_interleave(
+                self.num_random, dim=tensordict_q_random.ndim - 1
+            ),
+            batch_size=batch_size,
+        )
+        tensordict_q_random.set(self.tensor_keys.action, random_actions_tensor)
         cql_tensordict = torch.cat(
             [
                 tensordict_q_random.expand(
@@ -654,7 +669,9 @@ class CQLLoss(LossModule):
         )
 
         # importance sammpled version
-        random_density = np.log(0.5 ** curr_actions_td["action"].shape[-1])
+        random_density = np.log(
+            0.5 ** curr_actions_td[self.tensor_keys.action].shape[-1]
+        )
         cat_q1 = torch.cat(
             [
                 q_random[0] - random_density,

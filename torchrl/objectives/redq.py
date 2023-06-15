@@ -16,6 +16,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
+from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -50,6 +51,8 @@ class REDQLoss(LossModule):
         actor_network (TensorDictModule): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will
             be multiplicated as many times as needed.
+
+    Keyword Args:
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained.
             Default is ``10``.
         sub_sample_len (int, optional): number of Q-value networks to be
@@ -64,6 +67,9 @@ class REDQLoss(LossModule):
             Default is ``0.1``.
         max_alpha (float, optional): max value of alpha.
             Default is ``10.0``.
+        action_spec (TensorSpec, optional): the action tensor spec. If not provided
+            and the target entropy is ``"auto"``, it will be retrieved from
+            the actor.
         fixed_alpha (bool, optional): whether alpha should be trained to match
             a target entropy. Default is ``False``.
         target_entropy (Union[str, Number], optional): Target entropy for the
@@ -240,6 +246,7 @@ class REDQLoss(LossModule):
         alpha_init: float = 1.0,
         min_alpha: float = 0.1,
         max_alpha: float = 10.0,
+        action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
@@ -300,15 +307,20 @@ class REDQLoss(LossModule):
             )
 
         if target_entropy == "auto":
-            if actor_network.spec["action"] is None:
+            action_spec = (
+                action_spec
+                if action_spec is not None
+                else getattr(actor_network, "spec", None)
+            )
+            if action_spec is None:
                 raise RuntimeError(
                     "Cannot infer the dimensionality of the action. Consider providing "
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            target_entropy = -float(
-                np.prod(actor_network.spec[self.tensor_keys.action].shape)
-            )
+            if not isinstance(action_spec, CompositeSpec):
+                action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+            target_entropy = -float(np.prod(action_spec[self.tensor_keys.action].shape))
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
