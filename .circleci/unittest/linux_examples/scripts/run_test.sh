@@ -129,14 +129,21 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   env.name=Pendulum-v1 \
   logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=4 \
-  env_per_collector=2 \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
   collector_device=cuda:0 \
-  device=cuda:0 \
-  mode=offline
+  optim.device=cuda:0 \
+  logger.mode=offline
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=2 \
+  collector_device=cuda:0 \
+  optim.device=cuda:0 \
+  logger.mode=offline
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -227,14 +234,19 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
 #  record_video=True \
 #  record_frames=4 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
-  total_frames=48 \
-  batch_size=10 \
-  frames_per_batch=16 \
-  num_workers=2 \
-  env_per_collector=1 \
-  mode=offline \
-  device=cuda:0 \
-  collector_device=cuda:0
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=1 \
+  logger.mode=offline \
+  optim.device=cuda:0 \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
+  collector.total_frames=48 \
+  optim.batch_size=10 \
+  collector.frames_per_batch=16 \
+  collector.env_per_collector=1 \
+  logger.mode=offline \
+  optim.device=cuda:0 \
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -248,6 +260,20 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   logger.backend=
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
+
+# offline pretraining
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_online.py \
+  optim.gradient_steps=48 \
+  replay_buffer.batch_size=10 \
+  logger.mode=offline \
+  optim.device=cuda:0 \
+
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/cql/cql_online.py \
+  optim.gradient_steps=48 \
+  replay_buffer.batch_size=10 \
+  logger.mode=offline \
+  optim.device=cuda:0 \
+
 
 coverage combine
 coverage xml -i
