@@ -11,8 +11,9 @@ from env import rollout
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
+from torchrl.data import LazyMemmapStorage
 from torchrl.data.replay_buffers import (
-    LazyTensorStorage,
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
 )
@@ -148,9 +149,7 @@ def main(cfg):
     actor, critic, critic_head, model = init_actor_critic(
         resolve_name_or_path(transformer_name_or_path), dropout, device, compile_
     )
-    critic.eval()
     ref_model = deepcopy(model).to("cuda:1")
-    ref_model.eval()
     ref_model.requires_grad_(False)
     layers = model.transformer.h
     num_layers = len(layers)
@@ -166,7 +165,7 @@ def main(cfg):
     reward_model.eval()
     reward_model.requires_grad_(False)
 
-    adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True)
+    adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True, shifted=True)
     loss_fn = ClipPPOLoss(actor, critic_head)
 
     test_prompt = next(val_loader)
@@ -186,14 +185,16 @@ def main(cfg):
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
     rb = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
+        storage=LazyMemmapStorage(episode_length * num_rollouts_per_epoch),
         batch_size=episode_length * batch_size,
         sampler=SamplerWithoutReplacement(),
+        prefetch=10,
     )
     rb_ppo = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(episode_length * batch_size),
+        storage=LazyMemmapStorage(episode_length * batch_size),
         batch_size=ppo_batch_size,
         sampler=SamplerWithoutReplacement(),
+        prefetch=10,
     )
 
     best_val_reward = float("-inf")
@@ -205,16 +206,10 @@ def main(cfg):
             kl_coef = min(max((6 * it) / max_epochs, 0.1), 6)
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
-                td = rollout(
-                    batch,
-                    model,
-                    ref_model,
-                    reward_model,
-                    max_new_tokens=50,
-                    kl_coef=kl_coef,
-                )
-                with torch.no_grad(), ctx:
-                    adv_fn(td)
+                td = rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
+                # with torch.no_grad(), ctx:
+                #     # moving this to within epoch
+                #     adv_fn(td)
                 # it's possible we didn't fill the replay buffer in the last iteration if
                 # generation stopped early, so we empty first before repopulating
                 rb.extend(flatten_td(td))
@@ -229,10 +224,15 @@ def main(cfg):
                 pbar.set_description(f"TRAIN: {it=}: {rollout_reward=:.4f}")
 
             for batch in rb:
+                with torch.no_grad(), ctx:
+                    # moving this to within epoch
+                    adv_fn(td)
                 rb_ppo.empty()
                 rb_ppo.extend(batch)
                 for ppo_epoch in range(ppo_num_epochs):  # PPO epochs
                     optimizer.zero_grad()
+                    # why don't we optimize at each step? Is accumulating grads better?
+                    # usually more small steps is better than a giant one
                     for minibatch in rb_ppo:  # GO over RB
                         minibatch = minibatch.to(device, non_blocking=True)
                         with ctx:
