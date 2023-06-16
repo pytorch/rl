@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import time
 from pathlib import Path
 
@@ -6,8 +10,6 @@ from data import get_reward_dataloader
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, load_and_update_config, setup
-
-HERE = Path(__file__).parent
 
 
 def _accuracy(chosen_end_scores, rejected_end_scores):

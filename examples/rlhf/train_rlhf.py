@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 from copy import deepcopy
 
 import torch
@@ -16,8 +20,6 @@ from torchrl.objectives.value import GAE
 from tqdm import trange, tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
 from utils import get_file_logger, load_config, setup
-
-EOS_TOKEN_ID = 50256
 
 
 def flatten_td(td):
@@ -42,11 +44,11 @@ def create_loss_estimator(
     test_prompt_ids = batch.input_ids[:1, :test_rindex]
     test_label_ids = batch.input_ids[:1, test_rindex:]
     generation_config = GenerationConfig(
-        pad_token_id=EOS_TOKEN_ID, max_new_tokens=episode_length
+        pad_token_id=tokenizer.pad_token_id, max_new_tokens=episode_length
     )
     test_prompt = tokenizer.decode(test_prompt_ids[0, :test_rindex].tolist())
     test_label = tokenizer.decode(
-        test_label_ids[0, test_label_ids[0] != EOS_TOKEN_ID].tolist()
+        test_label_ids[0, test_label_ids[0] != tokenizer.pad_token_id].tolist()
     )
     _, test_label_reward = reward_model(
         input_ids=batch.input_ids[:1], attention_mask=batch.attention_mask[:1]
@@ -71,7 +73,7 @@ def create_loss_estimator(
             with ctx:
                 _, response_reward = reward_model(
                     input_ids=response_ids,
-                    attention_mask=(response_ids != EOS_TOKEN_ID).to(torch.int64),
+                    attention_mask=(response_ids != tokenizer.pad_token_id).to(torch.int64),
                 )
             reward = (response_reward - test_label_reward).item()
             response_ids = response_ids[0, test_rindex:]
