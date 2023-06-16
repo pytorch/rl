@@ -1,4 +1,4 @@
-name: Habitat Tests on Linux
+name: D4RL Tests on Linux
 
 on:
   pull_request:
