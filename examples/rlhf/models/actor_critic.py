@@ -71,10 +71,11 @@ def init_actor_critic(transformer_name_or_path, dropout, device, compile_):
         compile_=compile_,
         inference=True,
     )
-    a2c_model = ActorCritic(base_model)
-    a2c_model.to(device)
-    actor = a2c_model.get_policy_operator()
-    critic = a2c_model.get_value_operator()
-    critic_head = a2c_model.get_value_head()
+    model = ActorCritic(base_model)
+    model.to(device)
+    model.eval()
+    actor = model.get_policy_operator()
+    critic = model.get_value_operator()
+    critic_head = model.get_value_head()
 
     return actor, VmapCritic(critic), critic_head, base_model
