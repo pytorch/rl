@@ -43,7 +43,7 @@ class ActorCritic(ActorValueOperator):
                 in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
                 out_keys=["x"],
             ),
-            TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
+            TensorDictModule(lambda x: x[:, -1], in_keys=["x"], out_keys=["x"]),
         )
         actor_head = TensorDictModule(actor_head, in_keys=["x"], out_keys=["logits"])
         actor_head = SafeProbabilisticTensorDictSequential(
