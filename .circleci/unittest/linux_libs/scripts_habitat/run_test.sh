@@ -33,7 +33,7 @@ export LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 conda deactivate && conda activate ./env
 
 # this workflow only tests the libs
-python -c "import habitat;import habitat.gym"
+python -c "import torch;import quaternion;import habitat;import habitat.gym"
 python -c """from torchrl.envs.libs.habitat import HabitatEnv
 env = HabitatEnv('HabitatRenderPick-v0')
 env.reset()
