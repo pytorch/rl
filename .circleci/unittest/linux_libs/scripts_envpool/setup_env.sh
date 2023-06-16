@@ -47,6 +47,8 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
+yum install mesa-libGL
+
 conda deactivate
 conda activate "${env_dir}"
 
