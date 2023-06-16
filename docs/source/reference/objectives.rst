@@ -127,6 +127,15 @@ IQL
 
     IQLLoss
 
+CQL
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    CQLLoss
+
 TD3
 ----
 

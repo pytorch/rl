@@ -732,10 +732,12 @@ loss_fn = DDPGLoss(actor, value, gamma=0.99)
 tensordict = TensorDict(
     {
         "observation": torch.randn(10, 3),
-        "next": {"observation": torch.randn(10, 3)},
-        "reward": torch.randn(10, 1),
+        "next": {
+            "observation": torch.randn(10, 3),
+            "reward": torch.randn(10, 1),
+            "done": torch.zeros(10, 1, dtype=torch.bool),
+        },
         "action": torch.randn(10, 1),
-        "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
     device="cpu",

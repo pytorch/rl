@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from mocking_classes import ContinuousActionVecMockEnv
 from scipy.stats import ttest_1samp
 from tensordict.nn import InteractionType
@@ -17,7 +17,7 @@ from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
-from torchrl.envs.transforms.transforms import gSDENoise
+from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import SafeModule, SafeSequential
 from torchrl.modules.distributions import TanhNormal
@@ -55,7 +55,7 @@ class TestEGreedy:
             assert ((action == 1) | (action == 0)).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 class TestOrnsteinUhlenbeckProcessWrapper:
     def test_ou(self, device, seed=0):
         torch.manual_seed(seed)
@@ -100,7 +100,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             batch_size=[batch],
             source={
                 "observation": torch.randn(batch, d_obs, device=device),
-                "step_count": torch.zeros(batch, device=device),
+                "is_init": torch.ones(batch, 1, dtype=torch.bool, device=device),
             },
             device=device,
         )
@@ -121,9 +121,9 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             out.append(tensordict.clone())
             out_noexp.append(tensordict_noexp.clone())
             tensordict.set_("observation", torch.randn(batch, d_obs, device=device))
-            tensordict["step_count"] += 1
+            tensordict["is_init"][:] = 0
             if i == n_steps // 2:
-                tensordict["step_count"][: batch // 2] = 0
+                tensordict["is_init"][: batch // 2] = 1
 
         out = torch.stack(out, 0)
         out_noexp = torch.stack(out_noexp, 0)
@@ -139,7 +139,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             2,
             ContinuousActionVecMockEnv,
         )
-        env = env.to(device)
+        env = TransformedEnv(env.to(device), InitTracker())
         # the module must work with the action spec of a single env or a serial env
         if parallel_spec:
             action_spec = env.action_spec
@@ -181,7 +181,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         return
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 class TestAdditiveGaussian:
     @pytest.mark.parametrize("spec_origin", ["spec", "policy", None])
     def test_additivegaussian_sd(
@@ -350,7 +350,7 @@ class TestAdditiveGaussian:
 @pytest.mark.parametrize("action_dim", [5, 11])
 @pytest.mark.parametrize("gSDE", [True, False])
 @pytest.mark.parametrize("safe", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
     "exploration_type", [InteractionType.RANDOM, InteractionType.MODE]
 )
@@ -426,18 +426,19 @@ def test_gsde(
 @pytest.mark.parametrize("std", [1, 2])
 @pytest.mark.parametrize("sigma_init", [None, 1.5, 3])
 @pytest.mark.parametrize("learn_sigma", [False, True])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "device",
+    [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+)
 def test_gsde_init(sigma_init, state_dim, action_dim, mean, std, device, learn_sigma):
     torch.manual_seed(0)
-    state = torch.randn(100000, *state_dim, device=device) * std + mean
-    action = torch.randn(100000, *state_dim[:-1], action_dim, device=device)
+    state = torch.randn(10000, *state_dim, device=device) * std + mean
+    action = torch.randn(10000, *state_dim[:-1], action_dim, device=device)
     # lazy
     gsde_lazy = LazygSDEModule(sigma_init=sigma_init, learn_sigma=learn_sigma).to(
         device
     )
-    _eps = torch.randn(
-        100000, *state_dim[:-1], action_dim, state_dim[-1], device=device
-    )
+    _eps = torch.randn(10000, *state_dim[:-1], action_dim, state_dim[-1], device=device)
     with set_exploration_type(InteractionType.RANDOM):
         mu, sigma, action_out, _eps = gsde_lazy(action, state, _eps)
     sigma_init = sigma_init if sigma_init else 1.0

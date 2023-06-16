@@ -100,6 +100,7 @@ class DistributedCollectorBase:
         for data in collector:
             total += data.numel()
             assert data.numel() == frames_per_batch
+        assert data.names[-1] == "time"
         collector.shutdown()
         assert total == 1000
         queue.put("passed")

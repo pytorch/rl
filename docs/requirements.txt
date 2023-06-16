@@ -23,3 +23,4 @@ ipython
 imageio[ffmpeg,pyav]
 memory_profiler
 pyrender
+pytest

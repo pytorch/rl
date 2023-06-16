@@ -5,11 +5,11 @@ Pendulum: Writing your environment and transforms with TorchRL
 
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-Creating an environment (a simulator or a interface to a physical control system)
+Creating an environment (a simulator or an interface to a physical control system)
 is an integrative part of reinforcement learning and control engineering.
 
 TorchRL provides a set of tools to do this in multiple contexts.
-This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` code a pendulum
+This tutorial demonstrates how to use PyTorch and ``torchrl`` code a pendulum
 simulator from the ground up.
 It is freely inspired by the Pendulum-v1 implementation from `OpenAI-Gym/Farama-Gymnasium
 control library <https://github.com/Farama-Foundation/Gymnasium>`__.
@@ -139,7 +139,7 @@ DEFAULT_Y = 1.0
 # 0 too.
 #
 # Coding the effect of an action: :func:`~torchrl.envs.EnvBase._step`
-# ------------------------------------------------------------------
+# -------------------------------------------------------------------
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
@@ -263,7 +263,7 @@ def angle_normalize(x):
 
 ######################################################################
 # Resetting the simulator: :func:`~torchrl.envs.EnvBase._reset`
-# ------------------------------------------------------------
+# -------------------------------------------------------------
 #
 # The second method we need to care about is the
 # :meth:`~torchrl.envs.EnvBase._reset` method. Like
@@ -353,25 +353,16 @@ def _reset(self, tensordict):
 #   flag.
 #
 # TorchRL specs are organised in two general containers: ``input_spec`` which
-# contains the specs of the information that the step function reads (including
-# ``action_spec``), and ``output_spec`` which encodes the specs that the
+# contains the specs of the information that the step function reads (divided
+# between ``action_spec`` containing the action and ``state_spec`` containing
+# all the rest), and ``output_spec`` which encodes the specs that the
 # step outputs (``observation_spec``, ``reward_spec`` and ``done_spec``).
-# Given this organisation, the following queries will return the same results:
-#
-#   .. code-block::
-#
-#     >>> # observation
-#     >>> obs_spec = env.observation_spec
-#     >>> obs_spec = env.output_spec["observation"]
-#     >>> # reward
-#     >>> reward_spec = env.reward_spec
-#     >>> reward_spec = env.output_spec["reward"]
-#     >>> # done
-#     >>> done_spec = env.done_spec
-#     >>> done_spec = env.output_spec["done"]
-#     >>> # action
-#     >>> action_spec = env.action_spec
-#     >>> action_spec = env.input_spec["action"]
+# In general, you should not interact directly with ``output_spec`` and
+# ``input_spec`` but only with their content: ``observation_spec``,
+# ``reward_spec``, ``done_spec``, ``action_spec`` and ``state_spec``.
+# The reason if that the specs are organised in a non-trivial way
+# within ``output_spec`` and
+# ``input_spec`` and neither of these should be directly modified.
 #
 # In other words, the ``observation_spec`` and related properties are
 # convenient shortcuts to the content of the output and input spec containers.
@@ -414,10 +405,11 @@ def _make_spec(self, td_params):
         params=make_composite_from_td(td_params["params"]),
         shape=(),
     )
-    # since the environment is stateless, we expect the previous output as input
-    self.input_spec = self.observation_spec.clone()
-    # action-spec will be automatically wrapped in input_spec, but the convenient
-    # self.action_spec = spec is supported
+    # since the environment is stateless, we expect the previous output as input.
+    # For this, EnvBase expects some state_spec to be available
+    self.state_spec = self.observation_spec.clone()
+    # action-spec will be automatically wrapped in input_spec when
+    # `self.action_spec = spec` will be called supported
     self.action_spec = BoundedTensorSpec(
         minimum=-td_params["params", "max_torque"],
         maximum=td_params["params", "max_torque"],
@@ -464,7 +456,7 @@ def _set_seed(self, seed: Optional[int]):
 
 ######################################################################
 # Wrapping things together: the :class:`~torchrl.envs.EnvBase` class
-# -----------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # We can finally put together the pieces and design our environment class.
 # The specs initialization needs to be performed during the environment
@@ -556,7 +548,7 @@ check_env_specs(env)
 #
 
 print("observation_spec:", env.observation_spec)
-print("input_spec:", env.input_spec)
+print("state_spec:", env.state_spec)
 print("reward_spec:", env.reward_spec)
 
 ######################################################################
@@ -845,17 +837,17 @@ logs = defaultdict(list)
 for _ in pbar:
     init_td = env.reset(env.gen_params(batch_size=[batch_size]))
     rollout = env.rollout(100, policy, tensordict=init_td, auto_reset=False)
-    traj_return = rollout["reward"].mean()
+    traj_return = rollout["next", "reward"].mean()
     (-traj_return).backward()
     gn = torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optim.step()
     optim.zero_grad()
     pbar.set_description(
         f"reward: {traj_return: 4.4f}, "
-        f"last reward: {rollout[..., -1]['reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
+        f"last reward: {rollout[..., -1]['next', 'reward'].mean(): 4.4f}, gradient norm: {gn: 4.4}"
     )
     logs["return"].append(traj_return.item())
-    logs["last_reward"].append(rollout[..., -1]["reward"].mean().item())
+    logs["last_reward"].append(rollout[..., -1]["next", "reward"].mean().item())
     scheduler.step()
 
 

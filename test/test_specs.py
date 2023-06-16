@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import torch
 import torchrl.data.tensor_specs
-from _utils_internal import get_available_devices, set_global_var
+from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import (
@@ -310,7 +310,7 @@ def test_multi_discrete(shape, ns, dtype):
         99,
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize(
     "shape",
     [
@@ -352,7 +352,7 @@ def test_discrete_conversion(n, device, shape):
         torch.Size([4, 5]),
     ],
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
     one_hot = MultiOneHotDiscreteTensorSpec(ns, device=device)
@@ -366,7 +366,7 @@ def test_multi_discrete_conversion(ns, shape, device):
 
 
 @pytest.mark.parametrize("is_complete", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
 class TestComposite:
     @staticmethod
@@ -644,6 +644,40 @@ class TestComposite:
             ("nested_cp", "act"),
         }
         assert ts["nested_cp"]["act"] is not None
+
+
+@pytest.mark.parametrize("recurse", [True, False])
+def test_lock(recurse):
+    shape = [3, 4, 5]
+    spec = CompositeSpec(
+        a=CompositeSpec(
+            b=CompositeSpec(shape=shape[:3], device="cpu"), shape=shape[:2]
+        ),
+        shape=shape[:1],
+    )
+    spec["a"] = spec["a"].clone()
+    spec["a", "b"] = spec["a", "b"].clone()
+    assert not spec.locked
+    spec.lock_(recurse=recurse)
+    assert spec.locked
+    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        spec["a"] = spec["a"].clone()
+    with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+        spec.set("a", spec["a"].clone())
+    if recurse:
+        assert spec["a"].locked
+        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+            spec["a"].set("b", spec["a", "b"].clone())
+        with pytest.raises(RuntimeError, match="Cannot modify a locked CompositeSpec."):
+            spec["a", "b"] = spec["a", "b"].clone()
+    else:
+        assert not spec["a"].locked
+        spec["a", "b"] = spec["a", "b"].clone()
+        spec["a"].set("b", spec["a", "b"].clone())
+    spec.unlock_(recurse=recurse)
+    spec["a"] = spec["a"].clone()
+    spec["a", "b"] = spec["a", "b"].clone()
+    spec["a"].set("b", spec["a", "b"].clone())
 
 
 def test_keys_to_empty_composite_spec():
@@ -1081,7 +1115,7 @@ class TestSpec:
         torch.manual_seed(0)
         action_spec = OneHotDiscreteTensorSpec(10)
 
-        sample = torch.stack([action_spec.rand() for _ in range(10000)], 0)
+        sample = action_spec.rand((100000,))
 
         sample_list = sample.argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
@@ -2081,7 +2115,7 @@ class TestStack:
         assert (val.numpy() == val_np).all()
 
         with pytest.raises(AssertionError):
-            c.to_numpy(val + 1)
+            c.to_numpy(val + 1, safe=True)
 
 
 class TestStackComposite:
@@ -2345,7 +2379,212 @@ class TestStackComposite:
 
         td_fail = TensorDict({"a": torch.rand((2, 1, 3)) + 1}, [2, 1, 3])
         with pytest.raises(AssertionError):
-            c.to_numpy(td_fail)
+            c.to_numpy(td_fail, safe=True)
+
+
+# MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
+@pytest.mark.parametrize(
+    "spec_class",
+    [
+        BinaryDiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+        CompositeSpec,
+    ],
+)
+@pytest.mark.parametrize(
+    "idx",
+    [
+        5,
+        (0, 1),
+        range(10),
+        np.array([[2, 10]]),
+        (slice(None), slice(1, 2), 1),
+        (1, ..., 2, ..., 3),
+        (1, 1, 1, 1),
+        torch.tensor([10, 2]),
+    ],  # [:,1:2,1]
+)
+def test_invalid_indexing(spec_class, idx):
+    if spec_class in [BinaryDiscreteTensorSpec, OneHotDiscreteTensorSpec]:
+        spec = spec_class(n=4, shape=[3, 4])
+    elif spec_class == MultiDiscreteTensorSpec:
+        spec = spec_class([2, 2, 2], shape=[3])
+    elif spec_class == MultiOneHotDiscreteTensorSpec:
+        spec = spec_class([4], shape=[3, 4])
+    elif spec_class == CompositeSpec:
+        spec = spec_class(k=UnboundedDiscreteTensorSpec(shape=(3, 4)), shape=(3,))
+    with pytest.raises(IndexError):
+        spec[idx]
+
+
+# BoundedTensorSpec, MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
+@pytest.mark.parametrize(
+    "spec_class",
+    [
+        BinaryDiscreteTensorSpec,
+        DiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+        UnboundedContinuousTensorSpec,
+        UnboundedDiscreteTensorSpec,
+        CompositeSpec,
+    ],
+)
+def test_valid_indexing(spec_class):
+    # Default args. UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec
+    args = {"0d": [], "2d": [], "3d": [], "4d": [], "5d": []}
+    kwargs = {}
+    if spec_class in [
+        BinaryDiscreteTensorSpec,
+        DiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+    ]:
+        args = {"0d": [0], "2d": [3], "3d": [4], "4d": [6], "5d": [7]}
+    elif spec_class == MultiOneHotDiscreteTensorSpec:
+        args = {"0d": [[0]], "2d": [[3]], "3d": [[4]], "4d": [[6]], "5d": [[7]]}
+    elif spec_class == MultiDiscreteTensorSpec:
+        args = {
+            "0d": [[0]],
+            "2d": [[2] * 3],
+            "3d": [[2] * 4],
+            "4d": [[1] * 6],
+            "5d": [[2] * 7],
+        }
+    elif spec_class == BoundedTensorSpec:
+        min_max = (-1, -1)
+        args = {
+            "0d": min_max,
+            "2d": min_max,
+            "3d": min_max,
+            "4d": min_max,
+            "5d": min_max,
+        }
+    elif spec_class == CompositeSpec:
+        kwargs = {
+            "k1": UnboundedDiscreteTensorSpec(shape=(5, 3, 4, 6, 7, 8)),
+            "k2": OneHotDiscreteTensorSpec(n=7, shape=(5, 3, 4, 6, 7)),
+        }
+
+    spec_0d = spec_class(*args["0d"], **kwargs)
+    if spec_class in [
+        UnboundedContinuousTensorSpec,
+        UnboundedDiscreteTensorSpec,
+        CompositeSpec,
+    ]:
+        spec_0d = spec_class(*args["0d"], shape=[], **kwargs)
+    spec_2d = spec_class(*args["2d"], shape=[5, 3], **kwargs)
+    spec_3d = spec_class(*args["3d"], shape=[5, 3, 4], **kwargs)
+    spec_4d = spec_class(*args["4d"], shape=[5, 3, 4, 6], **kwargs)
+    spec_5d = spec_class(*args["5d"], shape=[5, 3, 4, 6, 7], **kwargs)
+
+    # Integers
+    assert spec_2d[1].shape == torch.Size([3])
+    # Lists
+    assert spec_3d[[1, 2]].shape == torch.Size([2, 3, 4])
+    assert spec_2d[[0]].shape == torch.Size([1, 3])
+    assert spec_2d[[[[0]]]].shape == torch.Size([1, 1, 1, 3])
+    assert spec_2d[[0, 1]].shape == torch.Size([2, 3])
+    assert spec_2d[[[0, 1]]].shape == torch.Size([1, 2, 3])
+    assert spec_3d[[0, 1], [0, 1]].shape == torch.Size([2, 4])
+    assert spec_2d[[[0, 1], [0, 1]]].shape == torch.Size([2, 2, 3])
+    # Tuples
+    assert spec_3d[1, 2].shape == torch.Size([4])
+    assert spec_3d[(1, 2)].shape == torch.Size([4])
+    assert spec_3d[((1, 2))].shape == torch.Size([4])
+    # Ranges
+    assert spec_2d[range(2)].shape == torch.Size([2, 3])
+    # Slices
+    assert spec_2d[:].shape == torch.Size([5, 3])
+    assert spec_2d[10:].shape == torch.Size([0, 3])
+    assert spec_2d[:1].shape == torch.Size([1, 3])
+    assert spec_2d[1:2].shape == torch.Size([1, 3])
+    assert spec_2d[10:1:-1].shape == torch.Size([3, 3])
+    assert spec_2d[-5:-1].shape == torch.Size([4, 3])
+    assert spec_3d[[1, 2], 3:].shape == torch.Size([2, 0, 4])
+    # None (adds a singleton dimension where needed)
+    assert spec_2d[None].shape == torch.Size([1, 5, 3])
+    assert spec_2d[None, :2].shape == torch.Size([1, 2, 3])
+    # Ellipsis
+    assert spec_2d[1, ...].shape == torch.Size([3])
+    # Numpy arrays
+    assert spec_2d[np.array([[1, 2]])].shape == torch.Size([1, 2, 3])
+    # Tensors
+    assert spec_2d[torch.randint(3, (3, 2))].shape == torch.Size([3, 2, 3])
+    # Tuples
+    # Note: nested tuples are supported by specs but transformed into lists, similarity to numpy
+    assert spec_3d[(0, 1), (0, 1)].shape == torch.Size([2, 4])
+    assert spec_3d[:2, (0, 1)].shape == torch.Size([2, 2, 4])
+    assert spec_3d[:2, [0, 1]].shape == torch.Size([2, 2, 4])
+    assert spec_3d[:2, torch.tensor([0, 1])].shape == torch.Size([2, 2, 4])
+    assert spec_3d[:2, range(3)].shape == torch.Size([2, 3, 4])
+    assert spec_3d[:2, np.array([[1, 2]])].shape == torch.Size([2, 1, 2, 4])
+    assert spec_3d[:2, [0]].shape == torch.Size([2, 1, 4])
+    assert spec_3d[:2, 0].shape == torch.Size([2, 4])
+    assert spec_3d[[0, 1], [0]].shape == torch.Size([2, 4])
+    assert spec_4d[:, 1:2, 1].shape == torch.Size([5, 1, 6])
+    assert spec_3d[1:, range(3)].shape == torch.Size([4, 3, 4])
+    assert spec_3d[[[[[0, 1]]]], [[0]]].shape == torch.Size([1, 1, 1, 2, 4])
+    assert spec_3d[0, [[[[0, 1]]]]].shape == torch.Size([1, 1, 1, 2, 4])
+    assert spec_3d[0, ((((0, 1))))].shape == torch.Size([2, 4])
+    assert spec_3d[((((0, 1)))), [0, 2]].shape == torch.Size([2, 4])
+    assert spec_4d[2:, [[[0, 1]]], :3].shape == torch.Size([3, 1, 1, 2, 3, 6])
+    assert spec_5d[2:, [[[0, 1]]], [[0, 1]], :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
+    assert spec_5d[2:, [[[0, 1]]], 0, :3].shape == torch.Size([3, 1, 1, 2, 3, 7])
+    assert spec_5d[2:, [[[0, 1]]], :3, 0].shape == torch.Size(
+        [3, 1, 1, 2, 3, 7]
+    )  # Matches tensordict & tensor's behavior. Numpy would return (1, 1, 2, 3, 3, 7).
+    # TODO: Fix these tests.
+    # assert spec_5d[2:, [[[0, 1]]], :3, [0]].shape == torch.Size([1, 1, 2, 3, 3, 7])
+    # assert spec_5d[2:, [[[0, 1]]], :3, [[[0, 1]]]].shape == torch.Size([1, 1, 2, 3, 3, 7])
+
+    # Specific tests when specs have non-indexable dimensions
+    if spec_class in [
+        BinaryDiscreteTensorSpec,
+        OneHotDiscreteTensorSpec,
+        MultiDiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+    ]:
+        # Ellipsis
+        assert spec_0d[None].shape == torch.Size([1, 0])
+        assert spec_0d[...].shape == torch.Size([0])
+        assert spec_2d[..., :2].shape == torch.Size([2, 3])
+        assert spec_2d[..., :2, None, None].shape == torch.Size([2, 1, 1, 3])
+        assert spec_4d[1, ..., 2].shape == torch.Size([3, 6])
+        assert spec_2d[1, ..., None].shape == torch.Size([1, 3])
+        assert spec_3d[..., [0, 1], [0]].shape == torch.Size([2, 4])
+        assert spec_3d[None, 1, ..., None].shape == torch.Size([1, 3, 1, 4])
+        assert spec_4d[:, None, ..., None, :].shape == torch.Size([5, 1, 3, 1, 4, 6])
+
+    # BoundedTensorSpec, DiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec, CompositeSpec
+    else:
+        # Integers
+        assert spec_2d[0, 1].shape == torch.Size([])
+
+        # Ellipsis
+        assert spec_0d[None].shape == torch.Size([1])
+        assert spec_0d[...].shape == torch.Size([])
+        assert spec_2d[..., :2].shape == torch.Size([5, 2])
+        assert spec_2d[..., :2, None, None].shape == torch.Size([5, 2, 1, 1])
+        assert spec_4d[1, ..., 2].shape == torch.Size([3, 4])
+        assert spec_2d[1, ..., None].shape == torch.Size([3, 1])
+        assert spec_3d[..., [0, 1], [0]].shape == torch.Size([5, 2])
+        assert spec_3d[None, 1, ..., None].shape == torch.Size([1, 3, 4, 1])
+        assert spec_4d[:, None, ..., None, :].shape == torch.Size([5, 1, 3, 4, 1, 6])
+
+    # Additional tests for composite spec
+    if spec_class == CompositeSpec:
+        assert spec_2d[1]["k1"].shape == torch.Size([3, 4, 6, 7, 8])
+        assert spec_3d[[1, 2]]["k1"].shape == torch.Size([2, 3, 4, 6, 7, 8])
+        assert spec_2d[torch.randint(3, (3, 2))]["k1"].shape == torch.Size(
+            [3, 2, 3, 4, 6, 7, 8]
+        )
+        assert spec_0d["k1"].shape == torch.Size([5, 3, 4, 6, 7, 8])
+        assert spec_0d[None]["k1"].shape == torch.Size([1, 5, 3, 4, 6, 7, 8])
+
+        assert spec_2d[..., 0]["k1"].shape == torch.Size([5, 4, 6, 7, 8])
+        assert spec_4d[1, ..., 2]["k2"].shape == torch.Size([3, 4, 7])
+        assert spec_2d[1, ..., None]["k2"].shape == torch.Size([3, 1, 4, 6, 7])
 
 
 if __name__ == "__main__":

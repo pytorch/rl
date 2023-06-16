@@ -11,8 +11,8 @@ from copy import copy
 from typing import Any, Dict, Sequence, Union
 
 import torch
+from tensordict import is_tensorclass
 from tensordict.memmap import MemmapTensor
-from tensordict.prototype import is_tensorclass
 from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from tensordict.utils import expand_right
 
@@ -46,11 +46,11 @@ class Storage:
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get(self, index: int) -> Any:
-        raise NotImplementedError
+        ...
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -80,13 +80,19 @@ class Storage:
 
     @abc.abstractmethod
     def __len__(self):
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        ...
+
+    @abc.abstractmethod
+    def _empty(self):
+        ...
 
 
 class ListStorage(Storage):
@@ -156,6 +162,9 @@ class ListStorage(Storage):
                 raise TypeError(
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
                 )
+
+    def _empty(self):
+        self._storage = []
 
 
 class LazyTensorStorage(Storage):
@@ -274,10 +283,18 @@ class LazyTensorStorage(Storage):
                 "Cannot get an item from an unitialized LazyMemmapStorage"
             )
         out = self._storage[index]
+        if is_tensor_collection(out):
+            out = _reset_batch_size(out)
+            return out.unlock_()
         return out
 
     def __len__(self):
         return self._len
+
+    def _empty(self):
+        # assuming that the data structure is the same, we don't need to to
+        # anything if the cursor is reset to 0
+        self._len = 0
 
 
 class LazyMemmapStorage(LazyTensorStorage):
@@ -435,13 +452,14 @@ def _reset_batch_size(x):
 
     """
     shape = x.pop("_batch_size", None)
+    data = x.pop("_data", None)
     if shape is not None:
         # we need to reset the batch-size
         if isinstance(shape, MemmapTensor):
             shape = shape.as_tensor()
-        locked = x.is_locked
+        locked = data.is_locked
         if locked:
-            x.unlock_()
+            data.unlock_()
         shape = [s.item() for s in shape[0]]
         shape = torch.Size([x.shape[0], *shape])
         # we may need to update some values in the data
@@ -449,35 +467,31 @@ def _reset_batch_size(x):
             if value.ndim >= len(shape):
                 continue
             value = expand_right(value, shape)
-            x.set(key, value)
-        x.batch_size = shape
+            data.set(key, value)
         if locked:
-            x.lock_()
+            data.lock_()
+        return data
+    if data is not None:
+        return data
     return x
 
 
 def _collate_list_tensordict(x):
     out = torch.stack(x, 0)
-    if isinstance(out, TensorDictBase):
-        return _reset_batch_size(out.to_tensordict())
+    if is_tensor_collection(out):
+        return _reset_batch_size(out)
     return out
 
 
-def _collate_list_tensors(*x):
-    return tuple(torch.stack(_x, 0) for _x in zip(*x))
-
-
 def _collate_contiguous(x):
-    if isinstance(x, TensorDictBase):
-        return _reset_batch_size(x).to_tensordict()
-    return x.clone()
+    return x
 
 
-def _get_default_collate(storage, _is_tensordict=True):
+def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
-            return _collate_list_tensors
+            return torch.utils.data._utils.collate.default_collate
     elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
         return _collate_contiguous

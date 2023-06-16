@@ -7,6 +7,7 @@ from .distributions import (
     Delta,
     distributions_maps,
     IndependentNormal,
+    MaskedCategorical,
     NormalParamWrapper,
     OneHotCategorical,
     TanhDelta,
@@ -54,6 +55,7 @@ from .tensordict_module import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
     SafeSequential,
+    TanhModule,
     ValueOperator,
     WorldModelWrapper,
 )

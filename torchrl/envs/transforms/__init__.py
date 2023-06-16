@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from .r3m import R3MTransform
+from .rlhf import KLRewardTransform
 from .transforms import (
     BinarizeReward,
     CatFrames,

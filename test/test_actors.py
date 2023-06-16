@@ -7,14 +7,20 @@ import argparse
 import pytest
 import torch
 
-from _utils_internal import get_available_devices
+from _utils_internal import get_default_devices
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 
-from torchrl.data import DiscreteTensorSpec, OneHotDiscreteTensorSpec
+from torchrl.data import (
+    CompositeSpec,
+    DiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+)
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.tensordict_module.actors import (
+    _process_action_space_spec,
     ActorValueOperator,
     DistributionalQValueActor,
     DistributionalQValueHook,
@@ -29,14 +35,44 @@ from torchrl.modules.tensordict_module.actors import (
 
 class TestQValue:
     def test_qvalue_hook_wrong_action_space(self):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(
+            ValueError, match="action_space was not specified/not compatible"
+        ):
             QValueHook(action_space="wrong_value")
-        assert "action_space must be one of" in str(exc.value)
 
     def test_distributional_qvalue_hook_wrong_action_space(self):
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(
+            ValueError, match="action_space was not specified/not compatible"
+        ):
             DistributionalQValueHook(action_space="wrong_value", support=None)
-        assert "action_space must be one of" in str(exc.value)
+
+    def test_distributional_qvalue_hook_conflicting_spec(self):
+        spec = OneHotDiscreteTensorSpec(3)
+        _process_action_space_spec("one-hot", spec)
+        _process_action_space_spec("one_hot", spec)
+        _process_action_space_spec("one_hot", None)
+        _process_action_space_spec(None, spec)
+        with pytest.raises(
+            ValueError, match="The action spec and the action space do not match"
+        ):
+            _process_action_space_spec("multi-one-hot", spec)
+        spec = MultiOneHotDiscreteTensorSpec([3, 3])
+        _process_action_space_spec("multi-one-hot", spec)
+        _process_action_space_spec(spec, spec)
+        with pytest.raises(
+            ValueError, match="Passing an action_space as a TensorSpec and a spec"
+        ):
+            _process_action_space_spec(OneHotDiscreteTensorSpec(3), spec)
+        with pytest.raises(
+            ValueError, match="action_space cannot be of type CompositeSpec"
+        ):
+            _process_action_space_spec(CompositeSpec(), spec)
+        with pytest.raises(KeyError, match="action could not be found in the spec"):
+            _process_action_space_spec(None, CompositeSpec())
+        with pytest.raises(
+            ValueError, match="Neither action_space nor spec was defined"
+        ):
+            _process_action_space_spec(None, None)
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
@@ -372,7 +408,7 @@ class TestQValue:
         assert (values == in_values).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy(device):
     torch.manual_seed(0)
     obs_dim = 4
@@ -406,7 +442,46 @@ def test_value_based_policy(device):
         assert (action.sum(-1) == 1).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize(
+    "spec", [None, OneHotDiscreteTensorSpec(3), MultiOneHotDiscreteTensorSpec([3, 2])]
+)
+@pytest.mark.parametrize(
+    "action_space", [None, "one-hot", "one_hot", "mult-one-hot", "mult_one_hot"]
+)
+def test_qvalactor_construct(
+    spec,
+    action_space,
+):
+    kwargs = {}
+    if spec is not None:
+        kwargs["spec"] = spec
+    if action_space is not None:
+        kwargs["action_space"] = action_space
+    kwargs["module"] = TensorDictModule(
+        lambda x: x, in_keys=["x"], out_keys=["action_value"]
+    )
+    if spec is None and action_space is None:
+        with pytest.raises(
+            ValueError, match="Neither action_space nor spec was defined"
+        ):
+            QValueActor(**kwargs)
+        return
+    if (
+        type(spec) is MultiOneHotDiscreteTensorSpec
+        and action_space not in ("mult-one-hot", "mult_one_hot", None)
+    ) or (
+        type(spec) is OneHotDiscreteTensorSpec
+        and action_space not in ("one-hot", "one_hot", None)
+    ):
+        with pytest.raises(
+            ValueError, match="The action spec and the action space do not match"
+        ):
+            QValueActor(**kwargs)
+        return
+    QValueActor(**kwargs)
+
+
+@pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy_categorical(device):
     torch.manual_seed(0)
     obs_dim = 4
@@ -437,7 +512,7 @@ def test_value_based_policy_categorical(device):
     assert (0 <= action).all() and (action < action_dim).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_actorcritic(device):
     common_module = SafeModule(
         module=nn.Linear(3, 4), in_keys=["obs"], out_keys=["hidden"], spec=None

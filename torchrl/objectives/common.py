@@ -5,17 +5,26 @@
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import (
+    make_functional,
+    repopulate_module,
+    TensorDictModule,
+    TensorDictModuleBase,
+)
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
 from torch.nn import Parameter
 
+from torchrl._utils import RL_WARNINGS
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
 from torchrl.objectives.utils import ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
@@ -35,7 +44,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-class LossModule(nn.Module):
+class LossModule(TensorDictModuleBase):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -46,21 +55,102 @@ class LossModule(nn.Module):
     the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
-    :cvar defaylt_value_type: The default value type of the class.
+    :cvar default_value_estimator: The default value type of the class.
         Losses that require a value estimation are equipped with a default value
         pointer. This class attribute indicates which value estimator will be
         used if none other is specified.
         The value estimator can be changed using the :meth:`~.make_value_estimator` method.
+
+    By default, the forward method is always decorated with a
+    gh :class:`torchrl.envs.ExplorationType.MODE`
+
+    To utilize the ability configuring the tensordict keys via
+    :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
+    This dataclass should include all keys that are intended to be configurable.
+    In addition, the subclass must implement the
+    :meth:._forward_value_estimator_keys() method. This function is crucial for
+    forwarding any altered tensordict keys to the underlying value_estimator.
+
+    Examples:
+        >>> class MyLoss(LossModule):
+        >>>     @dataclass
+        >>>     class _AcceptedKeys:
+        >>>         action = "action"
+        >>>
+        >>>     def _forward_value_estimator_keys(self, **kwargs) -> None:
+        >>>         pass
+        >>>
+        >>> loss = MyLoss()
+        >>> loss.set_keys(action="action2")
     """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+        """
+
+        pass
 
     default_value_estimator: ValueEstimators = None
     SEP = "_sep_"
+
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def __new__(cls, *args, **kwargs):
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        cls._tensor_keys = cls._AcceptedKeys()
+        return super().__new__(cls)
 
     def __init__(self):
         super().__init__()
         self._param_maps = {}
         self._value_estimator = None
+        self._has_update_associated = False
+        self.value_type = self.default_value_estimator
         # self.register_forward_pre_hook(_parameters_to_tensordict)
+
+    def _set_deprecated_ctor_keys(self, **kwargs) -> None:
+        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
+        for key, value in kwargs.items():
+            if value is not None:
+                warnings.warn(
+                    f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
+                    category=DeprecationWarning,
+                )
+                self.set_keys(**{key: value})
+
+    def set_keys(self, **kwargs) -> None:
+        """Set tensordict key names.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+        """
+        for key, value in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+            if value is not None:
+                setattr(self.tensor_keys, key, value)
+            else:
+                setattr(self.tensor_keys, key, self.default_keys.key)
+
+        try:
+            self._forward_value_estimator_keys(**kwargs)
+        except AttributeError:
+            raise AttributeError(
+                "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
+                "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
+                "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
+                "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
+            )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -333,6 +423,15 @@ class LossModule(nn.Module):
         if target_name in self.__dict__:
             target_params = getattr(self, target_name)
             if target_params is not None:
+                if not self._has_update_associated and RL_WARNINGS:
+                    warnings.warn(
+                        "No target network updater has been associated "
+                        "with this loss module, but target parameters have been found."
+                        "While this is supported, it is expected that the target network "
+                        "updates will be manually performed. You can deactivate this warning "
+                        "by turning the RL_WARNINGS env variable to False.",
+                        category=UserWarning,
+                    )
                 # get targets and update
                 for key in target_params.keys(True, True):
                     if not isinstance(key, tuple):
@@ -345,7 +444,8 @@ class LossModule(nn.Module):
                 return target_params
             else:
                 params = getattr(self, param_name)
-                return params.detach()
+                # should we clone here?
+                return params.detach()  # .clone()
 
         else:
             raise RuntimeError(
@@ -446,7 +546,7 @@ class LossModule(nn.Module):
         """
         self.make_value_estimator(self.default_value_estimator)
 
-    def make_value_estimator(self, value_type: ValueEstimators, **hyperparams):
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.
 
         If the non-default value function is wanted, it must be built using
@@ -454,20 +554,33 @@ class LossModule(nn.Module):
 
         Args:
             value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
-                enum type indicating the value function to use.
+                enum type indicating the value function to use. If none is provided,
+                the default stored in the ``default_value_estimator``
+                attribute will be used. The resulting value estimator class
+                will be registered in ``self.value_type``, allowing
+                future refinements.
             **hyperparams: hyperparameters to use for the value function.
                 If not provided, the value indicated by
                 :func:`~torchrl.objectives.utils.default_value_kwargs` will be
                 used.
 
         Examples:
+            >>> from torchrl.objectives import DQNLoss
             >>> # initialize the DQN loss
-            >>> dqn_loss = DQNLoss(actor)
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> # updating the parameters of the default value estimator
+            >>> dqn_loss.make_value_estimator(gamma=0.9)
             >>> dqn_loss.make_value_estimator(
             ...     ValueEstimators.TD1,
             ...     gamma=0.9)
+            >>> # if we want to change the gamma value
+            >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
 
         """
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
         if value_type == ValueEstimators.TD1:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."

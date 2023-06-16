@@ -293,7 +293,7 @@ class ConvNet(nn.Sequential):
             default:  SquashDims;
         aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
         squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
-            default: True.
+            default: False.
         device (Optional[DEVICE_TYPING]): device to create the module on.
 
     Examples:
@@ -884,7 +884,7 @@ class DdpgCnnQNet(nn.Module):
             'bias_last_layer': True,
         }
         use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`True`.
+            used to aggregate the output. Default is ``True``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 

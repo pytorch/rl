@@ -23,6 +23,7 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+from torchrl.modules.utils.utils import _find_action_space
 
 
 class Actor(SafeModule):
@@ -317,18 +318,24 @@ class QValueModule(TensorDictModuleBase):
     It works with both tensordict and regular tensors.
 
     Args:
-        action_space (str): Action space. Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            This is argumets is exclusive with ``spec``, since the ``action_spec``
+            conditions the action spec.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
         out_keys (list of str or tuple of str, optional): The output keys
             representing the actions, action values and chosen action value.
             Defaults to ``["action", "action_value", "chosen_action_value"]``.
-        var_nums (int, optional): if ``action_space = "mult_one_hot"``,
+        var_nums (int, optional): if ``action_space = "mult-one-hot"``,
             this value represents the cardinality of each
             action component.
         spec (TensorSpec, optional): if provided, the specs of the action (and/or
-            other outputs).
+            other outputs). This is exclusive with ``action_space``, as the spec
+            conditions the action space.
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
@@ -369,13 +376,14 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: str,
+        action_space: Optional[Union[str, TensorSpec]],
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
         var_nums: Optional[int] = None,
-        spec: TensorSpec = None,
+        spec: Optional[TensorSpec] = None,
         safe: bool = False,
     ):
+        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.var_nums = var_nums
         self.action_func_mapping = {
@@ -389,7 +397,7 @@ class QValueModule(TensorDictModuleBase):
         }
         if action_space not in self.action_func_mapping:
             raise ValueError(
-                f"action_space must be one of {list(self.action_func_mapping.keys())}"
+                f"action_space must be one of {list(self.action_func_mapping.keys())}, got {action_space}"
             )
         if action_value_key is None:
             action_value_key = "action_value"
@@ -401,6 +409,9 @@ class QValueModule(TensorDictModuleBase):
                 f"Expected the action-value key to be '{action_value_key}' but got {out_keys[1]} instead."
             )
         self.out_keys = out_keys
+        action_key = out_keys[0]
+        if not isinstance(spec, CompositeSpec):
+            spec = CompositeSpec({action_key: spec})
         super().__init__()
         self.register_spec(safe=safe, spec=spec)
 
@@ -476,10 +487,11 @@ class QValueModule(TensorDictModuleBase):
     def _categorical_action_value(
         values: torch.Tensor, action: torch.Tensor
     ) -> torch.Tensor:
-        if len(values.shape) == 1:
-            return values[action].unsqueeze(-1)
-        batch_size = values.size(0)
-        return values[range(batch_size), action].unsqueeze(-1)
+        return values.gather(-1, action.unsqueeze(-1))
+        # if values.ndim == 1:
+        #     return values[action].unsqueeze(-1)
+        # batch_size = values.size(0)
+        # return values[range(batch_size), action].unsqueeze(-1)
 
 
 class DistributionalQValueModule(QValueModule):
@@ -497,19 +509,25 @@ class DistributionalQValueModule(QValueModule):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        action_space (str): Action space. Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            This is argumets is exclusive with ``spec``, since the ``action_spec``
+            conditions the action spec.
         support (torch.Tensor): support of the action values.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
         out_keys (list of str or tuple of str, optional): The output keys
             representing the actions and action values.
             Defaults to ``["action", "action_value"]``.
-        var_nums (int, optional): if ``action_space = "mult_one_hot"``,
+        var_nums (int, optional): if ``action_space = "mult-one-hot"``,
             this value represents the cardinality of each
             action component.
         spec (TensorSpec, optional): if provided, the specs of the action (and/or
-            other outputs).
+            other outputs). This is exclusive with ``action_space``, as the spec
+            conditions the action space.
         safe (bool): if ``True``, the value of the output is checked against the
             input spec. Out-of-domain sampling can
             occur because of exploration policies or numerical under/overflow issues.
@@ -654,6 +672,49 @@ class DistributionalQValueModule(QValueModule):
         )
 
 
+def _process_action_space_spec(action_space, spec):
+    nest_action = False
+    if isinstance(spec, CompositeSpec):
+        try:
+            # this will break whenever our action is more complex than a single tensor
+            spec = spec["action"]
+            nest_action = True
+        except KeyError:
+            raise KeyError(
+                "action could not be found in the spec. Make sure "
+                "you pass a spec that is either a native action spec or a composite action spec "
+                "with an 'action' entry. Otherwise, simply remove the spec and use the action_space only."
+            )
+    if action_space is not None:
+        if isinstance(action_space, CompositeSpec):
+            raise ValueError("action_space cannot be of type CompositeSpec.")
+        if (
+            spec is not None
+            and isinstance(action_space, TensorSpec)
+            and action_space is not spec
+        ):
+            raise ValueError(
+                "Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match."
+            )
+        if isinstance(action_space, TensorSpec):
+            spec = action_space
+        action_space = _find_action_space(action_space)
+        # check that the spec and action_space match
+        if spec is not None and _find_action_space(spec) != action_space:
+            raise ValueError(
+                f"The action spec and the action space do not match: got action_space={action_space} and spec={spec}."
+            )
+    elif spec is not None:
+        action_space = _find_action_space(spec)
+    else:
+        raise ValueError(
+            "Neither action_space nor spec was defined. The action space cannot be inferred."
+        )
+    if nest_action:
+        spec = CompositeSpec(action=spec)
+    return action_space, spec
+
+
 class QValueHook:
     """Q-Value hook for Q-value policies.
 
@@ -664,8 +725,8 @@ class QValueHook:
 
     Args:
         action_space (str): Action space. Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
-        var_nums (int, optional): if ``action_space = "mult_one_hot"``,
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+        var_nums (int, optional): if ``action_space = "mult-one-hot"``,
             this value represents the cardinality of each
             action component.
         action_value_key (str or tuple of str, optional): to be used when hooked on
@@ -708,6 +769,8 @@ class QValueHook:
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
+        action_space, _ = _process_action_space_spec(action_space, None)
+
         self.qvalue_model = QValueModule(
             action_space=action_space,
             var_nums=var_nums,
@@ -740,9 +803,9 @@ class DistributionalQValueHook(QValueHook):
 
     Args:
         action_space (str): Action space. Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
         support (torch.Tensor): support of the action values.
-        var_nums (int, optional): if ``action_space = "mult_one_hot"``, this
+        var_nums (int, optional): if ``action_space = "mult-one-hot"``, this
             value represents the cardinality of each
             action component.
 
@@ -790,6 +853,7 @@ class DistributionalQValueHook(QValueHook):
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
+        action_space, _ = _process_action_space_spec(action_space, None)
         self.qvalue_model = DistributionalQValueModule(
             action_space=action_space,
             var_nums=var_nums,
@@ -816,6 +880,8 @@ class QValueActor(SafeSequential):
             with :class:`tensordict.nn.TensorDictModuleBase`, it will be
             wrapped in a :class:`tensordict.nn.TensorDictModule` with
             ``in_keys`` indicated by the following keyword argument.
+
+    Keyword Args:
         in_keys (iterable of str, optional): If the class provided is not
             compatible with :class:`tensordict.nn.TensorDictModuleBase`, this
             list of keys indicates what observations need to be passed to the
@@ -832,9 +898,13 @@ class QValueActor(SafeSequential):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
-        action_space (str, optional): The action space to be considered.
-            Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            This is argumets is exclusive with ``spec``, since the ``action_spec``
+            conditions the action spec.
         action_value_key (str or tuple of str, optional): if the input module
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
@@ -891,12 +961,15 @@ class QValueActor(SafeSequential):
     def __init__(
         self,
         module,
+        *,
         in_keys=None,
         spec=None,
         safe=False,
-        action_space: str = "one_hot",
+        action_space: str = None,
         action_value_key=None,
     ):
+        action_space, spec = _process_action_space_spec(action_space, spec)
+
         self.action_space = action_space
         self.action_value_key = action_value_key
         if action_value_key is None:
@@ -952,16 +1025,13 @@ class DistributionalQValueActor(QValueActor):
             operation is applied to the action value tensor along dimension ``-2``.
             This can be deactivated by turning off the ``make_log_softmax``
             keyword argument.
+
+    Keyword Args:
         in_keys (iterable of str, optional): keys to be read from input
             tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the
             order given by the in_keys iterable.
             Defaults to ``["observation"]``.
-        out_keys (iterable of str): keys to be written to the input tensordict.
-            The length of out_keys must match the
-            number of tensors returned by the embedded module. Using "_" as a
-            key avoid writing tensor to output.
-            Defaults to ``["action"]``.
         spec (TensorSpec, optional): Keyword-only argument.
             Specs of the output tensor. If the module
             outputs multiple output tensors,
@@ -973,10 +1043,17 @@ class DistributionalQValueActor(QValueActor):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
+        var_nums (int, optional): if ``action_space = "mult-one-hot"``,
+            this value represents the cardinality of each
+            action component.
         support (torch.Tensor): support of the action values.
-        action_space (str, optional): The action space to be considered.
-            Must be one of
-            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            This is argumets is exclusive with ``spec``, since the ``action_spec``
+            conditions the action spec.
         make_log_softmax (bool, optional): if ``True`` and if the module is not
             of type :class:`torchrl.modules.DistributionalDQNnet`, a log-softmax
             operation will be applied along dimension -2 of the action value tensor.
@@ -1021,10 +1098,13 @@ class DistributionalQValueActor(QValueActor):
         in_keys=None,
         spec=None,
         safe=False,
-        action_space: str = "one_hot",
+        var_nums: Optional[int] = None,
+        action_space: str = None,
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
+
+        action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
         out_keys = [
@@ -1059,6 +1139,7 @@ class DistributionalQValueActor(QValueActor):
             safe=safe,
             action_space=action_space,
             support=support,
+            var_nums=var_nums,
         )
         self.make_log_softmax = make_log_softmax
         if make_log_softmax and not isinstance(module, DistributionalDQNnet):
@@ -1107,7 +1188,7 @@ class ActorValueOperator(SafeSequential):
       refet to :class:`~.ActorCriticWrapper`.
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
-    will both return a stand-alone TDModule with the dedicated functionality.
+    will both return a standalone TDModule with the dedicated functionality.
 
     Args:
         common_operator (TensorDictModule): a common operator that reads
@@ -1200,7 +1281,7 @@ class ActorValueOperator(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a stand-alone policy operator that maps an observation to an action."""
+        """Returns a standalone policy operator that maps an observation to an action."""
         if isinstance(self.module[1], SafeProbabilisticTensorDictSequential):
             return SafeProbabilisticTensorDictSequential(
                 self.module[0], *self.module[1].module
@@ -1208,8 +1289,16 @@ class ActorValueOperator(SafeSequential):
         return SafeSequential(self.module[0], self.module[1])
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
+        """Returns a standalone value network operator that maps an observation to a value estimate."""
         return SafeSequential(self.module[0], self.module[2])
+
+    def get_policy_head(self) -> SafeSequential:
+        """Returns the policy head."""
+        return self.module[1]
+
+    def get_value_head(self) -> SafeSequential:
+        """Returns the value head."""
+        return self.module[2]
 
 
 class ActorCriticOperator(ActorValueOperator):
@@ -1250,7 +1339,7 @@ class ActorCriticOperator(ActorValueOperator):
 
 
     To facilitate the workflow, this  class comes with a get_policy_operator() method, which
-    will both return a stand-alone TDModule with the dedicated functionality. The get_critic_operator will return the
+    will both return a standalone TDModule with the dedicated functionality. The get_critic_operator will return the
     parent object, as the value is computed based on the policy output.
 
     Args:
@@ -1354,7 +1443,7 @@ class ActorCriticOperator(ActorValueOperator):
             )
 
     def get_critic_operator(self) -> TensorDictModuleWrapper:
-        """Returns a stand-alone critic network operator that maps a state-action pair to a critic estimate."""
+        """Returns a standalone critic network operator that maps a state-action pair to a critic estimate."""
         return self
 
     def get_value_operator(self) -> TensorDictModuleWrapper:
@@ -1363,6 +1452,14 @@ class ActorCriticOperator(ActorValueOperator):
             "state/observation. This class computes the value of a state-action pair: to get the "
             "network computing this value, please call td_sequence.get_critic_operator()"
         )
+
+    def get_policy_head(self) -> SafeSequential:
+        """Returns the policy head."""
+        return self.module[1]
+
+    def get_value_head(self) -> SafeSequential:
+        """Returns the value head."""
+        return self.module[2]
 
 
 class ActorCriticWrapper(SafeSequential):
@@ -1390,7 +1487,7 @@ class ActorCriticWrapper(SafeSequential):
 
 
     To facilitate the workflow, this  class comes with a get_policy_operator() and get_value_operator() methods, which
-    will both return a stand-alone TDModule with the dedicated functionality.
+    will both return a standalone TDModule with the dedicated functionality.
 
     Args:
         policy_operator (TensorDictModule): a policy operator that reads the hidden variable and returns an action
@@ -1473,9 +1570,181 @@ class ActorCriticWrapper(SafeSequential):
         )
 
     def get_policy_operator(self) -> SafeSequential:
-        """Returns a stand-alone policy operator that maps an observation to an action."""
+        """Returns a standalone policy operator that maps an observation to an action."""
         return self.module[0]
 
     def get_value_operator(self) -> SafeSequential:
-        """Returns a stand-alone value network operator that maps an observation to a value estimate."""
+        """Returns a standalone value network operator that maps an observation to a value estimate."""
         return self.module[1]
+
+    get_policy_head = get_policy_operator
+    get_value_head = get_value_operator
+
+
+class TanhModule(TensorDictModuleBase):
+    """A Tanh module for deterministic policies with bounded action space.
+
+    This transform is to be used as a TensorDictModule layer to map a network
+    output to a bounded space.
+
+    Args:
+        in_keys (list of str or tuples of str): the input keys of the module.
+        out_keys (list of str or tuples of str, optional): the output keys of the module.
+            If none is provided, the same keys as in_keys are assumed.
+
+    Keyword Args:
+        spec (TensorSpec, optional): if provided, the spec of the output.
+            If a CompositeSpec is provided, its key(s) must match the key(s)
+            in out_keys. Otherwise, the key(s) of out_keys are assumed and the
+            same spec is used for all outputs.
+        low (float, np.ndarray or torch.Tensor): the lower bound of the space.
+            If none is provided and no spec is provided, -1 is assumed. If a
+            spec is provided, the minimum value of the spec will be retrieved.
+        high (float, np.ndarray or torch.Tensor): the higher bound of the space.
+            If none is provided and no spec is provided, 1 is assumed. If a
+            spec is provided, the maximum value of the spec will be retrieved.
+        clamp (bool, optional): if ``True``, the outputs will be clamped to be
+            within the boundaries but at a minimum resolution from them.
+            Defaults to ``False``.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> # simplest use case: -1 - 1 boundaries
+        >>> torch.manual_seed(0)
+        >>> in_keys = ["action"]
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ... )
+        >>> data = TensorDict({"action": torch.randn(5) * 10}, [])
+        >>> data = mod(data)
+        >>> data['action']
+        tensor([ 1.0000, -0.9944, -1.0000,  1.0000, -1.0000])
+        >>> # low and high can be customized
+        >>> low = -2
+        >>> high = 1
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     low=low,
+        ...     high=high,
+        ... )
+        >>> data = TensorDict({"action": torch.randn(5) * 10}, [])
+        >>> data = mod(data)
+        >>> data['action']
+        tensor([-2.0000,  0.9991,  1.0000, -2.0000, -1.9991])
+        >>> # A spec can be provided
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> spec = BoundedTensorSpec(low, high, shape=())
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     low=low,
+        ...     high=high,
+        ...     spec=spec,
+        ...     clamp=False,
+        ... )
+        >>> # One can also work with multiple keys
+        >>> in_keys = ['a', 'b']
+        >>> spec = CompositeSpec(
+        ...     a=BoundedTensorSpec(-3, 0, shape=()),
+        ...     b=BoundedTensorSpec(0, 3, shape=()))
+        >>> mod = TanhModule(
+        ...     in_keys=in_keys,
+        ...     spec=spec,
+        ... )
+        >>> data = TensorDict(
+        ...     {'a': torch.randn(10), 'b': torch.randn(10)}, batch_size=[])
+        >>> data = mod(data)
+        >>> data['a']
+        tensor([-2.3020, -1.2299, -2.5418, -0.2989, -2.6849, -1.3169, -2.2690, -0.9649,
+                -2.5686, -2.8602])
+        >>> data['b']
+        tensor([2.0315, 2.8455, 2.6027, 2.4746, 1.7843, 2.7782, 0.2111, 0.5115, 1.4687,
+                0.5760])
+    """
+
+    def __init__(
+        self,
+        in_keys,
+        out_keys=None,
+        *,
+        spec=None,
+        low=None,
+        high=None,
+        clamp: bool = False,
+    ):
+        super(TanhModule, self).__init__()
+        self.in_keys = in_keys
+        if out_keys is None:
+            out_keys = in_keys
+        if len(in_keys) != len(out_keys):
+            raise ValueError(
+                "in_keys and out_keys should have the same length, "
+                f"got in_keys={in_keys} and out_keys={out_keys}"
+            )
+        self.out_keys = out_keys
+        # action_spec can be a composite spec or not
+        if isinstance(spec, CompositeSpec):
+            for out_key in self.out_keys:
+                if out_key not in spec.keys(True, True):
+                    spec[out_key] = None
+        else:
+            # if one spec is present, we assume it is the same for all keys
+            spec = CompositeSpec(
+                {out_key: spec for out_key in out_keys},
+            )
+
+        leaf_specs = [spec[out_key] for out_key in self.out_keys]
+        self.spec = spec
+        self.non_trivial = {}
+        for out_key, leaf_spec in zip(out_keys, leaf_specs):
+            _low, _high = self._make_low_high(low, high, leaf_spec)
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            self.register_buffer(f"{key}_low", _low)
+            self.register_buffer(f"{key}_high", _high)
+            self.non_trivial[out_key] = (_high != 1).any() or (_low != -1).any()
+            if (_high < _low).any():
+                raise ValueError(f"Got high < low in {type(self)}.")
+        self.clamp = clamp
+
+    def _make_low_high(self, low, high, leaf_spec):
+        if low is None and leaf_spec is None:
+            low = -torch.ones(())
+        elif low is None:
+            low = leaf_spec.space.minimum
+        elif leaf_spec is not None:
+            if (low != leaf_spec.space.minimum).any():
+                raise ValueError(
+                    f"The minimum value ({low}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.minimum})."
+                )
+        if not isinstance(low, torch.Tensor):
+            low = torch.tensor(low)
+        if high is None and leaf_spec is None:
+            high = torch.ones(())
+        elif high is None:
+            high = leaf_spec.space.maximum
+        elif leaf_spec is not None:
+            if (high != leaf_spec.space.maximum).any():
+                raise ValueError(
+                    f"The maximum value ({high}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.maximum})."
+                )
+        if not isinstance(high, torch.Tensor):
+            high = torch.tensor(high)
+        return low, high
+
+    @dispatch
+    def forward(self, tensordict):
+        inputs = [tensordict.get(key) for key in self.in_keys]
+        # map
+        for out_key, feature in zip(self.out_keys, inputs):
+            key = out_key if isinstance(out_key, str) else "_".join(out_key)
+            low_key = f"{key}_low"
+            high_key = f"{key}_high"
+            low = getattr(self, low_key)
+            high = getattr(self, high_key)
+            feature = feature.tanh()
+            if self.clamp:
+                eps = torch.finfo(feature.dtype).resolution
+                feature = feature.clamp(-1 + eps, 1 - eps)
+            if self.non_trivial:
+                feature = low + (high - low) * (feature + 1) / 2
+            tensordict.set(out_key, feature)
+        return tensordict
