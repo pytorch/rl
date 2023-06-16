@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import time
-from pathlib import Path
 
 import torch
 from data import get_reward_dataloader

@@ -19,6 +19,7 @@ __all__ = ["ActorCritic", "init_actor_critic"]
 
 
 class VmapCritic(TensorDictModuleBase):
+    """A TensorDictModule that wraps a critic, enabling a vmap in the forward method."""
     def __init__(self, critic):
         super().__init__()
         self.in_keys = critic.in_keys

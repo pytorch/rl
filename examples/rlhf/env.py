@@ -20,7 +20,10 @@ def logprobs_of_labels(logits, labels):
 
 
 @torch.no_grad()
-def generate(model, batch, ref_model, max_new_tokens=50):
+def _generate(model, batch, ref_model, max_new_tokens=50):
+    """Generates responses given a batch of prompts, and computes log probabilities of
+    the result in terms of both the model and a reference model.
+    """
     input_ids = batch.mask_label().input_ids
 
     # move padding tokens to left pad
@@ -87,7 +90,7 @@ def generate(model, batch, ref_model, max_new_tokens=50):
 
 
 @torch.no_grad()
-def create_rollout_td(
+def _create_rollout_td(
     batch, generated, reward_model, log_probs, log_ratio, max_new_tokens=50, kl_coef=0.1
 ):
     """
@@ -166,7 +169,25 @@ def create_rollout_td(
 
 
 def rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1):
-    generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
-    return create_rollout_td(
+    """Perform a rollout.
+
+    This function takes a batch of prompts and performs a rollout:
+    - We generate responses from model by feeding it the prompt.
+    - We calculate the (normalised) reward of the response from the reward model
+    - We calculate the log probabilities of the generated sequence using both model and
+      ref_model. The resulting KL divergence is subtracted from the reward
+
+    Args:
+        batch: A batch of prompts to use as the basis for generating responses.
+        model: A HuggingFace style model that has a `.generate` method.
+        ref_model: A reference model to compare against in the KL term.
+        reward_model: Model that will compute the reward on the generated response.
+        max_new_tokens: Upper limit on the number of tokens that can be generated for
+            each prompt.
+        kl_coef: coefficient with which to multiply the KL term when calculating the
+            reward.
+    """
+    generated, log_probs, log_ratio = _generate(model, batch, ref_model=ref_model)
+    return _create_rollout_td(
         batch, generated, reward_model, log_probs, log_ratio, max_new_tokens, kl_coef
     )

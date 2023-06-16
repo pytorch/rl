@@ -17,7 +17,7 @@ from torchrl.data.replay_buffers import (
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
-from tqdm import trange, tqdm
+from tqdm import tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
 from utils import get_file_logger, load_config, setup
 
@@ -34,9 +34,18 @@ def flatten_td(td):
     return td[mask]
 
 
-def create_loss_estimator(
+def create_reward_estimator(
     eval_iters, episode_length, reward_model, batch, ctx, logger=None, ref_model=None
 ):
+    """Create a function to estimate the reward via sampling.
+
+    This function creates a new function which, given a model and a dataloader, will
+    perform multiple rollouts using the model and data sampled from the dataloader then
+    average the accumulated rewards.
+
+    For debugging purposes, we also generate responses to a fixed prompt so that the
+    quality of the model can be visually assessed during training.
+    """
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -55,11 +64,11 @@ def create_loss_estimator(
     )
 
     @torch.no_grad()
-    def estimate_loss(model, dataloader):
+    def estimate_reward(model, dataloader):
         rewards = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
-            # NOTE: disable kl for evaluation
+            # disable kl for evaluation purposes
             td = rollout(
                 batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0
             )
@@ -92,7 +101,7 @@ def create_loss_estimator(
 
         return test_reward
 
-    return estimate_loss
+    return estimate_reward
 
 
 def main():
@@ -160,7 +169,7 @@ def main():
     loss_fn = ClipPPOLoss(actor, critic_head)
 
     test_prompt = next(val_loader)
-    estimate_loss = create_loss_estimator(
+    estimate_reward = create_reward_estimator(
         eval_iters,
         episode_length,
         reward_model,
@@ -239,7 +248,7 @@ def main():
                 it += 1
                 pbar.update(1)
                 if it % eval_interval == 0:
-                    val_reward = estimate_loss(model, val_loader)
+                    val_reward = estimate_reward(model, val_loader)
                     val_reward_logger.info(f"VALID: {it=}: {val_reward=:.4f}")
                     pbar.set_description(f"VALID: {it=}: {val_reward=:.4f}")
                     if val_reward > best_val_reward or always_save_checkpoint:

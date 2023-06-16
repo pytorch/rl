@@ -5,7 +5,6 @@
 import argparse
 import logging
 from contextlib import nullcontext
-from pathlib import Path
 
 import torch
 import torch._dynamo
@@ -14,7 +13,7 @@ import yaml
 
 def load_config(path):
     """Load config from specified path.
-    
+
     Useful in notebooks where argparse can cause problems.
     """
     with open(path) as f:
@@ -55,6 +54,9 @@ def _set_nested_key(d, k, v, sep="."):
 
 
 def get_file_logger(name, filename, level=logging.DEBUG):
+    """
+    Set up logger that will log to the given filename.
+    """
     logger = logging.getLogger(name)
     handler = logging.FileHandler(filename)
     handler.setFormatter(
@@ -67,6 +69,9 @@ def get_file_logger(name, filename, level=logging.DEBUG):
 
 
 def setup(device, dtype):
+    """
+    Set manual seed, configure backend and autocasting.
+    """
     torch.manual_seed(1337)
     torch.backends.cuda.matmul.allow_tf32 = True  # allow tf32 on matmul
     torch.backends.cudnn.allow_tf32 = True  # allow tf32 on cudnn
