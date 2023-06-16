@@ -53,7 +53,10 @@ conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightl
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
-pip install numba==0.49.1 --ignore-installed llvmlite
+wget https://files.pythonhosted.org/packages/cd/0a/09f8adda09f9330bfd9285c947e29e0080e649aa12aa8328d4993dbf97dd/llvmlite-0.40.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+pip install llvmlite-0.40.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+rm llvmlite-0.40.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+
 
 # smoke test
 python -c "import habitat;import habitat.gym"
