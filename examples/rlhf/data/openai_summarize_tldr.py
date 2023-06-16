@@ -121,5 +121,5 @@ class TLDRDataset(Dataset):
 
 
 def get_prompt_dataloader(config, device, split="train"):
-    data = TLDRDataset(split, max_length=config["block_size"])
+    data = TLDRDataset(split, max_length=config.block_size)
     return create_infinite_dataloader(data, config, Collate(device))

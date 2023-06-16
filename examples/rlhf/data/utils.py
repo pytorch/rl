@@ -23,7 +23,7 @@ def create_infinite_dataloader(data, config, collate_fn):
     dl = DataLoader(
         data,
         shuffle=True,
-        batch_size=config["batch_size"],
+        batch_size=config.batch_size,
         collate_fn=collate_fn,
         drop_last=True,
     )

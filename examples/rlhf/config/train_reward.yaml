@@ -6,10 +6,10 @@ data:
   batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
   block_size: 550
 model:
-  name_or_path: out
+  name_or_path: ./out
   dropout: 0.1 # for pretraining 0 is good, for finetuning try 0.1+
 reward_model:
-  out_dir: out_reward
+  out_dir: ./out_reward
   init_from: scratch  # 'scratch' or 'resume' - if "resume" model will be loaded from out_dir_reward
 train:
   grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0

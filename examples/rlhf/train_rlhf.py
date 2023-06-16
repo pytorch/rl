@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from copy import deepcopy
 
+import hydra
 import torch
 from data import get_prompt_dataloader
 from env import rollout
@@ -19,7 +20,7 @@ from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
-from utils import get_file_logger, load_config, setup
+from utils import get_file_logger, setup, resolve_name_or_path
 
 
 def flatten_td(td):
@@ -104,48 +105,47 @@ def create_reward_estimator(
     return estimate_reward
 
 
-def main():
+@hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
+def main(cfg):
     query_logger = get_file_logger("query_logger", "rlhf_query_logger.log")
     val_reward_logger = get_file_logger("val_reward_logger", "rlhf_valid_rewards.log")
 
-    config = load_config("config/train_rlhf.yaml")
+    data_cfg = cfg.data
+    model_cfg = cfg.model
+    reward_model_cfg = cfg.reward_model
+    train_cfg = cfg.train
+    ppo_cfg = train_cfg.ppo
 
-    data_config = config["data"]
-    model_config = config["model"]
-    reward_model_config = config["reward_model"]
-    train_config = config["train"]
-    ppo_config = train_config["ppo"]
+    eval_interval = cfg.io.eval_interval
+    log_interval = cfg.io.log_interval
+    eval_iters = cfg.io.eval_iters
 
-    eval_interval = config["io"]["eval_interval"]
-    log_interval = config["io"]["log_interval"]
-    eval_iters = config["io"]["eval_iters"]
+    rlhf_out_dir = model_cfg.out_dir
+    transformer_name_or_path = model_cfg.name_or_path
+    dropout = model_cfg.dropout
 
-    rlhf_out_dir = model_config["out_dir"]
-    transformer_name_or_path = model_config["name_or_path"]
-    dropout = model_config["dropout"]
+    batch_size = data_cfg.batch_size
 
-    batch_size = data_config["batch_size"]
+    grad_clip = train_cfg.grad_clip
+    max_epochs = train_cfg.max_epochs
+    always_save_checkpoint = train_cfg.always_save_checkpoint
 
-    grad_clip = train_config["grad_clip"]
-    max_epochs = train_config["max_epochs"]
-    always_save_checkpoint = train_config["always_save_checkpoint"]
+    episode_length = ppo_cfg.episode_length
+    ppo_batch_size = ppo_cfg.ppo_batch_size
+    ppo_num_epochs = ppo_cfg.ppo_num_epochs
+    num_rollouts_per_epoch = ppo_cfg.num_rollouts_per_epoch
 
-    episode_length = ppo_config["episode_length"]
-    ppo_batch_size = ppo_config["ppo_batch_size"]
-    ppo_num_epochs = ppo_config["ppo_num_epochs"]
-    num_rollouts_per_epoch = ppo_config["num_rollouts_per_epoch"]
-
-    device = config["sys"]["device"]
-    dtype = config["sys"]["dtype"]
-    compile_ = config["sys"]["compile"]
+    device = cfg.sys.device
+    dtype = cfg.sys.dtype
+    compile_ = cfg.sys.compile
 
     ctx = setup(device, dtype)
 
-    train_loader = get_prompt_dataloader(data_config, device=device, split="train")
-    val_loader = get_prompt_dataloader(data_config, device=device, split="valid")
+    train_loader = get_prompt_dataloader(data_cfg, device=device, split="train")
+    val_loader = get_prompt_dataloader(data_cfg, device=device, split="valid")
 
     actor, critic, critic_head, model = init_actor_critic(
-        transformer_name_or_path, dropout, device, compile_
+        resolve_name_or_path(transformer_name_or_path), dropout, device, compile_
     )
     critic.eval()
     ref_model = deepcopy(model).to("cuda:1")
@@ -158,7 +158,7 @@ def main():
         layer.requires_grad_(False)
 
     reward_model = init_reward_model(
-        reward_model_path=reward_model_config["name_or_path"],
+        reward_model_path=resolve_name_or_path(reward_model_cfg.name_or_path),
         device=device,
         compile_=compile_,
     )
@@ -179,10 +179,10 @@ def main():
         ref_model=ref_model,
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), **train_config["optimizer"])
+    optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
     scheduler = None
-    if train_config["decay_lr"]:
-        scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
+    if train_cfg.decay_lr:
+        scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
     rb = TensorDictReplayBuffer(
         storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
