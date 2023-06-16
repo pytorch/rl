@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euxo pipefail
+set -exo pipefail
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
