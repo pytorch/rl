@@ -68,6 +68,9 @@ class TD3Loss(LossModule):
         delay_qvalue (bool, optional): Whether to separate the target Q value
             networks from the Q value networks used
             for data collection. Default is ``True``.
+        spec (TensorSpec, optional): the action tensor spec. If not provided
+            and the target entropy is ``"auto"``, it will be retrieved from
+            the actor.
         separate_losses (bool, optional): if ``True``, shared parameters between
             policy and critic will only be trained on the policy loss.
             Defaults to ``False``, ie. gradients are propagated to shared
