@@ -121,7 +121,9 @@ def main():
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
-                    print(f"saving checkpoint to {reward_out_dir}")
+                    msg = f"saving checkpoint to {reward_out_dir}"
+                    print(msg)
+                    loss_logger.info(msg)
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
             loss = loss.item()
