@@ -28,6 +28,7 @@ export MKL_THREADING_LAYER=GNU
 
 conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
 conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+export LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 
 conda deactivate && conda activate ./env
 
