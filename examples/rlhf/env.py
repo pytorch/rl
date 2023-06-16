@@ -115,7 +115,7 @@ def create_rollout_td(
     # of generated tokens
     done_idx = torch.minimum(
         (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-        torch.tensor(max_new_tokens),
+        torch.tensor(max_new_tokens) - 1,
     )
     done = (
         torch.arange(max_new_tokens, device=generated.device) == done_idx[:, None]

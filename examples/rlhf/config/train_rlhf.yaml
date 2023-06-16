@@ -14,7 +14,7 @@ reward_model:
 train:
   grad_clip: 1.0
   max_epochs: 1000 # total number of training iterations
-  always_save_checkpoint: True # if True, always save a checkpoint after each eval
+  always_save_checkpoint: False # if True, always save a checkpoint after each eval
   decay_lr: True
   optimizer:
     # keyword arguments for torch.optim.AdamW
