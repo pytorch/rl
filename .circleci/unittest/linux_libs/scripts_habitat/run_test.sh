@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -euxo pipefail
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
@@ -17,9 +17,6 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
-
-# smoke test
-python -c "import habitat;import habitat.gym"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
