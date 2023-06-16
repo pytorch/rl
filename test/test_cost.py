@@ -5,13 +5,20 @@
 
 import argparse
 import functools
+import itertools
 import operator
 import warnings
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
-from tensordict.nn import InteractionType
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictModule as ProbMod,
+    ProbabilisticTensorDictSequential as ProbSeq,
+    TensorDictModule as Mod,
+    TensorDictSequential as Seq,
+)
 
 _has_functorch = True
 try:
@@ -1102,6 +1109,59 @@ class TestTD3(LossModuleTestBase):
     ):
         raise NotImplementedError
 
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2
+    ):
+        common = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor_net = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=1,
+            out_features=2 * n_act,
+        )
+        value = MLP(
+            in_features=n_hidden + n_act,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        batch = [batch]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+        )
+        common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            ProbMod(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        value_head = Mod(
+            value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
+        )
+        value = Seq(common, value_head)
+        return actor, value, common, td
+
     def _create_mock_data_td3(
         self,
         batch=8,
@@ -1266,29 +1326,22 @@ class TestTD3(LossModuleTestBase):
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_available_devices())
-    @pytest.mark.parametrize("use_action_spec", [True, False])
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_td3_separate_losses(
         self,
         device,
-        use_action_spec,
         separate_losses,
+        n_act=4,
     ):
         torch.manual_seed(self.seed)
-        actor = self._create_mock_actor(device=device)
-        value = self._create_mock_value(device=device)
-        td = self._create_mock_data_td3(device=device)
-        if use_action_spec:
-            action_spec = actor.spec
-            bounds = None
-        else:
-            bounds = (-1, 1)
-            action_spec = None
+        # actor = self._create_mock_actor(device=device)
+        # value = self._create_mock_value(device=device)
+        # td = self._create_mock_data_td3(device=device)
+        actor, value, common, td = self._create_mock_common_layer_setup(n_act=n_act)
         loss_fn = TD3Loss(
             actor,
             value,
-            action_spec=action_spec,
-            bounds=bounds,
+            action_spec=BoundedTensorSpec(shape=(n_act,), minimum=-1, maximum=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )
@@ -1318,23 +1371,28 @@ class TestTD3(LossModuleTestBase):
                     for p in loss_fn.actor_network_params.values(True, True)
                 )
             elif k == "loss_qvalue":
+                common_layers_no = len(list(common.parameters()))
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(True, True)
+                )
                 if separate_losses:
+                    common_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                    )
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.actor_network_params.values(True, True)
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
                     )
                 else:
                     assert not any(
                         (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.actor_network_params.values(True, True)
+                        for p in loss_fn.qvalue_network_params.values(True, True)
                     )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(True, True)
-                )
 
             else:
                 raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
