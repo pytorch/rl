@@ -6,16 +6,20 @@
 from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
+from torch.distributions import Categorical
+
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
     TensorDictModule,
     TensorDictModuleBase,
-    TensorDictModuleWrapper,
+    TensorDictModuleWrapper, TensorDictSequential,
 )
-from torch import nn
+from torch import nn, nn as nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.modules import SafeProbabilisticTensorDictSequential, \
+    SafeProbabilisticModule
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
@@ -1748,3 +1752,33 @@ class TanhModule(TensorDictModuleBase):
                 feature = low + (high - low) * (feature + 1) / 2
             tensordict.set(out_key, feature)
         return tensordict
+
+
+class LMActorCritic(ActorValueOperator):
+    def __init__(self, base_model):
+        actor_head = base_model.lm_head
+        value_head = nn.Linear(actor_head.in_features, 1, bias=False)
+
+        common = TensorDictSequential(
+            TensorDictModule(
+                base_model.transformer,
+                in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
+                out_keys=["x"],
+            ),
+            TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
+        )
+        actor_head = TensorDictModule(actor_head, in_keys=["x"], out_keys=["logits"])
+        actor_head = SafeProbabilisticTensorDictSequential(
+            actor_head,
+            SafeProbabilisticModule(
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=Categorical,
+                return_log_prob=True,
+            ),
+        )
+        value_head = TensorDictModule(
+            value_head, in_keys=["x"], out_keys=["state_value"]
+        )
+
+        super().__init__(common, actor_head, value_head)
