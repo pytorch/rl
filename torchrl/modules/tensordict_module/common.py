@@ -12,7 +12,7 @@ from typing import Iterable, Optional, Type, Union
 
 import torch
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
@@ -401,3 +401,33 @@ def ensure_tensordict_compatible(
     if out_keys is not None:
         kwargs["out_keys"] = out_keys
     return wrapper_type(module, **kwargs)
+
+
+class VmapModule(TensorDictModuleBase):
+    """A TensorDictModule wrapper to vmap over the input.
+
+    It is intended to be used with modules that accept data with one less batch
+    dimension than the one provided. By using this wrapper, one can hide a
+    batch dimension and satisfy the wrapped module.
+
+    Args:
+        module (TensorDictModuleBase): the module to vmap over.
+        vmap_dim (int, optional): the vmap input and output dim.
+            If none is provided, the last dimension of the tensordict is
+            assumed.
+
+    """
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+        super().__init__()
+        self.in_keys = module.in_keys
+        self.out_keys = module.out_keys
+        self.module = module
+        self.vmap_dim = vmap_dim
+
+    def forward(self, tensordict):
+        vmap_dim = self.vmap_dim
+        if vmap_dim is None:
+            ndim = tensordict.ndim
+            vmap_dim = ndim - 1
+        td = torch.vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        return tensordict.update(td)
