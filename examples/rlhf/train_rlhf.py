@@ -6,8 +6,10 @@ from copy import deepcopy
 
 import hydra
 import torch
+
+import torchrl.data.rlhf.utils
 from data import get_prompt_dataloader
-from env import rollout
+from torchrl.data.rlhf.utils import rollout_from_data
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -71,15 +73,13 @@ def create_reward_estimator(
         rewards = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
-            # disable kl for evaluation purposes
-            td = rollout(
-                batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0
-            )
+            # NOTE: disable kl for evaluation
+            td = rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
         if logger:
-            response_ids = model.generate(
+            response_ids = torchrl.data.rlhf.utils.generate(
                 input_ids=test_prompt_ids, generation_config=generation_config
             )
             with ctx:
@@ -206,7 +206,7 @@ def main(cfg):
             kl_coef = min(max((6 * it) / max_epochs, 0.1), 6)
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
-                td = rollout(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
+                td = rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
                 # with torch.no_grad(), ctx:
                 #     # moving this to within epoch
                 #     adv_fn(td)

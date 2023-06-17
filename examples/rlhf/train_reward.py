@@ -6,7 +6,7 @@ import time
 
 import hydra
 import torch
-from data import get_reward_dataloader
+from torchrl.data.rlhf.dataset import get_reward_dataloader
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, setup, resolve_name_or_path
