@@ -166,6 +166,7 @@ class ListStorage(Storage):
     def _empty(self):
         self._storage = []
 
+
 class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
 
@@ -205,6 +206,7 @@ class TensorStorage(Storage):
         >>> storage.set(0, storage.get(0).zero_()) # zeros the data along index ``0``
 
     This class also supports tensorclass data.
+
     Examples:
         >>> from tensordict import tensorclass
         >>> @tensorclass
@@ -228,14 +230,15 @@ class TensorStorage(Storage):
         cls._storage = None
         return super().__new__(cls)
 
-
     def __init__(self, storage, max_size=None, device=None):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
                 raise ValueError("Expected storage to be non-null.")
             if max_size != storage.shape[0]:
-                raise ValueError("The max-size and the storage shape mismatch: got "
-                                 f"max_size={max_size} for a storage of shape {storage.shape}.")
+                raise ValueError(
+                    "The max-size and the storage shape mismatch: got "
+                    f"max_size={max_size} for a storage of shape {storage.shape}."
+                )
         elif storage is not None:
             max_size = storage.shape[0]
         super().__init__(max_size)
@@ -247,25 +250,23 @@ class TensorStorage(Storage):
         self.device = device if device else torch.device("cpu")
         self._storage = storage
 
-
     def state_dict(self) -> Dict[str, Any]:
         _storage = self._storage
         if isinstance(_storage, torch.Tensor):
             pass
-        elif isinstance(_storage, TensorDictBase):
+        elif is_tensor_collection(_storage):
             _storage = _storage.state_dict()
         elif _storage is None:
             _storage = {}
         else:
             raise TypeError(
-                f"Objects of type {type(_storage)} are not supported by LazyTensorStorage.state_dict"
+                f"Objects of type {type(_storage)} are not supported by {type(self)}.state_dict"
             )
         return {
             "_storage": _storage,
             "initialized": self.initialized,
             "_len": self._len,
         }
-
 
     def load_state_dict(self, state_dict):
         _storage = copy(state_dict["_storage"])
@@ -279,7 +280,7 @@ class TensorStorage(Storage):
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
-            if isinstance(self._storage, TensorDictBase):
+            if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage)
             elif self._storage is None:
                 self._storage = TensorDict({}, []).load_state_dict(_storage)
@@ -331,7 +332,11 @@ class TensorStorage(Storage):
         self._len = 0
 
     def _init(self):
-        raise NotImplementedError(f"{type(self)} must be initialized during construction.")
+        raise NotImplementedError(
+            f"{type(self)} must be initialized during construction."
+        )
+
+
 class LazyTensorStorage(TensorStorage):
     """A pre-allocated tensor storage for tensors and tensordicts.
 
@@ -371,6 +376,7 @@ class LazyTensorStorage(TensorStorage):
         >>> storage.set(0, storage.get(0).zero_()) # zeros the data along index ``0``
 
     This class also supports tensorclass data.
+
     Examples:
         >>> from tensordict import tensorclass
         >>> @tensorclass
@@ -460,6 +466,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             is_shared=False)
 
     This class also supports tensorclass data.
+
     Examples:
         >>> from tensordict import tensorclass
         >>> @tensorclass
