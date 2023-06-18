@@ -9,7 +9,7 @@ import time
 
 import torch
 
-from data.openai_summarize_tldr import get_prompt_dataloader
+from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, load_and_update_config, setup
@@ -58,8 +58,8 @@ def main():
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_prompt_dataloader(data_config, device=device, split="train")
-    val_loader = get_prompt_dataloader(data_config, device=device, split="valid")
+    train_loader = get_prompt_dataloader_tldr(data_config, device=device, split="train")
+    val_loader = get_prompt_dataloader_tldr(data_config, device=device, split="valid")
 
     model = init_transformer(
         model_config["name_or_path"],
