@@ -18,6 +18,7 @@ from .replay_buffers import (
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
     Writer,
+TensorStorage,
 )
 from .tensor_specs import (
     BinaryDiscreteTensorSpec,
