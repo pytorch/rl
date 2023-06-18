@@ -11,14 +11,15 @@ import torch.nn as nn
 from tensordict import tensorclass
 from torch.utils.data import Dataset
 
-from .utils import create_infinite_dataloader, create_memmaps
+from torchrl.data.rlhf.dataset import create_or_load_dataset, \
+    create_infinite_dataloader
 
 HERE = Path(__file__).parent
 DATASET = "CarperAI/openai_summarize_tldr"
 
 
 @tensorclass
-class PromptData:
+class PromptDataTLDR:
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     prompt_rindex: torch.Tensor
@@ -42,7 +43,7 @@ class PromptData:
         )
 
 
-class Collate(nn.Module):
+class CollateTLDR(nn.Module):
     def __init__(self, device="cpu"):
         super().__init__()
         self.device = torch.device(device)
@@ -53,7 +54,7 @@ class Collate(nn.Module):
         return batch.to(self.device)
 
 
-def make_process_fn(tokenizer, max_length):
+def make_process_fn_tldr(tokenizer, max_length):
     def process(example):
         tokenized_prompts = tokenizer(
             example["prompt"], max_length=max_length, truncation=True
@@ -93,7 +94,7 @@ class TLDRDataset(Dataset):
             (data_dir / file).exists()
             for file in (ids_filename, mask_filename, rindex_filename)
         ):
-            create_memmaps(split, max_length, DATASET, make_process_fn)
+            create_or_load_dataset(split, max_length, DATASET, make_process_fn_tldr)
 
         self.input_ids = np.memmap(ids_filename, dtype=np.int32, mode="r+")
         self.mask = np.memmap(mask_filename, dtype=np.int32, mode="r+")
@@ -111,7 +112,7 @@ class TLDRDataset(Dataset):
         input_ids = torch.from_numpy(self.input_ids[idx]).to(torch.int64)
         mask = torch.from_numpy(self.mask[idx])
         rindex = torch.from_numpy(self.rindex[idx])
-        return PromptData(
+        return PromptDataTLDR(
             input_ids=input_ids,
             attention_mask=mask,
             prompt_rindex=rindex,
@@ -120,6 +121,6 @@ class TLDRDataset(Dataset):
         )
 
 
-def get_prompt_dataloader(config, device, split="train"):
+def get_prompt_dataloader_tldr(config, device, split="train"):
     data = TLDRDataset(split, max_length=config.block_size)
-    return create_infinite_dataloader(data, config, Collate(device))
+    return create_infinite_dataloader(data, config, CollateTLDR(device))

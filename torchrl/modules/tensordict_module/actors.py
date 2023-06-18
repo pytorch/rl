@@ -15,11 +15,9 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictModuleWrapper, TensorDictSequential,
 )
-from torch import nn, nn as nn
+from torch import nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
-from torchrl.modules import SafeProbabilisticTensorDictSequential, \
-    SafeProbabilisticModule
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (

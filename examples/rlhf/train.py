@@ -14,7 +14,7 @@ import time
 import hydra
 import torch
 
-from data.openai_summarize_tldr import get_prompt_dataloader
+from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, setup, resolve_name_or_path
@@ -62,8 +62,8 @@ def main(cfg):
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_prompt_dataloader(data_cfg, device=device, split="train")
-    val_loader = get_prompt_dataloader(data_cfg, device=device, split="valid")
+    train_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="train")
+    val_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="valid")
 
     model = init_transformer(
         resolve_name_or_path(model_cfg.name_or_path),

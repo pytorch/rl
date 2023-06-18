@@ -8,7 +8,7 @@ import hydra
 import torch
 
 import torchrl.data.rlhf.utils
-from data import get_prompt_dataloader
+from data import get_prompt_dataloader_tldr
 from torchrl.data.rlhf.utils import rollout_from_data
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
@@ -143,8 +143,8 @@ def main(cfg):
 
     ctx = setup(device, dtype)
 
-    train_loader = get_prompt_dataloader(data_cfg, device=device, split="train")
-    val_loader = get_prompt_dataloader(data_cfg, device=device, split="valid")
+    train_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="train")
+    val_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="valid")
 
     actor, critic, critic_head, model = init_actor_critic(
         resolve_name_or_path(transformer_name_or_path), dropout, device, compile_
