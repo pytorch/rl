@@ -71,16 +71,6 @@ class PromptDataTLDR:
         data = data[split, str(max_length)]
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)
 
-class CollateTLDR(nn.Module):
-    def __init__(self, device="cpu"):
-        super().__init__()
-        self.device = torch.device(device)
-
-    def __call__(self, batch):
-        if self.device.type == "cuda":
-            batch = batch.pin_memory()
-        return batch.to(self.device)
-
 
 def make_process_fn_tldr(tokenizer, max_length):
     def process(example):
