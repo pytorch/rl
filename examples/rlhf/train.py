@@ -14,7 +14,8 @@ import time
 import hydra
 import torch
 
-from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
+from torchrl.data.rlhf.dataset import get_dataloader
+from torchrl.data.rlhf.tldr import PromptDataTLDR
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, setup, resolve_name_or_path
@@ -29,6 +30,7 @@ def create_loss_estimator(eval_iters, ctx):
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
+            batch.batch_size = []
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
@@ -62,8 +64,22 @@ def main(cfg):
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="train")
-    val_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="valid")
+    train_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="train",
+    )
+    val_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="valid",
+    )
 
     model = init_transformer(
         resolve_name_or_path(model_cfg.name_or_path),
@@ -86,6 +102,8 @@ def main(cfg):
     for it in range(1, max_iters + 1):
         for _ in range(gradient_accumulation_steps):
             batch = next_batch
+            # TODO: can we handle this better with a differently structured tensorclass?
+            batch.batch_size = []
             with ctx:
                 model(batch)
             # immediately async prefetch next batch while model is doing the forward pass on the GPU

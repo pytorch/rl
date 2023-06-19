@@ -8,7 +8,7 @@ import hydra
 import torch
 
 import torchrl.data.rlhf.utils
-from data import get_prompt_dataloader_tldr
+from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
 from torchrl.data.rlhf.utils import rollout_from_data
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model

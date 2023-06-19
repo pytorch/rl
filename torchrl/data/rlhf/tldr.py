@@ -76,7 +76,7 @@ class PromptDataTLDR:
             dataset_name,
             make_process_fn_tldr,
         )
-        data = data[split, str(max_length)]
+        data = data[str(max_length)]
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)
 
 

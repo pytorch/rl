@@ -81,7 +81,7 @@ class PairwiseDataset:
             make_process_fn_comparison,
             pre_tokenization_hook,
         )
-        data = data[split, str(max_length)]
+        data = data[str(max_length)]
         maxidx = data.shape[0] // 2
         batch_size = [maxidx]
         # this is a zero-copy creation, as we index memmap-arrays without

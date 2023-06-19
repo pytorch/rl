@@ -84,16 +84,16 @@ def create_or_load_dataset(
     # search for data
     if os.path.exists(data_dir_total):
         print("found existing dataset")
-        dataset = TensorDict.load_memmap(data_dir)
+        dataset = TensorDict.load_memmap(data_dir / split)
         # exclude other datasets, if needed
-        dataset = dataset.select((split, str(max_length)))
+        dataset = dataset.select(str(max_length))
         return dataset
     print("preproc")
     dataset = preproc_data(
         split, max_length, dataset_name, make_process_fn, pre_tokenization_hook
     )
-    data_spec = (split, str(max_length))
-    return dataset_to_tensordict(dataset, data_dir, data_spec)
+    data_spec = str(max_length)
+    return dataset_to_tensordict(dataset, data_dir / split, data_spec)
 
 
 def preproc_data(
