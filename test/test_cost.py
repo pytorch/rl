@@ -1384,6 +1384,14 @@ class TestTD3(LossModuleTestBase):
                     assert all(
                         (p.grad is None) or (p.grad == 0).all() for p in common_layers
                     )
+                    qvalue_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
+                    )
                 else:
                     assert not any(
                         (p.grad is None) or (p.grad == 0).all()
