@@ -4,7 +4,6 @@ import torch
 
 import torchrl.data.rlhf.utils
 from data import get_prompt_dataloader_tldr
-from torchrl.data.rlhf.utils import rollout_from_data
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -14,6 +13,7 @@ from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
 )
+from torchrl.data.rlhf.utils import rollout_from_data
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
@@ -60,8 +60,10 @@ def create_loss_estimator(
         rewards = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
-            # NOTE: disable kl for evaluation
-            td = rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0)
+            # NOTE: disable kl for evaluation
+            td = rollout_from_data(
+                batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0
+            )
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
@@ -153,7 +155,9 @@ def main():
     reward_model.eval()
     reward_model.requires_grad_(False)
 
-    adv_fn = GAE(value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True, shifted=True)
+    adv_fn = GAE(
+        value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True, shifted=True
+    )
     loss_fn = ClipPPOLoss(actor, critic_head)
 
     test_prompt = next(val_loader)
@@ -187,14 +191,21 @@ def main():
 
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
-    with tqdm(total=int(max_epochs*num_rollouts_per_epoch/batch_size)) as pbar:
+    with tqdm(total=int(max_epochs * num_rollouts_per_epoch / batch_size)) as pbar:
         for _epoch in range(1, max_epochs + 1):
             rb.empty()
             rollout_rewards = []
             kl_coef = min(max((6 * it) / max_epochs, 0.1), 6)
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
-                td = rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
+                td = rollout_from_data(
+                    batch,
+                    model,
+                    ref_model,
+                    reward_model,
+                    max_new_tokens=50,
+                    kl_coef=kl_coef,
+                )
                 # with torch.no_grad(), ctx:
                 #     # moving this to within epoch
                 #     adv_fn(td)
@@ -204,7 +215,7 @@ def main():
                 rollout_rewards.append(td.get(("next", "reward")).mean().cpu().item())
             rollout_reward = torch.tensor(rollout_rewards).mean().cpu().item()
             # FIXME: THIS PPO CYCLE WAS DIFFERENT wrt trlx. @tcbegley please double check
-            # they sample batch_size from rb and then do minibatches ppo_batch_size within 
+            # they sample batch_size from rb and then do minibatches ppo_batch_size within
 
             for batch in rb:
                 with torch.no_grad(), ctx:
@@ -221,7 +232,9 @@ def main():
                         with ctx:
                             loss_vals = loss_fn(minibatch)
                         loss_val = sum(
-                            value for key, value in loss_vals.items() if key.startswith("loss")
+                            value
+                            for key, value in loss_vals.items()
+                            if key.startswith("loss")
                         )
                         loss_val.backward()
                         torch.nn.utils.clip_grad_norm_(loss_fn.parameters(), grad_clip)
@@ -237,7 +250,9 @@ def main():
                     if val_reward > best_val_reward or always_save_checkpoint:
                         best_val_reward = val_reward
                         if it > 0:
-                            val_reward_logger.info(f"saving checkpoint to {rlhf_out_dir}")
+                            val_reward_logger.info(
+                                f"saving checkpoint to {rlhf_out_dir}"
+                            )
                             model.save_pretrained(rlhf_out_dir)
                 elif it % log_interval == 0:
                     val_reward_logger.info(f"TRAIN: {it=}: {rollout_reward=:.4f}")

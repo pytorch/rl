@@ -417,6 +417,7 @@ class VmapModule(TensorDictModuleBase):
             assumed.
 
     """
+
     def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
         super().__init__()
         self.in_keys = module.in_keys

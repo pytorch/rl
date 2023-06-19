@@ -8,10 +8,10 @@ $ python train.py --batch_size=32 --compile=False
 import time
 
 import torch
-
-from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
+from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
 from utils import get_file_logger, load_and_update_config, setup
 
 

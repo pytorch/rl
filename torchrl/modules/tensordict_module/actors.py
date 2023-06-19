@@ -6,16 +6,17 @@
 from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
-from torch.distributions import Categorical
 
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
     TensorDictModule,
     TensorDictModuleBase,
-    TensorDictModuleWrapper, TensorDictSequential,
+    TensorDictModuleWrapper,
+    TensorDictSequential,
 )
 from torch import nn
+from torch.distributions import Categorical
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet

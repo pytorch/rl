@@ -1,14 +1,16 @@
 import torch
 import transformers
+
+from tensordict import TensorDict
 from torch.nn import functional as F
 from transformers import GenerationConfig
 
-
-from tensordict import TensorDict
-
 EOS_TOKEN_ID = 50256
 
-def rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1):
+
+def rollout_from_data(
+    batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1
+):
     generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
     return create_rollout_td(
         batch, generated, reward_model, log_probs, log_ratio, max_new_tokens, kl_coef
@@ -87,7 +89,12 @@ def create_rollout_td(
 
 
 @torch.no_grad()
-def generate(model: transformers.PreTrainedModel, batch, ref_model: transformers.PreTrainedModel, max_new_tokens=50):
+def generate(
+    model: transformers.PreTrainedModel,
+    batch,
+    ref_model: transformers.PreTrainedModel,
+    max_new_tokens=50,
+):
     """Generates a sequence of tokens from a batch of data sampled from the data collector.
 
     Args:
@@ -157,7 +164,7 @@ def generate(model: transformers.PreTrainedModel, batch, ref_model: transformers
         return_dict=True,
     ).logits.to(logits.device)
     ref_logprobs = logprobs_of_labels(ref_logits[:, :-1], generated[:, 1:])
-    log_ratio = (logprobs - ref_logprobs)
+    log_ratio = logprobs - ref_logprobs
     log_ratio = log_ratio.masked_fill(~attention_mask[:, :-1], 0)
     log_ratio = torch.stack(
         [

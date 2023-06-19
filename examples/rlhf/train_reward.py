@@ -2,9 +2,9 @@ import time
 from pathlib import Path
 
 import torch
-from torchrl.data.rlhf.comparison import get_reward_dataloader
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from torchrl.data.rlhf.comparison import get_reward_dataloader
 from utils import get_file_logger, load_and_update_config, setup
 
 HERE = Path(__file__).parent
@@ -114,8 +114,10 @@ def main():
             val_loss, val_acc = estimate_loss(model, val_loader)
             train_loss, train_acc = estimate_loss(model, train_loader)
 
-            msg = (f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
-                   f"{train_acc=:.4f}, {val_acc=:.4f}")
+            msg = (
+                f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
+                f"{train_acc=:.4f}, {val_acc=:.4f}"
+            )
             print(msg)
             loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
