@@ -21,6 +21,7 @@ DATASET = "CarperAI/openai_summarize_comparisons"
 
 @tensorclass
 class RewardData:
+    """A dataclass for reward model training."""
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     rewards: Optional[torch.Tensor] = None
@@ -116,11 +117,26 @@ def pre_tokenization_hook(dataset):
     return HFDataset.from_list(chosen + rejected)
 
 def get_reward_dataloader(config, device, split="train"):
+    """Creates a dataset for reward model training and returns a dataloader from it.
+
+    Args:
+        config (dict or equivalent): a configuration dict. Should contain the
+            entries ``"block_size"`` indicating the maximum length of a sequence,
+            ``"batch_size"`` indicating the batch size of the dataloader samples) and
+            optionally ``"prefetch"`` which sets the queue length for
+            multithreaded sampling. If none is provided, no prefetching
+            is assumed.
+        device (torch.device or equivalent): the device where the samples should
+            be cast.
+        split (str, optional): the data split. Either ``"train"`` or ``"valid"``.
+            Defaults to ``"train"``.
+
+    """
     data = PairwiseDataset.from_dataset(split, max_length=config["block_size"])
     return TensorDictReplayBuffer(
         storage=TensorStorage(data),
         collate_fn=lambda x: x.as_tensor().to(device, non_blocking=True),
-        sampler=SamplerWithoutReplacement(),
+        sampler=SamplerWithoutReplacement(drop_last=True),
         batch_size=config['batch_size'],
         prefetch=config.get('prefetch', 0),
     )
