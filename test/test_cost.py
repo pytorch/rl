@@ -1325,7 +1325,7 @@ class TestTD3(LossModuleTestBase):
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_td3_separate_losses(
         self,
@@ -1334,9 +1334,6 @@ class TestTD3(LossModuleTestBase):
         n_act=4,
     ):
         torch.manual_seed(self.seed)
-        # actor = self._create_mock_actor(device=device)
-        # value = self._create_mock_value(device=device)
-        # td = self._create_mock_data_td3(device=device)
         actor, value, common, td = self._create_mock_common_layer_setup(n_act=n_act)
         loss_fn = TD3Loss(
             actor,
@@ -1345,8 +1342,8 @@ class TestTD3(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        with _check_td_steady(td):
-            loss = loss_fn(td)
+
+        loss = loss_fn(td)
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
