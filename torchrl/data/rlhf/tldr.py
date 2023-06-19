@@ -114,45 +114,6 @@ def make_process_fn_tldr(tokenizer, max_length):
 
     return process
 
-#
-# @tensorclass
-# class TLDRDataset:
-#     def __init__(self, split, max_length=550):
-#         data_dir = HERE / "tldr"
-#         ids_filename = data_dir / f"input_ids-{split}-{max_length}.bin"
-#         mask_filename = data_dir / f"attention_mask-{split}-{max_length}.bin"
-#         rindex_filename = data_dir / f"prompt_rindex-{split}-{max_length}.bin"
-#
-#         if not all(
-#             (data_dir / file).exists()
-#             for file in (ids_filename, mask_filename, rindex_filename)
-#         ):
-#             create_or_load_dataset(split, max_length, DATASET, make_process_fn_tldr)
-#
-#         self.input_ids = np.memmap(ids_filename, dtype=np.int32, mode="r+")
-#         self.mask = np.memmap(mask_filename, dtype=np.int32, mode="r+")
-#         self.rindex = np.memmap(rindex_filename, dtype=np.int32, mode="r+")
-#
-#         self.input_ids = self.input_ids.reshape(
-#             (self.input_ids.shape[0] // max_length, max_length)
-#         )
-#         self.mask = self.mask.reshape((self.mask.shape[0] // max_length, max_length))
-#
-#     def __len__(self):
-#         return len(self.input_ids)
-#
-#     def __getitems__(self, idx):
-#         input_ids = torch.from_numpy(self.input_ids[idx]).to(torch.int64)
-#         mask = torch.from_numpy(self.mask[idx])
-#         rindex = torch.from_numpy(self.rindex[idx])
-#         return PromptDataTLDR(
-#             input_ids=input_ids,
-#             attention_mask=mask,
-#             prompt_rindex=rindex,
-#             labels=input_ids,  # NOTE: we will use Hugging Face model and label are shifted within model
-#             batch_size=[],
-#         )
-
 
 def get_prompt_dataloader(config, device, split="train"):
     """Creates a dataset for prompt generation and returns a dataloader from it.
@@ -170,11 +131,11 @@ def get_prompt_dataloader(config, device, split="train"):
             Defaults to ``"train"``.
 
     """
-    data = PromptDataTLDR.from_dataset(split, max_length=config["block_size"])
+    data = PromptDataTLDR.from_dataset(split, max_length=config.block_size)
     return TensorDictReplayBuffer(
         storage=TensorStorage(data),
         collate_fn=lambda x: x.as_tensor().to(device, non_blocking=True),
         sampler=SamplerWithoutReplacement(drop_last=True),
-        batch_size=config['batch_size'],
-        prefetch=config.get('prefetch', 0),
+        batch_size=config.batch_size,
+        prefetch=config.get("prefetch", 0),
     )
