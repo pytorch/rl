@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from pathlib import Path
 from typing import Optional
 
@@ -9,8 +14,7 @@ from torch.utils.data import Dataset
 
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from torchrl.data.rlhf.dataset import create_or_load_dataset, \
-    create_infinite_dataloader
+from torchrl.data.rlhf.dataset import create_or_load_dataset
 
 HERE = Path(__file__).parent
 DATASET = "CarperAI/openai_summarize_tldr"
@@ -19,6 +23,7 @@ DATASET = "CarperAI/openai_summarize_tldr"
 @tensorclass
 class PromptDataTLDR:
     """A prompt dataset."""
+
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     prompt_rindex: torch.Tensor
@@ -42,7 +47,7 @@ class PromptDataTLDR:
         )
 
     @classmethod
-    def from_dataset(cls, split, max_length=550):
+    def from_dataset(cls, split, dataset_name=None, max_length=550):
         """
 
         Args:
@@ -65,8 +70,12 @@ class PromptDataTLDR:
                 device=None,
                 is_shared=False)
         """
+        dataset_name = dataset_name if dataset_name is not None else DATASET
         data = create_or_load_dataset(
-            split, max_length, DATASET, make_process_fn_tldr,
+            split,
+            max_length,
+            dataset_name,
+            make_process_fn_tldr,
         )
         data = data[split, str(max_length)]
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)
@@ -99,29 +108,3 @@ def make_process_fn_tldr(tokenizer, max_length):
         return tokenized_example
 
     return process
-
-
-def get_prompt_dataloader(config, device, split="train"):
-    """Creates a dataset for prompt generation and returns a dataloader from it.
-
-    Args:
-        config (dict or equivalent): a configuration dict. Should contain the
-            entries ``"block_size"`` indicating the maximum length of a sequence,
-            ``"batch_size"`` indicating the batch size of the dataloader samples) and
-            optionally ``"prefetch"`` which sets the queue length for
-            multithreaded sampling. If none is provided, no prefetching
-            is assumed.
-        device (torch.device or equivalent): the device where the samples should
-            be cast.
-        split (str, optional): the data split. Either ``"train"`` or ``"valid"``.
-            Defaults to ``"train"``.
-
-    """
-    data = PromptDataTLDR.from_dataset(split, max_length=config["block_size"])
-    return TensorDictReplayBuffer(
-        storage=TensorStorage(data),
-        collate_fn=lambda x: x.as_tensor().to(device, non_blocking=True),
-        sampler=SamplerWithoutReplacement(drop_last=True),
-        batch_size=config['batch_size'],
-        prefetch=config.get('prefetch', 0),
-    )
