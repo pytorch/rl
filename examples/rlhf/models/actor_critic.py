@@ -78,6 +78,7 @@ def init_actor_critic(transformer_name_or_path, dropout, device, compile_):
     )
     a2c_model = ActorCritic(base_model)
     a2c_model.to(device)
+    a2c_model.eval()
     actor = a2c_model.get_policy_operator()
     critic = a2c_model.get_value_operator()
     critic_head = a2c_model.get_value_head()

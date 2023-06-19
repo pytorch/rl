@@ -16,6 +16,7 @@ from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
 )
+
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
@@ -179,7 +180,7 @@ def main(cfg):
         ref_model=ref_model,
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
+    optimizer = torch.optim.AdamW(loss_fn.parameters(), **train_cfg.optimizer)
     scheduler = None
     if train_cfg.decay_lr:
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
@@ -233,8 +234,9 @@ def main(cfg):
                 for ppo_epoch in range(ppo_num_epochs):  # PPO epochs
                     optimizer.zero_grad()
                     for minibatch in rb_ppo:  # GO over RB
+                        minibatch = minibatch.to(device, non_blocking=True)
                         with ctx:
-                            loss_vals = loss_fn(minibatch.to(device))
+                            loss_vals = loss_fn(minibatch)
                         loss_val = sum(
                             value
                             for key, value in loss_vals.items()

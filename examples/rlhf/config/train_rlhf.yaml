@@ -19,7 +19,7 @@ train:
   optimizer:
     # keyword arguments for torch.optim.AdamW
     lr: 5.0e-6
-    weight_decay: 0.01
+    weight_decay: 0  # completely disable wd
     betas: [0.9, 0.999]
   scheduler:
     # keyword arguments for torch.optim.lr_scheduler.CosineAnnealingLR
