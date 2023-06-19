@@ -6,7 +6,8 @@ import time
 
 import hydra
 import torch
-from torchrl.data.rlhf.comparison import get_reward_dataloader
+from torchrl.data.rlhf.dataset import get_dataloader
+from torchrl.data.rlhf.comparison import PairwiseDataset
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from utils import get_file_logger, setup, resolve_name_or_path
@@ -27,12 +28,16 @@ def create_loss_estimator(eval_iters, ctx):
         losses = torch.zeros(eval_iters)
         accs = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            chosen_batch, rejected_batch = next(dataloader)
+            batch = next(dataloader)
             with ctx:
-                model(chosen_batch)
-                model(rejected_batch)
-            losses[k] = model.compute_reward_loss(chosen_batch, rejected_batch).item()
-            accs[k] = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+                model(batch.chosen_data)
+                model(batch.rejected_data)
+            losses[k] = model.compute_reward_loss(
+                batch.chosen_data, batch.rejected_data
+            ).item()
+            accs[k] = _accuracy(
+                batch.chosen_data.end_scores, batch.rejected_data.end_scores
+            )
         model.train()
         return losses.mean(), accs.mean()
 
@@ -62,8 +67,22 @@ def main(cfg):
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_reward_dataloader(data_cfg, device=device, split="train")
-    val_loader = get_reward_dataloader(data_cfg, device=device, split="valid1")
+    train_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PairwiseDataset,
+        device,
+        dataset_name="CarperAI/openai_summarize_comparisons",
+        split="train",
+    )
+    val_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PairwiseDataset,
+        device,
+        dataset_name="CarperAI/openai_summarize_comparisons",
+        split="valid1",
+    )
 
     if reward_model_cfg.init_from == "resume":
         model = init_reward_model(
@@ -97,13 +116,13 @@ def main(cfg):
 
     t0 = time.time()
     for it in range(1, max_iters + 1):
-        chosen_batch, rejected_batch = next(train_loader)
+        batch = next(train_loader)
 
         with ctx:
-            model(chosen_batch)
-            model(rejected_batch)
+            model(batch.chosen_data)
+            model(batch.rejected_data)
         optimizer.zero_grad(set_to_none=True)
-        loss = model.compute_reward_loss(chosen_batch, rejected_batch)
+        loss = model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
         loss.backward()
         optimizer.step()
         if scheduler is not None:
@@ -116,8 +135,10 @@ def main(cfg):
             val_loss, val_acc = estimate_loss(model, val_loader)
             train_loss, train_acc = estimate_loss(model, train_loader)
 
-            msg = (f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
-                   f"{train_acc=:.4f}, {val_acc=:.4f}")
+            msg = (
+                f"VALID: {it=}: {train_loss=:.4f}, {val_loss=:.4f}, "
+                f"{train_acc=:.4f}, {val_acc=:.4f}"
+            )
             print(msg)
             loss_logger.info(msg)
             if val_loss < best_val_loss or always_save_checkpoint:
@@ -129,7 +150,9 @@ def main(cfg):
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
             loss = loss.item()
-            acc = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+            acc = _accuracy(
+                batch.chosen_data.end_scores, batch.rejected_data.end_scores
+            )
             msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms"
             print(msg)
             loss_logger.info(msg)
