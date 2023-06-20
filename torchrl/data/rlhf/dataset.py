@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 
 from tensordict import TensorDict
 from torch.utils.data import DataLoader
@@ -28,6 +28,7 @@ def create_or_load_dataset(
     make_process_fn,
     pre_tokenization_hook=None,
     root_dir=None,
+    from_disk=False,
 ):
     """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise.
 
@@ -39,6 +40,9 @@ def create_or_load_dataset(
         pre_tokenization_hook (callable): TODO
         root_dir (path, optional): the path where the datasets are stored.
             Defaults to ``"$HOME/.cache/torchrl/data"``
+        from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
+            will be used. Otherwise, :func:`datasets.load_dataset` will be used.
+            Defaults to ``False``.
 
     The dataset will be stored in ``root/<split>/<max_length>/``
     Examples:
@@ -76,21 +80,21 @@ def create_or_load_dataset(
     if root_dir is None:
         root_dir = Path(os.environ.get("HOME")) / ".cache/torchrl/data/"
         os.makedirs(root_dir, exist_ok=True)
-    print("root_dir:", root_dir)
     data_dir = root_dir / dataset_name.split("-")[0]
-    print("data_dir", data_dir)
     data_dir_total = data_dir / split / str(max_length)
-    print("data_dir_total", data_dir_total)
     # search for data
     if os.path.exists(data_dir_total):
-        print("found existing dataset")
         dataset = TensorDict.load_memmap(data_dir)
         # exclude other datasets, if needed
         dataset = dataset.select((split, str(max_length)))
         return dataset
-    print("preproc")
     dataset = preproc_data(
-        split, max_length, dataset_name, make_process_fn, pre_tokenization_hook
+        split,
+        max_length,
+        dataset_name,
+        make_process_fn,
+        pre_tokenization_hook,
+        from_disk=from_disk,
     )
     data_spec = (split, str(max_length))
     return dataset_to_tensordict(dataset, data_dir, data_spec)
@@ -102,8 +106,25 @@ def preproc_data(
     dataset_name,
     make_process_fn,
     pre_tokenization_hook=None,
+    from_disk: bool = False,
 ):
-    dataset = load_dataset(dataset_name, split=split)
+    """Loads and preprocesses a dataset.
+
+    Args:
+        split (str): One of ``"train"`` or ``"valid"``.
+        max_length (int): the maximum sequence length.
+        dataset_name (str): the name or path of the dataset.
+        make_process_fn (callable): a preprocess function.
+        pre_tokenization_hook (callable): TODO
+        from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
+            will be used. Otherwise, :func:`datasets.load_dataset` will be used.
+            Defaults to ``False``.
+    """
+    if from_disk:
+        dataset = load_from_disk(dataset_name)[split]
+        print(type(dataset))
+    else:
+        dataset = load_dataset(dataset_name, split=split)
     if split.startswith("valid"):
         # reduce size of validation dataset
         dataset = dataset.select(range(2_000))
@@ -139,7 +160,6 @@ def dataset_to_tensordict(dataset, data_dir, suffix):
     }
     out = TensorDict.from_dict(data_dict).memmap_(prefix=data_dir)
     out.batch_size = out.batch_size[:1]
-    print("dataset:", out)
     return out
 
 

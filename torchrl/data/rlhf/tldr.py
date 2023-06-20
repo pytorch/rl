@@ -6,22 +6,16 @@
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
 from tensordict import tensorclass
-from torch.utils.data import Dataset
 
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.rlhf.dataset import create_or_load_dataset
 
-HERE = Path(__file__).parent
-DATASET = "CarperAI/openai_summarize_tldr"
+DEFAULT_DATASET = "CarperAI/openai_summarize_tldr"
 
 
 @tensorclass
-class PromptDataTLDR:
+class PromptData:
     """A prompt dataset."""
 
     input_ids: torch.Tensor
@@ -57,7 +51,7 @@ class PromptDataTLDR:
         Returns:
 
         Examples:
-            >>> data = PromptDataTLDR.from_dataset("train")
+            >>> data = PromptData.from_dataset("train")
             >>> print(data)
             PromptDataTLDR(
                 attention_mask=MemmapTensor(shape=torch.Size([116722, 550]), device=cpu, dtype=torch.int64, is_shared=False),
@@ -70,7 +64,7 @@ class PromptDataTLDR:
                 device=None,
                 is_shared=False)
         """
-        dataset_name = dataset_name if dataset_name is not None else DATASET
+        dataset_name = dataset_name if dataset_name is not None else DEFAULT_DATASET
         data = create_or_load_dataset(
             split,
             max_length,

@@ -3,24 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
 from datasets import Dataset as HFDataset
 from tensordict import tensorclass, TensorDict
-from torch.utils.data import Dataset
 
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.rlhf.dataset import create_or_load_dataset
 from tqdm import tqdm
 
-HERE = Path(__file__).parent
-DATASET = "CarperAI/openai_summarize_comparisons"
+DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
 
 
 @tensorclass
@@ -73,7 +66,7 @@ class PairwiseDataset:
     @classmethod
     def from_dataset(cls, split, dataset_name=None, max_length=550):
         if dataset_name is None:
-            dataset_name = DATASET
+            dataset_name = DEFAULT_DATASET
         data = create_or_load_dataset(
             split,
             max_length,
