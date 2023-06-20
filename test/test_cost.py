@@ -738,6 +738,51 @@ class TestDDPG(LossModuleTestBase):
     ):
         raise NotImplementedError
 
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2
+    ):
+        common = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=1,
+            out_features=n_act,
+        )
+        value = MLP(
+            in_features=n_hidden + n_act,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        batch = [batch]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+        )
+        common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
+        actor_head = Mod(actor, in_keys=["hidden"], out_keys=["action"])
+        actor = Seq(common, actor_head)
+        value_head = Mod(
+            value, in_keys=["hidden", "action"], out_keys=["state_action_value"]
+        )
+        value = Seq(common, value_head)
+        value(actor(td))
+        return actor, value, common, td
+
     def _create_mock_data_ddpg(
         self,
         batch=8,
@@ -909,6 +954,120 @@ class TestDDPG(LossModuleTestBase):
         for p in loss_fn.parameters():
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_ddpg_separate_losses(
+        self,
+        device,
+        separate_losses,
+        n_act=4,
+    ):
+        torch.manual_seed(self.seed)
+        actor, value, common, td = self._create_mock_common_layer_setup(n_act=n_act)
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            separate_losses=separate_losses,
+        )
+
+        loss = loss_fn(td)
+
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.value_network_params.values(True, True)
+        )
+        assert all(
+            (p.grad is None) or (p.grad == 0).all()
+            for p in loss_fn.actor_network_params.values(True, True)
+        )
+
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            common_layers_no = len(list(common.parameters()))
+            if k == "loss_actor":
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(True, True)
+                )
+                if separate_losses:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(True, True)
+                    )
+                else:
+                    common_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    value_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in value_layers
+                    )
+            elif k == "loss_value":
+                if separate_losses:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                else:
+                    if separate_losses:
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.actor_network_params.values(True, True)
+                        )
+                        common_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        value_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in value_layers
+                        )
+                    else:
+                        common_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        actor_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in actor_layers
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.value_network_params.values(True, True)
+                        )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("device", get_default_devices())
