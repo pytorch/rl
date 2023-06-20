@@ -4,11 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from copy import deepcopy
 
-import hydra
+from omegaconf import OmegaConf
 import torch
 
 import torchrl.data.rlhf.utils
-from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
+from torchrl.data.rlhf.dataset import get_dataloader
+from torchrl.data.rlhf.tldr import PromptDataTLDR
 from torchrl.data.rlhf.utils import rollout_from_data
 from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
@@ -107,8 +108,10 @@ def create_reward_estimator(
     return estimate_reward
 
 
-@hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
-def main(cfg):
+# @hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
+def main():
+    cfg = OmegaConf.load("config/train_rlhf.yaml")
+
     query_logger = get_file_logger("query_logger", "rlhf_query_logger.log")
     val_reward_logger = get_file_logger("val_reward_logger", "rlhf_valid_rewards.log")
 
@@ -143,8 +146,22 @@ def main(cfg):
 
     ctx = setup(device, dtype)
 
-    train_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="train")
-    val_loader = get_prompt_dataloader_tldr(data_cfg, device=device, split="valid")
+    train_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="train",
+    )
+    val_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="valid",
+    )
 
     actor, critic, critic_head, model = init_actor_critic(
         resolve_name_or_path(transformer_name_or_path), dropout, device, compile_
@@ -226,7 +243,7 @@ def main(cfg):
             for batch in rb:
                 with torch.no_grad(), ctx:
                     # moving this to within epoch
-                    adv_fn(td)
+                    adv_fn(batch.to(device, non_blocking=True).unsqueeze(0))
                 rb_ppo.empty()
                 rb_ppo.extend(batch)
                 for ppo_epoch in range(ppo_num_epochs):  # PPO epochs

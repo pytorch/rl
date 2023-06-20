@@ -8,7 +8,10 @@ from tensordict import TensorDict
 
 EOS_TOKEN_ID = 50256
 
-def rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1):
+
+def rollout_from_data(
+    batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1
+):
     generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
     return create_rollout_td(
         batch, generated, reward_model, log_probs, log_ratio, max_new_tokens, kl_coef
@@ -50,8 +53,10 @@ def create_rollout_td(
         (generated != EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
         torch.tensor(max_new_tokens) - 1,
     )
-    done = torch.zeros(done_idx.numel(), max_new_tokens, dtype=torch.bool)
-    done = done.scatter(-1, done_idx.unsqueeze(-1), 1)
+    done = torch.zeros(
+        done_idx.numel(), max_new_tokens, dtype=torch.bool, device=generated.device
+    )
+    done = done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
 
     # the sequence of actions for each trajectory is just the generated token ids
     action_idx = torch.arange(max_new_tokens, device=generated.device)
@@ -69,7 +74,7 @@ def create_rollout_td(
     # the reward is zero except for the timestep where we reached a stopping condition
     reward = end_scores - end_scores_labels
     reward = reward.unsqueeze(-1).unsqueeze(-1)
-    reward = reward.masked_scatter(~done, 0)
+    reward = reward * done
     reward = reward - kl_coef * log_ratio.unsqueeze(-1)
     td = {
         "action": action,
@@ -87,7 +92,12 @@ def create_rollout_td(
 
 
 @torch.no_grad()
-def generate(model: transformers.PreTrainedModel, batch, ref_model: transformers.PreTrainedModel, max_new_tokens=50):
+def generate(
+    model: transformers.PreTrainedModel,
+    batch,
+    ref_model: transformers.PreTrainedModel,
+    max_new_tokens=50,
+):
     """Generates a sequence of tokens from a batch of data sampled from the data collector.
 
     Args:
@@ -135,7 +145,11 @@ def generate(model: transformers.PreTrainedModel, batch, ref_model: transformers
     mask = samples != EOS_TOKEN_ID
     splits = samples[mask].split(mask.sum(-1).tolist(), 0)
     generated = torch.nested.as_nested_tensor(list(splits))
-    generated = torch.nested.to_padded_tensor(generated, EOS_TOKEN_ID)
+    generated = torch.nested.to_padded_tensor(
+        generated,
+        EOS_TOKEN_ID,
+        output_size=(input_ids.shape[0], input_ids.shape[1] + max_new_tokens),
+    )
 
     # get the scores and normalise for log probabilities
     scores = torch.stack(outputs.scores, 1)
@@ -157,7 +171,7 @@ def generate(model: transformers.PreTrainedModel, batch, ref_model: transformers
         return_dict=True,
     ).logits.to(logits.device)
     ref_logprobs = logprobs_of_labels(ref_logits[:, :-1], generated[:, 1:])
-    log_ratio = (logprobs - ref_logprobs)
+    log_ratio = logprobs - ref_logprobs
     log_ratio = log_ratio.masked_fill(~attention_mask[:, :-1], 0)
     log_ratio = torch.stack(
         [
