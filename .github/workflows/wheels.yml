@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
         cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
@@ -56,7 +56,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -88,7 +88,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -122,7 +122,7 @@ jobs:
     strategy:
       matrix:
         os: [["linux", "ubuntu-20.04"], ["mac", "macos-latest"]]
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
+        python_version: [ "3.8", "3.9", "3.10" ]
     runs-on: ${{ matrix.os[1] }}
     steps:
       - name: Setup Python
@@ -172,7 +172,7 @@ jobs:
     needs: build-wheel-windows
     strategy:
       matrix:
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
+        python_version: [ "3.8", "3.9", "3.10" ]
     runs-on: windows-latest
     steps:
       - name: Setup Python
