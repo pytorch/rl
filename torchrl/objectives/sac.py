@@ -288,15 +288,15 @@ class SACLoss(LossModule):
             create_target_params=self.delay_actor,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
+            q_value_policy_params = None
         # Value
         if value_network is not None:
-            if separate_losses:
-                # we want to make sure there are no duplicates in the params: the
-                # params of critic must be refs to actor if they're shared
-                policy_params = list(actor_network.parameters())
-            else:
-                policy_params = None
             self._version = 1
             self.delay_value = delay_value
             self.convert_to_functional(
@@ -312,15 +312,19 @@ class SACLoss(LossModule):
         self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
         if self._version == 1:
-            value_params = list(value_network.parameters())
+            if separate_losses:
+                value_params = list(value_network.parameters())
+                q_value_policy_params = policy_params + value_params
+            else:
+                q_value_policy_params = policy_params
         else:
-            value_params = []
+            q_value_policy_params = policy_params
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()) + value_params,
+            compare_against=q_value_policy_params,
         )
 
         self.loss_function = loss_function

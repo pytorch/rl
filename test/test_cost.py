@@ -961,10 +961,9 @@ class TestDDPG(LossModuleTestBase):
         self,
         device,
         separate_losses,
-        n_act=4,
     ):
         torch.manual_seed(self.seed)
-        actor, value, common, td = self._create_mock_common_layer_setup(n_act=n_act)
+        actor, value, common, td = self._create_mock_common_layer_setup()
         loss_fn = DDPGLoss(
             actor,
             value,
@@ -1837,6 +1836,58 @@ class TestSAC(LossModuleTestBase):
         )
         return value.to(device)
 
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2
+    ):
+        common = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor_net = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=2,
+            out_features=2 * n_act,
+        )
+        qvalue = MLP(
+            in_features=n_hidden + n_act,
+            num_cells=ncells,
+            depth=2,
+            out_features=1,
+        )
+        batch = [batch]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+        )
+        common = Mod(common, in_keys=["obs"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            ProbMod(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+            ),
+        )
+        qvalue_head = Mod(
+            qvalue, in_keys=["hidden", "action"], out_keys=["state_action_value"]
+        )
+        qvalue = Seq(common, qvalue_head)
+        return actor, qvalue, common, td
+
     def _create_mock_distributional_actor(
         self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
     ):
@@ -2064,6 +2115,93 @@ class TestSAC(LossModuleTestBase):
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_sac_separate_losses(
+        self,
+        device,
+        separate_losses,
+        version,
+        n_act=4,
+    ):
+        torch.manual_seed(self.seed)
+        actor, qvalue, common, td = self._create_mock_common_layer_setup(n_act=n_act)
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            action_spec=UnboundedContinuousTensorSpec(shape=(n_act,)),
+            num_qvalue_nets=1,
+            separate_losses=separate_losses,
+        )
+        loss = loss_fn(td)
+
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            if k == "loss_actor":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_qvalue":
+                common_layers_no = len(list(common.parameters()))
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                if separate_losses:
+                    common_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    qvalue_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
+                    )
+                else:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(True, True)
+                    )
+            elif k == "loss_alpha":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
