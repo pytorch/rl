@@ -6,15 +6,12 @@
 import os
 from pathlib import Path
 
-import numpy as np
 import torch
 from datasets import load_dataset
 
 from tensordict import TensorDict
-from torch.utils.data import DataLoader
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from tqdm import trange
 from transformers import AutoTokenizer
 
 NUM_PROC = max(os.cpu_count() // 2, 1)

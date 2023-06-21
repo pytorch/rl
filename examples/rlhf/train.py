@@ -13,12 +13,12 @@ import time
 
 import hydra
 import torch
+from models.transformer import init_transformer
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.tldr import PromptDataTLDR
-from models.transformer import init_transformer
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from utils import get_file_logger, setup, resolve_name_or_path
+from utils import get_file_logger, resolve_name_or_path, setup
 
 
 def create_loss_estimator(eval_iters, ctx):

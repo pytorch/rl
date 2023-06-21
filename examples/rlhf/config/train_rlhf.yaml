@@ -14,11 +14,11 @@ reward_model:
 train:
   grad_clip: 1.0
   max_epochs: 1000 # total number of training iterations
-  always_save_checkpoint: False # if True, always save a checkpoint after each eval
+  always_save_checkpoint: True # if True, always save a checkpoint after each eval
   decay_lr: True
   optimizer:
     # keyword arguments for torch.optim.AdamW
-    lr: 5.0e-6
+    lr: 5.0e-5
     weight_decay: 0.0  # 01
     betas: [0.9, 0.999]
   scheduler:
@@ -29,7 +29,7 @@ train:
     episode_length: 50
     ppo_batch_size: 16
     ppo_num_epochs: 3
-    num_rollouts_per_epoch: 64
+    num_rollouts_per_epoch: 32
 sys:
   device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
   dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler

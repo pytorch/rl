@@ -6,11 +6,11 @@ import time
 
 import hydra
 import torch
-from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.comparison import PairwiseDataset
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from utils import get_file_logger, setup, resolve_name_or_path
+from torchrl.data.rlhf.comparison import PairwiseDataset
+from torchrl.data.rlhf.dataset import get_dataloader
+from utils import get_file_logger, resolve_name_or_path, setup
 
 
 def _accuracy(chosen_end_scores, rejected_end_scores):
@@ -105,7 +105,9 @@ def main(cfg):
 
     # ######## INIT TRAINING FUNCTIONS ########
 
-    optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
+    optimizer = torch.optim.AdamW(
+        [p for p in model.parameters() if p.requires_grad], **train_cfg.optimizer
+    )
     scheduler = None
     if train_cfg.decay_lr:
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)

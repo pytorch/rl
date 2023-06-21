@@ -5,14 +5,9 @@
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
 from tensordict import tensorclass
-from torch.utils.data import Dataset
 
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.rlhf.dataset import create_or_load_dataset
 
 HERE = Path(__file__).parent

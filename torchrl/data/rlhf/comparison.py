@@ -3,19 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 import torch
-import torch.nn as nn
 from datasets import Dataset as HFDataset
-from tensordict import tensorclass, TensorDict
-from torch.utils.data import Dataset
+from tensordict import tensorclass
 
-from torchrl.data import TensorDictReplayBuffer, TensorStorage
-from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from torchrl.data.rlhf.dataset import create_or_load_dataset
 from tqdm import tqdm
 

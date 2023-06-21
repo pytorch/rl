@@ -1,10 +1,9 @@
 import torch
 import transformers
-from torch.nn import functional as F
-from transformers import GenerationConfig
-
 
 from tensordict import TensorDict
+from torch.nn import functional as F
+from transformers import GenerationConfig
 
 EOS_TOKEN_ID = 50256
 
@@ -73,10 +72,11 @@ def create_rollout_td(
         attention_mask=batch.attention_mask,
     )
     # the reward is zero except for the timestep where we reached a stopping condition
-    reward = end_scores - end_scores_labels
-    reward = reward.unsqueeze(-1).unsqueeze(-1)
-    reward = reward * done
-    reward = reward - kl_coef * log_ratio.unsqueeze(-1)
+    clipped_scores = torch.clip(end_scores - end_scores_labels, -10, 10)
+    reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
+    reward_raw = reward_raw * done
+    reward_kl = -kl_coef * log_ratio.unsqueeze(-1)
+    reward = reward_raw + reward_kl
     td = {
         "action": action,
         "input_ids": rollout_generated[:, :-1].clone(),
@@ -87,6 +87,8 @@ def create_rollout_td(
             "attention_mask": rollout_attention_mask[:, 1:].clone(),
             "done": done,
             "reward": reward,
+            "reward_raw": reward_raw,
+            "reward_kl": reward_kl,
         },
     }
     return TensorDict(td, batch_size=done.shape[:2], device=generated.device)
