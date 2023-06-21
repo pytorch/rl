@@ -14,20 +14,22 @@ import torch
 
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict
-from torchrl.data.rlhf.comparison import (
-    make_process_fn_comparison,
-    PairwiseDataset,
-    pre_tokenization_hook,
-)
+from tensordict.nn import TensorDictModule
 from torchrl.data.rlhf.dataset import (
     create_or_load_dataset,
     dataset_to_tensordict,
     get_dataloader,
     preproc_data,
 )
-from torchrl.data.rlhf.tldr import make_process_fn_tldr, PromptData
-from torchrl.data.rlhf.utils import _padded_right_to_left, \
-    _padded_left_to_right
+from torchrl.data.rlhf.prompt import make_process_fn_tldr, PromptData
+from torchrl.data.rlhf.reward import (
+    make_process_fn_comparison,
+    PairwiseDataset,
+    pre_tokenization_hook,
+)
+from torchrl.data.rlhf.utils import RolloutFromModel
+from torchrl.modules.models.rlhf import GPT2RewardModel
+from transformers import GPT2Config
 
 HERE = Path(__file__).parent
 
@@ -163,27 +165,124 @@ def test_get_dataloader(
 
 
 class TestRollout:
+    kl_coef = 0.1
+
+    @staticmethod
+    def init_transformer(
+        dropout=0.1,
+        device="cpu",
+        as_tensordictmodule=True,
+        inference=False,
+    ):
+        from transformers import GPT2LMHeadModel
+
+        model = GPT2LMHeadModel(GPT2Config())
+        model.to(device)
+
+        if as_tensordictmodule:
+            model = TensorDictModule(
+                model,
+                in_keys={
+                    "input_ids": "input_ids",
+                    "attention_mask": "attention_mask",
+                    "labels": "labels",
+                },
+                out_keys=["logits"] if inference else ["loss", "logits"],
+            )
+        return model
+
+    def init_reward_model(self, device=None):
+        model = GPT2RewardModel()
+        model.to(device)
+
+        model = TensorDictModule(
+            model,
+            in_keys=["input_ids", "attention_mask"],
+            out_keys=["rewards", "end_scores"],
+        )
+        return model
+
+    @property
+    def _dummy_batch(self):
+        return PromptData.from_tensordict(
+            TensorDict.load_memmap(f"{HERE}/datasets_mini/tldr_batch/")
+        )
+
+    @property
+    def _model(self):
+        return self.init_transformer(
+            as_tensordictmodule=False,
+            inference=True,
+        )
+
+    @property
+    def _ref_model(self):
+        return self.init_transformer(
+            as_tensordictmodule=False,
+            inference=True,
+        )
+
+    @property
+    def _reward_model(self):
+        return self.init_reward_model()
+
+    @property
+    def _rollout_model(self):
+        return RolloutFromModel(
+            self._model,
+            self._ref_model,
+            self._reward_model,
+            self.max_new_tokens,
+            self.kl_coef,
+        )
+
     def test_padded_right_to_left(self):
         x = torch.arange(12).view(3, 4)
         x[0, -2:] = 100
         x[1, -1:] = 100
         x[2, -3:] = 100
         y = RolloutFromModel._padded_right_to_left(x, 100)
-        y_test = torch.tensor([[100, 100,   0,   1],
-        [100,   4,   5,   6],
-        [100, 100, 100,   8]])
+        y_test = torch.tensor([[100, 100, 0, 1], [100, 4, 5, 6], [100, 100, 100, 8]])
         assert (y == y_test).all()
 
     def test_padded_left_to_right(self):
         x = torch.arange(12).view(3, 4)
-        x[0, 2:] = 100
-        x[1, 1:] = 100
-        x[2, 3:] = 100
+        x[0, :2] = 100
+        x[1, :1] = 100
+        x[2, :3] = 100
         y = RolloutFromModel._padded_left_to_right(x, 100)
-        y_test = torch.tensor([[0,   1, 100, 100],
-        [4,   5,   6, 100],
-        [8, 100, 100, 100]])
+        y_test = torch.tensor([[2, 3, 100, 100], [5, 6, 7, 100], [11, 100, 100, 100]])
         assert (y == y_test).all()
+
+    @pytest.mark.parametrize("use_max", [True, False])
+    def test_get_scores(self, use_max):
+        scores = torch.arange(32, dtype=torch.float).view(2, 4, 4)
+        gen_tokens = torch.arange(4).view(4).expand(1, 4)
+        scores_comp = RolloutFromModel._get_scores(
+            scores.unbind(1), generated_tokens=gen_tokens, use_max=use_max
+        )
+        if not use_max:
+            assert (
+                scores_comp.squeeze()
+                == torch.diagonal(scores.log_softmax(-1), 0, -2, -1).squeeze()
+            ).all()
+        else:
+            assert (
+                scores_comp.squeeze() == scores.log_softmax(-1)[..., -1].squeeze()
+            ).all()
+
+    def test_generate(self, max_new_tokens=10):
+        self.max_new_tokens = max_new_tokens
+        model = self._rollout_model
+        batch = self._dummy_batch
+        generated, log_probs, log_ratio = model.generate(batch)
+
+    def test_rollout_from_data(self, max_new_tokens=10):
+        self.max_new_tokens = max_new_tokens
+        model = self._rollout_model
+        batch = self._dummy_batch
+        model.rollout_from_data(batch)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

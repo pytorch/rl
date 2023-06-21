@@ -2,13 +2,13 @@ from typing import Tuple
 
 import torch
 import transformers
-from torch import Tensor
 
 from tensordict import TensorDict
+from torch import Tensor
 from torch.nn import functional as F
-from transformers import GenerationConfig
 
-from torchrl.data.rlhf.tldr import PromptData
+from torchrl.data.rlhf.prompt import PromptData
+from transformers import GenerationConfig
 
 
 class RolloutFromModel:
@@ -18,10 +18,12 @@ class RolloutFromModel:
             :meth:`generate` method.
         ref_model (transformers.Transformer): a frozen version of ``model``
             where params are in their initial configuration.
+        reward_model: TODO
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
 
     """
+
     EOS_TOKEN_ID = 50256
 
     def __init__(
@@ -31,14 +33,20 @@ class RolloutFromModel:
         reward_model,
         max_new_tokens=50,
         kl_coef=0.1,
-                 ):
-        self.model =  model
+    ):
+        self.model = model
         self.ref_model = ref_model
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
         self.kl_coef = kl_coef
 
-    def rollout_from_data(self,
+    def kl_step(self):
+        """Makes a step in the KL coefficient schedule."""
+        pass
+
+    @torch.no_grad()
+    def rollout_from_data(
+        self,
         batch,
     ):
         generated, log_probs, log_ratio = self.generate(batch)
@@ -46,10 +54,16 @@ class RolloutFromModel:
             batch, generated, log_probs, log_ratio, self.max_new_tokens, self.kl_coef
         )
 
-
     @torch.no_grad()
-    def create_rollout_td(self,
-        batch, generated, reward_model, log_probs, log_ratio, max_new_tokens=50, kl_coef=0.1
+    def create_rollout_td(
+        self,
+        batch,
+        generated,
+        reward_model,
+        log_probs,
+        log_ratio,
+        max_new_tokens=50,
+        kl_coef=0.1,
     ):
         """A TensorDict wrapper for generated data.
 
@@ -92,7 +106,8 @@ class RolloutFromModel:
 
         # calculate the reward for the finished sequence
         _, end_scores = reward_model(
-            input_ids=rollout_generated[:, -1], attention_mask=rollout_attention_mask[:, -1]
+            input_ids=rollout_generated[:, -1],
+            attention_mask=rollout_attention_mask[:, -1],
         )
         _, end_scores_labels = reward_model(
             input_ids=batch.input_ids,
@@ -151,13 +166,18 @@ class RolloutFromModel:
         )
 
     @staticmethod
-    def _get_scores(scores: Tuple, generated_tokens: Tensor=None, use_max=False, pad_to=None):
+    def _get_scores(
+        scores: Tuple, generated_tokens: Tensor = None, use_max=False, pad_to=None
+    ):
         scores = torch.stack(scores, 1)
+        scores = F.log_softmax(scores, dim=-1)
+        num_gen = scores.shape[1]
         if use_max:
-            scores = F.log_softmax(scores, dim=-1).max(dim=-1).values
+            scores = scores.max(dim=-1).values
         else:
             index = generated_tokens.unsqueeze(-1)
-            scores = torch.gather(scores, -1, index)
+            index = index[:, -num_gen:]
+            scores = torch.gather(scores, dim=-1, index=index)
         if pad_to is not None:
             pad = pad_to - scores.shape[1]
             return F.pad(scores, (0, pad), value=-float("inf"))
@@ -172,6 +192,7 @@ class RolloutFromModel:
         logprobs_labels = torch.gather(logprobs, dim=-1, index=labels.unsqueeze(-1))
         return logprobs_labels.squeeze(-1)
 
+    @torch.no_grad()
     def _log_ratio(self, generated, prompt_rindex):
         # get the scores and normalise for log probabilities
         attention_mask = (generated != self.EOS_TOKEN_ID).bool()
@@ -197,10 +218,7 @@ class RolloutFromModel:
         return log_ratio
 
     @torch.no_grad()
-    def generate(self,
-        batch: PromptData,
-        generation_config=None
-    ):
+    def generate(self, batch: PromptData, generation_config=None):
         """Generates a sequence of tokens from a batch of data sampled from the data collector.
 
         Args:
@@ -244,4 +262,3 @@ class RolloutFromModel:
 
         log_ratio = self._log_ratio(generated, batch.prompt_rindex)
         return generated, log_probs_gen, log_ratio
-

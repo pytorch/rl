@@ -20,7 +20,7 @@ from torchrl.data.replay_buffers import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.tldr import PromptDataTLDR
+from torchrl.data.rlhf.prompt import PromptDataTLDR
 from torchrl.data.rlhf.utils import rollout_from_data
 
 from torchrl.objectives import ClipPPOLoss

@@ -80,6 +80,7 @@ def create_or_load_dataset(
     if root_dir is None:
         root_dir = Path(os.environ.get("HOME")) / ".cache/torchrl/data/"
         os.makedirs(root_dir, exist_ok=True)
+    root_dir = Path(root_dir)
     data_dir = root_dir / dataset_name.split("-")[0]
     data_dir_total = data_dir / split / str(max_length)
     # search for data
