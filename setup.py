@@ -217,7 +217,7 @@ def _main(argv):
             "dm_control": ["dm_control"],
             "gym_continuous": ["mujoco-py", "mujoco"],
             "rendering": ["moviepy"],
-            "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy"],
+            "tests": ["pytest", "pyyaml", "pytest-instafail", "scipy", "pytest-mock"],
             "utils": [
                 "tensorboard",
                 "wandb",

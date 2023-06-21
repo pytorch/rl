@@ -41,7 +41,9 @@ class PromptData:
         )
 
     @classmethod
-    def from_dataset(cls, split, dataset_name=None, max_length=550):
+    def from_dataset(
+        cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False
+    ):
         """
 
         Args:
@@ -70,6 +72,8 @@ class PromptData:
             max_length,
             dataset_name,
             make_process_fn_tldr,
+            root_dir=root_dir,
+            from_disk=from_disk,
         )
         data = data[split, str(max_length)]
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)

@@ -64,7 +64,9 @@ class PairwiseDataset:
     rejected_data: RewardData
 
     @classmethod
-    def from_dataset(cls, split, dataset_name=None, max_length=550):
+    def from_dataset(
+        cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False
+    ):
         if dataset_name is None:
             dataset_name = DEFAULT_DATASET
         data = create_or_load_dataset(
@@ -73,6 +75,8 @@ class PairwiseDataset:
             dataset_name,
             make_process_fn_comparison,
             pre_tokenization_hook,
+            root_dir=root_dir,
+            from_disk=from_disk,
         )
         data = data[split, str(max_length)]
         maxidx = data.shape[0] // 2

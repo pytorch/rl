@@ -119,10 +119,11 @@ def preproc_data(
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
+
+    Returns: a datasets.
     """
     if from_disk:
         dataset = load_from_disk(dataset_name)[split]
-        print(type(dataset))
     else:
         dataset = load_dataset(dataset_name, split=split)
     if split.startswith("valid"):
@@ -178,6 +179,8 @@ def get_dataloader(
     infinite=True,
     prefetch=0,
     split="train",
+    root_dir=None,
+    from_disk=False,
 ):
     """Creates a dataset and returns a dataloader from it.
 
@@ -187,7 +190,8 @@ def get_dataloader(
         tensorclass_type (tensorclass class): a tensorclass with a :meth:`from_dataset`
             method that must accept three keyword arguments: ``split`` (see below),
             ``max_length`` which is the block size to be used for training and
-            ``dataset_name``, a string indicating the dataset.
+            ``dataset_name``, a string indicating the dataset. The ``root_dir``
+            and ``from_disk`` arguments should also be supported.
         device (torch.device or equivalent): the device where the samples should
             be cast.
         dataset_name (str, optional): the dataset name. If not provided and if
@@ -200,6 +204,11 @@ def get_dataloader(
             multithreaded dataloading is being used.
         split (str, optional): the data split. Either ``"train"`` or ``"valid"``.
             Defaults to ``"train"``.
+        root_dir (path, optional): the path where the datasets are stored.
+            Defaults to ``"$HOME/.cache/torchrl/data"``
+        from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
+            will be used. Otherwise, :func:`datasets.load_dataset` will be used.
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.data.rlhf.comparison import PairwiseDataset
@@ -230,7 +239,11 @@ def get_dataloader(
             is_shared=False)
     """
     data = tensorclass_type.from_dataset(
-        split=split, dataset_name=dataset_name, max_length=block_size
+        split=split,
+        dataset_name=dataset_name,
+        max_length=block_size,
+        root_dir=root_dir,
+        from_disk=from_disk,
     )
     out = TensorDictReplayBuffer(
         storage=TensorStorage(data),
