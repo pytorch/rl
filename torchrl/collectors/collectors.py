@@ -240,7 +240,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 # we check if all the mandatory params are there
                 if not required_params.difference(set(next_observation)):
                     in_keys = [str(k) for k in sig.parameters if k in next_observation]
-                    out_keys = [self.env.action_key]
+                    out_keys = "action"
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
