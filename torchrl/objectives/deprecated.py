@@ -22,7 +22,6 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import (
     default_value_kwargs,
     distance_loss,
-    hold_out_params,
     ValueEstimators,
 )
 from torchrl.objectives.common import LossModule

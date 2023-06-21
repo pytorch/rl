@@ -17,9 +17,10 @@ from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
+    cache_values,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators, cache_values,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 

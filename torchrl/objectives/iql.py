@@ -373,9 +373,7 @@ class IQLLoss(LossModule):
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = self._vmap_qvalue_networkN0(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
@@ -403,9 +401,7 @@ class IQLLoss(LossModule):
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = self._vmap_qvalue_networkN0(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)

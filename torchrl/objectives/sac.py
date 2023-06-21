@@ -585,9 +585,6 @@ class SACLoss(LossModule):
                 tensordict, target_params=target_params
             ).squeeze(-1)
 
-        # value loss
-        qvalue_network = self.qvalue_network
-
         # Q-nets must be trained independently: as such, we split the data in 2
         # if required and train each q-net on one half of the data.
         shape = tensordict.shape
