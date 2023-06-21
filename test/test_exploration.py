@@ -14,7 +14,7 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.tensordict import TensorDict
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector, RandomPolicy
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
@@ -180,12 +180,12 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             pass
         return
 
-
-
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
     def test_nested(self, device, nested_obs_action, nested_done, seed=0):
-        env = NestedCountingEnv(nest_obs_action=nested_obs_action, nest_done=nested_done)
+        env = NestedCountingEnv(
+            nest_obs_action=nested_obs_action, nest_done=nested_done
+        )
         torch.manual_seed(seed)
         # TODO Serial
         env = TransformedEnv(env.to(device), InitTracker())
@@ -195,10 +195,14 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 
         net = nn.LazyLinear(d_act).to(device)
         policy = TensorDictModule(
-            net, in_keys=[("data","states") if nested_obs_action else "observation"], out_keys=[env.action_key]
+            net,
+            in_keys=[("data", "states") if nested_obs_action else "observation"],
+            out_keys=[env.action_key],
         )
 
-        exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, spec=action_spec, action_key=env.action_key)
+        exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
+            policy, spec=action_spec, action_key=env.action_key
+        )
         exploratory_policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,

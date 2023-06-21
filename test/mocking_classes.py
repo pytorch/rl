@@ -52,9 +52,9 @@ def make_spec(spec_str):
 class _MockEnv(EnvBase):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            **kwargs,
+        cls,
+        *args,
+        **kwargs,
     ):
         for key, item in list(cls._output_spec["_observation_spec"].items()):
             cls._output_spec["_observation_spec"][key] = item.to(
@@ -81,10 +81,10 @@ class _MockEnv(EnvBase):
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(
-            self,
-            *args,
-            seed: int = 100,
-            **kwargs,
+        self,
+        *args,
+        seed: int = 100,
+        **kwargs,
     ):
         super().__init__(
             device="cpu",
@@ -120,14 +120,14 @@ class MockSerialEnv(EnvBase):
 
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if action_spec is None:
@@ -226,14 +226,14 @@ class MockBatchedLockedEnv(EnvBase):
 
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if action_spec is None:
@@ -402,16 +402,16 @@ class MockBatchedUnLockedEnv(MockBatchedLockedEnv):
 class DiscreteActionVecMockEnv(_MockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=False,
-            categorical_action_encoding=False,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=False,
+        categorical_action_encoding=False,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
@@ -476,8 +476,8 @@ class DiscreteActionVecMockEnv(_MockEnv):
         return tensordict
 
     def _step(
-            self,
-            tensordict: TensorDictBase,
+        self,
+        tensordict: TensorDictBase,
     ) -> TensorDictBase:
         tensordict = tensordict.to(self.device)
         a = tensordict.get("action")
@@ -503,15 +503,15 @@ class DiscreteActionVecMockEnv(_MockEnv):
 class ContinuousActionVecMockEnv(_MockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=False,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=False,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         size = cls.size = 7
@@ -580,8 +580,8 @@ class ContinuousActionVecMockEnv(_MockEnv):
         return tensordict
 
     def _step(
-            self,
-            tensordict: TensorDictBase,
+        self,
+        tensordict: TensorDictBase,
     ) -> TensorDictBase:
         self.step_count += 1
         tensordict = tensordict.to(self.device)
@@ -626,15 +626,15 @@ class DiscreteActionVecPolicy:
 class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=True,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=True,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
@@ -685,16 +685,16 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
 class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=True,
-            categorical_action_encoding=False,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=True,
+        categorical_action_encoding=False,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
@@ -750,16 +750,16 @@ class DiscreteActionConvMockEnvNumpy(DiscreteActionConvMockEnv):
 class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=True,
-            pixel_shape=None,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=True,
+        pixel_shape=None,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if pixel_shape is None:
@@ -813,15 +813,15 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 class ContinuousActionConvMockEnvNumpy(ContinuousActionConvMockEnv):
     @classmethod
     def __new__(
-            cls,
-            *args,
-            observation_spec=None,
-            action_spec=None,
-            state_spec=None,
-            reward_spec=None,
-            done_spec=None,
-            from_pixels=True,
-            **kwargs,
+        cls,
+        *args,
+        observation_spec=None,
+        action_spec=None,
+        state_spec=None,
+        reward_spec=None,
+        done_spec=None,
+        from_pixels=True,
+        **kwargs,
     ):
         batch_size = kwargs.setdefault("batch_size", torch.Size([]))
         if observation_spec is None:
@@ -878,11 +878,11 @@ class DummyModelBasedEnvBase(ModelBasedEnvBase):
     """
 
     def __init__(
-            self,
-            world_model,
-            device="cpu",
-            dtype=None,
-            batch_size=None,
+        self,
+        world_model,
+        device="cpu",
+        dtype=None,
+        batch_size=None,
     ):
         super().__init__(
             world_model,
@@ -1007,8 +1007,8 @@ class CountingEnv(EnvBase):
         )
 
     def _step(
-            self,
-            tensordict: TensorDictBase,
+        self,
+        tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         self.count += action.to(torch.int).to(self.device)
@@ -1026,8 +1026,16 @@ class CountingEnv(EnvBase):
 
 class NestedCountingEnv(CountingEnv):
     # an env with nested reward and done states
-    def __init__(self, max_steps: int = 5, start_val: int = 0, nest_obs_action: bool = True, nest_done: bool = True,
-                 nest_reward: bool = True, nested_dim: int = 3, **kwargs):
+    def __init__(
+        self,
+        max_steps: int = 5,
+        start_val: int = 0,
+        nest_obs_action: bool = True,
+        nest_done: bool = True,
+        nest_reward: bool = True,
+        nested_dim: int = 3,
+        **kwargs,
+    ):
         super().__init__(max_steps=max_steps, start_val=start_val, **kwargs)
 
         self.nested_dim = nested_dim
@@ -1040,38 +1048,58 @@ class NestedCountingEnv(CountingEnv):
             self.observation_spec = CompositeSpec(
                 {
                     "data": CompositeSpec(
-                        {"states": self.observation_spec["observation"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)},
+                        {
+                            "states": self.observation_spec["observation"]
+                            .unsqueeze(-1)
+                            .expand(*self.batch_size, self.nested_dim, 1)
+                        },
                         shape=(self.nested_dim,),
                     )
-                }, shape=self.batch_size
+                },
+                shape=self.batch_size,
             )
             self.action_spec = CompositeSpec(
                 {
                     "data": CompositeSpec(
-                        {"action": self.action_spec.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)},
-                        shape=(self.nested_dim,)
+                        {
+                            "action": self.action_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
                     )
-                }, shape=self.batch_size
+                },
+                shape=self.batch_size,
             )
 
         if self.nested_reward:
             self.reward_spec = CompositeSpec(
                 {
                     "data": CompositeSpec(
-                        {"reward": self.reward_spec.unsqueeze(-1).expand(*self.batch_size,  self.nested_dim, 1)},
-                        shape=(self.nested_dim,)
+                        {
+                            "reward": self.reward_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
                     )
-                }, shape=self.batch_size
+                },
+                shape=self.batch_size,
             )
 
         if self.nested_done:
             self.done_spec = CompositeSpec(
                 {
                     "data": CompositeSpec(
-                        {"done": self.done_spec.unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)},
-                        shape=(self.nested_dim,)
+                        {
+                            "done": self.done_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
                     )
-                }, shape=self.batch_size
+                },
+                shape=self.batch_size,
             )
 
     def _reset(self, td):
@@ -1080,10 +1108,16 @@ class NestedCountingEnv(CountingEnv):
         td = super()._reset(td)
         td["observation"] = td["observation"].to(torch.float)
         if self.nested_done:
-            td[self.done_key] = td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)
+            td[self.done_key] = (
+                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
             del td["done"]
         if self.nested_obs_action:
-            td["data", "states"] = td["observation"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)
+            td["data", "states"] = (
+                td["observation"]
+                .unsqueeze(-1)
+                .expand(*self.batch_size, self.nested_dim, 1)
+            )
             del td["observation"]
         if "data" in td.keys():
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
@@ -1097,16 +1131,24 @@ class NestedCountingEnv(CountingEnv):
         td = td_root["next"]
         td["observation"] = td["observation"].to(torch.float)
         if self.nested_done:
-            td[self.done_key] = td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)
+            td[self.done_key] = (
+                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
             del td["done"]
         if self.nested_obs_action:
-            td["data", "states"] = td["observation"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)
+            td["data", "states"] = (
+                td["observation"]
+                .unsqueeze(-1)
+                .expand(*self.batch_size, self.nested_dim, 1)
+            )
             del td["observation"]
         if self.nested_reward:
-            td[self.reward_key] = td["reward"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim,1)
+            td[self.reward_key] = (
+                td["reward"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
             del td["reward"]
         if "data" in td.keys():
-            td["data"].batch_size = (*self.batch_size,self.nested_dim)
+            td["data"].batch_size = (*self.batch_size, self.nested_dim)
         return td_root
 
 
@@ -1119,10 +1161,10 @@ class CountingBatchedEnv(EnvBase):
     """
 
     def __init__(
-            self,
-            max_steps: torch.Tensor = None,
-            start_val: torch.Tensor = None,
-            **kwargs,
+        self,
+        max_steps: torch.Tensor = None,
+        start_val: torch.Tensor = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if max_steps is None:
@@ -1187,8 +1229,8 @@ class CountingBatchedEnv(EnvBase):
         )
 
     def _step(
-            self,
-            tensordict: TensorDictBase,
+        self,
+        tensordict: TensorDictBase,
     ) -> TensorDictBase:
         action = tensordict.get("action")
         self.count += action.to(torch.int).view_as(self.count)

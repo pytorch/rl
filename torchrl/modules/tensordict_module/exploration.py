@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right, NestedKey, expand_right
+from tensordict.utils import expand_as_right, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -576,7 +576,7 @@ class _OrnsteinUhlenbeckProcess:
             if (
                 action_tensordict.ndim <= is_init.ndim
                 and is_init.shape[: action_tensordict.ndim] != action_tensordict.shape
-            ): # if the leading dims of is_init do not correspond to the batch_size of action_tensordict we expand it
+            ):  # if the leading dims of is_init do not correspond to the batch_size of action_tensordict we expand it
                 is_init = expand_right(is_init, action_tensordict.shape)
             else:
                 is_init = is_init.sum(
