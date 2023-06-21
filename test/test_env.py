@@ -1369,7 +1369,7 @@ class TestConcurrentEnvs:
 
 class TestNestedSpecs:
     @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
-    def test_nested_reward(self, envclass):
+    def test_nested_env(self, envclass):
         from mocking_classes import NestedCountingEnv
 
         if envclass == "CountingEnv":
