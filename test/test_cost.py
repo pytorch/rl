@@ -1526,12 +1526,12 @@ class TestTD3(LossModuleTestBase):
                     for p in loss_fn.actor_network_params.values(True, True)
                 )
             elif k == "loss_qvalue":
-                common_layers_no = len(list(common.parameters()))
                 assert all(
                     (p.grad is None) or (p.grad == 0).all()
                     for p in loss_fn.actor_network_params.values(True, True)
                 )
                 if separate_losses:
+                    common_layers_no = len(list(common.parameters()))
                     common_layers = itertools.islice(
                         loss_fn.qvalue_network_params.values(True, True),
                         common_layers_no,
@@ -5961,6 +5961,75 @@ class TestIQL(LossModuleTestBase):
         )
         return value.to(device)
 
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10
+    ):
+        common_net = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor_net = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=1,
+            out_features=2 * n_act,
+        )
+        value_net = MLP(
+            in_features=n_hidden,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        qvalue_net = MLP(
+            in_features=n_hidden + n_act,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        batch = [batch, T]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "sample_log_prob": torch.randn(*batch),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+            names=[None, "time"],
+        )
+        common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            ProbMod(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+            ),
+        )
+        value = Seq(
+            common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"])
+        )
+        qvalue = Seq(
+            common,
+            Mod(
+                qvalue_net,
+                in_keys=["hidden", "action"],
+                out_keys=["state_action_value"],
+            ),
+        )
+        qvalue(actor(td.clone()))
+        value(td.clone())
+        return actor, value, qvalue, common, td
+
     def _create_mock_distributional_actor(
         self, batch=2, obs_dim=3, action_dim=4, atoms=5, vmin=1, vmax=5
     ):
@@ -6033,6 +6102,165 @@ class TestIQL(LossModuleTestBase):
             device=device,
         )
         return td
+
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_iql_separate_losses(self, separate_losses):
+        torch.manual_seed(self.seed)
+        actor, value, qvalue, common, td = self._create_mock_common_layer_setup()
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            loss_function="l2",
+            separate_losses=separate_losses,
+        )
+        loss = loss_fn(td)
+
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+        # check that losses are independent
+        for k in loss.keys():
+            if not k.startswith("loss"):
+                continue
+            loss[k].sum().backward(retain_graph=True)
+            debug_value = [
+                p.grad for p in loss_fn.value_network_params.values(True, True)
+            ]
+            debug_qvalue = [
+                p.grad for p in loss_fn.qvalue_network_params.values(True, True)
+            ]
+            debug_actor = [
+                p.grad for p in loss_fn.actor_network_params.values(True, True)
+            ]
+            common_layers_no = len(list(common.parameters()))
+            if k == "loss_actor":
+                if separate_losses:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                else:
+                    common_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    value_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in value_layers
+                    )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert not any(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            elif k == "loss_value":
+                if separate_losses:
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                else:
+                    common_layers = itertools.islice(
+                        loss_fn.actor_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    actor_layers = itertools.islice(
+                        loss_fn.actor_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in actor_layers
+                    )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.qvalue_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                if separate_losses:
+                    common_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    value_layers = itertools.islice(
+                        loss_fn.value_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in value_layers
+                    )
+                else:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.value_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+            elif k == "loss_qvalue":
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.actor_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    (p.grad is None) or (p.grad == 0).all()
+                    for p in loss_fn.value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                if separate_losses:
+                    common_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                    )
+                    qvalue_layers = itertools.islice(
+                        loss_fn.qvalue_network_params.values(True, True),
+                        common_layers_no,
+                        None,
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
+                    )
+                else:
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+            else:
+                raise NotImplementedError(k)
+            loss_fn.zero_grad()
 
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())

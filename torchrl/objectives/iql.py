@@ -274,14 +274,18 @@ class IQLLoss(LossModule):
         # Q Function Network
         self.delay_qvalue = True
         self.num_qvalue_nets = num_qvalue_nets
-
+        if separate_losses and policy_params is not None:
+            qvalue_policy_params = list(actor_network.parameters()) + list(
+                value_network.parameters()
+            )
+        else:
+            qvalue_policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=True,
-            compare_against=list(actor_network.parameters())
-            + list(value_network.parameters()),
+            compare_against=qvalue_policy_params,
         )
 
         self.loss_function = loss_function
