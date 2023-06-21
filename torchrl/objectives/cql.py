@@ -22,9 +22,10 @@ from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
+    cache_values,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators, cache_values,
+    ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -511,7 +512,8 @@ class CQLLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
-            td_q, self.__detach_qvalue_params,
+            td_q,
+            self.__detach_qvalue_params,
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -678,7 +680,9 @@ class CQLLoss(LossModule):
         )
         cql_tensordict = cql_tensordict.contiguous()
 
-        cql_tensordict_expand = self._vmap_qvalue_network00(cql_tensordict, qvalue_params)
+        cql_tensordict_expand = self._vmap_qvalue_network00(
+            cql_tensordict, qvalue_params
+        )
         # get q values
         state_action_value = cql_tensordict_expand.get(
             self.tensor_keys.state_action_value

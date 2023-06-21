@@ -10,8 +10,7 @@ from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase, \
-    is_tensor_collection
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 

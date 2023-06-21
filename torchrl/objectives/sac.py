@@ -361,6 +361,7 @@ class SACLoss(LossModule):
         self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
         if self._version == 1:
             self._vmap_qnetwork00 = vmap(qvalue_network)
+
     @property
     def target_entropy(self):
         target_entropy = self.target_entropy_buffer
@@ -639,9 +640,7 @@ class SACLoss(LossModule):
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
-            next_tensordict_expand = self._vmap_qnetworkN0(
-                next_tensordict, qval_params
-            )
+            next_tensordict_expand = self._vmap_qnetworkN0(next_tensordict, qval_params)
             state_action_value = next_tensordict_expand.get(
                 self.tensor_keys.state_action_value
             )

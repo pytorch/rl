@@ -23,7 +23,7 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    ValueEstimators,
+    ValueEstimators, cache_values,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
@@ -315,6 +315,9 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
+        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
+        self._vmap_getdist = vmap(self.actor_network.get_dist_params)
+
     @property
     def target_entropy(self):
         target_entropy = self.target_entropy_buffer
@@ -385,6 +388,17 @@ class REDQLoss(LossModule):
     def in_keys(self, values):
         self._in_keys = values
 
+    @property
+    @cache_values
+    def __detach_qvalue_network_params(self):
+        return self.qvalue_network_params.detach()
+
+    def __qvalue_params_cat(self, selected_q_params):
+        qvalue_params = torch.cat(
+            [self.__detach_qvalue_network_params, selected_q_params, self.qvalue_network_params], 0
+        )
+        return qvalue_params
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
@@ -416,7 +430,7 @@ class REDQLoss(LossModule):
                     torch.zeros(tensordict_actor.shape, device=tensordict_actor.device),
                 )
             # vmap doesn't support sampling, so we take it out from the vmap
-            td_params = vmap(self.actor_network.get_dist_params)(
+            td_params = self._vmap_getdist(
                 tensordict_actor,
                 actor_params,
             )
@@ -461,13 +475,9 @@ class REDQLoss(LossModule):
         )
 
         # cat params
-        q_params_detach = self.qvalue_network_params.detach()
-        qvalue_params = torch.cat(
-            [q_params_detach, selected_q_params, self.qvalue_network_params], 0
-        )
-        tensordict_qval = vmap(self.qvalue_network)(
+        tensordict_qval = self._vmap_qvalue_network00(
             tensordict_qval,
-            qvalue_params,
+            self.__qvalue_params_cat(selected_q_params),
         )
 
         state_action_value = tensordict_qval.get(

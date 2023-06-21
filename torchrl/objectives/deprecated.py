@@ -26,7 +26,7 @@ from torchrl.objectives import (
     ValueEstimators,
 )
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING
+from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING, cache_values
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
@@ -199,6 +199,8 @@ class REDQLoss_deprecated(LossModule):
         self.target_entropy_buffer = None
         self.gSDE = gSDE
 
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
+
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
@@ -307,6 +309,11 @@ class REDQLoss_deprecated(LossModule):
 
         return td_out
 
+    @property
+    @cache_values
+    def __detach_qvalue_network_params(self):
+        return self.qvalue_network_params.detach()
+
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)
@@ -316,12 +323,11 @@ class REDQLoss_deprecated(LossModule):
                 params=self.actor_network_params,
             )
 
-        with hold_out_params(self.qvalue_network_params) as params:
-            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
-                tensordict_clone.select(*self.qvalue_network.in_keys),
-                params,
-            )
-            state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
+        tensordict_expand = self._vmap_qvalue_networkN0(
+            tensordict_clone.select(*self.qvalue_network.in_keys),
+            self.__detach_qvalue_network_params,
+        )
+        state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
             - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
@@ -354,7 +360,7 @@ class REDQLoss_deprecated(LossModule):
                 )
             sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
-            next_td = vmap(self.qvalue_network, (None, 0))(
+            next_td = self._vmap_qvalue_networkN0(
                 next_td,
                 selected_q_params,
             )
@@ -371,7 +377,7 @@ class REDQLoss_deprecated(LossModule):
 
         tensordict.set(("next", "state_value"), next_state_value)
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
