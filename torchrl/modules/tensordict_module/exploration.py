@@ -492,7 +492,7 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
                 tensordict.set(
-                    "is_init", torch.zeros(tensordict.shape, dtype=torch.bool)
+                    "is_init", torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
                 )
             tensordict = self.ou.add_sample(tensordict, self.eps.item())
         return tensordict
