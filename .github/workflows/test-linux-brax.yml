@@ -1,0 +1,32 @@
+name: Brax Tests on Linux
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+  workflow_dispatch:
+
+jobs:
+  unittests:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "11.7"
+      timeout: 120
+      script: |
+        set -euo pipefail
+
+        export PYTHON_VERSION="3.8"
+        export CU_VERSION="11.7"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+
+        nvidia-smi
+
+        bash .circleci/unittest/linux_libs/scripts_brax/run_all.sh
