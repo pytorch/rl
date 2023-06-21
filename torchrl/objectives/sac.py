@@ -358,7 +358,9 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
-
+        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+        if self._version == 1:
+            self._vmap_qnetwork00 = vmap(qvalue_network)
     @property
     def target_entropy(self):
         target_entropy = self.target_entropy_buffer
@@ -545,7 +547,7 @@ class SACLoss(LossModule):
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
-        td_q = vmap(self.qvalue_network, (None, 0))(
+        td_q = self._vmap_qnetworkN0(
             td_q, self.__detached_qvalue_params  # should we clone?
         )
         min_q_logprob = (
@@ -599,7 +601,7 @@ class SACLoss(LossModule):
         target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
-        tensordict_chunks = vmap(qvalue_network)(
+        tensordict_chunks = self._vmap_qnetwork00(
             tensordict_chunks, self.qvalue_network_params
         )
         pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value).squeeze(
@@ -637,7 +639,7 @@ class SACLoss(LossModule):
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
-            next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+            next_tensordict_expand = self._vmap_qnetworkN0(
                 next_tensordict, qval_params
             )
             state_action_value = next_tensordict_expand.get(
@@ -665,7 +667,7 @@ class SACLoss(LossModule):
             self.target_qvalue_network_params,
         )
 
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
@@ -697,8 +699,7 @@ class SACLoss(LossModule):
 
         td_copy.set(self.tensor_keys.action, action, inplace=False)
 
-        qval_net = self.qvalue_network
-        td_copy = vmap(qval_net, (None, 0))(
+        td_copy = self._vmap_qnetworkN0(
             td_copy,
             self.target_qvalue_network_params,
         )
@@ -995,6 +996,9 @@ class DiscreteSACLoss(LossModule):
             "target_entropy", torch.tensor(target_entropy, device=device)
         )
 
+        self._vmap_getdist = vmap(self.actor_network.get_dist_params)
+        self._vmap_qnetwork = vmap(self.qvalue_network)
+
     @property
     def alpha(self):
         if self.min_log_alpha is not None:
@@ -1055,7 +1059,7 @@ class DiscreteSACLoss(LossModule):
 
         with set_exploration_type(ExplorationType.RANDOM):
             # vmap doesn't support sampling, so we take it out from the vmap
-            td_params = vmap(self.actor_network.get_dist_params)(
+            td_params = self._vmap_getdist(
                 tensordict_actor,
                 actor_params,
             )
@@ -1106,7 +1110,7 @@ class DiscreteSACLoss(LossModule):
             ],
             0,
         )
-        tensordict_qval = vmap(self.qvalue_network)(
+        tensordict_qval = self._vmap_qnetwork(
             tensordict_qval,
             qvalue_params,
         )
