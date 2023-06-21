@@ -105,5 +105,4 @@ if __name__ == "__main__":
     df = pd.DataFrame(res).round(3)
     gain = 1 - df.loc["Multithreaded, s"] / df.loc["Parallel, s"]
     df.loc["Gain, %", :] = (gain * 100).round(1)
-    print(df)
     df.to_csv("multithreaded_benchmark.csv")

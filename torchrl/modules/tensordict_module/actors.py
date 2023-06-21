@@ -220,11 +220,11 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         if out_keys is None:
             out_keys = ["action"]
         if (
-            "action" in out_keys
+            len(out_keys) == 1
             and spec is not None
             and not isinstance(spec, CompositeSpec)
         ):
-            spec = CompositeSpec(action=spec)
+            spec = CompositeSpec({out_keys[0]: spec})
 
         super().__init__(
             module,

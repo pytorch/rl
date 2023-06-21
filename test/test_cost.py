@@ -1483,6 +1483,7 @@ class TestSAC(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         observation_key="observation",
+        action_key="action",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -1495,6 +1496,7 @@ class TestSAC(LossModuleTestBase):
             in_keys=["loc", "scale"],
             spec=action_spec,
             distribution_class=TanhNormal,
+            out_keys=[action_key],
         )
         return actor.to(device)
 
@@ -1981,7 +1983,9 @@ class TestSAC(LossModuleTestBase):
             done_key=done_key,
         )
 
-        actor = self._create_mock_actor(observation_key=observation_key)
+        actor = self._create_mock_actor(
+            observation_key=observation_key, action_key=action_key
+        )
         qvalue = self._create_mock_qvalue(
             observation_key=observation_key,
             action_key=action_key,
@@ -2521,6 +2525,7 @@ class TestREDQ(LossModuleTestBase):
         action_dim=4,
         device="cpu",
         observation_key="observation",
+        action_key="action",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -2534,6 +2539,7 @@ class TestREDQ(LossModuleTestBase):
             distribution_class=TanhNormal,
             return_log_prob=True,
             spec=action_spec,
+            out_keys=[action_key],
         )
         return actor.to(device)
 
@@ -3051,7 +3057,10 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
-    def test_redq_notensordict(self, action_key, observation_key, reward_key, done_key):
+    @pytest.mark.parametrize("deprec", [True, False])
+    def test_redq_notensordict(
+        self, action_key, observation_key, reward_key, done_key, deprec
+    ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(
             action_key=action_key,
@@ -3062,6 +3071,7 @@ class TestREDQ(LossModuleTestBase):
 
         actor = self._create_mock_actor(
             observation_key=observation_key,
+            action_key=action_key,
         )
         qvalue = self._create_mock_qvalue(
             observation_key=observation_key,
@@ -3069,7 +3079,11 @@ class TestREDQ(LossModuleTestBase):
             out_keys=["state_action_value"],
         )
 
-        loss = REDQLoss(
+        if deprec:
+            cls = REDQLoss_deprecated
+        else:
+            cls = REDQLoss
+        loss = cls(
             actor_network=actor,
             qvalue_network=qvalue,
         )
@@ -3094,14 +3108,15 @@ class TestREDQ(LossModuleTestBase):
         torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
         torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
         torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-        torch.testing.assert_close(
-            loss_val_td.get("state_action_value_actor"), loss_val[5]
-        )
-        torch.testing.assert_close(
-            loss_val_td.get("action_log_prob_actor"), loss_val[6]
-        )
-        torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
-        torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
+        if not deprec:
+            torch.testing.assert_close(
+                loss_val_td.get("state_action_value_actor"), loss_val[5]
+            )
+            torch.testing.assert_close(
+                loss_val_td.get("action_log_prob_actor"), loss_val[6]
+            )
+            torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
+            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
         # test select
         torch.manual_seed(self.seed)
         loss.select_out_keys("loss_actor", "loss_alpha")
