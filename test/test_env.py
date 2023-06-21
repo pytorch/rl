@@ -1375,7 +1375,7 @@ class TestNestedSpecs:
         if envclass == "CountingEnv":
             env = CountingEnv()
         elif envclass == "NestedCountingEnv":
-            env = NestedCountingEnv(nest_action=False)
+            env = NestedCountingEnv()
         else:
             raise NotImplementedError
         reset = env.reset()
