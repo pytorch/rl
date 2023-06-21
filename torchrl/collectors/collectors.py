@@ -766,7 +766,7 @@ class SyncDataCollector(DataCollectorBase):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", "done"))
+        done = self._tensordict.get(("next", *self.env.done_key))
         truncated = self._tensordict.get(("next", "truncated"), None)
         traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
@@ -796,7 +796,7 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 self._tensordict.update(td_reset, inplace=True)
 
-            done = self._tensordict.get("done")
+            done = self._tensordict.get(self.env.done_key)
             if done.any():
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."

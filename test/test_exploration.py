@@ -8,13 +8,13 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_default_devices
-from mocking_classes import ContinuousActionVecMockEnv
+from mocking_classes import ContinuousActionVecMockEnv, NestedCountingEnv
 from scipy.stats import ttest_1samp
-from tensordict.nn import InteractionType
+from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.tensordict import TensorDict
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import SyncDataCollector, RandomPolicy
 from torchrl.data import BoundedTensorSpec, CompositeSpec
 from torchrl.envs import SerialEnv
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
@@ -177,6 +177,37 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         )
         for _ in collector:
             # check that we can run the policy
+            pass
+        return
+
+
+
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    def test_nested(self, device, nested_obs_action, nested_done, seed=0):
+        env = NestedCountingEnv(nest_obs_action=nested_obs_action, nest_done=nested_done)
+        torch.manual_seed(seed)
+        # TODO Serial
+        env = TransformedEnv(env.to(device), InitTracker())
+
+        action_spec = env.action_spec
+        d_act = action_spec.shape[-1]
+
+        net = nn.LazyLinear(d_act).to(device)
+        policy = TensorDictModule(
+            net, in_keys=[("data","states") if nested_obs_action else "observation"], out_keys=[env.action_key]
+        )
+
+        exploratory_policy = OrnsteinUhlenbeckProcessWrapper(policy, spec=action_spec, action_key=env.action_key)
+        exploratory_policy(env.reset())
+        collector = SyncDataCollector(
+            create_env_fn=env,
+            policy=exploratory_policy,
+            frames_per_batch=100,
+            total_frames=1000,
+            device=device,
+        )
+        for _ in collector:
             pass
         return
 
