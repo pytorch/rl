@@ -10,6 +10,8 @@ from pathlib import Path
 import datasets
 import numpy as np
 import pytest
+import torch
+
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict
 from torchrl.data.rlhf.comparison import (
@@ -24,6 +26,8 @@ from torchrl.data.rlhf.dataset import (
     preproc_data,
 )
 from torchrl.data.rlhf.tldr import make_process_fn_tldr, PromptData
+from torchrl.data.rlhf.utils import _padded_right_to_left, \
+    _padded_left_to_right
 
 HERE = Path(__file__).parent
 
@@ -159,8 +163,27 @@ def test_get_dataloader(
 
 
 class TestRollout:
-    pass
+    def test_padded_right_to_left(self):
+        x = torch.arange(12).view(3, 4)
+        x[0, -2:] = 100
+        x[1, -1:] = 100
+        x[2, -3:] = 100
+        y = RolloutFromModel._padded_right_to_left(x, 100)
+        y_test = torch.tensor([[100, 100,   0,   1],
+        [100,   4,   5,   6],
+        [100, 100, 100,   8]])
+        assert (y == y_test).all()
 
+    def test_padded_left_to_right(self):
+        x = torch.arange(12).view(3, 4)
+        x[0, 2:] = 100
+        x[1, 1:] = 100
+        x[2, 3:] = 100
+        y = RolloutFromModel._padded_left_to_right(x, 100)
+        y_test = torch.tensor([[0,   1, 100, 100],
+        [4,   5,   6, 100],
+        [8, 100, 100, 100]])
+        assert (y == y_test).all()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
