@@ -426,14 +426,6 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
         noise_key = self.ou.noise_key
         steps_key = self.ou.steps_key
 
-        ou_specs = {
-            noise_key: None,
-            steps_key: UnboundedContinuousTensorSpec(
-                shape=self.td_module._spec.shape,
-                device=self.td_module._spec.device,
-                dtype=torch.int64,
-            ),
-        }
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
                 spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
