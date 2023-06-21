@@ -573,10 +573,12 @@ class _OrnsteinUhlenbeckProcess:
 
         is_init = tensordict.get("is_init", None)
         if is_init is not None:
-            if (
+            if (action_tensordict.ndim > is_init.ndim) or (
                 action_tensordict.ndim <= is_init.ndim
                 and is_init.shape[: action_tensordict.ndim] != action_tensordict.shape
-            ):  # if the leading dims of is_init do not correspond to the batch_size of action_tensordict we expand it
+            ):  # if is_init has less dimensions than action_tensordict or
+                # if the leading dims of is_init do not correspond to the batch_size of action_tensordict
+                # we expand it
                 is_init = expand_right(is_init, action_tensordict.shape)
             else:
                 is_init = is_init.sum(
