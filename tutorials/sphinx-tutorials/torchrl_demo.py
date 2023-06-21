@@ -474,10 +474,10 @@ sequence(tensordict, params)
 
 ###############################################################################
 
-import functorch
+from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
+tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
 print(tensordict_exp)
 
 ###############################################################################
@@ -732,10 +732,12 @@ loss_fn = DDPGLoss(actor, value, gamma=0.99)
 tensordict = TensorDict(
     {
         "observation": torch.randn(10, 3),
-        "next": {"observation": torch.randn(10, 3)},
-        "reward": torch.randn(10, 1),
+        "next": {
+            "observation": torch.randn(10, 3),
+            "reward": torch.randn(10, 1),
+            "done": torch.zeros(10, 1, dtype=torch.bool),
+        },
         "action": torch.randn(10, 1),
-        "done": torch.zeros(10, 1, dtype=torch.bool),
     },
     batch_size=[10],
     device="cpu",

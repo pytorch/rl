@@ -12,8 +12,11 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-error-for-skips
     - expecttest
     - pyyaml
     - scipy
     - hydra-core
     - jumanji
+    - jax<=0.4.10
+    - jaxlib<=0.4.10

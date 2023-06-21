@@ -8,7 +8,7 @@ import torch
 
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs import EnvBase
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import classproperty
 
 IMPORT_ERR = None
@@ -53,6 +53,7 @@ class HabitatEnv(GymEnv):
     """
 
     @_wrap_import_error
+    @set_gym_backend("gym")
     def __init__(self, env_name, **kwargs):
         device_num = torch.device(kwargs.pop("device", 0)).index
         kwargs["override_options"] = [

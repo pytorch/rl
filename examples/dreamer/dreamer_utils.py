@@ -119,7 +119,6 @@ def make_env_transforms(
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
-            "action",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
     env.append_transform(
@@ -195,13 +194,13 @@ def transformed_env_constructor(
         from_pixels = cfg.from_pixels
 
         if custom_env is None and custom_env_maker is None:
-            if isinstance(cfg.collector_devices, str):
-                device = cfg.collector_devices
-            elif isinstance(cfg.collector_devices, Sequence):
-                device = cfg.collector_devices[0]
+            if isinstance(cfg.collector_device, str):
+                device = cfg.collector_device
+            elif isinstance(cfg.collector_device, Sequence):
+                device = cfg.collector_device[0]
             else:
                 raise ValueError(
-                    "collector_devices must be either a string or a sequence of strings"
+                    "collector_device must be either a string or a sequence of strings"
                 )
             env_kwargs = {
                 "env_name": env_name,
@@ -370,12 +369,22 @@ def make_recorder_env(cfg, video_tag, obs_norm_state_dict, logger, create_env_fn
         recorder_rm = recorder
 
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        sd = create_env_fn.state_dict()["worker0"]
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        _env = create_env_fn()
+        _env.rollout(2)
+        sd = _env.state_dict()
+        del _env
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        sd = create_env_fn.state_dict()
+    sd = {
+        key: val
+        for key, val in sd.items()
+        if key.endswith("loc") or key.endswith("scale")
+    }
+    if not len(sd):
+        raise ValueError("Empty state dict")
+    recorder_rm.load_state_dict(sd, strict=False)
     # reset reward scaling
     for t in recorder.transform:
         if isinstance(t, RewardScaling):

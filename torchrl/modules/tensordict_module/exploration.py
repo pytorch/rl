@@ -9,13 +9,9 @@ import numpy as np
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 
-from torchrl.data.tensor_specs import (
-    CompositeSpec,
-    TensorSpec,
-    UnboundedContinuousTensorSpec,
-)
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 
@@ -31,18 +27,27 @@ class EGreedyWrapper(TensorDictModuleWrapper):
 
     Args:
         policy (TensorDictModule): a deterministic policy.
+
+    Keyword Args:
         eps_init (scalar, optional): initial epsilon value.
             default: 1.0
         eps_end (scalar, optional): final epsilon value.
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
-        action_key (str, optional): if the policy module has more than one output key,
+        action_key (str, Tuple[str], optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
         spec (TensorSpec, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
+
+    .. note::
+        Once an environment has been wrapped in :class:`EGreedyWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
 
     Examples:
         >>> import torch
@@ -72,10 +77,11 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def __init__(
         self,
         policy: TensorDictModule,
+        *,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
-        action_key: str = "action",
+        action_key: NestedKey = "action",
         spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
@@ -125,9 +131,20 @@ class EGreedyWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = self.td_module.forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            out = tensordict.get(self.td_module.out_keys[0])
+            if isinstance(self.action_key, tuple) and len(self.action_key) > 1:
+                action_tensordict = tensordict.get(self.action_key[:-1])
+                action_key = self.action_key[-1]
+            else:
+                action_tensordict = tensordict
+                action_key = self.action_key
+
+            out = action_tensordict.get(action_key)
             eps = self.eps.item()
-            cond = (torch.rand(out.shape, device=tensordict.device) < eps).to(out.dtype)
+            cond = (
+                torch.rand(action_tensordict.shape, device=action_tensordict.device)
+                < eps
+            ).to(out.dtype)
+            cond = expand_as_right(cond, out)
             spec = self.spec
             if spec is not None:
                 if isinstance(spec, CompositeSpec):
@@ -137,7 +154,7 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 raise RuntimeError(
                     "spec must be provided by the policy or directly to the exploration wrapper."
                 )
-            tensordict.set(self.td_module.out_keys[0], out)
+            action_tensordict.set(action_key, out)
         return tensordict
 
 
@@ -146,6 +163,8 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
     Args:
         policy (TensorDictModule): a policy.
+
+    Keyword Args:
         sigma_init (scalar, optional): initial epsilon value.
             default: 1.0
         sigma_end (scalar, optional): final epsilon value.
@@ -165,6 +184,14 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             is set to False but the spec is passed, the projection will still
             happen.
             Default is True.
+
+    .. note::
+        Once an environment has been wrapped in :class:`AdditiveGaussianWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
 
     """
 
@@ -265,17 +292,22 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
 
 
 class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
-    """Ornstein-Uhlenbeck exploration policy wrapper.
+    r"""Ornstein-Uhlenbeck exploration policy wrapper.
 
     Presented in "CONTINUOUS CONTROL WITH DEEP REINFORCEMENT LEARNING", https://arxiv.org/pdf/1509.02971.pdf.
 
     The OU exploration is to be used with continuous control policies and introduces a auto-correlated exploration
     noise. This enables a sort of 'structured' exploration.
 
-        Noise equation:
-            noise = prev_noise + theta * (mu - prev_noise) * dt + current_sigma * sqrt(dt) * W
-        Sigma equation:
-            current_sigma = (-(sigma - sigma_min) / (n_steps_annealing) * n_steps + sigma).clamp_min(sigma_min)
+    Noise equation:
+
+    .. math::
+        noise_t = noise_{t-1} + \theta * (mu - noise_{t-1}) * dt + \sigma_t * \sqrt{dt} * W
+
+    Sigma equation:
+
+    .. math::
+        \sigma_t = max(\sigma^{min, (-(\sigma_{t-1} - \sigma^{min}) / (n^{\text{steps annealing}}) * n^{\text{steps}} + \sigma))
 
     To keep track of the steps and noise from sample to sample, an :obj:`"ou_prev_noise{id}"` and :obj:`"ou_steps{id}"` keys
     will be written in the input/output tensordict. It is expected that the tensordict will be zeroed at reset,
@@ -283,8 +315,17 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     trajectories, the step count will keep on increasing across rollouts. Note that the collector classes take care of
     zeroing the tensordict at reset time.
 
+    .. note::
+        Once an environment has been wrapped in :class:`OrnsteinUhlenbeckProcessWrapper`, it is
+        crucial to incorporate a call to :meth:`~.step` in the training loop
+        to update the exploration factor.
+        Since it is not easy to capture this omission no warning or exception
+        will be raised if this is ommitted!
+
     Args:
         policy (TensorDictModule): a policy
+
+    Keyword Args:
         eps_init (scalar): initial epsilon value, determining the amount of noise to be added.
             default: 1.0
         eps_end (scalar): final epsilon value, determining the amount of noise to be added.
@@ -407,6 +448,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                 self._spec[action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
+        ou_specs = {
+            noise_key: None,
+            steps_key: None,
+        }
         self._spec.update(ou_specs)
         if len(set(self.out_keys)) != len(self.out_keys):
             raise RuntimeError(f"Got multiple identical output keys: {self.out_keys}")
@@ -444,17 +489,19 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if "step_count" not in tensordict.keys():
+            if "is_init" not in tensordict.keys():
                 warnings.warn(
                     f"The tensordict passed to {self.__class__.__name__} appears to be "
-                    f"missing the 'step_count' entry. This entry is used to "
+                    f"missing the 'is_init' entry. This entry is used to "
                     f"reset the noise at the beginning of a trajectory, without it "
                     f"the behaviour of this exploration method is undefined. "
                     f"This is allowed for BC compatibility purposes but it will be deprecated soon! "
-                    f"To create a 'step_count' entry, simply append a StepCounter "
-                    f"transform to your environment with `env = TransformedEnv(env, StepCounter())`."
+                    f"To create a 'is_init' entry, simply append an torchrl.envs.InitTracker "
+                    f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-                tensordict.set("step_count", torch.ones(tensordict.shape))
+                tensordict.set(
+                    "is_init", torch.zeros(tensordict.shape, dtype=torch.bool)
+                )
             tensordict = self.ou.add_sample(tensordict, self.eps.item())
         return tensordict
 
@@ -529,9 +576,9 @@ class _OrnsteinUhlenbeckProcess:
 
         if self.noise_key not in tensordict.keys():
             self._make_noise_pair(tensordict)
-        step_count = tensordict.get("step_count", None)
-        if step_count is not None and not step_count.all():
-            self._make_noise_pair(tensordict, step_count == 0)
+        is_init = tensordict.get("is_init", None)
+        if is_init is not None and is_init.any():
+            self._make_noise_pair(tensordict, is_init.view(tensordict.shape))
 
         prev_noise = tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0

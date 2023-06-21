@@ -12,9 +12,12 @@ from .replay_buffers import (
     PrioritizedReplayBuffer,
     RemoteTensorDictReplayBuffer,
     ReplayBuffer,
+    RoundRobinWriter,
     Storage,
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
+    TensorDictRoundRobinWriter,
+    Writer,
 )
 from .tensor_specs import (
     BinaryDiscreteTensorSpec,
