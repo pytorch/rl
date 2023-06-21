@@ -15,7 +15,7 @@ from models.actor_critic import init_actor_critic
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl.data import LazyMemmapStorage
+from torchrl.data import LazyTensorStorage
 from torchrl.data.replay_buffers import (
     SamplerWithoutReplacement,
     TensorDictReplayBuffer,
@@ -80,7 +80,7 @@ def create_reward_estimator(
         test_reward = rewards.mean()
 
         if logger:
-            response_ids = torchrl.data.rlhf.utils.generate(
+            response_ids = model.generate(
                 input_ids=test_prompt_ids, generation_config=generation_config
             )
             with ctx:
@@ -202,13 +202,13 @@ def main():
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
     rb = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(episode_length * num_rollouts_per_epoch),
+        storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
         batch_size=episode_length * batch_size,
         sampler=SamplerWithoutReplacement(),
         prefetch=10,
     )
     rb_ppo = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(episode_length * batch_size),
+        storage=LazyTensorStorage(episode_length * batch_size),
         batch_size=ppo_batch_size,
         sampler=SamplerWithoutReplacement(),
         prefetch=10,
@@ -224,9 +224,9 @@ def main():
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
                 td = rollout_from_data(batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=kl_coef)
-                # with torch.no_grad(), ctx:
-                #     # moving this to within epoch
-                #     adv_fn(td)
+                with torch.no_grad(), ctx:
+                    # moving this to within epoch
+                    adv_fn(td)
                 # it's possible we didn't fill the replay buffer in the last iteration if
                 # generation stopped early, so we empty first before repopulating
                 rb.extend(flatten_td(td))
@@ -241,9 +241,6 @@ def main():
                 pbar.set_description(f"TRAIN: {it=}: {rollout_reward=:.4f}")
 
             for batch in rb:
-                with torch.no_grad(), ctx:
-                    # moving this to within epoch
-                    adv_fn(batch.to(device, non_blocking=True).unsqueeze(0))
                 rb_ppo.empty()
                 rb_ppo.extend(batch)
                 for ppo_epoch in range(ppo_num_epochs):  # PPO epochs

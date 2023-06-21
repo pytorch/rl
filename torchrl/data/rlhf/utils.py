@@ -13,9 +13,10 @@ def rollout_from_data(
     batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0.1
 ):
     generated, log_probs, log_ratio = generate(model, batch, ref_model=ref_model)
-    return create_rollout_td(
+    td = create_rollout_td(
         batch, generated, reward_model, log_probs, log_ratio, max_new_tokens, kl_coef
     )
+    return td.refine_names(..., "time")
 
 
 @torch.no_grad()
