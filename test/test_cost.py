@@ -4619,56 +4619,6 @@ class TestA2C(LossModuleTestBase):
         )
         return value.to(device)
 
-    def _create_seq_mock_data_a2c(
-        self,
-        batch=2,
-        T=4,
-        obs_dim=3,
-        action_dim=4,
-        atoms=None,
-        device="cpu",
-        action_key="action",
-        observation_key="observation",
-        reward_key="reward",
-        done_key="done",
-    ):
-        # create a tensordict
-        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
-        obs = total_obs[:, :T]
-        next_obs = total_obs[:, 1:]
-        if atoms:
-            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
-                -1, 1
-            )
-        else:
-            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
-        reward = torch.randn(batch, T, 1, device=device)
-        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
-        params_mean = torch.randn_like(action) / 10
-        params_scale = torch.rand_like(action) / 10
-        td = TensorDict(
-            batch_size=(batch, T),
-            source={
-                observation_key: obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "next": {
-                    observation_key: next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                    done_key: done,
-                    reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                },
-                "collector": {"mask": mask},
-                action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
-                    ~mask, 0.0
-                )
-                / 10,
-                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
-            },
-            device=device,
-        )
-        return td
-
     def _create_mock_common_layer_setup(
         self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10
     ):
@@ -4723,6 +4673,56 @@ class TestA2C(LossModuleTestBase):
         actor(td.clone())
         critic(td.clone())
         return actor, critic, common, td
+
+    def _create_seq_mock_data_a2c(
+        self,
+        batch=2,
+        T=4,
+        obs_dim=3,
+        action_dim=4,
+        atoms=None,
+        device="cpu",
+        action_key="action",
+        observation_key="observation",
+        reward_key="reward",
+        done_key="done",
+    ):
+        # create a tensordict
+        total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        obs = total_obs[:, :T]
+        next_obs = total_obs[:, 1:]
+        if atoms:
+            action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
+                -1, 1
+            )
+        else:
+            action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward = torch.randn(batch, T, 1, device=device)
+        done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
+        params_mean = torch.randn_like(action) / 10
+        params_scale = torch.rand_like(action) / 10
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                observation_key: obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "next": {
+                    observation_key: next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    done_key: done,
+                    reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                },
+                "collector": {"mask": mask},
+                action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
+                    ~mask, 0.0
+                )
+                / 10,
+                "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
+            },
+            device=device,
+        )
+        return td
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
