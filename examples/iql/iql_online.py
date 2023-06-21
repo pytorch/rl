@@ -43,9 +43,6 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
-    def collate_fn(data):
-        return data.as_tensor().to(device, non_blocking=True)
-
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
@@ -55,10 +52,9 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device="cpu",
+                device=device,
             ),
             batch_size=batch_size,
-            collate_fn=collate_fn,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
@@ -67,10 +63,9 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device="cpu",
+                device=device,
             ),
             batch_size=batch_size,
-            collate_fn=collate_fn,
         )
     return replay_buffer
 
@@ -265,7 +260,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # optimization steps
         for _ in range(cfg.frames_per_batch * int(cfg.utd_ratio)):
             # sample from replay buffer
-            sampled_tensordict = replay_buffer.sample(cfg.batch_size)
+            sampled_tensordict = replay_buffer.sample(cfg.batch_size).clone()
 
             loss_td = loss_module(sampled_tensordict)
 

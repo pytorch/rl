@@ -10,7 +10,8 @@ from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase, \
+    is_tensor_collection
 from torch import nn, Tensor
 from torch.nn import functional as F
 
@@ -467,6 +468,8 @@ def cache_values(fun):
             else:
                 out = fun(self)
             setattr(self, attr_name, out)
+            if is_tensor_collection(out):
+                out.lock_()
         return out
 
     return new_fun

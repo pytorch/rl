@@ -2,19 +2,12 @@ import torch
 from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn, optim
-from torchrl.collectors import MultiaSyncDataCollector
+from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.envs import (
-    Compose,
-    DoubleToFloat,
-    EnvCreator,
-    InitTracker,
-    ParallelEnv,
-    RewardScaling,
-    TransformedEnv,
-)
+from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
@@ -35,7 +28,6 @@ def apply_env_transforms(env, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
-            InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
         ),
@@ -45,13 +37,10 @@ def apply_env_transforms(env, reward_scaling=1.0):
 
 def make_environment(cfg):
     """Make environments for training and evaluation."""
-    if cfg.collector.env_per_collector > 1:
-        parallel_env = ParallelEnv(
-            cfg.collector.env_per_collector,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
-        )
-    else:
-        parallel_env = env_maker(task=cfg.env.name)
+    parallel_env = ParallelEnv(
+        cfg.collector.env_per_collector,
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+    )
     parallel_env.set_seed(cfg.env.seed)
 
     train_env = apply_env_transforms(parallel_env)
@@ -73,8 +62,8 @@ def make_environment(cfg):
 
 def make_collector(cfg, train_env, actor_model_explore):
     """Make collector."""
-    collector = MultiaSyncDataCollector(
-        [train_env] * cfg.collector.num_workers,
+    collector = SyncDataCollector(
+        train_env,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
@@ -93,9 +82,6 @@ def make_replay_buffer(
     device="cpu",
     prefetch=3,
 ):
-    def collate_fn(data):
-        return data.as_tensor().to(device, non_blocking=True)
-
     if prb:
         replay_buffer = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,
@@ -105,10 +91,9 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device="cpu",
+                device=device,
             ),
             batch_size=batch_size,
-            collate_fn=collate_fn,
         )
     else:
         replay_buffer = TensorDictReplayBuffer(
@@ -117,10 +102,9 @@ def make_replay_buffer(
             storage=LazyMemmapStorage(
                 buffer_size,
                 scratch_dir=buffer_scratch_dir,
-                device="cpu",
+                device=device,
             ),
             batch_size=batch_size,
-            collate_fn=collate_fn,
         )
     return replay_buffer
 
