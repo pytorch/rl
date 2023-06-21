@@ -458,18 +458,20 @@ def cache_values(fun):
     name = fun.__name__
 
     def new_fun(self, netname=None):
+        __dict__ = self.__dict__
         attr_name = "_cache_" + name
         if netname is not None:
             attr_name += "_" + netname
-        out = getattr(self, attr_name, None)
-        if out is None:
-            if netname is not None:
-                out = fun(self, netname)
-            else:
-                out = fun(self)
-            setattr(self, attr_name, out)
-            if is_tensor_collection(out):
-                out.lock_()
+        if attr_name in __dict__:
+            out = __dict__[attr_name]
+            return out
+        if netname is not None:
+            out = fun(self, netname)
+        else:
+            out = fun(self)
+        if is_tensor_collection(out):
+            out.lock_()
+        setattr(self, attr_name, out)
         return out
 
     return new_fun
