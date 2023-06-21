@@ -1,13 +1,16 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import time
-from pathlib import Path
 
+import hydra
 import torch
 from models.reward import init_reward_model
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchrl.data.rlhf.comparison import get_reward_dataloader
-from utils import get_file_logger, load_and_update_config, setup
-
-HERE = Path(__file__).parent
+from torchrl.data.rlhf.comparison import PairwiseDataset
+from torchrl.data.rlhf.dataset import get_dataloader
+from utils import get_file_logger, resolve_name_or_path, setup
 
 
 def _accuracy(chosen_end_scores, rejected_end_scores):
@@ -25,53 +28,71 @@ def create_loss_estimator(eval_iters, ctx):
         losses = torch.zeros(eval_iters)
         accs = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            chosen_batch, rejected_batch = next(dataloader)
+            batch = next(dataloader)
             with ctx:
-                model(chosen_batch)
-                model(rejected_batch)
-            losses[k] = model.compute_reward_loss(chosen_batch, rejected_batch).item()
-            accs[k] = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+                model(batch.chosen_data)
+                model(batch.rejected_data)
+            losses[k] = model.compute_reward_loss(
+                batch.chosen_data, batch.rejected_data
+            ).item()
+            accs[k] = _accuracy(
+                batch.chosen_data.end_scores, batch.rejected_data.end_scores
+            )
         model.train()
         return losses.mean(), accs.mean()
 
     return estimate_loss
 
 
-def main():
+@hydra.main(version_base="1.1", config_path="config", config_name="train_reward")
+def main(cfg):
     loss_logger = get_file_logger("loss_logger", "reward_loss_logger.log")
-    config = load_and_update_config("config/train_reward.yaml")
 
-    data_config = config["data"]
-    model_config = config["model"]
-    reward_model_config = config["reward_model"]
-    train_config = config["train"]
+    data_cfg = cfg.data
+    model_cfg = cfg.model
+    reward_model_cfg = cfg.reward_model
+    train_cfg = cfg.train
 
-    eval_interval = config["io"]["eval_interval"]
-    log_interval = config["io"]["log_interval"]
-    eval_iters = config["io"]["eval_iters"]
-    reward_out_dir = reward_model_config["out_dir"]
+    eval_interval = cfg.io.eval_interval
+    log_interval = cfg.io.log_interval
+    eval_iters = cfg.io.eval_iters
+    reward_out_dir = reward_model_cfg.out_dir
 
-    max_iters = train_config["max_iters"]
-    always_save_checkpoint = train_config["always_save_checkpoint"]
+    max_iters = train_cfg.max_iters
+    always_save_checkpoint = train_cfg.always_save_checkpoint
 
-    device = config["sys"]["device"]
-    dtype = config["sys"]["dtype"]
-    compile_ = config["sys"]["compile"]
+    device = cfg.sys.device
+    dtype = cfg.sys.dtype
+    compile_ = cfg.sys.compile
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_reward_dataloader(data_config, device=device, split="train")
-    val_loader = get_reward_dataloader(data_config, device=device, split="valid1")
+    train_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PairwiseDataset,
+        device,
+        dataset_name="CarperAI/openai_summarize_comparisons",
+        split="train",
+    )
+    val_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PairwiseDataset,
+        device,
+        dataset_name="CarperAI/openai_summarize_comparisons",
+        split="valid1",
+    )
 
-    if reward_model_config["init_from"] == "resume":
+    if reward_model_cfg.init_from == "resume":
         model = init_reward_model(
-            reward_model_path=reward_model_config["out_dir"],
+            reward_model_path=resolve_name_or_path(reward_model_cfg.out_dir),
             device=device,
             compile_=compile_,
         )
     else:
         model = init_reward_model(
-            transformer_path=model_config["name_or_path"],
+            transformer_path=resolve_name_or_path(model_cfg.name_or_path),
             device=device,
             compile_=compile_,
         )
@@ -84,10 +105,12 @@ def main():
 
     # ######## INIT TRAINING FUNCTIONS ########
 
-    optimizer = torch.optim.AdamW(model.parameters(), **train_config["optimizer"])
+    optimizer = torch.optim.AdamW(
+        [p for p in model.parameters() if p.requires_grad], **train_cfg.optimizer
+    )
     scheduler = None
-    if train_config["decay_lr"]:
-        scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
+    if train_cfg.decay_lr:
+        scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
     estimate_loss = create_loss_estimator(eval_iters, ctx)
 
@@ -95,13 +118,13 @@ def main():
 
     t0 = time.time()
     for it in range(1, max_iters + 1):
-        chosen_batch, rejected_batch = next(train_loader)
+        batch = next(train_loader)
 
         with ctx:
-            model(chosen_batch)
-            model(rejected_batch)
+            model(batch.chosen_data)
+            model(batch.rejected_data)
         optimizer.zero_grad(set_to_none=True)
-        loss = model.compute_reward_loss(chosen_batch, rejected_batch)
+        loss = model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
         loss.backward()
         optimizer.step()
         if scheduler is not None:
@@ -123,11 +146,15 @@ def main():
             if val_loss < best_val_loss or always_save_checkpoint:
                 best_val_loss = val_loss
                 if it > 0:
-                    print(f"saving checkpoint to {reward_out_dir}")
+                    msg = f"saving checkpoint to {reward_out_dir}"
+                    print(msg)
+                    loss_logger.info(msg)
                     model.module.save_pretrained(reward_out_dir)
         elif it % log_interval == 0:
             loss = loss.item()
-            acc = _accuracy(chosen_batch.end_scores, rejected_batch.end_scores)
+            acc = _accuracy(
+                batch.chosen_data.end_scores, batch.rejected_data.end_scores
+            )
             msg = f"TRAIN: {it=}: {loss=:.4f}, {acc=:.4f} time={dt*1000:.2f}ms"
             print(msg)
             loss_logger.info(msg)

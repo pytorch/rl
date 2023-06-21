@@ -7,7 +7,7 @@ data:
   block_size: 550
 model:
   name_or_path: gpt2  # gpt2 for pre-trained, local path for checkpoint
-  out_dir: out
+  out_dir: ./out
   dropout: 0.1  # for pretraining 0 is good, for finetuning try 0.1+
 train:
   grad_clip: 1.0  # clip gradients at this value, or disable if == 0.0

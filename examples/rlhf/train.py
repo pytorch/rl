@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 """
 Train the transformer model. Configurable via config/train.yaml, but any argument can
 also be overridden at the command line.
@@ -7,12 +11,14 @@ $ python train.py --batch_size=32 --compile=False
 """
 import time
 
+import hydra
 import torch
 from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchrl.data.rlhf.tldr import get_prompt_dataloader_tldr
-from utils import get_file_logger, load_and_update_config, setup
+from torchrl.data.rlhf.dataset import get_dataloader
+from torchrl.data.rlhf.tldr import PromptDataTLDR
+from utils import get_file_logger, resolve_name_or_path, setup
 
 
 def create_loss_estimator(eval_iters, ctx):
@@ -24,6 +30,7 @@ def create_loss_estimator(eval_iters, ctx):
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
+            batch.batch_size = []
             with ctx:
                 model(batch)
             losses[k] = batch.loss.item()
@@ -33,44 +40,57 @@ def create_loss_estimator(eval_iters, ctx):
     return estimate_loss
 
 
-def main():
+@hydra.main(version_base="1.1", config_path="config", config_name="train")
+def main(cfg):
     loss_logger = get_file_logger("loss_logger", "transformer_loss_logger.log")
-    # load and extract configuration
-    config = load_and_update_config("config/train.yaml")
 
-    data_config = config["data"]
-    model_config = config["model"]
-    train_config = config["train"]
+    data_cfg = cfg.data
+    model_cfg = cfg.model
+    train_cfg = cfg.train
 
-    eval_interval = config["io"]["eval_interval"]
-    log_interval = config["io"]["log_interval"]
-    eval_iters = config["io"]["eval_iters"]
-    out_dir = model_config["out_dir"]
+    eval_interval = cfg.io.eval_interval
+    log_interval = cfg.io.log_interval
+    eval_iters = cfg.io.eval_iters
+    out_dir = model_cfg.out_dir
 
-    grad_clip = train_config["grad_clip"]
-    max_iters = train_config["max_iters"]
-    always_save_checkpoint = train_config["always_save_checkpoint"]
-    gradient_accumulation_steps = train_config["gradient_accumulation_steps"]
+    grad_clip = train_cfg.grad_clip
+    max_iters = train_cfg.max_iters
+    always_save_checkpoint = train_cfg.always_save_checkpoint
+    gradient_accumulation_steps = train_cfg.gradient_accumulation_steps
 
-    device = config["sys"]["device"]
-    dtype = config["sys"]["dtype"]
-    compile_ = config["sys"]["compile"]
+    device = cfg.sys.device
+    dtype = cfg.sys.dtype
+    compile_ = cfg.sys.compile
 
     ctx = setup(device=device, dtype=dtype)
 
-    train_loader = get_prompt_dataloader_tldr(data_config, device=device, split="train")
-    val_loader = get_prompt_dataloader_tldr(data_config, device=device, split="valid")
+    train_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="train",
+    )
+    val_loader = get_dataloader(
+        data_cfg.batch_size,
+        data_cfg.block_size,
+        PromptDataTLDR,
+        device,
+        dataset_name="CarperAI/openai_summarize_tldr",
+        split="valid",
+    )
 
     model = init_transformer(
-        model_config["name_or_path"],
-        model_config["dropout"],
+        resolve_name_or_path(model_cfg.name_or_path),
+        model_cfg.dropout,
         device,
         compile_=compile_,
     )
-    optimizer = torch.optim.AdamW(model.parameters(), **train_config["optimizer"])
+    optimizer = torch.optim.AdamW(model.parameters(), **train_cfg.optimizer)
     scheduler = None
-    if train_config["decay_lr"]:
-        scheduler = CosineAnnealingLR(optimizer, **train_config["scheduler"])
+    if train_cfg.decay_lr:
+        scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
 
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
     estimate_loss = create_loss_estimator(eval_iters, ctx)
@@ -82,6 +102,8 @@ def main():
     for it in range(1, max_iters + 1):
         for _ in range(gradient_accumulation_steps):
             batch = next_batch
+            # TODO: can we handle this better with a differently structured tensorclass?
+            batch.batch_size = []
             with ctx:
                 model(batch)
             # immediately async prefetch next batch while model is doing the forward pass on the GPU
