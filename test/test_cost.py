@@ -1848,13 +1848,13 @@ class TestSAC(LossModuleTestBase):
         actor_net = MLP(
             num_cells=ncells,
             in_features=n_hidden,
-            depth=2,
+            depth=1,
             out_features=2 * n_act,
         )
         qvalue = MLP(
             in_features=n_hidden + n_act,
             num_cells=ncells,
-            depth=2,
+            depth=1,
             out_features=1,
         )
         batch = [batch]
@@ -4669,6 +4669,61 @@ class TestA2C(LossModuleTestBase):
         )
         return td
 
+    def _create_mock_common_layer_setup(
+        self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10
+    ):
+        common_net = MLP(
+            num_cells=ncells,
+            in_features=n_obs,
+            depth=3,
+            out_features=n_hidden,
+        )
+        actor_net = MLP(
+            num_cells=ncells,
+            in_features=n_hidden,
+            depth=1,
+            out_features=2 * n_act,
+        )
+        value_net = MLP(
+            in_features=n_hidden,
+            num_cells=ncells,
+            depth=1,
+            out_features=1,
+        )
+        batch = [batch, T]
+        td = TensorDict(
+            {
+                "obs": torch.randn(*batch, n_obs),
+                "action": torch.randn(*batch, n_act),
+                "sample_log_prob": torch.randn(*batch),
+                "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "next": {
+                    "obs": torch.randn(*batch, n_obs),
+                    "reward": torch.randn(*batch, 1),
+                    "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                },
+            },
+            batch,
+            names=[None, "time"],
+        )
+        common = Mod(common_net, in_keys=["obs"], out_keys=["hidden"])
+        actor = ProbSeq(
+            common,
+            Mod(actor_net, in_keys=["hidden"], out_keys=["param"]),
+            Mod(NormalParamExtractor(), in_keys=["param"], out_keys=["loc", "scale"]),
+            ProbMod(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+            ),
+        )
+        critic = Seq(
+            common, Mod(value_net, in_keys=["hidden"], out_keys=["state_value"])
+        )
+        actor(td.clone())
+        critic(td.clone())
+        return actor, critic, common, td
+
     @pytest.mark.parametrize("gradient_mode", (True, False))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
@@ -4727,6 +4782,58 @@ class TestA2C(LossModuleTestBase):
                 assert "critic" not in name
 
         value.zero_grad()
+        loss_objective.backward()
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "critic" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "critic" in name
+        actor.zero_grad()
+
+        # test reset
+        loss_fn.reset()
+
+    @pytest.mark.parametrize("separate_losses", [False, True])
+    def test_a2c_separate_losses(self, separate_losses):
+        torch.manual_seed(self.seed)
+        actor, critic, common, td = self._create_mock_common_layer_setup()
+        loss_fn = A2CLoss(actor=actor, critic=critic, separate_losses=separate_losses)
+
+        # Check error is raised when actions require grads
+        td["action"].requires_grad = True
+        with pytest.raises(
+            RuntimeError,
+            match="tensordict stored action require grad.",
+        ):
+            _ = loss_fn._log_probs(td)
+        td["action"].requires_grad = False
+
+        td = td.exclude(loss_fn.tensor_keys.value_target)
+        loss = loss_fn(td)
+        loss_critic = loss["loss_critic"]
+        loss_objective = loss["loss_objective"] + loss.get("loss_entropy", 0.0)
+        loss_critic.backward(retain_graph=True)
+        # check that grads are independent and non null
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            debug_p_grad = p.grad
+            if separate_losses:
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert "actor" not in name
+                    assert "critic" in name
+                if p.grad is None:
+                    assert "actor" in name
+                    assert "critic" not in name
+            else:
+                if p.grad is not None and p.grad.norm() > 0.0:
+                    assert ("actor" in name) or ("critic" in name)
+                if p.grad is None:
+                    assert ("actor" in name) or ("critic" in name)
+
+        critic.zero_grad()
         loss_objective.backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
