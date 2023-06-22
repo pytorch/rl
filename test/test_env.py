@@ -28,6 +28,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
@@ -1401,6 +1402,40 @@ class TestNestedSpecs:
         assert ("next", *env.reward_key) in next_state.keys(True)
 
         # check_env_specs(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
+        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+
+        td = env.reset()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rollout(rollout_length)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
+
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        td = env.rollout(rollout_length, policy)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
 
 
 @pytest.mark.parametrize(

@@ -14,6 +14,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
@@ -24,7 +25,7 @@ from mocking_classes import (
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
-from torchrl._utils import seed_generator
+from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -1354,113 +1355,97 @@ def test_reset_heterogeneous_envs():
     ).all()
 
 
-@pytest.mark.parametrize("nested_obs_action", [True, False])
-@pytest.mark.parametrize("nested_done", [True, False])
-@pytest.mark.parametrize("nested_reward", [True, False])
-def test_collector_nested_env(nested_obs_action, nested_done, nested_reward, seed=10):
-    env = NestedCountingEnv(
-        nest_obs_action=nested_obs_action,
-        nest_done=nested_done,
-        nest_reward=nested_reward,
-    )
-    torch.manual_seed(seed)
+class TestNestedEnvsCollector:
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    def test_collector_nested_env_consistency(
+        self, nested_obs_action, nested_done, nested_reward, seed=1
+    ):
+        env = NestedCountingEnv(
+            nest_obs_action=nested_obs_action,
+            nest_done=nested_done,
+            nest_reward=nested_reward,
+        )
+        torch.manual_seed(seed)
+        env_fn = lambda: TransformedEnv(env, InitTracker())
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy(env.reset())
 
-    env_fn = lambda: TransformedEnv(env, InitTracker())
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
 
-    action_spec = env.action_spec
-    d_act = action_spec.shape[-1]
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
 
-    net = nn.LazyLinear(d_act)
-    policy = TensorDictModule(
-        net,
-        in_keys=[("data", "states") if nested_obs_action else "observation"],
-        out_keys=[env.action_key],
-    )
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
 
-    policy(env.reset())
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
+        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
 
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        policy=policy,
-        frames_per_batch=20,
-        total_frames=1000,
-        device="cpu",
-    )
-    for i, d in enumerate(collector):
-        if i == 0:
-            a1 = d
-        elif i == 1:
-            a2 = d
-        else:
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        torch.manual_seed(0)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy(env.reset())
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for td in ccollector:
             break
-    with pytest.raises(AssertionError):
-        assert_allclose_td(a1, a2)
-    collector.shutdown()
+        ccollector.shutdown()
 
-    ccollector = aSyncDataCollector(
-        create_env_fn=env_fn,
-        policy=policy,
-        frames_per_batch=20,
-        total_frames=1000,
-        device="cpu",
-    )
-    for i, d in enumerate(ccollector):
-        if i == 0:
-            b1 = d
-        elif i == 1:
-            b2 = d
-        else:
-            break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(b1, b2)
-
-    assert_allclose_td(a1, b1)
-    assert_allclose_td(a2, b2)
-
-    ccollector.shutdown()
-
-    ccollector = MultiaSyncDataCollector(
-        create_env_fn=[env_fn],
-        policy=policy,
-        frames_per_batch=20,
-        total_frames=1000,
-        device="cpu",
-    )
-    for i, d in enumerate(ccollector):
-        if i == 0:
-            c1 = d
-        elif i == 1:
-            c2 = d
-        else:
-            break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(c1, c2)
-    assert_allclose_td(a1, c1)
-    assert_allclose_td(a2, c2)
-    ccollector.shutdown()
-
-    ccollector = MultiSyncDataCollector(
-        create_env_fn=[env_fn],
-        policy=policy,
-        frames_per_batch=20,
-        total_frames=1000,
-        device="cpu",
-    )
-    for i, d in enumerate(ccollector):
-        if i == 0:
-            d1 = d
-        elif i == 1:
-            d2 = d
-        else:
-            break
-    assert d.names[-1] == "time"
-    with pytest.raises(AssertionError):
-        assert_allclose_td(d1, d2)
-    assert_allclose_td(a1, d1)
-    assert_allclose_td(a2, d2)
-    ccollector.shutdown()
+        # assert ("data","reward") not in td.keys(True) # this can be activates once step_mdp is fixed for nested keys
+        assert td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
+        assert td["data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
