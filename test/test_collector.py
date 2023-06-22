@@ -1430,18 +1430,18 @@ class TestNestedEnvsCollector:
             device="cpu",
         )
 
-        for td in ccollector:
+        for _td in ccollector:
             break
         ccollector.shutdown()
 
         # assert ("data","reward") not in td.keys(True) # this can be activates once step_mdp is fixed for nested keys
-        assert td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
-        assert td["data"].batch_size == (
+        assert _td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
+        assert _td["data"].batch_size == (
             *batch_size,
             frames_per_batch // prod(batch_size),
             nested_dim,
         )
-        assert td["next", "data"].batch_size == (
+        assert _td["next", "data"].batch_size == (
             *batch_size,
             frames_per_batch // prod(batch_size),
             nested_dim,
