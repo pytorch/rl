@@ -17,7 +17,8 @@ jobs:
       runner: "linux.g5.4xlarge.nvidia.gpu"
       # gpu-arch-type: cuda
       # gpu-arch-version: "11.7"
-      docker-image: "nvidia/cudagl:11.4.0-base"
+      # docker-image: "nvidia/cudagl:11.4.0-base"
+      docker-image: "pytorch/manylinux-cuda117"
       timeout: 120
       script: |
         set -euo pipefail
