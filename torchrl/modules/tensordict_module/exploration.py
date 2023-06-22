@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
@@ -540,18 +540,20 @@ class _OrnsteinUhlenbeckProcess:
     def steps_key(self):
         return self._steps_key  # + str(id(self))
 
-    def _make_noise_pair(self, tensordict: TensorDictBase, is_init=None) -> None:
+    def _make_noise_pair(
+        self, tensordict: TensorDictBase, key: NestedKey, is_init=None
+    ) -> None:
         if is_init is not None:
-            tensordict = tensordict.get_sub_tensordict(is_init.view(tensordict.shape))
+            tensordict = tensordict.get_sub_tensordict(is_init)
         tensordict.set(
             self.noise_key,
-            torch.zeros(tensordict.get(self.key).shape, device=tensordict.device),
+            torch.zeros(tensordict.get(key).shape, device=tensordict.device),
             inplace=is_init is not None,
         )
         tensordict.set(
             self.steps_key,
             torch.zeros(
-                torch.Size([*tensordict.batch_size, 1]),
+                tensordict.batch_size,
                 dtype=torch.long,
                 device=tensordict.device,
             ),
@@ -562,27 +564,50 @@ class _OrnsteinUhlenbeckProcess:
         self, tensordict: TensorDictBase, eps: float = 1.0
     ) -> TensorDictBase:
 
-        if self.noise_key not in tensordict.keys():
-            self._make_noise_pair(tensordict)
-        is_init = tensordict.get("is_init", None)
-        if is_init is not None and is_init.any():
-            self._make_noise_pair(tensordict, is_init.view(tensordict.shape))
+        if isinstance(self.key, tuple) and len(self.key) > 1:
+            action_tensordict = tensordict.get(self.key[:-1])
+            action_key = self.key[-1]
+        else:
+            action_tensordict = tensordict
+            action_key = self.key
 
-        prev_noise = tensordict.get(self.noise_key)
+        is_init = tensordict.get("is_init", None)
+        if is_init is not None:
+            if (action_tensordict.ndim > is_init.ndim) or (
+                action_tensordict.ndim <= is_init.ndim
+                and is_init.shape[: action_tensordict.ndim] != action_tensordict.shape
+            ):  # if is_init has less dimensions than action_tensordict or
+                # if the leading dims of is_init do not correspond to the batch_size of action_tensordict
+                # we expand it
+                is_init = expand_right(is_init, action_tensordict.shape)
+            else:
+                is_init = is_init.sum(
+                    tuple(range(action_tensordict.batch_dims, is_init.ndim)),
+                    dtype=torch.bool,
+                )  # otherwise we reduce it to that batch_size
+
+        if self.noise_key not in action_tensordict.keys():
+            self._make_noise_pair(action_tensordict, action_key)
+        if is_init is not None and is_init.any():
+            self._make_noise_pair(action_tensordict, action_key, is_init)
+
+        prev_noise = action_tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0
 
-        n_steps = tensordict.get(self.steps_key)
+        n_steps = action_tensordict.get(self.steps_key)
 
         noise = (
             prev_noise
             + self.theta * (self.mu - prev_noise) * self.dt
-            + self.current_sigma(n_steps)
+            + self.current_sigma(expand_as_right(n_steps, prev_noise))
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
-        tensordict.set_(self.noise_key, noise - self.x0)
-        tensordict.set_(self.key, tensordict.get(self.key) + eps * noise)
-        tensordict.set_(self.steps_key, n_steps + 1)
+        action_tensordict.set_(self.noise_key, noise - self.x0)
+        action_tensordict.set_(
+            action_key, action_tensordict.get(action_key) + eps * noise
+        )
+        action_tensordict.set_(self.steps_key, n_steps + 1)
         return tensordict
 
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
