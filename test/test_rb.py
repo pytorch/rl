@@ -188,6 +188,8 @@ class TestComposableBuffers:
                     break
             else:
                 raise RuntimeError("did not find match")
+        data2 = self._get_data(rb_type, size=2 * size + 2)
+        rb.extend(data2)
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
