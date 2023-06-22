@@ -26,32 +26,27 @@ class RolloutFromModel:
 
     EOS_TOKEN_ID = 50256
 
-    def __init__(
-        self,
-        model,
-        ref_model,
-        reward_model,
-        max_new_tokens=50,
-        kl_coef=0.1,
-    ):
+    def __init__(self, model, ref_model, reward_model, max_new_tokens=50):
         self.model = model
         self.ref_model = ref_model
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
-        self.kl_coef = kl_coef
 
     def kl_step(self):
         """Makes a step in the KL coefficient schedule."""
         pass
 
     @torch.no_grad()
-    def rollout_from_data(
-        self,
-        batch,
-    ):
+    def rollout_from_data(self, batch, kl_coef=0.1):
         generated, log_probs, log_ratio = self.generate(batch)
         return self.create_rollout_td(
-            batch, generated, log_probs, log_ratio, self.max_new_tokens, self.kl_coef
+            batch,
+            generated,
+            self.reward_model,
+            log_probs,
+            log_ratio,
+            self.max_new_tokens,
+            kl_coef,
         )
 
     @torch.no_grad()
@@ -94,10 +89,12 @@ class RolloutFromModel:
         # of generated tokens
         done_idx = torch.minimum(
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(max_new_tokens),
+            torch.tensor(max_new_tokens) - 1,
         )
-        done = torch.zeros(done_idx.numel(), max_new_tokens, dtype=torch.bool)
-        done = done.scatter(-1, done_idx.unsqueeze(-1), 1)
+        done = torch.zeros(
+            done_idx.numel(), max_new_tokens, dtype=torch.bool, device=generated.device
+        )
+        done = done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
 
         # the sequence of actions for each trajectory is just the generated token ids
         action_idx = torch.arange(max_new_tokens, device=generated.device)
@@ -114,10 +111,11 @@ class RolloutFromModel:
             attention_mask=batch.attention_mask,
         )
         # the reward is zero except for the timestep where we reached a stopping condition
-        reward = end_scores - end_scores_labels
-        reward = reward.unsqueeze(-1).unsqueeze(-1)
-        reward = reward.masked_scatter(~done, 0)
-        reward = reward - kl_coef * log_ratio.unsqueeze(-1)
+        clipped_scores = torch.clip(end_scores - end_scores_labels, -10, 10)
+        reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
+        reward_raw = reward_raw * done
+        reward_kl = -kl_coef * log_ratio.unsqueeze(-1)
+        reward = reward_raw + reward_kl
         td = {
             "action": action,
             "input_ids": rollout_generated[:, :-1].clone(),
@@ -128,9 +126,13 @@ class RolloutFromModel:
                 "attention_mask": rollout_attention_mask[:, 1:].clone(),
                 "done": done,
                 "reward": reward,
+                "reward_raw": reward_raw,
+                "reward_kl": reward_kl,
             },
         }
-        return TensorDict(td, batch_size=done.shape[:2], device=generated.device)
+        return TensorDict(
+            td, batch_size=done.shape[:2], device=generated.device
+        ).refine_names(..., "time")
 
     @classmethod
     def _padded_right_to_left(cls, tensor, eos_token_id=None, dim=1):
@@ -146,14 +148,21 @@ class RolloutFromModel:
         return out
 
     @classmethod
-    def _padded_left_to_right(cls, tensor, eos_token_id=None, dim=1):
-        # mask = tensor != eos_token_id
-        # splits = tensor[mask].split(mask.sum(-1).tolist(), 0)
-        # tensor = torch.nested.as_nested_tensor(list(splits))
-        # tensor = torch.nested.to_padded_tensor(tensor, eos_token_id)
+    def _padded_left_to_right(cls, tensor, sequence_length, eos_token_id=None):
+        # some care must be taken here, because generated sequences may have both left
+        # and right padding, and also may not terminated early if all sequences in the
+        # batch reached EOS before reaching the token limit
         if eos_token_id is None:
             eos_token_id = cls.EOS_TOKEN_ID
-        return cls._padded_right_to_left(tensor, eos_token_id, dim=dim)
+        mask = tensor != eos_token_id
+        left_mask = torch.arange(sequence_length, device=mask.device) < mask.sum(
+            1
+        ).unsqueeze(-1)
+        out = torch.full(
+            (mask.shape[0], sequence_length), eos_token_id, device=tensor.device
+        )
+        out[left_mask] = tensor[mask]
+        return out
 
     @property
     def _default_conf(self):
@@ -165,11 +174,16 @@ class RolloutFromModel:
             do_sample=True,
         )
 
-    @staticmethod
     def _get_scores(
-        scores: Tuple, generated_tokens: Tensor = None, use_max=False, pad_to=None
+        self, scores: Tuple, generated_tokens: Tensor = None, use_max=False, pad_to=None
     ):
         scores = torch.stack(scores, 1)
+        if scores.shape[1] != self.max_new_tokens:
+            scores = F.pad(
+                scores,
+                (0, 0, 0, self.max_new_tokens - scores.shape[1]),
+                value=float("-inf"),
+            )
         scores = F.log_softmax(scores, dim=-1)
         num_gen = scores.shape[1]
         if use_max:
@@ -253,12 +267,15 @@ class RolloutFromModel:
             generation_config=generation_config,
         )
         samples = outputs.sequences
+        # get the scores and normalise for log probabilities
+        log_probs_gen = self._get_scores(outputs.scores, samples)
         # we'll insert generated tokens into a tensor prepopulated with padding tokens,
         # thereby moving back to right padding for reward model
-        generated = self._padded_left_to_right(samples, self.EOS_TOKEN_ID)
-
-        # get the scores and normalise for log probabilities
-        log_probs_gen = self._get_scores(outputs.scores, generated)
+        generated = self._padded_left_to_right(
+            samples,
+            input_ids.shape[1] + self.max_new_tokens,
+            eos_token_id=self.EOS_TOKEN_ID,
+        )
 
         log_ratio = self._log_ratio(generated, batch.prompt_rindex)
         return generated, log_probs_gen, log_ratio

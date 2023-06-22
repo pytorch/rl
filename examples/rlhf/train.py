@@ -17,7 +17,7 @@ from models.transformer import init_transformer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptDataTLDR
+from torchrl.data.rlhf.prompt import PromptData
 from utils import get_file_logger, resolve_name_or_path, setup
 
 
@@ -67,7 +67,7 @@ def main(cfg):
     train_loader = get_dataloader(
         data_cfg.batch_size,
         data_cfg.block_size,
-        PromptDataTLDR,
+        PromptData,
         device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="train",
@@ -75,7 +75,7 @@ def main(cfg):
     val_loader = get_dataloader(
         data_cfg.batch_size,
         data_cfg.block_size,
-        PromptDataTLDR,
+        PromptData,
         device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="valid",

@@ -78,7 +78,7 @@ class PairwiseDataset:
             root_dir=root_dir,
             from_disk=from_disk,
         )
-        data = data[split, str(max_length)]
+        data = data[str(max_length)]
         maxidx = data.shape[0] // 2
         batch_size = [maxidx]
         # this is a zero-copy creation, as we index memmap-arrays without

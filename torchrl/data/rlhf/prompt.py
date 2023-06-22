@@ -75,7 +75,7 @@ class PromptData:
             root_dir=root_dir,
             from_disk=from_disk,
         )
-        data = data[split, str(max_length)]
+        data = data[str(max_length)]
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)
 
 

@@ -20,8 +20,8 @@ from torchrl.data.replay_buffers import (
     TensorDictReplayBuffer,
 )
 from torchrl.data.rlhf.dataset import get_dataloader
-from torchrl.data.rlhf.prompt import PromptDataTLDR
-from torchrl.data.rlhf.utils import rollout_from_data
+from torchrl.data.rlhf.prompt import PromptData
+from torchrl.data.rlhf.utils import RolloutFromModel
 
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
@@ -95,13 +95,12 @@ def create_reward_estimator(
 
     @torch.no_grad()
     def estimate_reward(model, dataloader):
+        rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
         rewards = torch.zeros(eval_iters)
         for k in range(eval_iters):
             batch = next(dataloader)
             # NOTE: disable kl for evaluation
-            td = rollout_from_data(
-                batch, model, ref_model, reward_model, max_new_tokens=50, kl_coef=0
-            )
+            td = rollout_from_model.rollout_from_data(batch, kl_coef=0.0)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
@@ -182,7 +181,7 @@ def main():
     train_loader = get_dataloader(
         data_cfg.batch_size,
         data_cfg.block_size,
-        PromptDataTLDR,
+        PromptData,
         device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="train",
@@ -190,7 +189,7 @@ def main():
     val_loader = get_dataloader(
         data_cfg.batch_size,
         data_cfg.block_size,
-        PromptDataTLDR,
+        PromptData,
         device,
         dataset_name="CarperAI/openai_summarize_tldr",
         split="valid",
@@ -251,6 +250,8 @@ def main():
         prefetch=10,
     )
 
+    rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
+
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
     with tqdm(total=int(max_epochs * num_rollouts_per_epoch / batch_size)) as pbar:
@@ -261,13 +262,8 @@ def main():
             kl_controller = AdaptiveKLController(0.1, 6, 10000)
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
-                td = rollout_from_data(
-                    batch,
-                    model,
-                    ref_model,
-                    reward_model,
-                    max_new_tokens=50,
-                    kl_coef=kl_controller.value,
+                td = rollout_from_model.rollout_from_data(
+                    batch, kl_coef=kl_controller.value
                 )
                 with torch.no_grad(), ctx:
                     # moving this to within epoch
