@@ -959,7 +959,6 @@ class CountingEnv(EnvBase):
                     *self.batch_size,
                     1,
                 ),
-                dtype=torch.int32,
                 device=self.device,
             ),
             shape=self.batch_size,
@@ -1011,7 +1010,7 @@ class CountingEnv(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         self.count += action.to(torch.int).to(self.device)
         tensordict = TensorDict(
             source={
@@ -1025,38 +1024,131 @@ class CountingEnv(EnvBase):
         return tensordict.select().set("next", tensordict)
 
 
-class NestedRewardEnv(CountingEnv):
+class NestedCountingEnv(CountingEnv):
     # an env with nested reward and done states
-    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+    def __init__(
+        self,
+        max_steps: int = 5,
+        start_val: int = 0,
+        nest_obs_action: bool = True,
+        nest_done: bool = True,
+        nest_reward: bool = True,
+        nested_dim: int = 3,
+        **kwargs,
+    ):
         super().__init__(max_steps=max_steps, start_val=start_val, **kwargs)
-        self.observation_spec = CompositeSpec(
-            {("data", "states"): self.observation_spec["observation"].clone()},
-            shape=self.batch_size,
-        )
-        self.reward_spec = CompositeSpec(
-            {("data", "reward"): self.reward_spec.clone()}, shape=self.batch_size
-        )
-        self.done_spec = CompositeSpec(
-            {("data", "done"): self.done_spec.clone()}, shape=self.batch_size
-        )
+
+        self.nested_dim = nested_dim
+
+        self.nested_obs_action = nest_obs_action
+        self.nested_done = nest_done
+        self.nested_reward = nest_reward
+
+        if self.nested_obs_action:
+            self.observation_spec = CompositeSpec(
+                {
+                    "data": CompositeSpec(
+                        {
+                            "states": self.observation_spec["observation"]
+                            .unsqueeze(-1)
+                            .expand(*self.batch_size, self.nested_dim, 1)
+                        },
+                        shape=(self.nested_dim,),
+                    )
+                },
+                shape=self.batch_size,
+            )
+            self.action_spec = CompositeSpec(
+                {
+                    "data": CompositeSpec(
+                        {
+                            "action": self.action_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
+                    )
+                },
+                shape=self.batch_size,
+            )
+
+        if self.nested_reward:
+            self.reward_spec = CompositeSpec(
+                {
+                    "data": CompositeSpec(
+                        {
+                            "reward": self.reward_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
+                    )
+                },
+                shape=self.batch_size,
+            )
+
+        if self.nested_done:
+            self.done_spec = CompositeSpec(
+                {
+                    "data": CompositeSpec(
+                        {
+                            "done": self.done_spec.unsqueeze(-1).expand(
+                                *self.batch_size, self.nested_dim, 1
+                            )
+                        },
+                        shape=(self.nested_dim,),
+                    )
+                },
+                shape=self.batch_size,
+            )
 
     def _reset(self, td):
+        if self.nested_done and td is not None and "_reset" in td.keys():
+            td["_reset"] = td["_reset"].sum(-2, dtype=torch.bool)
         td = super()._reset(td)
-        td[self.done_key] = td["done"]
-        del td["done"]
-        td["data", "states"] = td["observation"]
-        del td["observation"]
+        td["observation"] = td["observation"].to(torch.float)
+        if self.nested_done:
+            td[self.done_key] = (
+                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
+            del td["done"]
+        if self.nested_obs_action:
+            td["data", "states"] = (
+                td["observation"]
+                .unsqueeze(-1)
+                .expand(*self.batch_size, self.nested_dim, 1)
+            )
+            del td["observation"]
+        if "data" in td.keys():
+            td["data"].batch_size = (*self.batch_size, self.nested_dim)
         return td
 
     def _step(self, td):
+        if self.nested_obs_action:
+            td["data"].batch_size = self.batch_size
+            td[self.action_key] = td[self.action_key].sum(-2)
         td_root = super()._step(td)
         td = td_root["next"]
-        td[self.reward_key] = td["reward"]
-        del td["reward"]
-        td[self.done_key] = td["done"]
-        del td["done"]
-        td["data", "states"] = td["observation"]
-        del td["observation"]
+        td["observation"] = td["observation"].to(torch.float)
+        if self.nested_done:
+            td[self.done_key] = (
+                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
+            del td["done"]
+        if self.nested_obs_action:
+            td["data", "states"] = (
+                td["observation"]
+                .unsqueeze(-1)
+                .expand(*self.batch_size, self.nested_dim, 1)
+            )
+            del td["observation"]
+        if self.nested_reward:
+            td[self.reward_key] = (
+                td["reward"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
+            )
+            del td["reward"]
+        if "data" in td.keys():
+            td["data"].batch_size = (*self.batch_size, self.nested_dim)
         return td_root
 
 
