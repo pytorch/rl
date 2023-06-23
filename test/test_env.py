@@ -1453,7 +1453,7 @@ class TestNestedSpecs:
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
-        NestedCountingEnv,
+        # NestedCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):

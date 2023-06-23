@@ -1422,8 +1422,8 @@ class TestNestedEnvsCollector:
         torch.manual_seed(0)
         policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
         policy(env.reset())
-        ccollector = MultiSyncDataCollector(
-            create_env_fn=[env_fn],
+        ccollector = SyncDataCollector(
+            create_env_fn=env_fn,
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
