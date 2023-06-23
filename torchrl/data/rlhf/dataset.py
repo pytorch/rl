@@ -8,17 +8,14 @@ import importlib.util
 import os
 from pathlib import Path
 
-import numpy as np
 import torch
 
 _has_datasets = importlib.util.find_spec("datasets") is not None
 from typing import Sequence
 
 from tensordict.tensordict import NestedKey, TensorDict
-from torch.utils.data import DataLoader
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from tqdm import trange
 from transformers import AutoTokenizer
 
 
