@@ -2,23 +2,24 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 
 import numpy as np
 import torch
-from datasets import load_dataset, load_from_disk
 
-from tensordict import TensorDict
+_has_datasets = importlib.util.find_spec("datasets") is not None
+from typing import Sequence
+
+from tensordict.tensordict import NestedKey, TensorDict
 from torch.utils.data import DataLoader
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from tqdm import trange
 from transformers import AutoTokenizer
-
-NUM_PROC = max(os.cpu_count() // 2, 1)
-HERE = Path(__file__).parent
 
 
 def create_or_load_dataset(
@@ -81,48 +82,51 @@ def create_or_load_dataset(
         root_dir = Path(os.environ.get("HOME")) / ".cache/torchrl/data/"
         os.makedirs(root_dir, exist_ok=True)
     root_dir = Path(root_dir)
-    data_dir = root_dir / dataset_name.split("-")[0]
+    data_dir = root_dir / str(Path(dataset_name).name).split("-")[0]
     data_dir_total = data_dir / split / str(max_length)
     # search for data
     if os.path.exists(data_dir_total):
-        dataset = TensorDict.load_memmap(data_dir / split)
-        # exclude other datasets, if needed
-        dataset = dataset.select(str(max_length))
+        dataset = TensorDict.load_memmap(data_dir_total)
         return dataset
-    dataset = preproc_data(
-        split,
-        max_length,
-        dataset_name,
-        make_process_fn,
-        pre_tokenization_hook,
+    dataset = load_dataset(
+        split=split,
+        dataset_name=dataset_name,
+        pre_tokenization_hook=pre_tokenization_hook,
         from_disk=from_disk,
     )
-    data_spec = str(max_length)
-    return dataset_to_tensordict(dataset, data_dir / split, data_spec)
+    dataset = tokenize(
+        dataset,
+        max_length=max_length,
+        make_process_fn=make_process_fn,
+    )
+    prefix = (split, str(max_length))
+    return dataset_to_tensordict(
+        dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
+    )[prefix]
 
 
-def preproc_data(
+def load_dataset(
     split,
-    max_length,
     dataset_name,
-    make_process_fn,
     pre_tokenization_hook=None,
     from_disk: bool = False,
 ):
-    """Loads and preprocesses a dataset.
+    """Loads a text dataset from ``datasets``.
 
     Args:
         split (str): One of ``"train"`` or ``"valid"``.
-        max_length (int): the maximum sequence length.
         dataset_name (str): the name or path of the dataset.
-        make_process_fn (callable): a preprocess function.
         pre_tokenization_hook (callable): TODO
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
 
-    Returns: a datasets.
+    Returns: a dataset of type ``datasets.Dataset``.
     """
+    if not _has_datasets:
+        raise ImportError("preproc_data requires the datasets package to be installed.")
+    from datasets import load_dataset, load_from_disk
+
     if from_disk:
         dataset = load_from_disk(dataset_name)[split]
     else:
@@ -130,24 +134,51 @@ def preproc_data(
     if split.startswith("valid"):
         # reduce size of validation dataset
         dataset = dataset.select(range(2_000))
-
     if pre_tokenization_hook is not None:
         dataset = pre_tokenization_hook(dataset)
+    return dataset
 
+
+def tokenize(
+    dataset,
+    max_length,
+    make_process_fn,
+    num_workers: int = None,
+    excluded_features: Sequence[str] | None = None,
+):
+    """Preprocesses a text dataset from ``datasets``.
+
+    Args:
+        dataset (datasets.Dataset): a dataset loaded using :func:`~.load_dataset`.
+        max_length (int): the maximum sequence length.
+        make_process_fn (callable): a preprocess function.
+        num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`.
+            Defaults to ``max(os.cpu_count() // 2, 1)``.
+        excluded_features (sequence of str, optional): the features to exclude
+            once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
+
+    Returns: a dataset of type ``datasets.Dataset``.
+    """
+    if num_workers is None:
+        num_workers = max(os.cpu_count() // 2, 1)
+    if excluded_features is None:
+        excluded_features = {"text", "prompt", "label", "valid_sample"}
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
     # tokenize the dataset
     dataset = dataset.map(
         make_process_fn(tokenizer, max_length=max_length),
         desc="Tokenizing...",
-        num_proc=NUM_PROC,
+        num_proc=num_workers,
         batched=True,
     )
-    dataset = dataset.select_columns(
-        list({*dataset.column_names} - {"text", "prompt", "label", "valid_sample"})
-    )
+    if excluded_features:
+        dataset = dataset.select_columns(
+            list({*dataset.column_names} - excluded_features)
+        )
     # keep non empty rows (i.e. where at least one token is not eos)
     if "valid_sample" in dataset.features:
+        raise RuntimeError("move to tensordict")
         dataset.set_format("numpy")
         mask = dataset["valid_sample"]
         filtered_ = dataset.data.filter(mask)
@@ -156,12 +187,74 @@ def preproc_data(
     return dataset
 
 
-def dataset_to_tensordict(dataset, data_dir, suffix):
-    data_dict = {
-        (suffix, key): torch.as_tensor(dataset[key]) for key in dataset.features
-    }
-    out = TensorDict.from_dict(data_dict).memmap_(prefix=data_dir)
-    out.batch_size = out.batch_size[:1]
+def dataset_to_tensordict(
+    dataset: "datasets.Dataset",
+    data_dir: Path,
+    prefix: NestedKey = None,
+    features: Sequence[str] = None,
+    batch_dims=1,
+    valid_mask_key=None,
+):
+    """Convers a dataset to a TensorDict.
+
+    The dataset is expected to have a ``features`` attribute which is a sequence of
+    strings indicating the features that can be found in the dataset.
+
+    Args:
+        dataset (datasets.Dataset or equivalent): a dataset to map to a TensorDict.
+            If ``features`` is ``None``, it must have a ``features`` attribute
+            with the list of keys to write in the tensordict.
+        data_dir (Path or equivalent): directory where the data should be written.
+        prefix (NestedKey, optional): the prefix of the dataset location. This can
+            be used to differentiate several copies of a same dataset that have
+            undergone different preprocessings.
+        features (sequence of str, optional): a sequence of str indicating the
+            features that can be found in the dataset.
+        batch_dims (int, optional): the number of batch_dimensions of the data
+            (ie number of dimensions along which the tensordict can be indexed).
+            Defaults to 1.
+        valid_mask_key (NestedKey, optional): if provided, this entry will be
+            tentatively gathered and used to filder the data. Defaults to
+            ``None`` (ie, no filter key).
+
+    Returns: a TensorDict containing memory-mapped tensors with the dataset.
+
+    Examples:
+        >>> from datasets import Dataset
+        >>> import tempfile
+        >>> data = Dataset.from_dict({"tokens": torch.randint(20, (10, 11)), "labels": torch.zeros(10, 11)})
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     data_memmap = dataset_to_tensordict(data, data_dir=tmpdir, prefix=("some", "prefix"), features=["tokens", "labels"])
+        ...     print(data_memmap)
+        TensorDict(
+            fields={
+                some: TensorDict(
+                    fields={
+                        prefix: TensorDict(
+                            fields={
+                                labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                                tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
+                            batch_size=torch.Size([10]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([10]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+
+    """
+    if features is None:
+        features = dataset.features
+    if prefix is None:
+        prefix = ()
+    data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
+    out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+    if valid_mask_key is not None and valid_mask_key in out.keys(include_nested=True):
+        out = out[out.get(valid_mask_key)]
+    out = TensorDict({prefix: out}, [])
+    out.memmap_(prefix=data_dir)
     return out
 
 

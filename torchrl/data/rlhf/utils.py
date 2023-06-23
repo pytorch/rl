@@ -135,7 +135,7 @@ class RolloutFromModel:
         ).refine_names(..., "time")
 
     @classmethod
-    def _padded_right_to_left(cls, tensor, eos_token_id=None, dim=1):
+    def _padded_right_to_left(cls, tensor, *, eos_token_id=None, dim=1):
         # this is about 2x slower than masking
         # tensor = torch.stack(
         #     [torch.roll(row, (row == eos_token_id).sum().item(), 0) for row in tensor]
@@ -148,20 +148,26 @@ class RolloutFromModel:
         return out
 
     @classmethod
-    def _padded_left_to_right(cls, tensor, sequence_length, eos_token_id=None):
+    def _padded_left_to_right(
+        cls, tensor, *, sequence_length=None, eos_token_id=None, dim=1
+    ):
         # some care must be taken here, because generated sequences may have both left
         # and right padding, and also may not terminated early if all sequences in the
         # batch reached EOS before reaching the token limit
+        if sequence_length is None:
+            sequence_length = tensor.size(dim)
+        if dim < 0:
+            dim = tensor.ndim + dim
         if eos_token_id is None:
             eos_token_id = cls.EOS_TOKEN_ID
         mask = tensor != eos_token_id
-        left_mask = torch.arange(sequence_length, device=mask.device) < mask.sum(
-            1
-        ).unsqueeze(-1)
-        out = torch.full(
-            (mask.shape[0], sequence_length), eos_token_id, device=tensor.device
-        )
-        out[left_mask] = tensor[mask]
+        # convert [0, 0, 1, 1, 0] to [0, 0, 1, 1, 1] to avoid right eos
+        mask = ~((~mask).to(torch.uint8).cumprod(dim).bool())
+        shape = list(mask.shape)
+        shape[dim] = sequence_length
+        out = torch.full(torch.Size(shape), eos_token_id, device=tensor.device)
+        index = (slice(None),) * dim + (slice(tensor.size(dim)),)
+        out[index][mask.flip(dim)] = tensor[mask]
         return out
 
     @property
