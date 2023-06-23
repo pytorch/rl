@@ -1,4 +1,4 @@
-name: Sklearn Tests on Linux
+name: RLHF Tests on Linux
 
 on:
   pull_request:

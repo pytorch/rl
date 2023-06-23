@@ -151,7 +151,7 @@ def test_get_dataloader(
         root_dir=tmpdir,
         from_disk=True,
     )
-    for data in dl:
+    for data in dl:  # noqa: B007
         break
     assert data.shape[0] == batch_size
     for value in data.values():

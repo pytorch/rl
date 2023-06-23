@@ -35,7 +35,15 @@ def create_or_load_dataset(
         max_length (int): the maximum sequence length.
         dataset_name (str): the name of the dataset.
         make_process_fn (callable): a preprocess function.
-        pre_tokenization_hook (callable): TODO
+        pre_tokenization_hook (callable, optional): called on
+            the Dataset before tokenization. It should return a modified
+            Dataset object.
+            The intended use is for carrying out tasks that
+            require modifying the dataset as a whole as opposed to modifying
+            individual datapoints, for example discarding certain datapoints
+            based on a particular condition. Tokenization and other
+            "elementwise" operations on the data are performed by the process
+            function which is mapped over the dataset.
         root_dir (path, optional): the path where the datasets are stored.
             Defaults to ``"$HOME/.cache/torchrl/data"``
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
@@ -44,10 +52,10 @@ def create_or_load_dataset(
 
     The dataset will be stored in ``root/<split>/<max_length>/``
     Examples:
-        >>> from torchrl.data.rlhf.comparison import make_process_fn_comparison, pre_tokenization_hook
+        >>> from torchrl.data.rlhf.reward import make_process_fn_comparison, pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
-        >>> dataset_name = "CarperAI--openai_summarize_comparisons"
+        >>> dataset_name = "CarperAI/openai_summarize_comparisons"
         >>> dataset = create_or_load_dataset(
         ...     split,
         ...     max_length,
@@ -113,7 +121,15 @@ def load_dataset(
     Args:
         split (str): One of ``"train"`` or ``"valid"``.
         dataset_name (str): the name or path of the dataset.
-        pre_tokenization_hook (callable): TODO
+        pre_tokenization_hook (callable): called on
+            the Dataset before tokenization. It should return a modified
+            Dataset object.
+            The intended use is for carrying out tasks that
+            require modifying the dataset as a whole as opposed to modifying
+            individual datapoints, for example discarding certain datapoints
+            based on a particular condition. Tokenization and other
+            "elementwise" operations on the data are performed by the process
+            function which is mapped over the dataset.
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
@@ -185,7 +201,7 @@ def tokenize(
 
 
 def dataset_to_tensordict(
-    dataset: "datasets.Dataset",
+    dataset: "datasets.Dataset",  # noqa: F821
     data_dir: Path,
     prefix: NestedKey = None,
     features: Sequence[str] = None,

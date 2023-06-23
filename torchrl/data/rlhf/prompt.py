@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from pathlib import Path
 from typing import Optional
 
 import torch
@@ -44,7 +43,8 @@ class PromptData:
     def from_dataset(
         cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False
     ):
-        """
+        """TODO
+        Returns a ``PromptData`` from a dataset name.
 
         Args:
             split:
