@@ -10,10 +10,12 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import InitTracker, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
+    OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     TanhDelta,
     ValueOperator,
@@ -82,15 +84,18 @@ def train(seed):
     }
 
     # Create env and env_test
-    env = VmasEnv(
-        scenario=scenario_name,
-        num_envs=vmas_envs,
-        continuous_actions=True,
-        max_steps=max_steps,
-        device=vmas_device,
-        seed=seed,
-        # Scenario kwargs
-        **env_config,
+    env = TransformedEnv(
+        VmasEnv(
+            scenario=scenario_name,
+            num_envs=vmas_envs,
+            continuous_actions=True,
+            max_steps=max_steps,
+            device=vmas_device,
+            seed=seed,
+            # Scenario kwargs
+            **env_config,
+        ),
+        InitTracker(),
     )
     env_test = VmasEnv(
         scenario=scenario_name,
@@ -132,10 +137,9 @@ def train(seed):
         return_log_prob=False,
     )
 
-    policy_explore = AdditiveGaussianWrapper(
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(
         policy,
         annealing_num_steps=int(total_frames * (1 / 2)),
-        sigma_end=0.0,
         action_key=env.action_key,
         spec=env.unbatched_action_spec,
     )
@@ -160,7 +164,7 @@ def train(seed):
     )
 
     with set_exploration_type(ExplorationType.RANDOM):
-        value_module(policy(env.reset().to(training_device)))
+        value_module(policy_explore(env.reset().to(training_device)))
 
     collector = SyncDataCollector(
         env,
@@ -180,7 +184,8 @@ def train(seed):
 
     loss_module = DDPGLoss(actor_network=policy, value_network=value_module)
     loss_module.set_keys(
-        state_action_value=("agents", "state_action_value"), reward=env.reward_key
+        state_action_value=("agents", "state_action_value"),
+        reward=env.reward_key,
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
 
