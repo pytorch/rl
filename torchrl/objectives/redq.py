@@ -257,7 +257,7 @@ class REDQLoss(LossModule):
         gSDE: bool = False,
         gamma: float = None,
         priority_key: str = None,
-        separate_losses: bool = True,
+        separate_losses: bool = False,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR

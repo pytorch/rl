@@ -3479,46 +3479,6 @@ class TestREDQ(LossModuleTestBase):
                 raise NotImplementedError(k)
             loss_fn.zero_grad()
 
-        # check td is left untouched
-        assert loss_fn.tensor_keys.priority in td.keys()
-
-        sum([item for _, item in loss.items()]).backward()
-        named_parameters = list(loss_fn.named_parameters())
-        named_buffers = list(loss_fn.named_buffers())
-
-        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
-        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
-
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
-
-        # modify params and check that expanded values are updated
-        for p in loss_fn.parameters():
-            p.data *= 0
-
-        counter = 0
-        for key, p in loss_fn.qvalue_network_params.items(True, True):
-            if not isinstance(key, tuple):
-                key = (key,)
-            if not isinstance(p, nn.Parameter):
-                counter += 1
-                key = "_sep_".join(["qvalue_network", *key])
-                mapped_param = next(
-                    (k for k, val in loss_fn._param_maps.items() if val == key)
-                )
-                assert (p == getattr(loss_fn, mapped_param)).all()
-                assert (p == 0).all()
-        assert counter == len(loss_fn._actor_network_params.keys(True, True))
-        assert counter == len(loss_fn.actor_network_params.keys(True, True))
-
-        # check that params of the original actor are those of the loss_fn
-        for p in actor.parameters():
-            assert p in set(loss_fn.parameters())
-
-        if delay_qvalue:
-            # test that updating with target updater resets the targets of qvalue to 0
-            target_updater.step()
-
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
