@@ -17,5 +17,5 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - transformers
-    - datasets
+    - scikit-learn
+    - pandas
