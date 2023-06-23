@@ -5,7 +5,7 @@
 
 import os
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 try:
     import torchvision
@@ -125,3 +125,6 @@ class MLFlowLogger(Logger):
 
     def __repr__(self) -> str:
         return f"MLFlowLogger(experiment={self.experiment.__repr__()})"
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        raise NotImplementedError("Logging histograms in cvs is not permitted.")
