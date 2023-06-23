@@ -840,7 +840,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -920,8 +921,9 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
@@ -995,7 +997,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1082,8 +1085,9 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1163,7 +1167,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
