@@ -19,7 +19,7 @@ from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
-    cache_values,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -290,7 +290,7 @@ class DDPGLoss(LossModule):
         )
         td_copy = self.value_network(
             td_copy,
-            params=self.__detached_value_params,
+            params=self._cached_detached_value_params,
         )
         return -td_copy.get(self.tensor_keys.state_action_value)
 
@@ -307,7 +307,7 @@ class DDPGLoss(LossModule):
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
         target_value = self.value_estimator.value_estimate(
-            tensordict, target_params=self.__target_params
+            tensordict, target_params=self._cached_target_params
         ).squeeze(-1)
 
         # td_error = pred_val - target_value
@@ -348,8 +348,8 @@ class DDPGLoss(LossModule):
         self._value_estimator.set_keys(**tensor_keys)
 
     @property
-    @cache_values
-    def __target_params(self):
+    @_cache_values
+    def _cached_target_params(self):
         target_params = TensorDict(
             {
                 "module": {
@@ -363,6 +363,6 @@ class DDPGLoss(LossModule):
         return target_params
 
     @property
-    @cache_values
-    def __detached_value_params(self):
+    @_cache_values
+    def _cached_detached_value_params(self):
         return self.value_network_params.detach()

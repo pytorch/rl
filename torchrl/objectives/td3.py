@@ -17,7 +17,7 @@ from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
-    cache_values,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -317,13 +317,13 @@ class TD3Loss(LossModule):
         self._in_keys = values
 
     @property
-    @cache_values
-    def __detach_qvalue_network_params(self):
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
         return self.qvalue_network_params.detach()
 
     @property
-    @cache_values
-    def __stack_actor_params(self):
+    @_cache_values
+    def _cached_stack_actor_params(self):
         return torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
         )
@@ -345,7 +345,7 @@ class TD3Loss(LossModule):
 
         actor_output_td = self._vmap_actor_network00(
             tensordict_actor,
-            self.__stack_actor_params,
+            self._cached_stack_actor_params,
         )
         # add noise to target policy
         action = actor_output_td[1].get(self.tensor_keys.action)
@@ -391,7 +391,7 @@ class TD3Loss(LossModule):
         # cat params
         qvalue_params = torch.cat(
             [
-                self.__detach_qvalue_network_params,
+                self._cached_detach_qvalue_network_params,
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],

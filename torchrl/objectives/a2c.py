@@ -15,7 +15,7 @@ from torch import distributions as d
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
-    cache_values,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -335,8 +335,8 @@ class A2CLoss(LossModule):
         return self.critic_coef * loss_value
 
     @property
-    @cache_values
-    def __detach_critic_params(self):
+    @_cache_values
+    def _cached_detach_critic_params(self):
         return self.critic_params.detach()
 
     @dispatch()
@@ -346,7 +346,7 @@ class A2CLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.__detach_critic_params,
+                params=self._cached_detach_critic_params,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)

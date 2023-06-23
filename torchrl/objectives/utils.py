@@ -452,17 +452,18 @@ def next_state_value(
     return target_value
 
 
-def cache_values(fun):
+def _cache_values(fun):
     """Caches the tensordict returned by a property."""
     name = fun.__name__
 
     def new_fun(self, netname=None):
         __dict__ = self.__dict__
-        attr_name = "_cache_" + name
+        _cache = __dict__["_cache"]
+        attr_name = name
         if netname is not None:
             attr_name += "_" + netname
-        if attr_name in __dict__:
-            out = __dict__[attr_name]
+        if attr_name in _cache:
+            out = _cache[attr_name]
             return out
         if netname is not None:
             out = fun(self, netname)
@@ -470,7 +471,7 @@ def cache_values(fun):
             out = fun(self)
         if is_tensor_collection(out):
             out.lock_()
-        setattr(self, attr_name, out)
+        _cache[attr_name] = out
         return out
 
     return new_fun

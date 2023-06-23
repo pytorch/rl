@@ -23,7 +23,7 @@ from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
-    cache_values,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -533,8 +533,8 @@ class SACLoss(LossModule):
         return TensorDict(out, [])
 
     @property
-    @cache_values
-    def __detached_qvalue_params(self):
+    @_cache_values
+    def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
@@ -549,7 +549,7 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
-            td_q, self.__detached_qvalue_params  # should we clone?
+            td_q, self._cached_detached_qvalue_params  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -565,8 +565,8 @@ class SACLoss(LossModule):
         return self._alpha * log_prob - min_q_logprob
 
     @property
-    @cache_values
-    def __target_params_actor_value(self):
+    @_cache_values
+    def _cached_target_params_actor_value(self):
         return TensorDict(
             {
                 "module": {
@@ -579,7 +579,7 @@ class SACLoss(LossModule):
         )
 
     def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
-        target_params = self.__target_params_actor_value
+        target_params = self._cached_target_params_actor_value
         with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
                 tensordict, target_params=target_params

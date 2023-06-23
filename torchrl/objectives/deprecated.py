@@ -21,7 +21,7 @@ from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING, cache_values
+from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING, _cache_values
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
@@ -305,8 +305,8 @@ class REDQLoss_deprecated(LossModule):
         return td_out
 
     @property
-    @cache_values
-    def __detach_qvalue_network_params(self):
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
         return self.qvalue_network_params.detach()
 
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
@@ -320,7 +320,7 @@ class REDQLoss_deprecated(LossModule):
 
         tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict_clone.select(*self.qvalue_network.in_keys),
-            self.__detach_qvalue_network_params,
+            self._cached_detach_qvalue_network_params,
         )
         state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(

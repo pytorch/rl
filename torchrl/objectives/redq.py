@@ -21,7 +21,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_WARNING,
-    cache_values,
+    _cache_values,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -390,14 +390,14 @@ class REDQLoss(LossModule):
         self._in_keys = values
 
     @property
-    @cache_values
-    def __detach_qvalue_network_params(self):
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
         return self.qvalue_network_params.detach()
 
-    def __qvalue_params_cat(self, selected_q_params):
+    def _qvalue_params_cat(self, selected_q_params):
         qvalue_params = torch.cat(
             [
-                self.__detach_qvalue_network_params,
+                self._cached_detach_qvalue_network_params,
                 selected_q_params,
                 self.qvalue_network_params,
             ],
@@ -483,7 +483,7 @@ class REDQLoss(LossModule):
         # cat params
         tensordict_qval = self._vmap_qvalue_network00(
             tensordict_qval,
-            self.__qvalue_params_cat(selected_q_params),
+            self._qvalue_params_cat(selected_q_params),
         )
 
         state_action_value = tensordict_qval.get(

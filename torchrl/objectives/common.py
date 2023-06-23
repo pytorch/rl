@@ -26,7 +26,7 @@ from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
-from torchrl.objectives.utils import cache_values, ValueEstimators
+from torchrl.objectives.utils import _cache_values, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 _has_functorch = False
@@ -104,10 +104,12 @@ class LossModule(TensorDictModuleBase):
     def __new__(cls, *args, **kwargs):
         cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
         cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
+        self = super().__new__(cls)
+        return self
 
     def __init__(self):
         super().__init__()
+        self._cache = {}
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = False
@@ -389,7 +391,7 @@ class LossModule(TensorDictModuleBase):
             property(lambda _self=self: _self._target_param_getter(module_name)),
         )
 
-    @cache_values
+    @_cache_values
     def _param_getter(self, network_name):
         name = "_" + network_name + "_params"
         param_name = network_name + "_params"
@@ -418,7 +420,7 @@ class LossModule(TensorDictModuleBase):
                 f"{self.__class__.__name__} does not have the target param {name}"
             )
 
-    @cache_values
+    @_cache_values
     def _target_param_getter(self, network_name):
         target_name = "_target_" + network_name + "_params"
         param_name = network_name + "_params"
@@ -504,7 +506,7 @@ class LossModule(TensorDictModuleBase):
             origin_value = getattr(self, origin)
             target_value = getattr(self, target)
             setattr(self, target, origin_value.expand_as(target_value))
-
+        out._cache = {}
         return out
 
     def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
