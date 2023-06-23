@@ -39,6 +39,7 @@ We also give users the ability to compose a replay buffer using the following co
     ListStorage
     LazyTensorStorage
     LazyMemmapStorage
+    TensorStorage
     Writer
     RoundRobinWriter
 
