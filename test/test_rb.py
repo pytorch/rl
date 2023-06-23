@@ -294,7 +294,7 @@ class TestStorages:
         storage2 = storage_type(torch.zeros_like(data))
         storage2.load_state_dict(sd)
         assert (storage.get(range(10)) == storage2.get(range(10))).all()
-        assert type(storage.get(range(10))) is type(storage2.get(range(10)))
+        assert type(storage.get(range(10))) is type(storage2.get(range(10)))  # noqa: E721
 
 
 @pytest.mark.parametrize("max_size", [1000])
