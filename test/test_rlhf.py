@@ -413,7 +413,8 @@ class TestRollout:
             )
         return model
 
-    def init_reward_model(self, device=None):
+    @staticmethod
+    def init_reward_model(device=None):
         model = GPT2RewardModel()
         model.to(device)
 
@@ -424,8 +425,8 @@ class TestRollout:
         )
         return model
 
-    @property
-    def _dummy_batch(self):
+    @staticmethod
+    def _get_dummy_batch():
         return PromptData.from_tensordict(
             TensorDict.load_memmap(f"{HERE}/datasets_mini/tldr_batch")
         )
@@ -510,7 +511,7 @@ class TestRollout:
 
     def test_generate(self, max_new_tokens=10):
         model = self._get_rollout_model(max_new_tokens)
-        batch = self._dummy_batch
+        batch = self._get_dummy_batch()
         generated, log_probs, log_ratio = model.generate(batch)
         batch_size = batch.shape[0]
 
@@ -523,7 +524,7 @@ class TestRollout:
 
     def test_rollout_from_data(self, max_new_tokens=10):
         model = self._get_rollout_model(max_new_tokens)
-        batch = self._dummy_batch
+        batch = self._get_dummy_batch()
         td = model.rollout_from_data(batch)
         batch_size = batch.shape[0]
 
