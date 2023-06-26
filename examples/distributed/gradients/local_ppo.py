@@ -87,8 +87,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     for remote_grads in grad_worker:
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            list(local_actor.parameters()) + list(local_critic.parameters()), max_norm=0.5)
+        grad_norm = torch.nn.utils.clip_grad_norm_(local_loss_module.parameters(), max_norm=0.5)
 
         # Update local policy
         local_optim.step()

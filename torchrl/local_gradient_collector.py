@@ -75,7 +75,7 @@ class GradientCollector:
         #     p.data = torch.from_numpy(g).to(self.device)
         #     p.grad.zero_()
 
-        params = itertools.chain(self.policy.parameters(), self.critic.parameters())
+        params = self.objective.parameters()
         for g, p in zip(weights, params):
             p.data = torch.from_numpy(g).to(self.device)
             p.grad.zero_()
@@ -98,6 +98,7 @@ class GradientCollector:
         for data in self.collector:
 
             data_view = data.reshape(-1)
+            data_view = data_view.to("cuda")
 
             # Compute GAE
             with torch.no_grad():
