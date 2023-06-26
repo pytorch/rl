@@ -15,8 +15,11 @@ from transformers import GenerationConfig
 
 
 class RolloutFromModel:
-    """A class for performing rollouts with causal language models, i.e., a model that takes in input tokenized text
-        and whose task is to predicting the next word in a sentence having read the n previous words.
+    """A class for performing rollouts with causal language models.
+
+    It is assumed that the model this class wraps takes in input tokenized text and
+    whose task is to predicting the next word in a sentence having read the n previous
+    words.
 
     Args:
         model (transformers.Transformer): the model to be used. Should have a
