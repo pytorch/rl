@@ -61,7 +61,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_loss_module, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic_head)
 
-    collector = make_collector(cfg, local_actor)
+    collector, state_dict = make_collector(cfg, local_actor)
     objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
     buffer = make_data_buffer(cfg)
 
@@ -79,7 +79,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     logger = None
     if cfg.logger.backend:
         logger = make_logger(cfg.logger)
-    test_env = make_test_env(cfg.env)
+    test_env = make_test_env(cfg.env, state_dict)
     record_interval = cfg.logger.log_interval
     frames_in_batch = cfg.collector.frames_per_batch
     collected_frames = 0
