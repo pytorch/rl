@@ -22,7 +22,9 @@ class RolloutFromModel:
         model (transformers.Transformer): the model to be used. Should have a
             :meth:`generate` method.
         ref_model (transformers.Transformer): a frozen version of ``model``
-            where params are in their initial configuration.
+            where params are in their initial configuration. This is used to compute a
+            KL penalty for the reward, to stop the model from straying too far from the
+            reference model during training.
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
             input_ids and attention_mask, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
@@ -67,6 +69,28 @@ class RolloutFromModel:
                 obtained by calling the ``generate`` method.
             kl_coef: Coefficient with which to multiply the KL term before subtracting
                 from the reward.
+
+        Returns:
+            A TensorDict with the following keys:
+            - "action": the sequence of actions (generated tokens)
+            - "input_ids": the input_ids passed to the generative model at each time
+              step.
+            - "attention_mask": the attention_masks passed to the generative model at
+              each time step
+            - "sample_log_prob": the log probability of each token during generation
+            - ("next", "input_ids"): the sequence of tokens after generation. Makes up
+              part of the inputs that will be used for generating the next token.
+            - ("next", "attention_mask"): updated attention_mask after token has been
+              generated. Passed to the generative model on the next time step
+            - ("next", "done"): Boolean array indicating whether we've reached a
+              terminal state (either because we generated EOS token or because we
+              reached the token limit)
+            - ("next", "reward"): The reward received at each time step
+            - ("next", "reward_raw"): The raw reward from the reward model, without the
+              KL term. This is mainly for debugging and logging, it is not used in
+              training
+            - ("next", "reward_kl"): The KL term from the reward. This is mainly for
+              debugging and logging, it is not used in training.
         """
         rollout_generated = []
         for rindex, row in zip(batch.prompt_rindex, generated):
