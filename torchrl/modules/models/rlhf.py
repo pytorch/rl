@@ -29,6 +29,8 @@ class GPT2RewardModel(nn.Module):
         self.PAD_ID = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
 
     def forward(self, input_ids=None, attention_mask=None):
+        """ Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token
+        """
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = outputs[0]
         rewards = self.lm_head(hidden_states).squeeze(-1)
