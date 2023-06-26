@@ -15,7 +15,8 @@ from transformers import GenerationConfig
 
 
 class RolloutFromModel:
-    """
+    """A class for performing rollouts with language models.
+
     Args:
         model (transformers.Transformer): the model to be used. Should have a
             :meth:`generate` method.
@@ -26,7 +27,6 @@ class RolloutFromModel:
             end_scores (the reward for the final token in each sequence).
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
-
     """
 
     EOS_TOKEN_ID = 50256
@@ -44,41 +44,34 @@ class RolloutFromModel:
     @torch.no_grad()
     def rollout_from_data(self, batch, kl_coef=0.1):
         generated, log_probs, log_ratio = self.generate(batch)
-        return self.create_rollout_td(
-            batch,
-            generated,
-            self.reward_model,
-            log_probs,
-            log_ratio,
-            self.max_new_tokens,
-            kl_coef,
-        )
+        return self.create_rollout_td(batch, generated, log_probs, log_ratio, kl_coef)
 
     @torch.no_grad()
-    def create_rollout_td(
-        self,
-        batch,
-        generated,
-        reward_model,
-        log_probs,
-        log_ratio,
-        max_new_tokens=50,
-        kl_coef=0.1,
-    ):
+    def create_rollout_td(self, batch, generated, log_probs, log_ratio, kl_coef=0.1):
         """A TensorDict wrapper for generated data.
 
-        This function takes a batch plus the generated tokens and replicates the tensordict
-        structure that would have been obtained from a rollout with a TorchRL env that
-        sampled one token each timestep.
+        This function takes a batch plus the generated tokens and replicates the
+        tensordict structure that would have been obtained from a rollout with a TorchRL
+        env that sampled one token each timestep.
 
         Args:
-            batch:
+            batch: A batch of data containing the original prompt together with a field
+                "rindex" indicating the right index of the prompt.
+            generated: The prompt together with generated tokens. This can be obtained
+                by calling the ``generate`` method.
+            log_probs: The log probabilities of the generated tokens. Can be obtained by
+                calling the ``generate`` method.
+            log_ratio: The log ratio of the probabilities of the generated tokens
+                according to the generative model and the reference model. Can be
+                obtained by calling the ``generate`` method.
+            kl_coef: Coefficient with which to multiply the KL term before subtracting
+                from the reward.
         """
         rollout_generated = []
         for rindex, row in zip(batch.prompt_rindex, generated):
             arange = torch.arange(row.shape[0], device=generated.device)
             tokens = []
-            for i in range(max_new_tokens + 1):
+            for i in range(self.max_new_tokens + 1):
                 tokens.append(
                     torch.where(
                         arange < rindex + i,
@@ -94,24 +87,27 @@ class RolloutFromModel:
         # of generated tokens
         done_idx = torch.minimum(
             (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(max_new_tokens) - 1,
+            torch.tensor(self.max_new_tokens) - 1,
         )
         done = torch.zeros(
-            done_idx.numel(), max_new_tokens, dtype=torch.bool, device=generated.device
+            done_idx.numel(),
+            self.max_new_tokens,
+            dtype=torch.bool,
+            device=generated.device,
         )
         done = done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
 
         # the sequence of actions for each trajectory is just the generated token ids
-        action_idx = torch.arange(max_new_tokens, device=generated.device)
+        action_idx = torch.arange(self.max_new_tokens, device=generated.device)
         action_idx = action_idx + batch.prompt_rindex.unsqueeze(-1)
         action = generated.gather(-1, action_idx)
 
         # calculate the reward for the finished sequence
-        _, end_scores = reward_model(
+        _, end_scores = self.reward_model(
             input_ids=rollout_generated[:, -1],
             attention_mask=rollout_attention_mask[:, -1],
         )
-        _, end_scores_labels = reward_model(
+        _, end_scores_labels = self.reward_model(
             input_ids=batch.input_ids,
             attention_mask=batch.attention_mask,
         )
@@ -206,7 +202,9 @@ class RolloutFromModel:
     def logprobs_of_labels(logits, labels):
         """Log probabilities of the labels.
 
-        These are calculated from the logits."""
+        These are calculated from the logits. The labels (token ids) are used to index
+        the logits along the relevant dimension.
+        """
         logprobs = F.log_softmax(logits, dim=-1)
         logprobs_labels = torch.gather(logprobs, dim=-1, index=labels.unsqueeze(-1))
         return logprobs_labels.squeeze(-1)
@@ -284,7 +282,7 @@ class RolloutFromModel:
         # thereby moving back to right padding for reward model
         generated = self._padded_left_to_right(
             samples,
-            input_ids.shape[1] + self.max_new_tokens,
+            sequence_length=input_ids.shape[1] + self.max_new_tokens,
             eos_token_id=self.EOS_TOKEN_ID,
         )
         generated_tokens = self._get_generated_tokens(generated, batch.prompt_rindex)
