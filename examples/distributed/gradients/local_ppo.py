@@ -62,7 +62,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic_head)
 
     collector = make_collector(cfg, local_actor)
-    objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
+    objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
     buffer = make_data_buffer(cfg)
 
     grad_worker = GradientCollector(
