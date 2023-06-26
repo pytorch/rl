@@ -59,7 +59,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     local_actor = local_actor.to(local_model_device)
     local_critic = local_critic.to(local_model_device)
     local_critic_head = local_critic_head.to(local_model_device)
-    local_loss_module, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
+    local_loss_module, local_advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
     local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic_head)
 
     collector, state_dict = make_collector(cfg, local_actor)
@@ -70,8 +70,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor=local_actor,
         critic=local_critic,
         collector=collector,
-        objective=objective,
-        advantage=advantage,
+        objective=local_loss_module,
+        advantage=local_advantage,
         buffer=buffer,
         updates_per_batch=320,
         device=cfg.optim.device,

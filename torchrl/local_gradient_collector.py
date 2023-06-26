@@ -70,15 +70,16 @@ class GradientCollector:
             self,
             weights: Optional[TensorDictBase] = None,
     ) -> None:
+        pass
 
         # for g, p in zip(weights, self.objective.parameters()):
         #     p.data = torch.from_numpy(g).to(self.device)
         #     p.grad.zero_()
 
-        params = self.objective.parameters()
-        for g, p in zip(weights, params):
-            p.data = torch.from_numpy(g).to(self.device)
-            p.grad.zero_()
+        # params = self.objective.parameters()
+        # for g, p in zip(weights, params):
+        #     p.data = torch.from_numpy(g).to(self.device)
+        #     p.grad.zero_()
 
         # params = itertools.chain(self.collector.parameters())
         # for g, p in zip(weights, params):
