@@ -6,6 +6,14 @@ from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
 
 class GPT2RewardModel(nn.Module):
+    """Wrapper around GPT2-like models to enable their use as reward models.
+
+    This wrapper replaces the language modelling head of the GPT2 model with a new
+    linear layer with 1 output that can be used as a reward signal. It also exposes the
+    method ``compute_reward_loss`` which calculates the reward loss by comparing two
+    batches, one chosen, one rejected.
+    """
+
     def __init__(self, model_path=None):
         super().__init__()
         if model_path:
@@ -38,6 +46,12 @@ class GPT2RewardModel(nn.Module):
 
     @staticmethod
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
+        """Compute the reward loss given a chosen and rejected batch.
+
+        The loss is computed as loss = -log_sigmoid(chosen_reward - rejected_reward).
+        This loss is small when the reward model favours the chosen data and large if
+        the model favours the rejected data.
+        """
         chosen_ids = chosen_batch.input_ids
         rejected_ids = rejected_batch.input_ids
         chosen_rewards = chosen_batch.rewards
