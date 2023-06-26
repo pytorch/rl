@@ -5,7 +5,7 @@
 #
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
-set -e
+set -euxo pipefail
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -57,6 +57,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 #yum makecache
-#yum -y install glfw-devel
+# sudo yum -y install glfw
+yum -y install glfw-devel
 #yum -y install libGLEW
 #yum -y install gcc-c++
