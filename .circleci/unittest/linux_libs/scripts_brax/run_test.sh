@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-set -e
+set -euxo pipefail
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git wget
 
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -17,7 +16,7 @@ env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 # more logging
 export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
@@ -27,6 +26,9 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 
 # this workflow only tests the libs
 python -c "import brax"
+python -c "import brax.envs"
+python -c "import jax"
+python3 -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestBrax --error-for-skips
 coverage combine

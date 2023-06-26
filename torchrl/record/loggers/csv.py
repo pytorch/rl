@@ -5,7 +5,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import torch
 from torch import Tensor
@@ -123,3 +123,6 @@ class CSVLogger(Logger):
 
     def __repr__(self) -> str:
         return f"CSVLogger(exp_name={self.exp_name}, experiment={self.experiment.__repr__()})"
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        raise NotImplementedError("Logging histograms in cvs is not permitted.")
