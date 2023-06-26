@@ -16,7 +16,7 @@ import random
 import itertools
 import numpy as np
 import torch
-from torchrl.gradient_collector import GradientCollector
+from torchrl.local_gradient_collector import GradientCollector
 from tensordict import TensorDict
 
 # Set seeds for reproducibility
@@ -55,11 +55,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create local modules
     local_model_device = cfg.optim.device
-    local_actor, local_critic = make_ppo_models(cfg)
+    local_actor, local_critic, local_critic_head = make_ppo_models(cfg)
     local_actor = local_actor.to(local_model_device)
     local_critic = local_critic.to(local_model_device)
-    local_loss_module, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
-    local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
+    local_loss_module, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
+    local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic_head)
 
     collector = make_collector(cfg, local_actor)
     objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
