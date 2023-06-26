@@ -34,6 +34,9 @@ torch.manual_seed(int(2023))
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import torch
+    import tqdm
+    from tensordict import TensorDict
+    from torchrl.envs.utils import ExplorationType, set_exploration_type
     from utils import (
         make_collector,
         make_data_buffer,
@@ -42,7 +45,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_optim,
         make_ppo_models,
         make_test_env,
-        make_advantage_module,
     )
 
     # Correct for frame_skip
@@ -50,29 +52,38 @@ def main(cfg: "DictConfig"):  # noqa: F821
     cfg.collector.frames_per_batch = (
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
-    num_mini_batches = (cfg.collector.frames_per_batch // cfg.loss.mini_batch_size) * cfg.loss.ppo_epochs
+    mini_batch_size = cfg.loss.mini_batch_size = (
+        cfg.loss.mini_batch_size // cfg.env.frame_skip
+    )
 
-    # Create local modules
-    local_model_device = cfg.optim.device
-    local_actor, local_critic, local_critic_head = make_ppo_models(cfg)
-    local_actor = local_actor.to(local_model_device)
-    local_critic = local_critic.to(local_model_device)
-    local_critic_head = local_critic_head.to(local_model_device)
-    local_loss_module, local_advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
-    local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic_head)
+    model_device = cfg.optim.device
+    actor, critic, critic_head = make_ppo_models(cfg)
 
-    collector, state_dict = make_collector(cfg, local_actor)
-    objective, advantage = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic, value_head=local_critic_head)
-    buffer = make_data_buffer(cfg)
+    collector, state_dict = make_collector(cfg, policy=actor)
+    data_buffer = make_data_buffer(cfg)
+    loss_module, adv_module = make_loss(
+        cfg.loss,
+        actor_network=actor,
+        value_network=critic,
+        value_head=critic_head,
+    )
+    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
+
+    batch_size = cfg.collector.total_frames * cfg.env.num_envs
+    num_mini_batches = batch_size // mini_batch_size
+    total_network_updates = (
+        (cfg.collector.total_frames // batch_size)
+        * cfg.loss.ppo_epochs
+        * num_mini_batches
+    )
 
     grad_worker = GradientCollector(
-        actor=local_actor,
-        critic=local_critic,
+        actor=actor,
+        critic=critic,
         collector=collector,
-        objective=local_loss_module,
-        advantage=local_advantage,
-        buffer=buffer,
+        objective=loss_module,
+        advantage=adv_module,
+        buffer=data_buffer,
         updates_per_batch=320,
         device=cfg.optim.device,
     )
@@ -87,12 +98,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     for remote_grads in grad_worker:
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(local_loss_module.parameters(), max_norm=0.5)
+        grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
 
         # Update local policy
-        local_optim.step()
+        optim.step()
         print(f"optimisation step!, grad norm {grad_norm}")
-        local_optim.zero_grad()
+        optim.zero_grad()
 
         # Update counter
         collected_frames += frames_in_batch
@@ -106,11 +117,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
             < collected_frames // record_interval
         ):
 
-            with torch.no_grad():
+            with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
                 test_env.eval()
-                local_actor.eval()
+                actor.eval()
+                # Generate a complete episode
                 td_test = test_env.rollout(
-                    policy=local_actor,
+                    policy=actor,
                     max_steps=10_000_000,
                     auto_reset=True,
                     auto_cast_to_device=True,
@@ -121,7 +133,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     td_test["next", "reward"].sum().item(),
                     collected_frames,
                 )
-                local_actor.train()
+                actor.train()
                 del td_test
 
 
