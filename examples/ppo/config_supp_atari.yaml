@@ -31,11 +31,7 @@ logger:
 
 # Optim
 optim:
-<<<<<<< HEAD:examples/ppo/config_supp_atari.yaml
-  device: cuda:2
-=======
   device: cuda:0
->>>>>>> main:examples/ppo/config.yaml
   lr: 2.5e-4
   weight_decay: 0.0
   lr_scheduler: True
