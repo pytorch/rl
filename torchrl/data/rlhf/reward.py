@@ -142,7 +142,7 @@ class PairwiseDataset:
 
 
 def pre_tokenization_hook(dataset, min_length=5):
-    """Pre-tokenizer for the eward model (comparison) dataset.
+    """Pre-tokenizer for the reward model (comparison) dataset.
 
     This function selects all samples where the length of the prompt is
     sufficient and where the ``"chosen"`` and ``"rejected"`` entries differ.
