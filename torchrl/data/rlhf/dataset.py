@@ -23,7 +23,7 @@ _has_datasets = importlib.util.find_spec("datasets") is not None
 
 
 class TokenizedDatasetLoader:
-    """Loads a tokenized dataset and caches a memory-mapped copy of it.
+    """Loads a tokenizes dataset, and caches a memory-mapped copy of it.
 
     Args:
         split (str): One of ``"train"`` or ``"valid"``.
