@@ -26,16 +26,19 @@ class GradientWorker:
 
         self.device = device
         self.objective = objective
-        self.weights = TensorDict(dict(self.objective.named_parameters()), [])
-        self.weights.apply(set_grad)
-        self.weights.lock_()
+
+        with torch.no_grad():
+            self.weights = TensorDict(dict(self.objective.named_parameters()), [])
+            self.weights.apply(set_grad)
+            self.weights.lock_()
 
     def update_policy_weights_(
             self,
             weights,
     ) -> None:
 
-        self.weights = self.weights.detach()  # Seems required
+        # self.weights = self.weights.detach()  # Seems required
+        # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         self.weights.update_(weights)
         self.weights.apply(set_grad)
 

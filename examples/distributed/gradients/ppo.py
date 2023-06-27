@@ -14,6 +14,11 @@ import copy
 import hydra
 
 
+def apply_grad(w, g):
+    w.grad.copy_(g)
+    return w
+
+
 @hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
@@ -133,13 +138,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Compute gradients
                 grads = grad_worker.compute_gradients(batch)
 
-                def apply_grad(w, g):
-                    try:
-                        w.grad.copy_(g)
-                    except:
-                        w.grad = g
-                    return w
-
                 weights.apply(apply_grad, grads)
 
                 # Update policy
@@ -148,7 +146,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scheduler.step()
                 optim.zero_grad()
 
-                weights_copy = weights.detach().clone()
+                weights_copy = weights.apply(lambda p: p.data)
                 grad_worker.update_policy_weights_(weights_copy)
 
         collector.update_policy_weights_()
