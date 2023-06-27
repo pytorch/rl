@@ -21,14 +21,8 @@ from torchrl.data.rlhf.dataset import (
     get_dataloader,
     TokenizedDatasetLoader,
 )
-from torchrl.data.rlhf.prompt import (
-    PromptData,
-    PromptTensorDictTokenizer,
-)
-from torchrl.data.rlhf.reward import (
-    PairwiseDataset,
-    pre_tokenization_hook,
-)
+from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
+from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
 from torchrl.modules.models.rlhf import GPT2RewardModel
 from transformers import AutoTokenizer
 
@@ -353,21 +347,23 @@ class TestTokenizers:
 @pytest.mark.parametrize("batch_size", [5, 6])
 @pytest.mark.parametrize("block_size", [15, 50])
 @pytest.mark.parametrize("device", get_default_devices())
-def test_reward_model(tmpdir, batch_size, block_size, device):
-    dataset_name = f"{HERE}/datasets_mini/openai_summarize_tldr"
-    tensorclass_type = PromptData
-    dl = get_dataloader(
-        batch_size,
-        block_size,
-        tensorclass_type,
-        device,
-        dataset_name=dataset_name,
-        infinite=True,
-        prefetch=0,
-        split="train",
-        root_dir=tmpdir,
-        from_disk=True,
-    )
+def test_reward_model(tmpdir1, tmpdir2, batch_size, block_size, device):
+    dataset_path = f"{HERE}/assets/openai_summarize_tldr.zip"
+    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
+        zip_ref.extractall(tmpdir2)
+        tensorclass_type = PromptData
+        dl = get_dataloader(
+            batch_size,
+            block_size,
+            tensorclass_type,
+            device,
+            dataset_name=tmpdir2 / "openai_summarize_tldr",
+            infinite=True,
+            prefetch=0,
+            split="train",
+            root_dir=tmpdir1,
+            from_disk=True,
+        )
 
     reward_model = GPT2RewardModel().to(device)
 
