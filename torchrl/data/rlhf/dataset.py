@@ -184,6 +184,7 @@ def tokenize(
     if not _has_transformers:
         raise ImportError("The transformers library is missing.")
     from transformers import AutoTokenizer
+
     if num_workers is None:
         num_workers = max(os.cpu_count() // 2, 1)
     if excluded_features is None:
