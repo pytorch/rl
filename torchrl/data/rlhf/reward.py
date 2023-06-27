@@ -3,10 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib
 from typing import Optional
 
 import torch
-from datasets import Dataset as HFDataset
 
 from tensordict import tensorclass
 
@@ -14,6 +14,7 @@ from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoade
 from tqdm import tqdm
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
+_has_datasets = importlib.util.find_spec("datasets") is not None
 
 
 @tensorclass
@@ -188,6 +189,12 @@ def pre_tokenization_hook(dataset, min_length=5):
         })
 
     """
+    if not _has_datasets:
+        raise ImportError(
+            "datasets module couldn't be found. Make sure it is installed in your environment."
+        )
+    from datasets import Dataset as HFDataset
+
     chosen = []
     rejected = []
     for sample in tqdm(dataset):

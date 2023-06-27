@@ -125,9 +125,7 @@ class TokenizedDatasetLoader:
         self.tokenizer = tokenizer
 
     def load(self):
-        """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise.
-
-        """
+        """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise."""
         root_dir = self.root_dir
         max_length = self.max_length
         split = self.split

@@ -237,12 +237,9 @@ efficient sampling.
     PromptTensorDictTokenizer
     RewardData
     TensorDictTokenizer
+    TokenizedDatasetLoader
     create_infinite_iterator
-    create_or_load_dataset
-    dataset_to_tensordict
     get_dataloader
-    load_dataset
-    tokenize
 
 Utils
 -----
