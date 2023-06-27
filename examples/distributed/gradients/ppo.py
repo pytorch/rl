@@ -11,7 +11,6 @@ Both state and pixel-based environments are supported.
 The helper functions are coded in the utils.py associated with this script.
 """
 import copy
-
 import hydra
 
 
@@ -80,7 +79,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     remote_actor = copy.deepcopy(actor)
     remote_critic = copy.deepcopy(critic)
     remote_critic_head = copy.deepcopy(critic_head)
-
     remote_loss_module, _ = make_loss(
         cfg.loss,
         actor_network=remote_actor,
@@ -124,31 +122,37 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             for i, batch in enumerate(data_buffer):
 
-                # Backward pass
+                # Compute gradients
                 grads = grad_worker.compute_gradients(batch)
-
                 for g, p in zip(grads, list(loss_module.parameters())):
                     if g is not None:
                         p.grad = torch.from_numpy(g).to("cuda")
 
+                # Update policy
                 optim.step()
                 if scheduler is not None:
                     scheduler.step()
                 optim.zero_grad()
 
-                # Get weigths
+                # Get weights
                 weights = []
                 for p in loss_module.parameters():
                     if p.data is not None:
-                        weights.append(p.data.clone().cpu().numpy())
+                        weights.append(p.data.cpu().numpy())
+                    else:
+                        weights.append(None)
 
                 # Get gradients
                 grads = []
                 for p in loss_module.parameters():
-                    if p.grads is not None:
-                        weights.append(p.grad.clone().cpu().numpy())
+                    if p.grad is not None:
+                        grads.append(p.grad.cpu().numpy())
+                    else:
+                        grads.append(None)
 
                 grad_worker.update_policy_weights_(weights, grads)
+
+        collector.update_policy_weights_()
 
         # Test current policy
         if (

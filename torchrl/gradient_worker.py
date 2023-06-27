@@ -30,12 +30,12 @@ class GradientWorker:
 
         for w, p in zip(weights, self.objective.parameters()):
             if w is not None:
-                # p.grad.zero_()
-                p.data = torch.from_numpy(w).to(self.device).clone()
+                p.grad.zero_()
+                p.data = torch.from_numpy(w).to(self.device)
 
         for g, p in zip(grads, self.objective.parameters()):
             if g is not None:
-                p.grad = torch.from_numpy(g).to(self.device).clone()
+                p.grad = torch.from_numpy(g).to(self.device)
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
@@ -55,7 +55,7 @@ class GradientWorker:
         grads = []
         for p in self.objective.parameters():
             if p.grad is not None:
-                grads.append(p.grad.clone().cpu().numpy())
+                grads.append(p.grad.cpu().numpy())
             else:
                 grads.append(None)
 
