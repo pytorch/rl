@@ -21,21 +21,21 @@ class GradientWorker:
 
         self.device = device
         self.objective = objective
+        self.weights = TensorDict(dict(self.objective.named_parameters()), [])
+
+        def set_grad(p):
+            p.grad = torch.zeros_like(p.data)
+            return p
+        self.weights.apply(set_grad)
+
+        self.weights.lock_()
 
     def update_policy_weights_(
             self,
             weights,
             grads,
     ) -> None:
-
-        for w, p in zip(weights, self.objective.parameters()):
-            if w is not None:
-                p.grad.zero_()
-                p.data = torch.from_numpy(w).to(self.device)
-
-        for g, p in zip(grads, self.objective.parameters()):
-            if g is not None:
-                p.grad = torch.from_numpy(g).to(self.device)
+        self.weights.update_(weights)
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
@@ -52,11 +52,6 @@ class GradientWorker:
         grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
         # Get gradients
-        grads = []
-        for p in self.objective.parameters():
-            if p.grad is not None:
-                grads.append(p.grad.cpu().numpy())
-            else:
-                grads.append(None)
+        grads = self.weights.apply(lambda p: p.grad)
 
         return grads

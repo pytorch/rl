@@ -53,7 +53,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_head=critic_head,
     )
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
-
+    weights = TensorDict(dict(loss_module.named_parameters()), [])
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // mini_batch_size
     total_network_updates = (
@@ -124,9 +124,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Compute gradients
                 grads = grad_worker.compute_gradients(batch)
-                for g, p in zip(grads, list(loss_module.parameters())):
-                    if g is not None:
-                        p.grad = torch.from_numpy(g).to("cuda")
+
+                def apply_grad(w, g):
+                    try:
+                        w.grad.copy_(g)
+                    except:
+                        w.grad = g
+                    return w
+
+                weights.apply(apply_grad, grads)
 
                 # Update policy
                 optim.step()
@@ -134,23 +140,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scheduler.step()
                 optim.zero_grad()
 
-                # Get weights
-                weights = []
-                for p in loss_module.parameters():
-                    if p.data is not None:
-                        weights.append(p.data.cpu().numpy())
-                    else:
-                        weights.append(None)
-
-                # Get gradients
-                grads = []
-                for p in loss_module.parameters():
-                    if p.grad is not None:
-                        grads.append(p.grad.cpu().numpy())
-                    else:
-                        grads.append(None)
-
-                grad_worker.update_policy_weights_(weights, grads)
+                weights_copy = weights.clone()
+                grad_worker.update_policy_weights_(weights_copy)
 
         collector.update_policy_weights_()
 
