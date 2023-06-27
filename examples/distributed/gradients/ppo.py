@@ -8,32 +8,20 @@ This is a self-contained example of a PPO training script.
 
 Both state and pixel-based environments are supported.
 
-The helper functions are coded in the utils_supp.py associated with this script.
+The helper functions are coded in the utils.py associated with this script.
 """
 import copy
+
 import hydra
-import random
-import itertools
-import numpy as np
-import torch
-from torchrl.gradient_collector import GradientCollector
-from tensordict import TensorDict
-
-# Set seeds for reproducibility
-# Set a seed for the random module
-random.seed(int(2023))
-
-# Set a seed for the numpy module
-np.random.seed(int(2023))
-
-# Set a seed for the torch module
-torch.manual_seed(int(2023))
 
 
-@hydra.main(config_path=".", config_name="config")
+@hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import torch
+    import tqdm
+    from tensordict import TensorDict
+    from torchrl.envs.utils import ExplorationType, set_exploration_type
     from utils import (
         make_collector,
         make_data_buffer,
@@ -43,78 +31,124 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_ppo_models,
         make_test_env,
     )
+    from torchrl.gradient_worker import GradientWorker
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
     cfg.collector.frames_per_batch = (
         cfg.collector.frames_per_batch // cfg.env.frame_skip
     )
-    cfg.loss.mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
-    num_mini_batches = (cfg.collector.frames_per_batch // cfg.loss.mini_batch_size) * cfg.loss.ppo_epochs
-
-    # Create local modules
-    local_model_device = cfg.optim.device
-    local_actor, local_critic = make_ppo_models(cfg)
-    local_actor = local_actor.to(local_model_device)
-    local_critic = local_critic.to(local_model_device)
-    local_loss_module, _ = make_loss(cfg.loss, actor_network=local_actor, value_network=local_critic)
-    local_optim = make_optim(cfg.optim, actor_network=local_actor, value_network=local_critic)
-
-    grad_worker = GradientCollector(
-        configuration=cfg,
-        make_actor_critic=make_ppo_models,
-        make_collector=make_collector,
-        make_objective=make_loss,
-        make_buffer=make_data_buffer,
-        updates_per_batch=num_mini_batches,
-        device=cfg.optim.device,
+    mini_batch_size = cfg.loss.mini_batch_size = (
+        cfg.loss.mini_batch_size // cfg.env.frame_skip
     )
 
-    # Ugly hack
-    grad_worker.policy.load_state_dict(local_actor.state_dict())
-    grad_worker.critic.load_state_dict(local_critic.state_dict())
+    model_device = cfg.optim.device
+    actor, critic, critic_head = make_ppo_models(cfg)
+
+    collector, state_dict = make_collector(cfg, policy=actor)
+    data_buffer = make_data_buffer(cfg)
+    loss_module, adv_module = make_loss(
+        cfg.loss,
+        actor_network=actor,
+        value_network=critic,
+        value_head=critic_head,
+    )
+    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
+
+    batch_size = cfg.collector.total_frames * cfg.env.num_envs
+    num_mini_batches = batch_size // mini_batch_size
+    total_network_updates = (
+        (cfg.collector.total_frames // batch_size)
+        * cfg.loss.ppo_epochs
+        * num_mini_batches
+    )
+
+    scheduler = None
+    if cfg.optim.lr_scheduler:
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
+        )
 
     logger = None
     if cfg.logger.backend:
         logger = make_logger(cfg.logger)
-    test_env = make_test_env(cfg.env)
+    test_env = make_test_env(cfg.env, state_dict)
     record_interval = cfg.logger.log_interval
-    frames_in_batch = cfg.collector.frames_per_batch
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
 
-    params = TensorDict(dict(local_loss_module.named_parameters()), [])
+    remote_actor = copy.deepcopy(actor)
+    remote_critic = copy.deepcopy(critic)
+    remote_critic_head = copy.deepcopy(critic_head)
 
-    for remote_grads in grad_worker:
+    remote_loss_module, _ = make_loss(
+        cfg.loss,
+        actor_network=remote_actor,
+        value_network=remote_critic,
+        value_head=remote_critic_head,
+    )
+    grad_worker = GradientWorker(
+        objective=remote_loss_module,
+        device=cfg.optim.device,
+    )
 
-        # for g, p in zip(remote_grads, local_loss_module.parameters()):
-        #     if g is not None:
-        #         p.grad = torch.from_numpy(g).to(local_model_device)
+    # Main loop
+    r0 = None
+    l0 = None
+    frame_skip = cfg.env.frame_skip
+    ppo_epochs = cfg.loss.ppo_epochs
+    total_done = 0
+    for data in collector:
 
-        params = itertools.chain(local_actor.parameters(), local_critic.parameters())
-        for g, p in zip(remote_grads, params):
-            if g is not None:
-                p.grad = torch.from_numpy(g).to(local_model_device)
+        frames_in_batch = data.numel()
+        total_done += data.get(("next", "done")).sum()
+        collected_frames += frames_in_batch * frame_skip
+        pbar.update(data.numel())
 
-        grad_norm = torch.nn.utils.clip_grad_norm_(
-            list(local_actor.parameters()) + list(local_critic.parameters()), max_norm=0.5)
+        # Log end-of-episode accumulated rewards for training
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        if logger is not None and len(episode_rewards) > 0:
+            logger.log_scalar(
+                "reward_training", episode_rewards.mean().item(), collected_frames
+            )
 
-        # Update local policy
-        local_optim.step()
-        print(f"optimisation step!, grad norm {grad_norm}")
-        local_optim.zero_grad()
+        for j in range(ppo_epochs):
 
-        # Update grad collector policy
-        weights = []
-        for p in local_loss_module.parameters():
-            weights.append(p.data.cpu().numpy())
+            # Compute GAE
+            with torch.no_grad():
+                data = adv_module(data.to(model_device)).cpu()
 
-        for p in list(local_actor.parameters()) + list(local_critic.parameters()):
-            weights.append(p.data.cpu().numpy())
+            # Update the data buffer
+            data_reshape = data.reshape(-1)
+            data_buffer.extend(data_reshape)
 
-        grad_worker.update_policy_weights_(weights)
+            for i, batch in enumerate(data_buffer):
 
-        # Update counter
-        collected_frames += frames_in_batch
+                # Backward pass
+                grads = grad_worker.compute_gradients(batch)
+
+                for g, p in zip(grads, list(loss_module.parameters())):
+                    if g is not None:
+                        p.grad = torch.from_numpy(g).to("cuda")
+
+                optim.step()
+                if scheduler is not None:
+                    scheduler.step()
+                optim.zero_grad()
+
+                # Get weigths
+                weights = []
+                for p in loss_module.parameters():
+                    if p.data is not None:
+                        weights.append(p.data.clone().cpu().numpy())
+
+                # Get gradients
+                grads = []
+                for p in loss_module.parameters():
+                    if p.grads is not None:
+                        weights.append(p.grad.clone().cpu().numpy())
+
+                grad_worker.update_policy_weights_(weights, grads)
 
         # Test current policy
         if (
@@ -123,11 +157,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
             < collected_frames // record_interval
         ):
 
-            with torch.no_grad():
+            with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
                 test_env.eval()
-                local_actor.eval()
+                actor.eval()
+                # Generate a complete episode
                 td_test = test_env.rollout(
-                    policy=local_actor,
+                    policy=actor,
                     max_steps=10_000_000,
                     auto_reset=True,
                     auto_cast_to_device=True,
@@ -138,10 +173,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     td_test["next", "reward"].sum().item(),
                     collected_frames,
                 )
-                local_actor.train()
+                actor.train()
                 del td_test
-
-        torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

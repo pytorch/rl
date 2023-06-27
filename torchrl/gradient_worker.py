@@ -10,17 +10,9 @@ import torch
 from tensordict import TensorDict
 
 
-class GradientCollector:
-    """
-    This Python class serves as a solution to abstract data collection and gradient
-    computation.
+class GradientWorker:
+    """Worker that computes gradients for a given objective."""
 
-    This class is an iterable that yields model gradients until a target number of collected
-    frames is reached.
-
-    Args:
-        configuration: A dictionary containing the configuration parameters.
-    """
     def __init__(
         self,
         objective,
@@ -33,11 +25,17 @@ class GradientCollector:
     def update_policy_weights_(
             self,
             weights,
+            grads,
     ) -> None:
 
-        for g, p in zip(weights, self.objective.parameters()):
-            p.data = torch.from_numpy(g).to(self.device)
-            p.grad.zero_()
+        for w, p in zip(weights, self.objective.parameters()):
+            if w is not None:
+                # p.grad.zero_()
+                p.data = torch.from_numpy(w).to(self.device).clone()
+
+        for g, p in zip(grads, self.objective.parameters()):
+            if g is not None:
+                p.grad = torch.from_numpy(g).to(self.device).clone()
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
@@ -57,7 +55,7 @@ class GradientCollector:
         grads = []
         for p in self.objective.parameters():
             if p.grad is not None:
-                grads.append(p.grad.data.cpu().numpy())
+                grads.append(p.grad.clone().cpu().numpy())
             else:
                 grads.append(None)
 
