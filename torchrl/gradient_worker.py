@@ -33,7 +33,6 @@ class GradientWorker:
     def update_policy_weights_(
             self,
             weights,
-            grads,
     ) -> None:
         self.weights.update_(weights)
 
