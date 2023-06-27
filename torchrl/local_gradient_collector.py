@@ -70,7 +70,8 @@ class GradientCollector:
             self,
             weights: Optional[TensorDictBase] = None,
     ) -> None:
-        pass
+
+        print("Updating remote policy...")
 
         # for g, p in zip(weights, self.objective.parameters()):
         #     p.data = torch.from_numpy(g).to(self.device)
@@ -85,7 +86,6 @@ class GradientCollector:
         # for g, p in zip(weights, params):
         #     p.data = torch.from_numpy(g).to(self.device)
         #     p.grad.zero_()
-
 
     def shutdown(self):
         self.collector.shutdown()
@@ -117,7 +117,7 @@ class GradientCollector:
                 loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
                 # Backprop loss
-                print("Computing gradients...")
+                print("Computing remote gradients...")
                 loss_sum.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
