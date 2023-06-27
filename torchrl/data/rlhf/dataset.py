@@ -22,16 +22,8 @@ _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
 
-def create_or_load_dataset(
-    split,
-    max_length,
-    dataset_name,
-    tokenizer_fn: Type[TensorDictTokenizer],
-    pre_tokenization_hook=None,
-    root_dir=None,
-    from_disk=False,
-):
-    """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise.
+class TokenizedDatasetLoader:
+    """Loads a tokenized dataset and caches a memory-mapped copy of it.
 
     Args:
         split (str): One of ``"train"`` or ``"valid"``.
@@ -55,246 +47,259 @@ def create_or_load_dataset(
         from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
             will be used. Otherwise, :func:`datasets.load_dataset` will be used.
             Defaults to ``False``.
+        valid_size (int, optional): the size of the validation dataset (if split
+            starts with ``"valid"``) will be truncated to this value.
+            Defaults to 2000 items.
+        num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`
+            which is called during tokenization.
+            Defaults to ``max(os.cpu_count() // 2, 1)``.
+        tokenizer_class (type, optional): A tokenizer class, such as
+            :class:`~transformers.AutoTokenizer` (default).
+        tokenizer_model_name (str, optional): The model from which the vocabulary
+            should be gathered. Defaults to ``"gpt2"``.
 
-    The dataset will be stored in ``root/<split>/<max_length>/``
+    The dataset will be stored in ``<root_dir>/<split>/<max_length>/``.
+
     Examples:
-        >>> from torchrl.data.rlhf import TensorDictTokenizer        
-        >>> from torchrl.data.rlhf.reward import pre_tokenization_hook
+        >>> from torchrl.data.rlhf import TensorDictTokenizer
+        >>> from torchrl.data.rlhf.reward import  pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
         >>> dataset_name = "CarperAI/openai_summarize_comparisons"
-        >>> dataset = create_or_load_dataset(
+        >>> loader = TokenizedDatasetLoader(
         ...     split,
         ...     max_length,
         ...     dataset_name,
         ...     TensorDictTokenizer,
         ...     pre_tokenization_hook=pre_tokenization_hook,
         ... )
+        >>> dataset = loader.load()
         >>> print(dataset)
         TensorDict(
             fields={
-                train: TensorDict(
-                    fields={
-                        550: TensorDict(
-                            fields={
-                                attention_mask: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
-                                input_ids: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([185068, 550]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([185068, 550]),
-                    device=None,
-                    is_shared=False)},
-            batch_size=torch.Size([185068, 550]),
+                attention_mask: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: MemmapTensor(shape=torch.Size([185068, 550]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([185068]),
             device=None,
             is_shared=False)
 
     """
-    if root_dir is None:
-        root_dir = Path(os.environ.get("HOME")) / ".cache/torchrl/data/"
-        os.makedirs(root_dir, exist_ok=True)
-    root_dir = Path(root_dir)
-    data_dir = root_dir / str(Path(dataset_name).name).split("-")[0]
-    data_dir_total = data_dir / split / str(max_length)
-    # search for data
-    if os.path.exists(data_dir_total):
-        dataset = TensorDict.load_memmap(data_dir_total)
+
+    def __init__(
+        self,
+        split,
+        max_length,
+        dataset_name,
+        tokenizer_fn: Type[TensorDictTokenizer],
+        pre_tokenization_hook=None,
+        root_dir=None,
+        from_disk=False,
+        valid_size: int = 2000,
+        num_workers: int = None,
+        tokenizer_class=None,
+        tokenizer_model_name=None,
+    ):
+        self.split = split
+        self.max_length = max_length
+        self.dataset_name = dataset_name
+        self.tokenizer_fn = tokenizer_fn
+        self.pre_tokenization_hook = pre_tokenization_hook
+        self.root_dir = root_dir
+        self.from_disk = from_disk
+        if num_workers is None:
+            num_workers = max(os.cpu_count() // 2, 1)
+        self.num_workers = num_workers
+        if tokenizer_class is None:
+            from transformers import AutoTokenizer
+
+            tokenizer_class = AutoTokenizer
+        if tokenizer_model_name is None:
+            tokenizer_model_name = "gpt2"
+        self.make_tokenizer(
+            tokenizer_class=AutoTokenizer, tokenizer_model_name=tokenizer_model_name
+        )
+
+    def make_tokenizer(self, *, tokenizer_class, tokenizer_model_name):
+        tokenizer = tokenizer_class.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        self.tokenizer = tokenizer
+
+    def load(self):
+        """Loads a pre-processed, memory-mapped dataset if it exists, and creates it otherwise.
+
+        """
+        root_dir = self.root_dir
+        max_length = self.max_length
+        split = self.split
+        if root_dir is None:
+            root_dir = Path(os.environ.get("HOME")) / ".cache/torchrl/data/"
+            os.makedirs(root_dir, exist_ok=True)
+        root_dir = Path(root_dir)
+        data_dir = root_dir / str(Path(self.dataset_name).name).split("-")[0]
+        data_dir_total = data_dir / split / str(max_length)
+        # search for data
+        if os.path.exists(data_dir_total):
+            dataset = TensorDict.load_memmap(data_dir_total)
+            return dataset
+        dataset = self._load_dataset()
+        dataset = self._tokenize(dataset)
+        prefix = (split, str(max_length))
+        return self.dataset_to_tensordict(
+            dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
+        )[prefix]
+
+    def _load_dataset(self):
+        """Loads a text dataset from ``datasets``.
+
+        Returns: a dataset of type ``datasets.Dataset``.
+        """
+        if not _has_datasets:
+            raise ImportError(
+                "preproc_data requires the datasets package to be installed."
+            )
+        from datasets import load_dataset, load_from_disk
+
+        if self.from_disk:
+            dataset = load_from_disk(self.dataset_name)[self.split]
+        else:
+            dataset = load_dataset(self.dataset_name, split=self.split)
+        if self.split.startswith("valid"):
+            # reduce size of validation dataset
+            dataset = dataset.select(range(self.valid_size))
+        if self.pre_tokenization_hook is not None:
+            dataset = self.pre_tokenization_hook(dataset)
         return dataset
-    dataset = load_dataset(
-        split=split,
-        dataset_name=dataset_name,
-        pre_tokenization_hook=pre_tokenization_hook,
-        from_disk=from_disk,
-    )
-    dataset = tokenize(
+
+    def _tokenize(
+        self,
         dataset,
-        max_length=max_length,
-        tokenizer_fn=tokenizer_fn,
-    )
-    prefix = (split, str(max_length))
-    return dataset_to_tensordict(
-        dataset, data_dir=data_dir, prefix=prefix, valid_mask_key="valid_sample"
-    )[prefix]
+        excluded_features: Sequence[str] | None = None,
+    ):
+        """Preprocesses a text dataset from ``datasets``.
 
+        Args:
+            dataset (datasets.Dataset): a dataset loaded using :meth:`~.load_dataset`.
+            excluded_features (sequence of str, optional): the features to exclude
+                once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
 
-def load_dataset(
-    split,
-    dataset_name,
-    pre_tokenization_hook=None,
-    from_disk: bool = False,
-):
-    """Loads a text dataset from ``datasets``.
+        Returns: a dataset of type ``datasets.Dataset``.
+        """
+        if not _has_transformers:
+            raise ImportError("The transformers library is missing.")
 
-    Args:
-        split (str): One of ``"train"`` or ``"valid"``.
-        dataset_name (str): the name or path of the dataset.
-        pre_tokenization_hook (callable): called on
-            the Dataset before tokenization. It should return a modified
-            Dataset object.
-            The intended use is for carrying out tasks that
-            require modifying the dataset as a whole as opposed to modifying
-            individual datapoints, for example discarding certain datapoints
-            based on a particular condition. Tokenization and other
-            "elementwise" operations on the data are performed by the process
-            function which is mapped over the dataset.
-        from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
-            will be used. Otherwise, :func:`datasets.load_dataset` will be used.
-            Defaults to ``False``.
+        num_workers = self.num_workers
+        if excluded_features is None:
+            excluded_features = {"text", "prompt", "label", "valid_sample"}
+        tokenizer = self.tokenizer
+        # tokenize the dataset
+        # TODO: replace this by TensorDict.map
+        dataset = dataset.map(
+            self.tokenizer_fn(
+                tokenizer, max_length=self.max_length, return_tensordict=False
+            ),
+            desc="Tokenizing...",
+            num_proc=num_workers,
+            batched=True,
+        )
+        if not isinstance(dataset, TensorDictBase):
+            dataset_dict = dataset.to_dict()
+            if excluded_features:
+                dataset_dict = {
+                    key: value
+                    for key, value in dataset_dict.items()
+                    if key not in excluded_features
+                }
+            dataset = TensorDict.from_dict(dataset_dict)
+        elif excluded_features:
+            dataset = dataset.exclude(*excluded_features)
+        # keep non empty rows (i.e. where at least one token is not eos)
+        if "valid_sample" in dataset.keys():
+            mask = dataset.get("valid_sample")
+            dataset = dataset[mask]
+        return dataset
 
-    Returns: a dataset of type ``datasets.Dataset``.
-    """
-    if not _has_datasets:
-        raise ImportError("preproc_data requires the datasets package to be installed.")
-    from datasets import load_dataset, load_from_disk
+    @staticmethod
+    def dataset_to_tensordict(
+        dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
+        data_dir: Path,
+        prefix: NestedKey = None,
+        features: Sequence[str] = None,
+        batch_dims=1,
+        valid_mask_key=None,
+    ):
+        """Convers a dataset to a memory-mapped TensorDict.
 
-    if from_disk:
-        dataset = load_from_disk(dataset_name)[split]
-    else:
-        dataset = load_dataset(dataset_name, split=split)
-    if split.startswith("valid"):
-        # reduce size of validation dataset
-        dataset = dataset.select(range(2_000))
-    if pre_tokenization_hook is not None:
-        dataset = pre_tokenization_hook(dataset)
-    return dataset
+        If the dataset is already a :class:`TensorDict` instance, it is simply converted
+        to a memory-mapped TensorDict.
+        Otherwise, the dataset is expected to have a ``features`` attribute
+        which is a sequence of strings indicating the features that can be found
+        in the dataset. If it does not, the ``features`` must be passed explicitely
+        to this function.
 
+        Args:
+            dataset (datasets.Dataset, TensorDict or equivalent): a dataset to convert
+                to a memory-mapped TensorDict.
+                If ``features`` is ``None``, it must have a ``features`` attribute
+                with the list of keys to write in the tensordict.
+            data_dir (Path or equivalent): directory where the data should be written.
+            prefix (NestedKey, optional): the prefix of the dataset location. This can
+                be used to differentiate several copies of a same dataset that have
+                undergone different preprocessings.
+            features (sequence of str, optional): a sequence of str indicating the
+                features that can be found in the dataset.
+            batch_dims (int, optional): the number of batch_dimensions of the data
+                (ie number of dimensions along which the tensordict can be indexed).
+                Defaults to 1.
+            valid_mask_key (NestedKey, optional): if provided, this entry will be
+                tentatively gathered and used to filder the data. Defaults to
+                ``None`` (ie, no filter key).
 
-def tokenize(
-    dataset,
-    max_length,
-    tokenizer_fn: Type[TensorDictTokenizer],
-    num_workers: int = None,
-    excluded_features: Sequence[str] | None = None,
-):
-    """Preprocesses a text dataset from ``datasets``.
+        Returns: a TensorDict containing memory-mapped tensors with the dataset.
 
-    Args:
-        dataset (datasets.Dataset): a dataset loaded using :func:`~.load_dataset`.
-        max_length (int): the maximum sequence length.
-        tokenizer_fn (callable): the tokeinizing method, such as
-            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,
-            it should return a :class:`tensordict.TensorDict` instance
-            or a dictionary-like structure with the tokenized data.
-        num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`.
-            Defaults to ``max(os.cpu_count() // 2, 1)``.
-        excluded_features (sequence of str, optional): the features to exclude
-            once tokenization is complete. Defaults to ``{"text", "prompt", "label", "valid_sample"}``.
+        Examples:
+            >>> from datasets import Dataset
+            >>> import tempfile
+            >>> data = Dataset.from_dict({"tokens": torch.randint(20, (10, 11)), "labels": torch.zeros(10, 11)})
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     data_memmap = TokenizedDatasetLoader.dataset_to_tensordict(
+            ...         data, data_dir=tmpdir, prefix=("some", "prefix"), features=["tokens", "labels"]
+            ...     )
+            ...     print(data_memmap)
+            TensorDict(
+                fields={
+                    some: TensorDict(
+                        fields={
+                            prefix: TensorDict(
+                                fields={
+                                    labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
+                                    tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
+                                batch_size=torch.Size([10]),
+                                device=None,
+                                is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
 
-    Returns: a dataset of type ``datasets.Dataset``.
-    """
-    if not _has_transformers:
-        raise ImportError("The transformers library is missing.")
-    from transformers import AutoTokenizer
-
-    if num_workers is None:
-        num_workers = max(os.cpu_count() // 2, 1)
-    if excluded_features is None:
-        excluded_features = {"text", "prompt", "label", "valid_sample"}
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
-    # tokenize the dataset
-    # TODO: replace this by TensorDict.map
-    dataset = dataset.map(
-        tokenizer_fn(tokenizer, max_length=max_length, return_tensordict=False),
-        desc="Tokenizing...",
-        num_proc=num_workers,
-        batched=True,
-    )
-    if not isinstance(dataset, TensorDictBase):
-        dataset_dict = dataset.to_dict()
-        if excluded_features:
-            dataset_dict = {
-                key: value
-                for key, value in dataset_dict.items()
-                if key not in excluded_features
-            }
-        dataset = TensorDict.from_dict(dataset_dict)
-    elif excluded_features:
-        dataset = dataset.exclude(*excluded_features)
-    # keep non empty rows (i.e. where at least one token is not eos)
-    if "valid_sample" in dataset.keys():
-        mask = dataset.get("valid_sample")
-        dataset = dataset[mask]
-    return dataset
-
-
-def dataset_to_tensordict(
-    dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
-    data_dir: Path,
-    prefix: NestedKey = None,
-    features: Sequence[str] = None,
-    batch_dims=1,
-    valid_mask_key=None,
-):
-    """Convers a dataset to a memory-mapped TensorDict.
-
-    If the dataset is already a :class:`TensorDict` instance, it is simply converted
-    to a memory-mapped TensorDict.
-    Otherwise, the dataset is expected to have a ``features`` attribute
-    which is a sequence of strings indicating the features that can be found
-    in the dataset. If it does not, the ``features`` must be passed explicitely
-    to this function.
-
-    Args:
-        dataset (datasets.Dataset, TensorDict or equivalent): a dataset to convert
-            to a memory-mapped TensorDict.
-            If ``features`` is ``None``, it must have a ``features`` attribute
-            with the list of keys to write in the tensordict.
-        data_dir (Path or equivalent): directory where the data should be written.
-        prefix (NestedKey, optional): the prefix of the dataset location. This can
-            be used to differentiate several copies of a same dataset that have
-            undergone different preprocessings.
-        features (sequence of str, optional): a sequence of str indicating the
-            features that can be found in the dataset.
-        batch_dims (int, optional): the number of batch_dimensions of the data
-            (ie number of dimensions along which the tensordict can be indexed).
-            Defaults to 1.
-        valid_mask_key (NestedKey, optional): if provided, this entry will be
-            tentatively gathered and used to filder the data. Defaults to
-            ``None`` (ie, no filter key).
-
-    Returns: a TensorDict containing memory-mapped tensors with the dataset.
-
-    Examples:
-        >>> from datasets import Dataset
-        >>> import tempfile
-        >>> data = Dataset.from_dict({"tokens": torch.randint(20, (10, 11)), "labels": torch.zeros(10, 11)})
-        >>> with tempfile.TemporaryDirectory() as tmpdir:
-        ...     data_memmap = dataset_to_tensordict(data, data_dir=tmpdir, prefix=("some", "prefix"), features=["tokens", "labels"])
-        ...     print(data_memmap)
-        TensorDict(
-            fields={
-                some: TensorDict(
-                    fields={
-                        prefix: TensorDict(
-                            fields={
-                                labels: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.float32, is_shared=False),
-                                tokens: MemmapTensor(shape=torch.Size([10, 11]), device=cpu, dtype=torch.int64, is_shared=False)},
-                            batch_size=torch.Size([10]),
-                            device=None,
-                            is_shared=False)},
-                    batch_size=torch.Size([10]),
-                    device=None,
-                    is_shared=False)},
-            batch_size=torch.Size([10]),
-            device=None,
-            is_shared=False)
-
-    """
-    if not isinstance(dataset, TensorDict):
-        if features is None:
-            features = dataset.features
-        if prefix is None:
-            prefix = ()
-        data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
-        out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
-    else:
-        out = dataset
-    if valid_mask_key is not None and valid_mask_key in out.keys(include_nested=True):
-        out = out[out.get(valid_mask_key)]
-    out = TensorDict({prefix: out}, [])
-    out.memmap_(prefix=data_dir)
-    return out
+        """
+        if not isinstance(dataset, TensorDict):
+            if features is None:
+                features = dataset.features
+            if prefix is None:
+                prefix = ()
+            data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
+            out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+        else:
+            out = dataset
+        if valid_mask_key is not None and valid_mask_key in out.keys(
+            include_nested=True
+        ):
+            out = out[out.get(valid_mask_key)]
+        out = TensorDict({prefix: out}, [])
+        out.memmap_(prefix=data_dir)
+        return out
 
 
 def create_infinite_iterator(iterator):

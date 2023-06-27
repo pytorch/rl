@@ -8,7 +8,7 @@ from typing import Optional
 import torch
 from tensordict import tensorclass, TensorDict
 
-from torchrl.data.rlhf.dataset import create_or_load_dataset, TensorDictTokenizer
+from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_tldr"
 
@@ -78,7 +78,7 @@ class PromptData:
 
         """
         dataset_name = dataset_name if dataset_name is not None else DEFAULT_DATASET
-        data = create_or_load_dataset(
+        loader = TokenizedDatasetLoader(
             split,
             max_length,
             dataset_name,
@@ -86,6 +86,7 @@ class PromptData:
             root_dir=root_dir,
             from_disk=from_disk,
         )
+        data = loader.load()
         return cls(**data, labels=data["input_ids"], batch_size=data.shape)
 
 

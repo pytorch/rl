@@ -15,13 +15,7 @@ import pytest
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
 from torchrl.data.rlhf import TensorDictTokenizer
-from torchrl.data.rlhf.dataset import (
-    create_or_load_dataset,
-    dataset_to_tensordict,
-    get_dataloader,
-    load_dataset,
-    tokenize,
-)
+from torchrl.data.rlhf.dataset import get_dataloader, TokenizedDatasetLoader
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
 from transformers import AutoTokenizer
@@ -74,7 +68,7 @@ def test_create_or_load_dataset(
         for i in range(2):
 
             # shutil.copyfileobj(gzip.open(dataset_path), tmpdir2)
-            data = create_or_load_dataset(
+            data = TokenizedDatasetLoader(
                 split="train",
                 max_length=max_length,
                 dataset_name=tmpdir2 / Path(dataset_path).name[:-4],
@@ -82,7 +76,7 @@ def test_create_or_load_dataset(
                 pre_tokenization_hook=pre_tokenization_hook,
                 from_disk=True,
                 root_dir=tmpdir1,
-            )
+            ).load()
             if i == 0:
                 mocked_hello.assert_not_called()
             else:
@@ -114,6 +108,7 @@ def test_create_or_load_dataset(
 )
 def test_preproc_data(
     tmpdir1,
+    tmpdir2,
     max_length,
     dataset_path,
     make_process_fn,
@@ -122,25 +117,25 @@ def test_preproc_data(
 ):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(tmpdir1)
-        dataset = load_dataset(
+        loader = TokenizedDatasetLoader(
             split=split,
+            max_length=max_length,
             dataset_name=tmpdir1 / Path(dataset_path).name[:-4],
+            tokenizer_fn=make_process_fn,
             pre_tokenization_hook=pre_tokenization_hook,
             from_disk=True,
+            root_dir=tmpdir2,
         )
+        dataset = loader._load_dataset()
         assert isinstance(dataset, datasets.Dataset)
-        dataset = tokenize(
-            dataset,
-            max_length=max_length,
-            tokenizer_fn=make_process_fn,
-        )
+        dataset = loader._tokenize(dataset)
         assert isinstance(dataset, TensorDictBase)
 
 
 @pytest.mark.parametrize("suffix", ["c", ("c", "d")])
 def test_dataset_to_tensordict(tmpdir, suffix):
     dataset = datasets.Dataset.from_dict({"a": np.zeros((10,)), "b": np.ones((10,))})
-    td = dataset_to_tensordict(dataset, tmpdir, prefix=suffix)
+    td = TokenizedDatasetLoader.dataset_to_tensordict(dataset, tmpdir, prefix=suffix)
     if suffix == "c":
         assert ("c", "a") in td.keys(True)
         assert ("c", "b") in td.keys(True)

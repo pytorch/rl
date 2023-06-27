@@ -5,12 +5,9 @@
 
 from .dataset import (
     create_infinite_iterator,
-    create_or_load_dataset,
-    dataset_to_tensordict,
     get_dataloader,
-    load_dataset,
     TensorDictTokenizer,
-    tokenize,
+    TokenizedDatasetLoader,
 )
 from .prompt import PromptData, PromptTensorDictTokenizer
 from .reward import PairwiseDataset, RewardData

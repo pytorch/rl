@@ -10,7 +10,7 @@ from datasets import Dataset as HFDataset
 
 from tensordict import tensorclass
 
-from torchrl.data.rlhf.dataset import create_or_load_dataset, TensorDictTokenizer
+from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
 from tqdm import tqdm
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
@@ -113,7 +113,7 @@ class PairwiseDataset:
         """
         if dataset_name is None:
             dataset_name = DEFAULT_DATASET
-        data = create_or_load_dataset(
+        loader = TokenizedDatasetLoader(
             split,
             max_length,
             dataset_name,
@@ -122,6 +122,7 @@ class PairwiseDataset:
             root_dir=root_dir,
             from_disk=from_disk,
         )
+        data = loader.load()
         maxidx = data.shape[0] // 2
         batch_size = [maxidx]
         # this is a zero-copy creation, as we index memmap-arrays without
