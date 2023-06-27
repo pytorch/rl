@@ -21,6 +21,6 @@ conda deactivate && conda activate ./env
 
 python -c "import transformers, datasets"
 
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_rlhf.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_rlhf.py --instafail -v --durations 200 --capture no --error-for-skips
 coverage combine
 coverage xml -i
