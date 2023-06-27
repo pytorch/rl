@@ -32,17 +32,17 @@ class GradientCollector:
 
     def update_policy_weights_(
             self,
-            weights: Optional[TensorDictBase] = None,
+            weights,
     ) -> None:
 
         for g, p in zip(weights, self.objective.parameters()):
             p.data = torch.from_numpy(g).to(self.device)
-            p.grad.zero_()
+            # p.grad.zero_()
 
-        params = self.objective.parameters()
-        for g, p in zip(weights, params):
-            p.data = torch.from_numpy(g).to(self.device)
-            p.grad.zero_()
+        # params = self.objective.parameters()
+        # for g, p in zip(weights, params):
+        #     p.data = torch.from_numpy(g).to(self.device)
+        #     p.grad.zero_()
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
@@ -67,4 +67,3 @@ class GradientCollector:
                 grads.append(None)
 
         return grads
-

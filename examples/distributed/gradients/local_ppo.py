@@ -131,7 +131,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scheduler.step()
                 optim.zero_grad()
 
-        collector.update_policy_weights_()
+                # Get gradients
+                weights = []
+                for p in loss_module.parameters():
+                    if p.data is not None:
+                        weights.append(p.data.cpu().numpy())
+
+                grad_worker.update_policy_weights_(weights)
 
         # Test current policy
         if (
