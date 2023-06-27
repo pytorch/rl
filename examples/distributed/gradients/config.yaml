@@ -22,7 +22,7 @@ collector:
 logger:
   backend: wandb
   exp_name: ppo_halfcheetah_gym
-  log_interval: 100000
+  log_interval: 10_000
 
 # Optim
 optim:

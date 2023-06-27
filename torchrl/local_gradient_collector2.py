@@ -37,12 +37,7 @@ class GradientCollector:
 
         for g, p in zip(weights, self.objective.parameters()):
             p.data = torch.from_numpy(g).to(self.device)
-            # p.grad.zero_()
-
-        # params = self.objective.parameters()
-        # for g, p in zip(weights, params):
-        #     p.data = torch.from_numpy(g).to(self.device)
-        #     p.grad.zero_()
+            p.grad.zero_()
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
