@@ -1,0 +1,32 @@
+io:
+  eval_interval: 200
+  log_interval: 50
+  eval_iters: 100
+data:
+  batch_size: 16 # if gradient_accumulation_steps > 1, this is the micro-batch size
+  block_size: 550
+model:
+  name_or_path: ./out
+  dropout: 0.1 # for pretraining 0 is good, for finetuning try 0.1+
+reward_model:
+  out_dir: ./out_reward
+  init_from: scratch  # 'scratch' or 'resume' - if "resume" model will be loaded from out_dir_reward
+train:
+  grad_clip: 1.0 # clip gradients at this value, or disable if == 0.0
+  max_iters: 20000 # total number of training iterations
+  gradient_accumulation_steps: 2 # used to simulate larger batch sizes
+  always_save_checkpoint: False # if True, always save a checkpoint after each eval
+  decay_lr: False # whether to decay the learning rate
+  optimizer:
+    # keyword arguments for torch.optim.AdamW
+    lr: 1.0e-5
+    weight_decay: 1.0e-1
+    betas: [0.9, 0.95]
+  scheduler:
+    # keyword arguments for torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: 20000
+    eta_min: 1.0e-6
+sys:
+  device: cuda # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
+  dtype: bfloat16 # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
+  compile: True # use PyTorch 2.0 to compile the model to be faster
