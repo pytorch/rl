@@ -37,15 +37,14 @@ class GradientWorker:
             weights,
     ) -> None:
 
-        # self.weights = self.weights.detach()  # Seems required
-        # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
-        self.weights.update_(weights)
+        # self.weights = self.weights.detach()  # avoids error but probably not what we want
+        self.weights.update_(weights)  # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         self.weights.apply(set_grad)
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
 
-        mini_batch = mini_batch.to("cuda")
+        mini_batch = mini_batch.to(self.device)
 
         # Compute loss
         loss = self.objective(mini_batch)

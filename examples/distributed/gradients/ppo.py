@@ -137,7 +137,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Compute gradients
                 grads = grad_worker.compute_gradients(batch)
-
                 weights.apply(apply_grad, grads)
 
                 # Update policy
