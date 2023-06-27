@@ -1611,17 +1611,17 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         ...      DecisionTransformerInferenceWrapper,
         ...  )
         >>> actor_module = TensorDictModule(
-                    DTActor(state_dim=4, action_dim=2),
-                    in_keys=in_keys,
-                    out_keys=[
-                        "loc",
-                        "scale",])
+        ...         DTActor(state_dim=4, action_dim=2),
+        ...         in_keys=in_keys,
+        ...         out_keys=[
+        ...             "loc",
+        ...             "scale",])
         >>> dist_class = TanhNormal
         >>> dist_kwargs = {
-                "min": -1.0,
-                "max": 1.0,
-                "tanh_loc": False,
-            }
+        ...     "min": -1.0,
+        ...     "max": 1.0,
+        ...     "tanh_loc": False,
+        ... }
         >>> actor = ProbabilisticActor(
             in_keys=["loc", "scale"],
             out_keys=["action", "log_prob"],
@@ -1632,8 +1632,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         >>> print(inference_actor)
         >>> sequence_length = 20
         >>> td = TensorDict({"observation": torch.randn(1, sequence_length, 4),
-                            "action": torch.randn(1, sequence_length, 2),
-                            "return_to_go": torch.randn(1, sequence_length, 1)}, [1,])
+        ...                 "action": torch.randn(1, sequence_length, 2),
+        ...                 "return_to_go": torch.randn(1, sequence_length, 1)}, [1,])
         >>> print(inference_actor(td.clone()))
         TensorDict(
             fields={
