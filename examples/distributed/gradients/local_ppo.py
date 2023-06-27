@@ -97,20 +97,49 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collected_frames = 0
 
     for remote_grads in grad_worker:
-
-        grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
-
-        # Update local policy
-        optim.step()
-        print(f"optimisation step!, grad norm {grad_norm}")
-        optim.zero_grad()
+    # for data in collector:
+    #
+    #     frames_in_batch = data.numel()
+    #     collected_frames += frames_in_batch
+    #
+    #     for j in range(cfg.loss.ppo_epochs):
+    #
+    #         # Compute GAE
+    #         with torch.no_grad():
+    #             data = adv_module(data.to(model_device)).cpu()
+    #
+    #         # Update the data buffer
+    #         data_reshape = data.reshape(-1)
+    #         data_buffer.extend(data_reshape)
+    #
+    #         for i, batch in enumerate(data_buffer):
+    #
+    #             # Get a data batch
+    #             batch = batch.to(model_device)
+    #
+    #             # Forward pass PPO loss
+    #             loss = loss_module(batch)
+    #             loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+    #
+    #             # Backward pass
+    #             loss_sum.backward()
+    #             grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
+    #             optim.step()
+    #             optim.zero_grad()
+    #
+    #     collector.update_policy_weights_()
 
         # Update counter
         collected_frames += frames_in_batch
 
+        # Update local policy
+        print("Updating local policy")
+        optim.step()
+        optim.zero_grad()
         collector.update_policy_weights_()
 
         # Test current policy
+
         if (
             logger is not None
             and (collected_frames - frames_in_batch) // record_interval

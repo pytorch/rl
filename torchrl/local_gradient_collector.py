@@ -98,34 +98,29 @@ class GradientCollector:
 
         for data in self.collector:
 
-            data_view = data.reshape(-1)
-            data_view = data_view.to("cuda")
-
             # Compute GAE
             with torch.no_grad():
-                data_view = self.advantage(data_view)
+                data = self.advantage(data.to(self.device)).cpu()
 
-            # Add to replay buffer
+            # Add to Replay Buffer
+            data_view = data.reshape(-1)
             self.replay_buffer.extend(data_view)
 
             for iter in range(self.updates_per_batch):
-
-                print(iter)
 
                 # Sample batch from replay buffer
                 mini_batch = self.replay_buffer.sample().to(self.device)
 
                 # Compute loss
                 loss = self.objective(mini_batch)
-                # loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
-                loss_sum = (
-                        loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-                )
+                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
                 # Backprop loss
+                print("Computing gradients...")
                 loss_sum.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
-                yield None
+                yield
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return self.collector.set_seed(seed, static_seed)
