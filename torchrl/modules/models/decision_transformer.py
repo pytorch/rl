@@ -26,15 +26,15 @@ class DecisionTransformer(nn.Module):
 
     Example:
         >>> config = {
-        >>>     "n_embd": 256,
-        >>>     "n_layer": 4,
-        >>>     "n_head": 4,
-        >>>     "n_inner": 1024,
-        >>>     "activation": "relu",
-        >>>     "n_positions": 1024,
-        >>>     "resid_pdrop": 0.1,
-        >>>     "attn_pdrop": 0.1,
-        >>> }
+        ...     "n_embd": 256,
+        ...     "n_layer": 4,
+        ...     "n_head": 4,
+        ...     "n_inner": 1024,
+        ...     "activation": "relu",
+        ...     "n_positions": 1024,
+        ...     "resid_pdrop": 0.1,
+        ...     "attn_pdrop": 0.1,
+        ... }
         >>> model = DecisionTransformer(state_dim=4, action_dim=2, config=config)
         >>> observation = torch.randn(32, 10, 4)
         >>> action = torch.randn(32, 10, 2)

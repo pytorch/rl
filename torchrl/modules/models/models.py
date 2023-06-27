@@ -1144,6 +1144,7 @@ class OnlineDTActor(nn.Module):
     """Online Decision Transformer Actor class.
 
     Actor class for the Online Decision Transformer to sample actions from gaussian distribution as presented inresented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
+    Returns mu and sigma for the gaussian distribution to sample actions from.
 
     Args:
         state_dim (int): state dimension.
@@ -1151,6 +1152,26 @@ class OnlineDTActor(nn.Module):
         transformer_config (Dict): config for the GPT2 transformer.
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
+    Examples:
+        >>> config = {
+        ...     "n_embd": 256,
+        ...     "n_layer": 4,
+        ...     "n_head": 4,
+        ...     "n_inner": 1024,
+        ...     "activation": "relu",
+        ...     "n_positions": 1024,
+        ...     "resid_pdrop": 0.1,
+        ...     "attn_pdrop": 0.1,
+        ... }
+        >>> model = OnlineDTActor(state_dim=4, action_dim=2, config=config)
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> (mu, std) = model(observation, action, return_to_go)
+        >>> mu.shape
+        torch.Size([32, 10, 2])
+        >>> std.shape
+        torch.Size([32, 10, 2])
     """
 
     def __init__(
@@ -1209,13 +1230,33 @@ class DTActor(nn.Module):
     """Decision Transformer Actor class.
 
     Actor class for the Decision Transformer to output deterministic action as presented in `"Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
-
+    Returns the deterministic actions.
 
     Args:
         state_dim (int): state dimension.
         action_dim (int): action dimension.
         transformer_config (Dict): config for the GPT2 transformer.
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
+
+    Examples:
+        >>> config = {
+        ...     "n_embd": 256,
+        ...     "n_layer": 4,
+        ...     "n_head": 4,
+        ...     "n_inner": 1024,
+        ...     "activation": "relu",
+        ...     "n_positions": 1024,
+        ...     "resid_pdrop": 0.1,
+        ...     "attn_pdrop": 0.1,
+        ... }
+        >>> model = DTActor(state_dim=4, action_dim=2, config=config)
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> output = model(observation, action, return_to_go)
+        >>> output.shape
+        torch.Size([32, 10, 2])
+
     """
 
     def __init__(
