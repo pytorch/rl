@@ -66,11 +66,19 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env = TransformedEnv(base_env)
     if train:
         transformed_env.append_transform(
-            TargetReturn(env_cfg.collect_target_return, out_keys=["return_to_go"])
+            TargetReturn(
+                env_cfg.collect_target_return,
+                out_keys=["return_to_go"],
+                mode=env_cfg.target_return_mode,
+            )
         )
     else:
         transformed_env.append_transform(
-            TargetReturn(env_cfg.eval_target_return, out_keys=["return_to_go"])
+            TargetReturn(
+                env_cfg.eval_target_return,
+                out_keys=["return_to_go"],
+                mode=env_cfg.target_return_mode,
+            )
         )
     transformed_env.append_transform(
         RewardScaling(
@@ -314,7 +322,7 @@ def make_odt_model(cfg):
     actor = ProbabilisticActor(
         spec=action_spec,
         in_keys=["loc", "scale"],
-        out_keys=["action", "log_prob"],
+        out_keys=["action"],
         module=actor_module,
         distribution_class=dist_class,
         distribution_kwargs=dist_kwargs,

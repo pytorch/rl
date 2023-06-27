@@ -1180,6 +1180,11 @@ class TargetReturn(Transform):
                 target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
+            if reward.ndim == 1 and target_return.ndim == 2:
+                # if target is stacked
+                target_return = target_return[-1]
+            else:
+                target_return = target_return
             return target_return
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))

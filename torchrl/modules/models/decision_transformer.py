@@ -40,7 +40,6 @@ class DecisionTransformer(nn.Module):
         >>> output.shape
         torch.Size([32, 10, 256])
 
-
     """
 
     def __init__(
@@ -55,7 +54,7 @@ class DecisionTransformer(nn.Module):
             n_embd=config["n_embd"],
             n_layer=config["n_layer"],
             n_head=config["n_head"],
-            n_inner=["config.n_inner"],
+            n_inner=config["n_inner"],
             activation_function=config["activation"],
             n_positions=config["n_positions"],
             resid_pdrop=config["resid_pdrop"],

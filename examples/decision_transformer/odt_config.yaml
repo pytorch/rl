@@ -12,6 +12,7 @@ env:
   reward_scaling: 0.001 # for r2g
   noop: 1
   seed: 2
+  target_return_mode: constant
   eval_target_return: 6000
   collect_target_return: 12000
 
