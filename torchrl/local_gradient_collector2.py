@@ -66,5 +66,5 @@ class GradientCollector:
             else:
                 grads.append(None)
 
-        yield grads
+        return grads
 

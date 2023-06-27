@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Backward pass
                 grads = grad_worker.compute_gradients(batch)
 
-                for g, p in zip(grads, loss_module.parameters()):
+                for g, p in zip(grads, list(loss_module.parameters())):
                     if g is not None:
                         p.grad = torch.from_numpy(g).to("cuda")
 
