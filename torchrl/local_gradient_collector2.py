@@ -29,7 +29,6 @@ class GradientCollector:
         self.updates_per_batch = updates_per_batch
         self.objective = objective
 
-
     def __iter__(self) -> Iterator[TensorDictBase]:
         return self.iterator()
 
@@ -78,7 +77,7 @@ class GradientCollector:
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""
 
-        mini_batch = mini_batch.to(self.device)
+        mini_batch = mini_batch.to("cuda")
 
         # Compute loss
         loss = self.objective(mini_batch)
@@ -89,10 +88,10 @@ class GradientCollector:
         loss_sum.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
-        params = TensorDict.from_module(self.objective).lock_()
-        grads = params.apply(lambda p: p.grad).lock_()
+        # params = TensorDict.from_module(self.objective).lock_()
+        # grads = params.apply(lambda p: p.grad).lock_()
 
-        yield grads
+        # yield grads
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return self.collector.set_seed(seed, static_seed)

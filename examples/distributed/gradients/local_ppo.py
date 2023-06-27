@@ -78,12 +78,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     grad_worker = GradientCollector(
-        actor=actor,
-        critic=critic,
-        collector=collector,
+        # actor=actor,
+        # critic=critic,
+        # collector=collector,
         objective=loss_module,
-        advantage=adv_module,
-        buffer=data_buffer,
+        # advantage=adv_module,
+        # buffer=data_buffer,
         updates_per_batch=320,
         device=cfg.optim.device,
     )
@@ -113,25 +113,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
             data_reshape = data.reshape(-1)
             data_buffer.extend(data_reshape)
 
-            for i, batch in enumerate(data_buffer):
+            for i, mini_batch in enumerate(data_buffer):
 
-                grads = grad_worker.compute_gradients(batch)
+                mini_batch = mini_batch.to("cuda")
 
+                # Compute loss
+                loss = loss_module(mini_batch)
+                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+
+                # Backprop loss
+                print("Computing remote gradients...")
+                loss_sum.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
+
+                #  grads = grad_worker.compute_gradients(mini_batch)
                 optim.step()
                 optim.zero_grad()
 
         collector.update_policy_weights_()
-
-        # Update counter
-        collected_frames += (frames_in_batch / 320)
-
-        # apply gradients
-
-        # Update local policy
-        print("Updating local policy")
-        optim.step()
-        optim.zero_grad()
-        collector.update_policy_weights_()
+        print("Updating local policy, collected_frames: ", collected_frames)
 
         # Test current policy
         if (
