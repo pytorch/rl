@@ -17,7 +17,7 @@ from transformers import GenerationConfig
 class RolloutFromModel:
     """A class for performing rollouts with causal language models.
 
-    It is assumed that the model this class wraps takes in input tokenized text and
+    It is assumed that the model this class wraps takes as input tokenized text and
     whose task is to predict the next word in a sentence having read the n previous
     words.
 
@@ -33,19 +33,69 @@ class RolloutFromModel:
             end_scores (the reward for the final token in each sequence).
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
+        score_clip (float, optional): Scores from the reward model are clipped to the
+            range ``(-score_clip, score_clip)``. Defaults to 10.
+
+    Examples:
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.rlhf import GPT2RewardModel
+        >>> from torchrl.data.rlhf.utils import RolloutFromModel
+        >>> from torchrl.data.rlhf.dataset import get_dataloader
+        >>> from torchrl.data.rlhf.prompt import PromptData
+        >>> from transformers import GPT2LMHeadModel
+        >>>
+        >>> dl = get_dataloader(
+        ...     batch_size=4,
+        ...     block_size=550,
+        ...     tensorclass_type=PromptData,
+        ...     device="cpu",
+        ...     dataset_name="CarperAI/openai_summarize_tldr",
+        ... )
+        >>> model = GPT2LMHeadModel.from_pretrained("gpt2")
+        >>> # we load ref_model with random weights so it differs from model
+        >>> ref_model = GPT2LMHeadModel(GPT2LMHeadModel.config_class())
+        >>> reward_model = GPT2RewardModel(model_path="gpt2")
+        >>> rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
+        >>>
+        >>> batch = next(dl)
+        >>> rollout = rollout_from_model.rollout_from_data(batch)
+        >>> rollout
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
+                attention_mask: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.bool, is_shared=False),
+                input_ids: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.int64, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        attention_mask: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        input_ids: Tensor(shape=torch.Size([4, 50, 600]), device=cpu, dtype=torch.int64, is_shared=False),
+                        reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_kl: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward_raw: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([4, 50]),
+                    device=cpu,
+                    is_shared=False),
+                sample_log_prob: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([4, 50]),
+            device=cpu,
+            is_shared=False)
     """
 
     EOS_TOKEN_ID = 50256
 
-    def __init__(self, model, ref_model, reward_model, max_new_tokens=50):
+    def __init__(
+        self, model, ref_model, reward_model, max_new_tokens=50, score_clip=10.0
+    ):
         self.model = model
         self.ref_model = ref_model
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
+        self.score_clip = score_clip
 
     def kl_step(self):
         """Makes a step in the KL coefficient schedule."""
-        pass
+        raise NotImplementedError
 
     @torch.no_grad()
     def rollout_from_data(self, batch, kl_coef=0.1):
@@ -95,52 +145,19 @@ class RolloutFromModel:
             - ``("next", "reward_kl")``: The KL term from the reward. This is mainly for
               debugging and logging, it is not used in training.
         """
-        rollout_generated = []
-        for rindex, row in zip(batch.prompt_rindex, generated):
-            arange = torch.arange(row.shape[0], device=generated.device)
-            tokens = []
-            for i in range(self.max_new_tokens + 1):
-                tokens.append(
-                    torch.where(
-                        arange < rindex + i,
-                        row,
-                        self.EOS_TOKEN_ID,
-                    )
-                )
-            rollout_generated.append(torch.stack(tokens))
-        rollout_generated = torch.stack(rollout_generated)
+        rollout_generated = self._get_rollout_generated(generated, batch)
         rollout_attention_mask = (rollout_generated != self.EOS_TOKEN_ID).bool()
 
-        # done is True when we either first sample an EOS token or reach the maximum number
-        # of generated tokens
-        done_idx = torch.minimum(
-            (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(self.max_new_tokens) - 1,
+        done = self._get_done_status(generated, batch)
+        action = self._get_action(generated, batch)
+        end_scores, end_scores_labels = self._get_end_scores(
+            rollout_generated, rollout_attention_mask, batch
         )
-        done = torch.zeros(
-            done_idx.numel(),
-            self.max_new_tokens,
-            dtype=torch.bool,
-            device=generated.device,
-        )
-        done = done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
 
-        # the sequence of actions for each trajectory is just the generated token ids
-        action_idx = torch.arange(self.max_new_tokens, device=generated.device)
-        action_idx = action_idx + batch.prompt_rindex.unsqueeze(-1)
-        action = generated.gather(-1, action_idx)
-
-        # calculate the reward for the finished sequence
-        _, end_scores = self.reward_model(
-            input_ids=rollout_generated[:, -1],
-            attention_mask=rollout_attention_mask[:, -1],
-        )
-        _, end_scores_labels = self.reward_model(
-            input_ids=batch.input_ids,
-            attention_mask=batch.attention_mask,
-        )
         # the reward is zero except for the timestep where we reached a stopping condition
-        clipped_scores = torch.clip(end_scores - end_scores_labels, -10, 10)
+        clipped_scores = torch.clip(
+            end_scores - end_scores_labels, -self.score_clip, self.score_clip
+        )
         reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
         reward_raw = reward_raw * done
         reward_kl = -kl_coef * log_ratio.unsqueeze(-1)
@@ -162,6 +179,51 @@ class RolloutFromModel:
         return TensorDict(
             td, batch_size=done.shape[:2], device=generated.device
         ).refine_names(..., "time")
+
+    def _get_rollout_generated(self, generated, batch):
+        # stack the individual timesteps during generation into a single tensor
+        rollout_generated = []
+        arange = torch.arange(generated.shape[1], device=generated.device)
+        for rindex, row in zip(batch.prompt_rindex, generated):
+            tokens = []
+            for i in range(self.max_new_tokens + 1):
+                tokens.append(torch.where(arange < rindex + i, row, self.EOS_TOKEN_ID))
+            rollout_generated.append(torch.stack(tokens))
+        rollout_generated = torch.stack(rollout_generated)
+        return rollout_generated
+
+    def _get_done_status(self, generated, batch):
+        # done is True when we either first sample an EOS token or reach the maximum number
+        # of generated tokens
+        done_idx = torch.minimum(
+            (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
+            torch.tensor(self.max_new_tokens) - 1,
+        )
+        done = torch.zeros(
+            done_idx.numel(),
+            self.max_new_tokens,
+            dtype=torch.bool,
+            device=generated.device,
+        )
+        return done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
+
+    def _get_action(self, generated, batch):
+        # the sequence of actions for each trajectory is just the generated token ids
+        action_idx = torch.arange(self.max_new_tokens, device=generated.device)
+        action_idx = action_idx + batch.prompt_rindex.unsqueeze(-1)
+        return generated.gather(-1, action_idx)
+
+    def _get_end_scores(self, rollout_generated, rollout_attention_mask, batch):
+        # calculate the reward for the finished sequence
+        _, end_scores = self.reward_model(
+            input_ids=rollout_generated[:, -1],
+            attention_mask=rollout_attention_mask[:, -1],
+        )
+        _, end_scores_labels = self.reward_model(
+            input_ids=batch.input_ids,
+            attention_mask=batch.attention_mask,
+        )
+        return end_scores, end_scores_labels
 
     @classmethod
     def _padded_right_to_left(cls, tensor, *, eos_token_id=None, dim=1):
