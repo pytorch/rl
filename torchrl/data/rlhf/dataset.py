@@ -120,7 +120,7 @@ class TokenizedDatasetLoader:
         )
 
     def make_tokenizer(self, *, tokenizer_class, tokenizer_model_name):
-        tokenizer = tokenizer_class.from_pretrained("gpt2")
+        tokenizer = tokenizer_class.from_pretrained(tokenizer_model_name)
         tokenizer.pad_token = tokenizer.eos_token
         self.tokenizer = tokenizer
 
