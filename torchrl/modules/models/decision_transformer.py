@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+
 import torch
 import torch.nn as nn
 import transformers
@@ -5,7 +11,37 @@ from transformers.models.gpt2.modeling_gpt2 import GPT2Model
 
 
 class DecisionTransformer(nn.Module):
-    """online Decion Transformer as described in https://arxiv.org/abs/2202.05607 ."""
+    """Online Decion Transformer.
+
+    Desdescribed in https://arxiv.org/abs/2202.05607 .
+
+    Args:
+        state_dim (int): dimension of the state space
+        action_dim (int): dimension of the action space
+        config (dict): transformer architecture configuration, used to create the GPT2Config from transformers.
+
+
+    Example:
+        >>> config = {
+        >>>     "n_embd": 256,
+        >>>     "n_layer": 4,
+        >>>     "n_head": 4,
+        >>>     "n_inner": 1024,
+        >>>     "activation": "relu",
+        >>>     "n_positions": 1024,
+        >>>     "resid_pdrop": 0.1,
+        >>>     "attn_pdrop": 0.1,
+        >>> }
+        >>> model = DecisionTransformer(state_dim=4, action_dim=2, config=config)
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> output = model(observation, action, return_to_go)
+        >>> output.shape
+        torch.Size([32, 10, 256])
+
+
+    """
 
     def __init__(
         self,
@@ -16,27 +52,27 @@ class DecisionTransformer(nn.Module):
         super(DecisionTransformer, self).__init__()
 
         gpt_config = transformers.GPT2Config(
-            n_embd=config.n_embd,
-            n_layer=config.n_layer,
-            n_head=config.n_head,
-            n_inner=config.n_inner,
-            activation_function=config.activation,
-            n_positions=config.n_positions,
-            resid_pdrop=config.resid_pdrop,
-            attn_pdrop=config.attn_pdrop,
+            n_embd=config["n_embd"],
+            n_layer=config["n_layer"],
+            n_head=config["n_head"],
+            n_inner=["config.n_inner"],
+            activation_function=config["activation"],
+            n_positions=config["n_positions"],
+            resid_pdrop=config["resid_pdrop"],
+            attn_pdrop=config["attn_pdrop"],
             vocab_size=1,
         )
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.hidden_size = config.n_embd
+        self.hidden_size = config["n_embd"]
 
         self.transformer = GPT2Model(config=gpt_config)
 
-        self.embed_return = torch.nn.Linear(1, config.n_embd)
-        self.embed_state = torch.nn.Linear(self.state_dim, config.n_embd)
-        self.embed_action = torch.nn.Linear(self.action_dim, config.n_embd)
+        self.embed_return = torch.nn.Linear(1, self.hidden_size)
+        self.embed_state = torch.nn.Linear(self.state_dim, self.hidden_size)
+        self.embed_action = torch.nn.Linear(self.action_dim, self.hidden_size)
 
-        self.embed_ln = nn.LayerNorm(config.n_embd)
+        self.embed_ln = nn.LayerNorm(self.hidden_size)
 
     def forward(
         self,
