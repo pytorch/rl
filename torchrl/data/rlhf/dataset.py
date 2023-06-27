@@ -17,8 +17,8 @@ from tensordict import TensorDict, TensorDictBase
 from tensordict.tensordict import NestedKey
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
-from transformers import AutoTokenizer
 
+_has_transformers = importlib.util.find_spec("transformers") is not None
 _has_datasets = importlib.util.find_spec("datasets") is not None
 
 
@@ -181,6 +181,9 @@ def tokenize(
 
     Returns: a dataset of type ``datasets.Dataset``.
     """
+    if not _has_transformers:
+        raise ImportError("The transformers library is missing.")
+    from transformers import AutoTokenizer
     if num_workers is None:
         num_workers = max(os.cpu_count() // 2, 1)
     if excluded_features is None:
