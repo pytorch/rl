@@ -58,7 +58,8 @@ def create_or_load_dataset(
 
     The dataset will be stored in ``root/<split>/<max_length>/``
     Examples:
-        >>> from torchrl.data.rlhf import TensorDictTokenizer        >>> from torchrl.data.rlhf.reward import  pre_tokenization_hook
+        >>> from torchrl.data.rlhf import TensorDictTokenizer        
+        >>> from torchrl.data.rlhf.reward import pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
         >>> dataset_name = "CarperAI/openai_summarize_comparisons"
