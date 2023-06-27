@@ -23,16 +23,16 @@ from torchrl.data.rlhf.dataset import (
     load_dataset,
     tokenize,
 )
-from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
-from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
-from transformers import AutoTokenizer
-from torchrl.data.rlhf.prompt import make_process_fn_tldr, PromptData
+from torchrl.data.rlhf.prompt import (
+    PromptData,
+    PromptTensorDictTokenizer,
+)
 from torchrl.data.rlhf.reward import (
-    make_process_fn_comparison,
     PairwiseDataset,
     pre_tokenization_hook,
 )
 from torchrl.modules.models.rlhf import GPT2RewardModel
+from transformers import AutoTokenizer
 
 HERE = Path(__file__).parent
 
