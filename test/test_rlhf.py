@@ -8,17 +8,20 @@ import zipfile
 from copy import deepcopy
 from pathlib import Path
 
-import datasets
 import numpy as np
 import pytest
 
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
 from torchrl.data.rlhf import TensorDictTokenizer
-from torchrl.data.rlhf.dataset import get_dataloader, TokenizedDatasetLoader
+from torchrl.data.rlhf.dataset import (
+    _has_datasets,
+    _has_transformers,
+    get_dataloader,
+    TokenizedDatasetLoader,
+)
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
-from transformers import AutoTokenizer
 
 HERE = Path(__file__).parent
 
@@ -46,6 +49,9 @@ def minidata_dir_tldr(tmp_path_factory):
         yield dest / Path(dataset_path).name[:-4]
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
     "dataset,make_process_fn,pre_tokenization_hook",
@@ -106,6 +112,9 @@ def test_create_or_load_dataset(
                 assert val.shape[1] == max_length
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
     "dataset,make_process_fn,pre_tokenization_hook",
@@ -132,6 +141,8 @@ def test_preproc_data(
     minidata_dir_comparison,
     split="train",
 ):
+    import datasets
+
     if dataset == "tldr":
         dataset = minidata_dir_tldr
     elif dataset == "comp":
@@ -153,8 +164,13 @@ def test_preproc_data(
     assert isinstance(dataset, TensorDictBase)
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 @pytest.mark.parametrize("suffix", ["c", ("c", "d")])
 def test_dataset_to_tensordict(tmpdir, suffix):
+    import datasets
+
     dataset = datasets.Dataset.from_dict({"a": np.zeros((10,)), "b": np.ones((10,))})
     td = TokenizedDatasetLoader.dataset_to_tensordict(dataset, tmpdir, prefix=suffix)
     if suffix == "c":
@@ -167,6 +183,9 @@ def test_dataset_to_tensordict(tmpdir, suffix):
     assert isinstance(td.get((suffix, "b")), MemmapTensor)
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 @pytest.mark.parametrize("batch_size", [5, 6])
 @pytest.mark.parametrize("block_size", [15, 50])
 @pytest.mark.parametrize(
@@ -222,6 +241,9 @@ def test_get_dataloader(
         assert not is_tensor_collection(dl)
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 class TestTokenizers:
     @pytest.mark.parametrize("max_length", [10, 15])
     @pytest.mark.parametrize("key", ["text", "other"])
@@ -232,6 +254,8 @@ class TestTokenizers:
     def test_tensordict_tokenizer(
         self, max_length, key, padding, truncation, return_tensordict, device
     ):
+        from transformers import AutoTokenizer
+
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = 100
         process = TensorDictTokenizer(
@@ -277,6 +301,8 @@ class TestTokenizers:
     def test_prompt_tensordict_tokenizer(
         self, max_length, key, padding, truncation, return_tensordict, device
     ):
+        from transformers import AutoTokenizer
+
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = 100
         process = PromptTensorDictTokenizer(
