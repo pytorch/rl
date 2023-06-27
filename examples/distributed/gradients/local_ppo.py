@@ -8,29 +8,12 @@ This is a self-contained example of a PPO training script.
 
 Both state and pixel-based environments are supported.
 
-The helper functions are coded in the utils_supp.py associated with this script.
+The helper functions are coded in the utils.py associated with this script.
 """
-import copy
 import hydra
-import random
-import itertools
-import numpy as np
-import torch
-from torchrl.local_gradient_collector2 import GradientCollector
-from tensordict import TensorDict
-
-# Set seeds for reproducibility
-# Set a seed for the random module
-random.seed(int(2023))
-
-# Set a seed for the numpy module
-np.random.seed(int(2023))
-
-# Set a seed for the torch module
-torch.manual_seed(int(2023))
 
 
-@hydra.main(config_path=".", config_name="config")
+@hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import torch
@@ -46,6 +29,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_ppo_models,
         make_test_env,
     )
+    from torchrl.local_gradient_collector2 import GradientCollector
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
@@ -77,33 +61,53 @@ def main(cfg: "DictConfig"):  # noqa: F821
         * num_mini_batches
     )
 
-    grad_worker = GradientCollector(
-        # actor=actor,
-        # critic=critic,
-        # collector=collector,
-        objective=loss_module,
-        # advantage=adv_module,
-        # buffer=data_buffer,
-        updates_per_batch=320,
-        device=cfg.optim.device,
-    )
+    scheduler = None
+    if cfg.optim.lr_scheduler:
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optim, total_iters=total_network_updates, start_factor=1.0, end_factor=0.1
+        )
 
     logger = None
     if cfg.logger.backend:
         logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env, state_dict)
     record_interval = cfg.logger.log_interval
-    frames_in_batch = cfg.collector.frames_per_batch
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     collected_frames = 0
 
-    # for remote_grads in grad_worker:
+    remote_actor, remote_critic, remote_critic_head = make_ppo_models(cfg)
+    remote_loss_module, _ = make_loss(
+        cfg.loss,
+        actor_network=remote_actor,
+        value_network=remote_critic,
+        value_head=remote_critic_head,
+    )
+    grad_worker = GradientCollector(
+        objective=remote_loss_module,
+        device=cfg.optim.device,
+    )
 
+    # Main loop
+    r0 = None
+    l0 = None
+    frame_skip = cfg.env.frame_skip
+    ppo_epochs = cfg.loss.ppo_epochs
+    total_done = 0
     for data in collector:
 
         frames_in_batch = data.numel()
-        collected_frames += frames_in_batch
+        total_done += data.get(("next", "done")).sum()
+        collected_frames += frames_in_batch * frame_skip
+        pbar.update(data.numel())
 
-        for j in range(cfg.loss.ppo_epochs):
+        # Log end-of-episode accumulated rewards for training
+        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        if logger is not None and len(episode_rewards) > 0:
+            logger.log_scalar(
+                "reward_training", episode_rewards.mean().item(), collected_frames
+            )
+
+        for j in range(ppo_epochs):
 
             # Compute GAE
             with torch.no_grad():
@@ -113,14 +117,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
             data_reshape = data.reshape(-1)
             data_buffer.extend(data_reshape)
 
-            for i, mini_batch in enumerate(data_buffer):
+            for i, batch in enumerate(data_buffer):
 
-                grad_worker.compute_gradients(mini_batch)
+                # Backward pass
+                grads = grad_worker.compute_gradients(batch)
+
+                for g, p in zip(grads, loss_module.parameters()):
+                    if g is not None:
+                        p.grad = torch.from_numpy(g).to("cuda")
+
                 optim.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optim.zero_grad()
 
         collector.update_policy_weights_()
-        print("Updating local policy, collected_frames: ", collected_frames)
 
         # Test current policy
         if (
