@@ -272,7 +272,7 @@ class ReplayBuffer:
             Indices of the data added to the replay buffer.
         """
         if self._transform is not None and is_tensor_collection(data):
-            data = self._transform.inv(data.get("_data"))
+            data = self._transform.inv(data)  # test
         elif self._transform is not None and len(self._transform):
             data = self._transform.inv(data)
         return self._extend(data)
