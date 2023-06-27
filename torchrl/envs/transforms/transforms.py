@@ -1180,11 +1180,7 @@ class TargetReturn(Transform):
                 target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
-            if reward.ndim == 1 and target_return.ndim == 2:
-                # if target is stacked
-                target_return = target_return[-1] - reward
-            else:
-                target_return = target_return - reward
+            return target_return
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
 
@@ -2176,10 +2172,10 @@ class CatFrames(ObservationTransform):
 
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or tensordict.names[-1] != "time":
-            raise ValueError(
-                "The last dimension of the tensordict must be marked as 'time'."
-            )
+        # if not tensordict.ndim or tensordict.names[-1] != "time":
+        #     raise ValueError(
+        #         "The last dimension of the tensordict must be marked as 'time'."
+        #     )
         # first sort the in_keys with strings and non-strings
         in_keys = list(
             zip(
