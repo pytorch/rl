@@ -11,10 +11,10 @@ import torch
 from tensordict import tensorclass
 
 from torchrl.data.rlhf.dataset import TensorDictTokenizer, TokenizedDatasetLoader
-from tqdm import tqdm
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
 _has_datasets = importlib.util.find_spec("datasets") is not None
+_has_tqdm = importlib.util.find_spec("tqdm") is not None
 
 
 @tensorclass
@@ -197,7 +197,13 @@ def pre_tokenization_hook(dataset, min_length=5):
 
     chosen = []
     rejected = []
-    for sample in tqdm(dataset):
+    if _has_tqdm:
+        from tqdm import tqdm
+
+        pbar = tqdm(dataset)
+    else:
+        pbar = dataset
+    for sample in pbar:
         prompt = sample["prompt"]
         chosen_summary = sample["chosen"]
         rejected_summary = sample["rejected"]
