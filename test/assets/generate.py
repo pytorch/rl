@@ -12,7 +12,7 @@ from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.prompt import PromptData
 
 
-def generate_small_data(comparison=True):
+def generate_small_dataset(comparison=True):
     if comparison:
         d = load_dataset("CarperAI/openai_summarize_comparisons")
     else:
