@@ -1960,6 +1960,7 @@ class CatFrames(ObservationTransform):
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
+        as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2032,6 +2033,7 @@ class CatFrames(ObservationTransform):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         padding="same",
+        as_inverse=False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2053,6 +2055,7 @@ class CatFrames(ObservationTransform):
             )
         # keeps track of calls to _reset since it's only _call that will populate the buffer
         self._just_reset = False
+        self.as_inverse = as_inverse
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -2091,6 +2094,12 @@ class CatFrames(ObservationTransform):
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
         setattr(self, buffer_name, buffer)
         return buffer
+
+    def _inv_call(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.as_inverse:
+            return self.unfolding(tensordict)
+        else:
+            return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
@@ -2150,6 +2159,12 @@ class CatFrames(ObservationTransform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.as_inverse:
+            return tensordict
+        else:
+            return self.unfolding(tensordict)
+
+    def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim or tensordict.names[-1] != "time":
             raise ValueError(

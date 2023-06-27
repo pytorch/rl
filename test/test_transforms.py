@@ -466,6 +466,29 @@ class TestCatFrames(TransformBase):
         assert (tdsample["out_" + key1] == td["out_" + key1]).all()
         assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
 
+    @pytest.mark.parametrize("dim", [-1])  # -2?
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_as_inverse(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        in_keys = ["observation", ("next", "observation")]
+        rollout_length = 10
+        cat_frames = CatFrames(
+            N=N, in_keys=in_keys, dim=dim, padding=padding, as_inverse=True
+        )
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+        )
+        obs_dim = env.specs["output_spec"]["_observation_spec"][
+            "observation_orig"
+        ].shape[0]
+        td = env.rollout(rollout_length)
+
+        transformed_td = cat_frames._inv_call(td)
+        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim, N)
+        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim, N)
+
     def test_catframes_transform_observation_spec(self):
         N = 4
         key1 = "first key"
