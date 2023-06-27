@@ -49,10 +49,11 @@ class GPT2RewardModel(nn.Module):
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
         """Compute the reward loss given a chosen and rejected batch.
 
-        The loss is computed as loss = -log_sigmoid(chosen_reward - rejected_reward).
+        The loss is computed as ``loss = -log_sigmoid(chosen_reward - rejected_reward)``.
         This loss is small when the reward model favours the chosen data and large if
         the model favours the rejected data.
-        Note: the loss is computed excluding the common "prefix" subsequence to effectively disregard contribution of the original prompt.
+
+          .. note:: The loss is computed excluding the common "prefix" subsequence to effectively disregard contribution of the original prompt.
         """
         chosen_ids = chosen_batch.input_ids
         rejected_ids = rejected_batch.input_ids
