@@ -8,22 +8,25 @@ import importlib.util
 import os
 from pathlib import Path
 
+from typing import Sequence, Type
+
 import torch
 
-_has_datasets = importlib.util.find_spec("datasets") is not None
-from typing import Sequence
+from tensordict import TensorDict, TensorDictBase
 
-from tensordict.tensordict import NestedKey, TensorDict
+from tensordict.tensordict import NestedKey
 from torchrl.data import TensorDictReplayBuffer, TensorStorage
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
 from transformers import AutoTokenizer
+
+_has_datasets = importlib.util.find_spec("datasets") is not None
 
 
 def create_or_load_dataset(
     split,
     max_length,
     dataset_name,
-    make_process_fn,
+    tokenizer_fn: Type[TensorDictTokenizer],
     pre_tokenization_hook=None,
     root_dir=None,
     from_disk=False,
@@ -34,7 +37,10 @@ def create_or_load_dataset(
         split (str): One of ``"train"`` or ``"valid"``.
         max_length (int): the maximum sequence length.
         dataset_name (str): the name of the dataset.
-        make_process_fn (callable): a preprocess function.
+        tokenizer_fn (callable): the tokeinizing method constructor, such as
+            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,
+            it should return a :class:`tensordict.TensorDict` instance
+            or a dictionary-like structure with the tokenized data.
         pre_tokenization_hook (callable, optional): called on
             the Dataset before tokenization. It should return a modified
             Dataset object.
@@ -52,7 +58,7 @@ def create_or_load_dataset(
 
     The dataset will be stored in ``root/<split>/<max_length>/``
     Examples:
-        >>> from torchrl.data.rlhf.reward import make_process_fn_comparison, pre_tokenization_hook
+        >>> from torchrl.data.rlhf import TensorDictTokenizer        >>> from torchrl.data.rlhf.reward import  pre_tokenization_hook
         >>> split = "train"
         >>> max_length = 550
         >>> dataset_name = "CarperAI/openai_summarize_comparisons"
@@ -60,7 +66,7 @@ def create_or_load_dataset(
         ...     split,
         ...     max_length,
         ...     dataset_name,
-        ...     make_process_fn_comparison,
+        ...     TensorDictTokenizer,
         ...     pre_tokenization_hook=pre_tokenization_hook,
         ... )
         >>> print(dataset)
@@ -102,7 +108,7 @@ def create_or_load_dataset(
     dataset = tokenize(
         dataset,
         max_length=max_length,
-        make_process_fn=make_process_fn,
+        tokenizer_fn=tokenizer_fn,
     )
     prefix = (split, str(max_length))
     return dataset_to_tensordict(
@@ -155,7 +161,7 @@ def load_dataset(
 def tokenize(
     dataset,
     max_length,
-    make_process_fn,
+    tokenizer_fn: Type[TensorDictTokenizer],
     num_workers: int = None,
     excluded_features: Sequence[str] | None = None,
 ):
@@ -164,7 +170,10 @@ def tokenize(
     Args:
         dataset (datasets.Dataset): a dataset loaded using :func:`~.load_dataset`.
         max_length (int): the maximum sequence length.
-        make_process_fn (callable): a preprocess function.
+        tokenizer_fn (callable): the tokeinizing method, such as
+            :class:`torchrl.data.rlhf.TensorDictTokenizer`. When called,
+            it should return a :class:`tensordict.TensorDict` instance
+            or a dictionary-like structure with the tokenized data.
         num_workers (int, optional): number of workers for :meth:`datasets.dataset.map`.
             Defaults to ``max(os.cpu_count() // 2, 1)``.
         excluded_features (sequence of str, optional): the features to exclude
@@ -179,42 +188,51 @@ def tokenize(
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
     # tokenize the dataset
+    # TODO: replace this by TensorDict.map
     dataset = dataset.map(
-        make_process_fn(tokenizer, max_length=max_length),
+        tokenizer_fn(tokenizer, max_length=max_length, return_tensordict=False),
         desc="Tokenizing...",
         num_proc=num_workers,
         batched=True,
     )
-    if excluded_features:
-        dataset = dataset.select_columns(
-            list({*dataset.column_names} - excluded_features)
-        )
+    if not isinstance(dataset, TensorDictBase):
+        dataset_dict = dataset.to_dict()
+        if excluded_features:
+            dataset_dict = {
+                key: value
+                for key, value in dataset_dict.items()
+                if key not in excluded_features
+            }
+        dataset = TensorDict.from_dict(dataset_dict)
+    elif excluded_features:
+        dataset = dataset.exclude(*excluded_features)
     # keep non empty rows (i.e. where at least one token is not eos)
-    if "valid_sample" in dataset.features:
-        raise RuntimeError("move to tensordict")
-        dataset.set_format("numpy")
-        mask = dataset["valid_sample"]
-        filtered_ = dataset.data.filter(mask)
-        dataset = dataset.__class__(filtered_, dataset.info, dataset.split)
-    dataset.set_format("torch")
+    if "valid_sample" in dataset.keys():
+        mask = dataset.get("valid_sample")
+        dataset = dataset[mask]
     return dataset
 
 
 def dataset_to_tensordict(
-    dataset: "datasets.Dataset",  # noqa: F821
+    dataset: "datasets.Dataset" | TensorDict,  # noqa: F821
     data_dir: Path,
     prefix: NestedKey = None,
     features: Sequence[str] = None,
     batch_dims=1,
     valid_mask_key=None,
 ):
-    """Convers a dataset to a TensorDict.
+    """Convers a dataset to a memory-mapped TensorDict.
 
-    The dataset is expected to have a ``features`` attribute which is a sequence of
-    strings indicating the features that can be found in the dataset.
+    If the dataset is already a :class:`TensorDict` instance, it is simply converted
+    to a memory-mapped TensorDict.
+    Otherwise, the dataset is expected to have a ``features`` attribute
+    which is a sequence of strings indicating the features that can be found
+    in the dataset. If it does not, the ``features`` must be passed explicitely
+    to this function.
 
     Args:
-        dataset (datasets.Dataset or equivalent): a dataset to map to a TensorDict.
+        dataset (datasets.Dataset, TensorDict or equivalent): a dataset to convert
+            to a memory-mapped TensorDict.
             If ``features`` is ``None``, it must have a ``features`` attribute
             with the list of keys to write in the tensordict.
         data_dir (Path or equivalent): directory where the data should be written.
@@ -258,12 +276,15 @@ def dataset_to_tensordict(
             is_shared=False)
 
     """
-    if features is None:
-        features = dataset.features
-    if prefix is None:
-        prefix = ()
-    data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
-    out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+    if not isinstance(dataset, TensorDict):
+        if features is None:
+            features = dataset.features
+        if prefix is None:
+            prefix = ()
+        data_dict = {key: torch.as_tensor(dataset[key]) for key in features}
+        out = TensorDict.from_dict(data_dict, batch_dims=batch_dims)
+    else:
+        out = dataset
     if valid_mask_key is not None and valid_mask_key in out.keys(include_nested=True):
         out = out[out.get(valid_mask_key)]
     out = TensorDict({prefix: out}, [])
@@ -362,3 +383,85 @@ def get_dataloader(
     if infinite:
         return create_infinite_iterator(out)
     return out
+
+
+class TensorDictTokenizer:
+    """Factory for a process function that applies a tokenizer over a text example.
+
+    Args:
+        tokenizer (tokenizer from transformers library): the tokenizer to use.
+        max_length (int): maximum length of the sequence.
+        key (str, optional): the key where to find the text. Defaults to ``"text"``.
+        padding (str, optional): type of padding. Defaults to ``"max_length"``.
+        truncation (bool, optional): whether the sequences should be truncated to max_length.
+        return_tensordict (bool, optional): if ``True``, a TensoDict is returned.
+            Otherwise, a the orignal data will be returned.
+        device (torch.device, optional): the device where to store the data.
+            This option is ignored if ``return_tensordict=False``.
+
+    See transformers library for more information about tokenizers:
+        Padding and truncation: `<https://huggingface.co/docs/transformers/pad_truncation>`_
+
+    Returns: a :class:`tensordict.TensorDict` instance with the same batch-size
+    as the input data.
+
+    Examples:
+        >>> from transformers import AutoTokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> tokenizer.pad_token = 100
+        >>> process = TensorDictTokenizer(tokenizer, max_length=10)
+        >>> # example with a single input
+        >>> example = {"text": "I am a little worried"}
+        >>> process(example)
+        TensorDict(
+            fields={
+                attention_mask: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: Tensor(shape=torch.Size([10]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> # example with a multiple inputs
+        >>> example = {"text": ["Let me reassure you", "It will be ok"]}
+        >>> process(example)
+        TensorDict(
+            fields={
+                attention_mask: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False),
+                input_ids: Tensor(shape=torch.Size([2, 10]), device=cpu, dtype=torch.int64, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=None,
+            is_shared=False)
+
+    """
+
+    def __init__(
+        self,
+        tokenizer,
+        max_length,
+        key="text",
+        padding="max_length",
+        truncation=True,
+        return_tensordict=True,
+        device=None,
+    ):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.key = key
+        self.padding = padding
+        self.truncation = truncation
+        self.return_tensordict = return_tensordict
+        self.device = device
+
+    def __call__(self, sample):
+        input = sample[self.key]
+        tokenized_sample = self.tokenizer(
+            input,
+            max_length=self.max_length,
+            padding=self.padding,
+            truncation=self.truncation,
+        )
+        batch_size = [] if isinstance(input, str) else [len(input)]
+        if self.return_tensordict:
+            return TensorDict.from_dict(
+                dict(tokenized_sample), batch_size=batch_size, device=self.device
+            )
+        return tokenized_sample

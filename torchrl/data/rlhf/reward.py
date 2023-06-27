@@ -7,9 +7,10 @@ from typing import Optional
 
 import torch
 from datasets import Dataset as HFDataset
+
 from tensordict import tensorclass
 
-from torchrl.data.rlhf.dataset import create_or_load_dataset
+from torchrl.data.rlhf.dataset import create_or_load_dataset, TensorDictTokenizer
 from tqdm import tqdm
 
 DEFAULT_DATASET = "CarperAI/openai_summarize_comparisons"
@@ -66,17 +67,22 @@ class PairwiseDataset:
     def from_dataset(
         cls, split, dataset_name=None, max_length=550, root_dir=None, from_disk=False
     ):
-        """TODO
-        Returns a ``PairwiseDataset`` from a dataset name.
+        """Returns a :class:`PairwiseDataset` from a dataset name.
 
         Args:
-            split:
-            dataset_name:
-            max_length:
-            root_dir:
-            from_disk:
+            split (str): ``"train"`` or ``"valid"`` depending on the data split needed.
+            dataset_name (str, optional): name of the dataset to be processed. Defaults to
+                ``"CarperAI/openai_summarize_comparisons"``.
+            max_length (int, optional): maximum length of the dataset sequenes.
+                Defaults to 550.
+            root_dir (path, optional): the path where the datasets are stored.
+                Defaults to ``"$HOME/.cache/torchrl/data"``
+            from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
+                will be used. Otherwise, :func:`datasets.load_dataset` will be used.
+                Defaults to ``False``.
 
-        Returns:
+        Returns: a :class:`PairwiseDataset` instance containing a memory-mapped
+            version of the required dataset.
 
         Examples:
             >>> data = PairwiseDataset.from_dataset("train")
@@ -101,6 +107,9 @@ class PairwiseDataset:
                 batch_size=torch.Size([92534]),
                 device=None,
                 is_shared=False)
+            >>> # data can be sampled from using regular indexing
+            >>> sub_data = data[:3]
+
         """
         if dataset_name is None:
             dataset_name = DEFAULT_DATASET
@@ -108,7 +117,7 @@ class PairwiseDataset:
             split,
             max_length,
             dataset_name,
-            make_process_fn_comparison,
+            TensorDictTokenizer,
             pre_tokenization_hook,
             root_dir=root_dir,
             from_disk=from_disk,
@@ -130,43 +139,6 @@ class PairwiseDataset:
             ),
             batch_size=batch_size,
         )
-
-
-def make_process_fn_comparison(
-    tokenizer, max_length, key="text", padding="max_length", truncation=True
-):
-    """Factory for a process function that applies a tokenizer over a text example.
-
-    Args:
-        tokenizer (tokenizer from transformers library): the tokenizer to use.
-        max_length (int): maximum length of the sequence.
-        key (str, optional): the key where to find the text. Defaults to ``"text"``.
-        padding (str, optional): type of padding. Defaults to ``"max_length"``.
-        truncation (bool, optional): whether the sequences should be truncated to max_length.
-
-    See transformers library for more information about tokenizers:
-        Padding and truncation: `<https://huggingface.co/docs/transformers/pad_truncation>`_
-
-    Examples:
-        >>> from transformers import AutoTokenizer
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> tokenizer.pad_token = 100
-        >>> process = make_process_fn_comparison(tokenizer, max_length=10)
-        >>> example = {"text": "I am a little worried"}
-        >>> process(example)
-        {'input_ids': [40, 716, 257, 1310, 7960, 3064, 3064, 3064, 3064, 3064], 'attention_mask': [1, 1, 1, 1, 1, 0, 0, 0, 0, 0]}
-
-    """
-
-    def process(example):
-        return tokenizer(
-            example[key],
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-        )
-
-    return process
 
 
 def pre_tokenization_hook(dataset, min_length=5):
