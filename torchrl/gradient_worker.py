@@ -10,6 +10,11 @@ import torch
 from tensordict import TensorDict
 
 
+def set_grad(p):
+    p.grad = torch.zeros_like(p.data)
+    return p
+
+
 class GradientWorker:
     """Worker that computes gradients for a given objective."""
 
@@ -22,19 +27,17 @@ class GradientWorker:
         self.device = device
         self.objective = objective
         self.weights = TensorDict(dict(self.objective.named_parameters()), [])
-
-        def set_grad(p):
-            p.grad = torch.zeros_like(p.data)
-            return p
         self.weights.apply(set_grad)
-
         self.weights.lock_()
 
     def update_policy_weights_(
             self,
             weights,
     ) -> None:
+
+        self.weights = self.weights.detach()  # Seems required
         self.weights.update_(weights)
+        self.weights.apply(set_grad)
 
     def compute_gradients(self, mini_batch):
         """Computes next gradient in each iteration."""

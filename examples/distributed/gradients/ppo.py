@@ -54,6 +54,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
     weights = TensorDict(dict(loss_module.named_parameters()), [])
+
+    def set_grad(p):
+        p.grad = torch.zeros_like(p.data)
+        return p
+
+    weights.apply(set_grad)
+    weights.lock_()  # Raises error when updating later
+
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // mini_batch_size
     total_network_updates = (
@@ -140,7 +148,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     scheduler.step()
                 optim.zero_grad()
 
-                weights_copy = weights.clone()
+                weights_copy = weights.detach().clone()
                 grad_worker.update_policy_weights_(weights_copy)
 
         collector.update_policy_weights_()
