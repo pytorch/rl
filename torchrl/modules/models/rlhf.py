@@ -12,6 +12,19 @@ class GPT2RewardModel(nn.Module):
     linear layer with 1 output that can be used as a reward signal. It also exposes the
     method ``compute_reward_loss`` which calculates the reward loss by comparing two
     batches, one chosen, one rejected.
+
+    Examples:
+        >>> from transformers import GPT2Tokenizer
+        >>> from torchrl.modules.models.rlhf import GPT2RewardModel
+        >>> reward_model = GPT2RewardModel(model_path="gpt2")
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> model_inputs = tokenizer(
+        ...     ["This is a test sentence"], return_tensors="pt"
+        ... )
+        >>> rewards, end_scores = reward_model(**model_inputs)
+        >>> assert rewards.shape == model_inputs["input_ids"].shape
+        >>> assert end_scores.shape[1] == 1
+
     """
 
     def __init__(self, model_path=None):
@@ -26,24 +39,30 @@ class GPT2RewardModel(nn.Module):
 
         # replace last layer with the reward layer
         self.lm_head = nn.Linear(self.config.n_embd, 1, bias=False)
-        self.PAD_ID = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
+        self.pad_id = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
 
-    def forward(self, input_ids=None, attention_mask=None):
+    def forward(self, input_ids, attention_mask):
         """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token"""
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = outputs[0]
         rewards = self.lm_head(hidden_states).squeeze(-1)
+        end_scores = self._compute_end_scores(rewards, input_ids)
+
+        return rewards, end_scores
+
+    def _compute_end_scores(self, rewards, input_ids):
         end_scores = []
         bs = input_ids.shape[0]
 
         for i in range(bs):
-            pad_inds = (input_ids[i] == self.PAD_ID).nonzero()
+            pad_inds = (input_ids[i] == self.pad_id).nonzero()
             first_pad_ind = (
                 pad_inds[0].item() if len(pad_inds) > 0 else input_ids.shape[1]
             )
             end_scores.append(rewards[i, first_pad_ind - 1])
 
-        return rewards, torch.stack(end_scores)
+        return torch.stack(end_scores)
+
 
     @staticmethod
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
@@ -63,6 +82,7 @@ class GPT2RewardModel(nn.Module):
         bs = chosen_rewards.shape[0]
         loss = 0
 
+        # TODO: this loop can likely be made more efficient
         for i in range(bs):
             # Check if there is any padding otherwise take length of sequence
             c_inds = (chosen_ids[i] == pad_token_id).nonzero()
@@ -73,7 +93,6 @@ class GPT2RewardModel(nn.Module):
 
             # Retrieve first index where trajectories diverge
             divergence_ind = (chosen_ids[i] != rejected_ids[i]).nonzero()[0]
-            assert divergence_ind > 0
 
             # Index into the correct rewards
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]

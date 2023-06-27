@@ -297,19 +297,18 @@ class TestTokenizers:
 
 
 @pytest.mark.parametrize("batch_size", [5, 6])
-@pytest.mark.parametrize("block_size", [15, 50])
+@pytest.mark.parametrize("block_size", [500, 550])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_reward_model(tmpdir1, tmpdir2, batch_size, block_size, device):
-    dataset_path = f"{HERE}/assets/openai_summarize_tldr.zip"
+    dataset_path = f"{HERE}/assets/openai_summarize_comparisons.zip"
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(tmpdir2)
-        tensorclass_type = PromptData
         dl = get_dataloader(
             batch_size,
             block_size,
-            tensorclass_type,
+            PairwiseDataset,
             device,
-            dataset_name=tmpdir2 / "openai_summarize_tldr",
+            dataset_name=tmpdir2 / "openai_summarize_comparisons",
             infinite=True,
             prefetch=0,
             split="train",
@@ -320,13 +319,21 @@ def test_reward_model(tmpdir1, tmpdir2, batch_size, block_size, device):
     reward_model = GPT2RewardModel().to(device)
 
     batch = next(dl)
-
-    rewards, end_scores = reward_model(
-        input_ids=batch.input_ids, attention_mask=batch.attention_mask
+    chosen_rewards, chosen_end_scores = reward_model(
+        input_ids=batch.chosen_data.input_ids, attention_mask=batch.chosen_data.attention_mask
+    )
+    rejected_rewards, _ = reward_model(
+        input_ids=batch.rejected_data.input_ids, attention_mask=batch.rejected_data.attention_mask
     )
 
-    assert rewards.shape == torch.Size([batch_size, block_size])
-    assert end_scores.shape == torch.Size([batch_size])
+    assert chosen_rewards.shape == torch.Size([batch_size, block_size])
+    assert chosen_end_scores.shape == torch.Size([batch_size])
+
+    batch.chosen_data.rewards = chosen_rewards
+    batch.rejected_data.rewards = rejected_rewards
+
+    loss = reward_model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
+    assert loss.shape == torch.Size([])
 
 
 if __name__ == "__main__":
