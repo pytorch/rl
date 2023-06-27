@@ -121,9 +121,9 @@ class GradientCollector:
                 loss_sum.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
-                params = TensorDict.from_module(self.objective).lock_()
-                grads = params.apply(lambda p: p.grad).lock_()
-                grads.isend(0)
+                # params = TensorDict.from_module(self.objective).lock_()
+                # grads = params.apply(lambda p: p.grad).lock_()
+                # grads.isend(0)
 
                 yield
 
