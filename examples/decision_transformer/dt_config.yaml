@@ -15,8 +15,6 @@ env:
   target_return_mode: constant
   eval_target_return: 6000 
   collect_target_return: 12000
-  total_online_frames: 1000000
-
 
 # logger
 logger:
