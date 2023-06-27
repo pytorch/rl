@@ -28,22 +28,35 @@ def tmpdir1(tmp_path_factory):
     yield tmp_path_factory.mktemp("tmpdir1")
 
 
-@pytest.fixture
-def tmpdir2(tmp_path_factory):
-    yield tmp_path_factory.mktemp("tmpdir2")
+@pytest.fixture(scope="session")
+def minidata_dir_comparison(tmp_path_factory):
+    dest = tmp_path_factory.mktemp("tldr")
+    dataset_path = f"{HERE}/assets/openai_summarize_comparisons.zip"
+    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
+        zip_ref.extractall(dest)
+        yield dest / Path(dataset_path).name[:-4]
+
+
+@pytest.fixture(scope="session")
+def minidata_dir_tldr(tmp_path_factory):
+    dest = tmp_path_factory.mktemp("tldr")
+    dataset_path = f"{HERE}/assets/openai_summarize_tldr.zip"
+    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
+        zip_ref.extractall(dest)
+        yield dest / Path(dataset_path).name[:-4]
 
 
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
-    "dataset_path,make_process_fn,pre_tokenization_hook",
+    "dataset,make_process_fn,pre_tokenization_hook",
     [
         (
-            f"{HERE}/assets/openai_summarize_comparisons.zip",
+            "comp",
             TensorDictTokenizer,
             pre_tokenization_hook,
         ),
         (
-            f"{HERE}/assets/openai_summarize_tldr.zip",
+            "tldr",
             PromptTensorDictTokenizer,
             None,
         ),
@@ -51,9 +64,10 @@ def tmpdir2(tmp_path_factory):
 )
 def test_create_or_load_dataset(
     tmpdir1,
-    tmpdir2,
+    minidata_dir_tldr,
+    minidata_dir_comparison,
     max_length,
-    dataset_path,
+    dataset,
     make_process_fn,
     pre_tokenization_hook,
     mocker,
@@ -62,45 +76,47 @@ def test_create_or_load_dataset(
     lmemmap_save = deepcopy(TensorDict.load_memmap)
     mocked_hello = mocker.patch("tensordict.TensorDict.load_memmap")
     mocked_hello.side_effect = lmemmap_save
-    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
-        zip_ref.extractall(tmpdir2)
+    if dataset == "tldr":
+        dataset = minidata_dir_tldr
+    elif dataset == "comp":
+        dataset = minidata_dir_comparison
+    else:
+        raise NotImplementedError
 
-        for i in range(2):
+    for i in range(2):
+        data = TokenizedDatasetLoader(
+            split="train",
+            max_length=max_length,
+            dataset_name=dataset,
+            tokenizer_fn=make_process_fn,
+            pre_tokenization_hook=pre_tokenization_hook,
+            from_disk=True,
+            root_dir=tmpdir1,
+        ).load()
+        if i == 0:
+            mocked_hello.assert_not_called()
+        else:
+            mocked_hello.assert_called()
 
-            # shutil.copyfileobj(gzip.open(dataset_path), tmpdir2)
-            data = TokenizedDatasetLoader(
-                split="train",
-                max_length=max_length,
-                dataset_name=tmpdir2 / Path(dataset_path).name[:-4],
-                tokenizer_fn=make_process_fn,
-                pre_tokenization_hook=pre_tokenization_hook,
-                from_disk=True,
-                root_dir=tmpdir1,
-            ).load()
-            if i == 0:
-                mocked_hello.assert_not_called()
-            else:
-                mocked_hello.assert_called()
-
-            assert isinstance(data, TensorDict)
-            # assert "train" in data.keys(), data
-            # assert ("train", str(max_length)) in data.keys(True), data
-            for val in data.values(True, True):
-                if val.ndim > 1:
-                    assert val.shape[1] == max_length
+        assert isinstance(data, TensorDict)
+        # assert "train" in data.keys(), data
+        # assert ("train", str(max_length)) in data.keys(True), data
+        for val in data.values(True, True):
+            if val.ndim > 1:
+                assert val.shape[1] == max_length
 
 
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
-    "dataset_path,make_process_fn,pre_tokenization_hook",
+    "dataset,make_process_fn,pre_tokenization_hook",
     [
         (
-            f"{HERE}/assets/openai_summarize_comparisons.zip",
+            "comp",
             TensorDictTokenizer,
             pre_tokenization_hook,
         ),
         (
-            f"{HERE}/assets/openai_summarize_tldr.zip",
+            "tldr",
             PromptTensorDictTokenizer,
             None,
         ),
@@ -108,28 +124,33 @@ def test_create_or_load_dataset(
 )
 def test_preproc_data(
     tmpdir1,
-    tmpdir2,
     max_length,
-    dataset_path,
+    dataset,
     make_process_fn,
     pre_tokenization_hook,
+    minidata_dir_tldr,
+    minidata_dir_comparison,
     split="train",
 ):
-    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
-        zip_ref.extractall(tmpdir1)
-        loader = TokenizedDatasetLoader(
-            split=split,
-            max_length=max_length,
-            dataset_name=tmpdir1 / Path(dataset_path).name[:-4],
-            tokenizer_fn=make_process_fn,
-            pre_tokenization_hook=pre_tokenization_hook,
-            from_disk=True,
-            root_dir=tmpdir2,
-        )
-        dataset = loader._load_dataset()
-        assert isinstance(dataset, datasets.Dataset)
-        dataset = loader._tokenize(dataset)
-        assert isinstance(dataset, TensorDictBase)
+    if dataset == "tldr":
+        dataset = minidata_dir_tldr
+    elif dataset == "comp":
+        dataset = minidata_dir_comparison
+    else:
+        raise NotImplementedError
+    loader = TokenizedDatasetLoader(
+        split=split,
+        max_length=max_length,
+        dataset_name=dataset,
+        tokenizer_fn=make_process_fn,
+        pre_tokenization_hook=pre_tokenization_hook,
+        from_disk=True,
+        root_dir=tmpdir1,
+    )
+    dataset = loader._load_dataset()
+    assert isinstance(dataset, datasets.Dataset)
+    dataset = loader._tokenize(dataset)
+    assert isinstance(dataset, TensorDictBase)
 
 
 @pytest.mark.parametrize("suffix", ["c", ("c", "d")])
@@ -149,10 +170,10 @@ def test_dataset_to_tensordict(tmpdir, suffix):
 @pytest.mark.parametrize("batch_size", [5, 6])
 @pytest.mark.parametrize("block_size", [15, 50])
 @pytest.mark.parametrize(
-    "tensorclass_type,dataset_path",
+    "tensorclass_type,dataset",
     [
-        (PromptData, f"{HERE}/assets/openai_summarize_tldr.zip"),
-        (PairwiseDataset, f"{HERE}/assets/openai_summarize_comparisons.zip"),
+        (PromptData, "tldr"),
+        (PairwiseDataset, "comp"),
     ],
 )
 @pytest.mark.parametrize("device", get_default_devices())
@@ -160,29 +181,34 @@ def test_dataset_to_tensordict(tmpdir, suffix):
 @pytest.mark.parametrize("infinite", [True, False])
 def test_get_dataloader(
     tmpdir1,
-    tmpdir2,
     tensorclass_type,
     batch_size,
     block_size,
     device,
-    dataset_path,
+    dataset,
     split,
     infinite,
+    minidata_dir_tldr,
+    minidata_dir_comparison,
 ):
-    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
-        zip_ref.extractall(tmpdir1)
-        dl = get_dataloader(
-            batch_size,
-            block_size,
-            tensorclass_type,
-            device,
-            dataset_name=tmpdir1 / Path(dataset_path).name[:-4],
-            infinite=infinite,
-            prefetch=0,
-            split=split,
-            root_dir=tmpdir2,
-            from_disk=True,
-        )
+    if dataset == "tldr":
+        dataset = minidata_dir_tldr
+    elif dataset == "comp":
+        dataset = minidata_dir_comparison
+    else:
+        raise NotImplementedError
+    dl = get_dataloader(
+        batch_size,
+        block_size,
+        tensorclass_type,
+        device,
+        dataset_name=dataset,
+        infinite=infinite,
+        prefetch=0,
+        split=split,
+        root_dir=tmpdir1,
+        from_disk=True,
+    )
     for data in dl:  # noqa: B007
         break
     assert data.shape[0] == batch_size
