@@ -132,6 +132,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Update counter
         collected_frames += frames_in_batch
 
+        # apply gradients
+
         # Update local policy
         print("Updating local policy")
         optim.step()

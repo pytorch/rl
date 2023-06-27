@@ -86,6 +86,7 @@ class GradientCollector:
         #     p.data = torch.from_numpy(g).to(self.device)
         #     p.grad.zero_()
 
+
     def shutdown(self):
         self.collector.shutdown()
 
@@ -119,6 +120,10 @@ class GradientCollector:
                 print("Computing gradients...")
                 loss_sum.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
+
+                params = TensorDict.from_module(self.objective).lock_()
+                grads = params.apply(lambda p: p.grad).lock_()
+                grads.isend(0)
 
                 yield
 
