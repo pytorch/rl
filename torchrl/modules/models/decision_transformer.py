@@ -3,11 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib
 
 import torch
 import torch.nn as nn
 import transformers
 from transformers.models.gpt2.modeling_gpt2 import GPT2Model
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class DecisionTransformer(nn.Module):
@@ -48,6 +51,10 @@ class DecisionTransformer(nn.Module):
         action_dim,
         config,
     ):
+        if not _has_transformers:
+            raise ImportError(
+                "transformers is not installed. Please install it with `pip install transformers`."
+            )
         super(DecisionTransformer, self).__init__()
 
         gpt_config = transformers.GPT2Config(
