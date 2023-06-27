@@ -16,7 +16,7 @@ import random
 import itertools
 import numpy as np
 import torch
-from torchrl.local_gradient_collector import GradientCollector
+from torchrl.local_gradient_collector2 import GradientCollector
 from tensordict import TensorDict
 
 # Set seeds for reproducibility
@@ -96,39 +96,31 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frames_in_batch = cfg.collector.frames_per_batch
     collected_frames = 0
 
-    for remote_grads in grad_worker:
+    # for remote_grads in grad_worker:
 
-    # for data in collector:
-    #
-    #     frames_in_batch = data.numel()
-    #     collected_frames += frames_in_batch
-    #
-    #     for j in range(cfg.loss.ppo_epochs):
-    #
-    #         # Compute GAE
-    #         with torch.no_grad():
-    #             data = adv_module(data.to(model_device)).cpu()
-    #
-    #         # Update the data buffer
-    #         data_reshape = data.reshape(-1)
-    #         data_buffer.extend(data_reshape)
-    #
-    #         for i, batch in enumerate(data_buffer):
-    #
-    #             # Get a data batch
-    #             batch = batch.to(model_device)
-    #
-    #             # Forward pass PPO loss
-    #             loss = loss_module(batch)
-    #             loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-    #
-    #             # Backward pass
-    #             loss_sum.backward()
-    #             grad_norm = torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_norm=0.5)
-    #             optim.step()
-    #             optim.zero_grad()
-    #
-    #     collector.update_policy_weights_()
+    for data in collector:
+
+        frames_in_batch = data.numel()
+        collected_frames += frames_in_batch
+
+        for j in range(cfg.loss.ppo_epochs):
+
+            # Compute GAE
+            with torch.no_grad():
+                data = adv_module(data.to(model_device)).cpu()
+
+            # Update the data buffer
+            data_reshape = data.reshape(-1)
+            data_buffer.extend(data_reshape)
+
+            for i, batch in enumerate(data_buffer):
+
+                grads = grad_worker.compute_gradients(batch)
+
+                optim.step()
+                optim.zero_grad()
+
+        collector.update_policy_weights_()
 
         # Update counter
         collected_frames += (frames_in_batch / 320)
