@@ -18,7 +18,7 @@ class RolloutFromModel:
     """A class for performing rollouts with causal language models.
 
     It is assumed that the model this class wraps takes in input tokenized text and
-    whose task is to predicting the next word in a sentence having read the n previous
+    whose task is to predict the next word in a sentence having read the n previous
     words.
 
     Args:
@@ -29,7 +29,7 @@ class RolloutFromModel:
             KL penalty for the reward, to stop the model from straying too far from the
             reference model during training.
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
-            input_ids and attention_mask, calculates rewards for each token and
+            ``input_ids`` and ``attention_mask``, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
@@ -61,38 +61,38 @@ class RolloutFromModel:
         env that sampled one token each timestep.
 
         Args:
-            batch: A batch of data containing the original prompt together with a field
+            batch (TensorDict): A batch of data containing the original prompt together with a field
                 "rindex" indicating the right index of the prompt.
-            generated: The prompt together with generated tokens. This can be obtained
+            generated (torch.Tensor): Tokenized prompt followed by generated tokens. This can be obtained
                 by calling the ``generate`` method.
-            log_probs: The log probabilities of the generated tokens. Can be obtained by
+            log_probs (torch.Tensor): The log probabilities of the generated tokens. Can be obtained by
                 calling the ``generate`` method.
-            log_ratio: The log ratio of the probabilities of the generated tokens
+            log_ratio (torch.Tensor): The log ratio of the probabilities of the generated tokens
                 according to the generative model and the reference model. Can be
                 obtained by calling the ``generate`` method.
-            kl_coef: Coefficient with which to multiply the KL term before subtracting
-                from the reward.
+            kl_coef (float, optional): Coefficient with which to multiply the KL term before subtracting
+                from the reward. Defaults to 0.1.
 
         Returns:
-            A TensorDict with the following keys:
-            - "action": the sequence of actions (generated tokens)
-            - "input_ids": the input_ids passed to the generative model at each time
+            A :class:`~tensordict.TensorDict` with the following keys:
+            - ``"action"``: the sequence of actions (generated tokens)
+            - ``"input_ids"``: the input_ids passed to the generative model at each time
               step.
-            - "attention_mask": the attention_masks passed to the generative model at
+            - ``"attention_mask"``: the attention_masks passed to the generative model at
               each time step
-            - "sample_log_prob": the log probability of each token during generation
-            - ("next", "input_ids"): the sequence of tokens after generation. Makes up
+            - ``"sample_log_prob"``: the log probability of each token during generation
+            - ``("next", "input_ids")``: the sequence of tokens after generation. Makes up
               part of the inputs that will be used for generating the next token.
-            - ("next", "attention_mask"): updated attention_mask after token has been
+            - ``("next", "attention_mask")``: updated attention_mask after token has been
               generated. Passed to the generative model on the next time step
-            - ("next", "done"): Boolean array indicating whether we've reached a
+            - ``("next", "done")``: Boolean array indicating whether we've reached a
               terminal state (either because we generated EOS token or because we
               reached the token limit)
-            - ("next", "reward"): The reward received at each time step
-            - ("next", "reward_raw"): The raw reward from the reward model, without the
+            - ``("next", "reward")``: The reward received at each time step
+            - ``("next", "reward_raw")``: The raw reward from the reward model, without the
               KL term. This is mainly for debugging and logging, it is not used in
               training
-            - ("next", "reward_kl"): The KL term from the reward. This is mainly for
+            - ``("next", "reward_kl")``: The KL term from the reward. This is mainly for
               debugging and logging, it is not used in training.
         """
         rollout_generated = []
