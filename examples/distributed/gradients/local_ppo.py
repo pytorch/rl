@@ -93,10 +93,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger = make_logger(cfg.logger)
     test_env = make_test_env(cfg.env, state_dict)
     record_interval = cfg.logger.log_interval
-    frames_in_batch = 2048 / 320
+    frames_in_batch = cfg.collector.frames_per_batch
     collected_frames = 0
 
     for remote_grads in grad_worker:
+
     # for data in collector:
     #
     #     frames_in_batch = data.numel()
@@ -130,7 +131,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     #     collector.update_policy_weights_()
 
         # Update counter
-        collected_frames += frames_in_batch
+        collected_frames += (frames_in_batch / 320)
 
         # apply gradients
 

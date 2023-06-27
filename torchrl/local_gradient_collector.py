@@ -99,33 +99,35 @@ class GradientCollector:
 
         for data in self.collector:
 
-            # Compute GAE
-            with torch.no_grad():
-                data = self.advantage(data.to(self.device)).cpu()
+            for i in range(10):
 
-            # Add to Replay Buffer
-            data_view = data.reshape(-1)
-            self.replay_buffer.extend(data_view)
+                # Compute GAE
+                with torch.no_grad():
+                    data = self.advantage(data.to(self.device)).cpu()
 
-            for iter in range(self.updates_per_batch):
+                # Add to Replay Buffer
+                data_view = data.reshape(-1)
+                self.replay_buffer.extend(data_view)
 
-                # Sample batch from replay buffer
-                mini_batch = self.replay_buffer.sample().to(self.device)
+                for j in range(32):
 
-                # Compute loss
-                loss = self.objective(mini_batch)
-                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                    # Sample batch from replay buffer
+                    mini_batch = self.replay_buffer.sample().to(self.device)
 
-                # Backprop loss
-                print("Computing remote gradients...")
-                loss_sum.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
+                    # Compute loss
+                    loss = self.objective(mini_batch)
+                    loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
-                # params = TensorDict.from_module(self.objective).lock_()
-                # grads = params.apply(lambda p: p.grad).lock_()
-                # grads.isend(0)
+                    # Backprop loss
+                    print("Computing remote gradients...")
+                    loss_sum.backward()
+                    grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
 
-                yield
+                    # params = TensorDict.from_module(self.objective).lock_()
+                    # grads = params.apply(lambda p: p.grad).lock_()
+                    # grads.isend(0)
+
+                    yield
 
     def set_seed(self, seed: int, static_seed: bool = False) -> int:
         return self.collector.set_seed(seed, static_seed)
