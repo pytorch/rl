@@ -476,9 +476,9 @@ def make_loss(loss_cfg, actor_network, value_network, value_head):
     return loss_module, advantage_module
 
 
-def make_optim(optim_cfg, actor_network, value_network):
+def make_optim(optim_cfg, loss_module):
     optim = torch.optim.Adam(
-        list(actor_network.parameters()) + list(value_network.parameters()),
+        loss_module.parameters(),
         lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )

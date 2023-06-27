@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Backward pass
                 loss_sum.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(
-                    list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
+                    list(loss_module.parameters()), max_norm=0.5
                 )
                 losses[j, i]["grad_norm"] = grad_norm
 
