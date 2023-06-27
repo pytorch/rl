@@ -19,9 +19,8 @@ lib_dir="${env_dir}/lib"
 
 conda deactivate && conda activate ./env
 
-# this workflow only tests the libs
-python -c "import sklearn, pandas"
+python -c "import transformers, datasets"
 
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_libs.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/test_rlhf.py --instafail -v --durations 200 --capture no -k TestOpenML --error-for-skips
 coverage combine
 coverage xml -i
