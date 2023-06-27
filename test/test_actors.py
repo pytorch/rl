@@ -18,6 +18,7 @@ from torchrl.data import (
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
 )
+from torchrl.data.rlhf.dataset import _has_transformers
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
@@ -25,6 +26,7 @@ from torchrl.modules.tensordict_module.actors import (
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    LMHeadActorValueOperator,
     ProbabilisticActor,
     QValueActor,
     QValueHook,
@@ -554,6 +556,68 @@ def test_actorcritic(device):
 
     policy_params = set(
         list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
+    )
+    policy_params2 = set(policy_op.parameters())
+    assert len(policy_params.difference(policy_params2)) == 0 and len(
+        policy_params.intersection(policy_params2)
+    ) == len(policy_params)
+
+
+@pytest.mark.skipif(not _has_transformers, reason="missing dependencies")
+@pytest.mark.parametrize("device", get_default_devices())
+def test_lmhead_actorvalueoperator(device):
+    from transformers import AutoModelForCausalLM
+
+    base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
+    aco = LMHeadActorValueOperator(base_model)
+
+    # check common
+    assert aco.module[0][0].module is base_model.transformer
+    assert aco.module[0][1].in_keys == ["x"]
+    assert aco.module[0][1].out_keys == ["x"]
+
+    # check actor
+    assert aco.module[1].in_keys == ["x"]
+    assert aco.module[1].out_keys == ["logits", "action", "sample_log_prob"]
+    assert aco.module[1][0].module is base_model.lm_head
+
+    # check critic
+    assert aco.module[2].in_keys == ["x"]
+    assert aco.module[2].out_keys == ["state_value"]
+    assert isinstance(aco.module[2].module, nn.Linear)
+    assert aco.module[2].module.in_features == base_model.transformer.embed_dim
+    assert aco.module[2].module.out_features == 1
+
+    td = TensorDict(
+        source={
+            "input_ids": torch.randint(50257, (4, 3)),
+            "attention_mask": torch.ones((4, 3)),
+        },
+        batch_size=[
+            4,
+        ],
+    ).to(device)
+    td_total = aco(td.clone())
+    policy_op = aco.get_policy_operator()
+    td_policy = policy_op(td.clone())
+    value_op = aco.get_value_operator()
+    td_value = value_op(td)
+    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
+    torch.testing.assert_close(
+        td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
+    )
+    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
+
+    value_params = set(
+        list(aco.get_value_operator().parameters()) + list(aco.module[0].parameters())
+    )
+    value_params2 = set(value_op.parameters())
+    assert len(value_params.difference(value_params2)) == 0 and len(
+        value_params.intersection(value_params2)
+    ) == len(value_params)
+
+    policy_params = set(
+        list(aco.get_policy_operator().parameters()) + list(aco.module[0].parameters())
     )
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(
