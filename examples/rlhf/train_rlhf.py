@@ -27,19 +27,7 @@ from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
-from utils import get_file_logger, resolve_name_or_path, setup
-
-
-def flatten_td(td):
-    # our tensordict has shape [B, T] where B = batch_size and T = trajectory length
-    # some trajectories may have stopped (reached EOS) before generating T tokens
-    # this function truncates and concatenates the trajectories, resulting in a
-    # tensordict that has shape [N] where N <= B * T.
-    done = td["next", "done"]
-    mask = torch.zeros_like(done)
-    mask[..., 1:, :] = done[..., :-1, :]  # shift by one
-    mask = ~mask.cumsum(-2).bool().squeeze()
-    return td[mask]
+from utils import flatten_td, get_file_logger, resolve_name_or_path, setup, TestPromptLogger
 
 
 class AdaptiveKLController:
@@ -64,75 +52,48 @@ class AdaptiveKLController:
         return self.value
 
 
-def create_reward_estimator(
-    eval_iters, episode_length, reward_model, batch, ctx, logger=None, ref_model=None
-):
-    """Create a function to estimate the reward via sampling.
+class RewardEstimator:
+    """Create a class to estimate the reward via sampling.
 
-    This function creates a new function which, given a model and a dataloader, will
+    This class exposes a call method which, given a model and a dataloader, will
     perform multiple rollouts using the model and data sampled from the dataloader then
     average the accumulated rewards.
 
     For debugging purposes, we also generate responses to a fixed prompt so that the
     quality of the model can be visually assessed during training.
-    """
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    tokenizer.pad_token = tokenizer.eos_token
 
-    test_rindex = batch.prompt_rindex[0]
-    test_prompt_ids = batch.input_ids[:1, :test_rindex]
-    test_label_ids = batch.input_ids[:1, test_rindex:]
-    generation_config = GenerationConfig(
-        pad_token_id=tokenizer.pad_token_id, max_new_tokens=episode_length
-    )
-    test_prompt = tokenizer.decode(test_prompt_ids[0, :test_rindex].tolist())
-    test_label = tokenizer.decode(
-        test_label_ids[0, test_label_ids[0] != tokenizer.pad_token_id].tolist()
-    )
-    _, test_label_reward = reward_model(
-        input_ids=batch.input_ids[:1], attention_mask=batch.attention_mask[:1]
-    )
+    """
+    def __init__(
+            self, eval_iters, episode_length, reward_model, ref_model
+    ):
+        """
+            Args:
+                eval_iters (int): number of batches on which we would like to estimate reward
+
+                episode_length (int): max number of generated new tokens
+
+                reward_model (GPT2RewardModel): reward model
+
+                ref_model (GPT2LMHeadModel): original transformer model that it is used to 
+                    correctly compute kl component of reward.
+        """
+        self.ref_model = ref_model
+        self.reward_model = reward_model
+        self.eval_iters = eval_iters
+        self.episode_length = episode_length
 
     @torch.no_grad()
-    def estimate_reward(model, dataloader):
-        rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
-        rewards = torch.zeros(eval_iters)
-        for k in range(eval_iters):
+    def __call__(self, model, dataloader):
+        rollout_from_model = RolloutFromModel(model, self.ref_model, self.reward_model, max_new_tokens=self.episode_length)
+        rewards = torch.zeros(self.eval_iters)
+        for k in range(self.eval_iters):
             batch = next(dataloader)
             # NOTE: disable kl for evaluation
             td = rollout_from_model.rollout_from_data(batch, kl_coef=0.0)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
-        if logger:
-            response_ids = model.generate(
-                input_ids=test_prompt_ids, generation_config=generation_config
-            )
-            with ctx:
-                _, response_reward = reward_model(
-                    input_ids=response_ids,
-                    attention_mask=(response_ids != tokenizer.pad_token_id).to(
-                        torch.int64
-                    ),
-                )
-            reward = (response_reward - test_label_reward).item()
-            response_ids = response_ids[0, test_rindex:]
-            response = tokenizer.decode(
-                response_ids[response_ids != tokenizer.eos_token_id].tolist()
-            )
-            string_to_write = (
-                f"Query:\n{test_prompt}\n"
-                f"Response:\n{response}\n"
-                f"Actual response:\n{test_label}\n"
-                f"{reward=:4.4f}, "
-                f"{test_reward=:4.4f}\n"
-                f"====================================================\n"
-            )
-            logger.info(string_to_write)
-
         return test_reward
-
-    return estimate_reward
 
 
 # @hydra.main(version_base="1.1", config_path="config", config_name="train_rlhf")
@@ -220,15 +181,14 @@ def main():
     loss_fn = ClipPPOLoss(actor, critic_head)
 
     test_prompt = next(val_loader)
-    estimate_reward = create_reward_estimator(
+    reward_estimator = RewardEstimator(
         eval_iters,
         episode_length,
         reward_model,
-        test_prompt,
-        ctx,
-        logger=query_logger,
-        ref_model=ref_model,
+        ref_model
     )
+
+    prompt_logger = TestPromptLogger(test_prompt=test_prompt, reward_model=reward_model, logger=query_logger)
 
     optimizer = torch.optim.AdamW(
         [p for p in loss_fn.parameters() if p.requires_grad], **train_cfg.optimizer
@@ -236,6 +196,7 @@ def main():
     scheduler = None
     if train_cfg.decay_lr:
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
+    kl_controller = AdaptiveKLController(0.1, 6, 10000)
 
     rb = TensorDictReplayBuffer(
         storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
@@ -255,11 +216,10 @@ def main():
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
     with tqdm(total=int(max_epochs * num_rollouts_per_epoch / batch_size)) as pbar:
-        for _epoch in range(1, max_epochs + 1):
+        for epoch in range(1, max_epochs + 1):
             rb.empty()
             rollout_rewards = []
             rollout_kl = []
-            kl_controller = AdaptiveKLController(0.1, 6, 10000)
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
                 td = rollout_from_model.rollout_from_data(
@@ -304,8 +264,6 @@ def main():
                 rb_ppo.extend(batch)
                 for _ in range(ppo_num_epochs):  # PPO epochs
                     optimizer.zero_grad()
-                    # why don't we optimize at each step? Is accumulating grads better?
-                    # usually more small steps is better than a giant one
                     for minibatch in rb_ppo:  # GO over RB
                         minibatch = minibatch.to(device, non_blocking=True)
                         with ctx:
@@ -323,7 +281,9 @@ def main():
                 it += 1
                 pbar.update(1)
                 if it % eval_interval == 0:
-                    val_reward = estimate_reward(model, val_loader)
+                    with ctx:
+                        val_reward = reward_estimator(model, val_loader)
+                        prompt_logger.log(model)
                     val_reward_logger.info(f"VALID: {it=}: {val_reward=:.4f}")
                     wandb.log({"val_reward": val_reward}, step=it)
                     pbar.set_description(f"VALID: {it=}: {val_reward=:.4f}")
@@ -334,6 +294,9 @@ def main():
                                 f"saving checkpoint to {rlhf_out_dir}"
                             )
                             model.save_pretrained(rlhf_out_dir)
+                    
+
+
 
 
 if __name__ == "__main__":
