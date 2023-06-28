@@ -1356,21 +1356,11 @@ def test_reset_heterogeneous_envs():
 
 
 class TestNestedEnvsCollector:
-    @pytest.mark.parametrize("nested_obs_action", [True, False])
-    @pytest.mark.parametrize("nested_done", [True, False])
-    @pytest.mark.parametrize("nested_reward", [True, False])
-    def test_collector_nested_env_consistency(
-        self, nested_obs_action, nested_done, nested_reward, seed=1
-    ):
-        env = NestedCountingEnv(
-            nest_obs_action=nested_obs_action,
-            nest_done=nested_done,
-            nest_reward=nested_reward,
-        )
+    def test_multi_collector_nested_env_consistency(self, seed=1):
+        env = NestedCountingEnv()
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
         policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
-        policy(env.reset())
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],
@@ -1412,6 +1402,36 @@ class TestNestedEnvsCollector:
 
         assert_allclose_td(c1, d1)
         assert_allclose_td(c2, d2)
+
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    def test_collector_nested_env_combinations(
+        self,
+        nested_obs_action,
+        nested_done,
+        nested_reward,
+        seed=1,
+        frames_per_batch=20,
+    ):
+        env = NestedCountingEnv(
+            nest_reward=nested_reward,
+            nest_done=nested_done,
+            nest_obs_action=nested_obs_action,
+        )
+        torch.manual_seed(seed)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
