@@ -177,7 +177,7 @@ def step_mdp(
     elif exclude_done:
         excluded = {"done"}
     if excluded:
-        out = out.exclude(*excluded, inplace=True)
+        out = out.exclude(*excluded)
     # TODO: make it work with LazyStackedTensorDict
     # def _valid_key(key):
     #     if key == "next" or key in out.keys():
@@ -198,9 +198,9 @@ def step_mdp(
 
     if td_keys:
         # update does some checks that we can spare
-        # out.update(tensordict.select(*td_keys))
-        for key in td_keys:
-            out._set(key, tensordict.get(key))
+        out.update(tensordict.select(*td_keys))
+        # for key in td_keys:
+        #     out.set(key, tensordict.get(key))
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:

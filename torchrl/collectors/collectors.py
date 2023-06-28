@@ -831,7 +831,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.clone(False))
+                tensordicts.append(self._tensordict.to(self.storing_device))
 
                 self._step_and_maybe_reset()
                 if (
@@ -840,13 +840,17 @@ class SyncDataCollector(DataCollectorBase):
                 ):
                     break
         try:
-            torch.stack(
-                tensordicts, self._tensordict_out.ndim - 1, out=self._tensordict_out
+            self._tensordict_out = torch.stack(
+                tensordicts,
+                self._tensordict_out.ndim - 1,
+                out=self._tensordict_out,
             )
         except RuntimeError:
             with self._tensordict_out.unlock_():
-                torch.stack(
-                    tensordicts, self._tensordict_out.ndim - 1, out=self._tensordict_out
+                self._tensordict_out = torch.stack(
+                    tensordicts,
+                    self._tensordict_out.ndim - 1,
+                    out=self._tensordict_out,
                 )
         return self._tensordict_out
 
