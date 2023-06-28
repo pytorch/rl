@@ -768,7 +768,6 @@ class SyncDataCollector(DataCollectorBase):
     def _step_and_maybe_reset(self) -> None:
         done = self._tensordict.get(("next", "done"))
         truncated = self._tensordict.get(("next", "truncated"), None)
-        traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
         self._tensordict = step_mdp(self._tensordict)
 
@@ -780,6 +779,8 @@ class SyncDataCollector(DataCollectorBase):
         )
 
         if done_or_terminated.any():
+            traj_ids = self._tensordict.get(("collector", "traj_ids"))
+            traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             _reset = done_or_terminated
@@ -790,11 +791,12 @@ class SyncDataCollector(DataCollectorBase):
                 dtype=torch.bool,
             )
             if td_reset.batch_dims:
+                # self._tensordict = self._tensordict.clone()
                 self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
-                    td_reset[traj_done_or_terminated], inplace=True
+                    td_reset[traj_done_or_terminated]
                 )
             else:
-                self._tensordict.update(td_reset, inplace=True)
+                self._tensordict.update(td_reset)
 
             done = self._tensordict.get("done")
             if done.any():
@@ -804,7 +806,7 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
-            self._tensordict.set_(
+            self._tensordict.set(
                 ("collector", "traj_ids"), traj_ids
             )  # no ops if they already match
 
@@ -817,7 +819,7 @@ class SyncDataCollector(DataCollectorBase):
 
         """
         if self.reset_at_each_iter:
-            self._tensordict.update(self.env.reset(), inplace=True)
+            self._tensordict.update(self.env.reset())
 
         # self._tensordict.fill_(("collector", "step_count"), 0)
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
@@ -831,7 +833,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.clone(False).to(self.storing_device))
+                tensordicts.append(self._tensordict.to(self.storing_device))
 
                 self._step_and_maybe_reset()
                 if (

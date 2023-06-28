@@ -168,7 +168,8 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-    out = tensordict.get("next").clone(False)
+    tensordict = tensordict.clone(False)
+    out = tensordict.get("next")
     excluded = None
     if exclude_done and exclude_reward:
         excluded = {"done", "reward"}
@@ -189,7 +190,13 @@ def step_mdp(
     #     return False
     td_keys = None
     if keep_other:
-        out_keys = set(out.keys())
+        # we could select the leafs because otherwise we just copy root
+        # tensordicts and modifying their values results in a modification
+        # of the previous td. Alternatively, we select from tensordict and clone
+        # (see below)
+        out_keys = set(
+            out.keys()
+        )  # Q: is True, True here and below faster than the clone(False) here under?
         td_keys = set(tensordict.keys()) - out_keys - {"next"}
         if exclude_action:
             td_keys = td_keys - {"action"}
