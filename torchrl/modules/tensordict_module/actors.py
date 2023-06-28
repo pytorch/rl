@@ -1766,7 +1766,7 @@ class LMHeadActorValueOperator(ActorValueOperator):
     Args:
         base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer
 
-    Note: for more details please refer to :class:`~.ActorValueOperator`.
+      .. note:: For more details regarding the class construction, please refer to :class:`~.ActorValueOperator`.
     """
 
     def __init__(self, base_model):
