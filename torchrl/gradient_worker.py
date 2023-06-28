@@ -5,14 +5,22 @@ import torch
 import itertools
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
-from torch import nn
 import torch
+from torch import nn
 from tensordict import TensorDict
 
 
 def set_grad(p):
+    """Initializes gradients to zero."""
     p.grad = torch.zeros_like(p.data)
     return p
+
+
+def apply_weights(w1, w2):
+    """Applies weights to a model and re-sets gradients to zero."""
+    w1.data.copy_(w2)
+    w1.grad.zero_()
+    return w1
 
 
 class GradientWorker:
@@ -23,26 +31,32 @@ class GradientWorker:
         objective,
         device: torch.device = "cpu",
     ):
+        """Initializes the worker.
+
+        objective: The objective to optimize.
+        device: The device to use for computation.
+        """
 
         self.device = device
         self.objective = objective
 
-        with torch.no_grad():
-            self.weights = TensorDict(dict(self.objective.named_parameters()), [])
-            self.weights.apply(set_grad)
-            self.weights.lock_()
+        self.weights = TensorDict(dict(self.objective.named_parameters()), [])
+        self.weights.apply(set_grad)
+        self.weights.lock_()
 
     def update_policy_weights_(
             self,
-            weights,
+            weights: TensorDictBase,
     ) -> None:
+        self.weights.apply(apply_weights, weights)
+        # self.weights.update_(weights)  # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
+        # self.weights.update(weights)  #  RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
-        # self.weights = self.weights.detach()  # avoids error but probably not what we want
-        self.weights.update_(weights)  # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
-        self.weights.apply(set_grad)
-
-    def compute_gradients(self, mini_batch):
-        """Computes next gradient in each iteration."""
+    def compute_gradients(
+            self,
+            mini_batch: TensorDictBase,
+    ) -> TensorDictBase:
+        """Computes gradients for the given mini-batch."""
 
         mini_batch = mini_batch.to(self.device)
 

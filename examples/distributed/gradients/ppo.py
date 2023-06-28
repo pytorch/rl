@@ -143,7 +143,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optim.step()
                 if scheduler is not None:
                     scheduler.step()
-                optim.zero_grad()
+                # optim.zero_grad()  # Not needed since we are using apply_grad
 
                 weights_copy = weights.apply(lambda p: p.data)
                 grad_worker.update_policy_weights_(weights_copy)
