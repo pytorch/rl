@@ -18,6 +18,6 @@ export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 200
-MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py test/test_rlhf.py
+MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore "test/test_distributed.py test/test_rlhf.py"
 coverage combine
 coverage xml -i
