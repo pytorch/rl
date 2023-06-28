@@ -15,6 +15,7 @@ from torchrl.data.rlhf.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
+
 class RolloutFromModel:
     """A class for performing rollouts with causal language models.
 
@@ -90,9 +91,9 @@ class RolloutFromModel:
     ):
         if not _has_transformers:
             raise ImportError(
-            "transformers module couldn't be found. Make sure it is installed in your "
-            "environment."
-        )
+                "transformers module couldn't be found. Make sure it is installed in your "
+                "environment."
+            )
         self.model = model
         self.ref_model = ref_model
         self.reward_model = reward_model
