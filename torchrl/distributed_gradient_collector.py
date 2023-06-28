@@ -14,7 +14,6 @@ from torch.utils.data import IterableDataset
 from typing import Callable, Dict, Iterator, List, OrderedDict, Union, Optional
 from torch.optim import Optimizer, Adam
 
-
 import torch
 from torch import multiprocessing as mp, nn
 from torchrl._utils import VERBOSE
@@ -36,7 +35,14 @@ TCP_PORT = os.environ.get("TCP_PORT", "10003")
 MAX_TIME_TO_CONNECT = 1000
 
 
-def get_params_and_grad(loss_module: LossModule):
+def create_model():
+    model = nn.Linear(3, 4)
+    model.weight.data.fill_(0.0)
+    model.bias.data.fill_(0.0)
+    return model
+
+
+def get_weights_and_grad(loss_module: LossModule):
     params = TensorDict(dict(loss_module.named_parameters()), [])
 
     def set_grad(p):
@@ -44,8 +50,11 @@ def get_params_and_grad(loss_module: LossModule):
         return p
 
     params.apply(set_grad)
+
+    weights = params.apply(lambda p: p.data)
     grad = params.apply(lambda p: p.grad)
-    return params, grad
+
+    return weights, grad
 
 
 def _run_gradient_worker(
@@ -77,7 +86,7 @@ def _run_gradient_worker(
     )
 
     loss_module = create_model()  # TODO: testing only
-    params, grad = get_params_and_grad(loss_module)
+    weigths, grad = get_weights_and_grad(loss_module)
 
     # while True:
     for _ in range(10):
@@ -87,7 +96,7 @@ def _run_gradient_worker(
         grad.reduce(0)  # send grads to server, operation is SUM
 
         # receive latest params
-        params.irecv(src=0)
+        weigths.irecv(src=0)
         print(f"agent {rank} received params from server")
 
 
@@ -99,6 +108,7 @@ class DistributedGradientCollector:
     TensorDicts with gradients until a target number of collected frames is reached.
     """
 
+    _iterator = None
     _VERBOSE = VERBOSE  # for debugging
 
     def __init__(
@@ -162,7 +172,7 @@ class DistributedGradientCollector:
         )
 
         loss_module = create_model()  # TODO: testing only
-        self.params, self.grad = get_params_and_grad(loss_module)
+        self.weights, self.grad = get_weights_and_grad(loss_module)
 
         if self._VERBOSE:
             print("main initiated!", end="\t")
@@ -184,25 +194,33 @@ class DistributedGradientCollector:
         job.start()
         return job
 
-    def _get_params_and_grads(self, model):
-        # Equivalent to creating the local storage where grads will be sent
-        pass
+    def __iter__(self) -> Iterator[TensorDictBase]:
+        return self.iterator()
+
+    def __next__(self):
+        try:
+            if self._iterator is None:
+
+                self._iterator = iter(self)
+            out = next(self._iterator)
+            # if any, we don't want the device ref to be passed in distributed settings
+            out.clear_device_()
+            return out
+        except StopIteration:
+            return None
 
     def iterator(self):
 
         for _ in range(10):
+
             # collect gradients from workers
             print(f"server received grads from agents")
             self.grad.reduce(0, op=torch.distributed.ReduceOp.SUM)  # see reduce doc to see what ops are supported
             self.grad.apply_(lambda x: x / 2)  # average grads
-            print(self.grad['weight'])
 
             yield self.grad
 
-            # update params and send updated version to workers
-            self.params.apply_(lambda p, g: p.data.copy_(g), self.grad)
-            self.params.isend(dst=1)
-            self.params.isend(dst=2)
+            self.grad.zero_()
 
     def _iterator_dist(self):
         if self._VERBOSE:
@@ -212,13 +230,18 @@ class DistributedGradientCollector:
         # Split the data, send it to the workers, receiving grads and averaging them
         pass
 
-    def update_policy_weights_(self, worker_rank=None) -> None:
+    def update_policy_weights_(self, weights, worker_rank=None) -> None:
         """Updates the weights of the worker nodes.
 
         Args:
             worker_rank (int, optional): if provided, only this worker weights
                 will be updated.
         """
+        # update params and send updated version to workers
+        self.weights.update_(weights)
+        for i in range(self.num_workers):
+            if worker_rank is None or worker_rank == i:
+                self.weights.isend(dst=i + 1)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -232,15 +255,17 @@ class DistributedGradientCollector:
 
 
 if __name__ == "__main__":
-    def create_model():
-        model = nn.Linear(3, 4)
-        model.weight.data.fill_(0.0)
-        model.bias.data.fill_(0.0)
-        return model
+
+    local_model = create_model()
+    local_model.weight.data.fill_(0.0)
+    local_model.bias.data.fill_(0.0)
+    weights, grad = get_weights_and_grad(local_model)
 
     grad_collector = DistributedGradientCollector(
         loss_module=None,  # TODO: testing only
     )
 
     for grads in grad_collector:
+
         import ipdb; ipdb.set_trace()
+        grad_collector.update_policy_weights_(weights)
