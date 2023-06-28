@@ -17,7 +17,18 @@ from .replay_buffers import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
+    TensorStorage,
     Writer,
+)
+from .rlhf import (
+    create_infinite_iterator,
+    get_dataloader,
+    PairwiseDataset,
+    PromptData,
+    PromptTensorDictTokenizer,
+    RewardData,
+    TensorDictTokenizer,
+    TokenizedDatasetLoader,
 )
 from .tensor_specs import (
     BinaryDiscreteTensorSpec,

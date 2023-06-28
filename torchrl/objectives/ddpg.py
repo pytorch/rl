@@ -38,6 +38,10 @@ class DDPGLoss(LossModule):
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
             data collection. Default is ``True``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -178,6 +182,7 @@ class DDPGLoss(LossModule):
         delay_actor: bool = False,
         delay_value: bool = True,
         gamma: float = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         super().__init__()
@@ -195,11 +200,17 @@ class DDPGLoss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
         self.actor_critic.module[0] = self.actor_network
         self.actor_critic.module[1] = self.value_network
