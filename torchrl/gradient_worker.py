@@ -3,22 +3,15 @@ import itertools
 from typing import Callable, Dict, Iterator, List, Optional, OrderedDict, Union
 
 import torch
+from torch import nn
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
-from torch import nn
 
 
 def set_grad(p):
     """Initializes gradients to zero."""
     p.grad = torch.zeros_like(p.data)
     return p
-
-
-def apply_weights(w1, w2):
-    """Applies weights to a model and re-sets gradients to zero."""
-    w1.data.copy_(w2)
-    w1.grad.zero_()
-    return w1
 
 
 class GradientWorker:
@@ -39,16 +32,21 @@ class GradientWorker:
         self.objective = objective
 
         self.weights = TensorDict(dict(self.objective.named_parameters()), [])
-        self.weights.apply(set_grad)
+        self.weights.apply(set_grad)  # Initialize gradients to zero
         self.weights.lock_()
+
+        self.weights_data = self.weights.apply(lambda p: p.data)
+        self.weights_data.lock_()
+
+        self.grads = self.weights.apply(lambda p: p.grad)
+        self.grads.lock_()
 
     def update_policy_weights_(
         self,
         weights: TensorDictBase,
     ) -> None:
-        self.weights.apply(apply_weights, weights)
-        # self.weights.update_(weights)  # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
-        # self.weights.update(weights)  #  RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
+        self.grads.zero_()
+        self.weights_data.update_(weights)
 
     def compute_gradients(
         self,
@@ -69,7 +67,4 @@ class GradientWorker:
             self.objective.parameters(), max_norm=0.5
         )
 
-        # Get gradients
-        grads = self.weights.apply(lambda p: p.grad)
-
-        return grads
+        return self.grads
