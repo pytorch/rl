@@ -1,9 +1,15 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+import importlib
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 from torch import nn as nn
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 class GPT2RewardModel(nn.Module):
@@ -29,6 +35,11 @@ class GPT2RewardModel(nn.Module):
     """
 
     def __init__(self, model_path=None):
+        if not _has_transformers:
+            raise ImportError("The transformers library is missing.")
+
+        from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+
         super().__init__()
         if model_path:
             model = GPT2LMHeadModel.from_pretrained(model_path, return_dict=False)

@@ -343,6 +343,9 @@ class TestTokenizers:
                 assert len(obj) == max_length
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 @pytest.mark.parametrize("batch_size", [5, 6])
 @pytest.mark.parametrize("block_size", [550, 560])
 @pytest.mark.parametrize("device", get_default_devices())
