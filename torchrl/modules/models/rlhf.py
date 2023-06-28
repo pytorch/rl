@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch import nn as nn
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
@@ -72,6 +73,34 @@ class GPT2RewardModel(nn.Module):
         the model favours the rejected data.
 
           .. note:: The loss is computed excluding the common "prefix" subsequence to effectively disregard contribution of the original prompt.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torchrl.data.rlhf.dataset import get_dataloader
+            >>> from torchrl.data.rlhf.reward import PairwiseDataset
+            >>> from torchrl.modules.models.rlhf import GPT2RewardModel
+            >>>
+            >>> reward_model = TensorDictModule(
+            ...     GPT2RewardModel(model_path="gpt2"),
+            ...     in_keys=["input_ids", "attention_mask"],
+            ...     out_keys=["rewards", "end_scores"],
+            ... )
+            >>> dl = get_dataloader(
+            ...     batch_size=4,
+            ...     block_size=550,
+            ...     tensorclass_type=PairwiseDataset,
+            ...     device="cpu",
+            ...     dataset_name="CarperAI/openai_summarize_comparisons",
+            ... )
+            >>> batch = next(dl)
+            >>> reward_model(batch.chosen_data)
+            >>> reward_model(batch.rejected_data)
+            >>> loss = reward_model.compute_reward_loss(
+            ...     batch.chosen_data, batch.rejected_data
+            ... )
+            >>> assert isinstance(loss, torch.Tensor)
+            >>> assert loss.shape == torch.Size([])
         """
         chosen_ids = chosen_batch.input_ids
         rejected_ids = rejected_batch.input_ids
@@ -97,9 +126,7 @@ class GPT2RewardModel(nn.Module):
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
             r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
 
-            loss += -torch.log(
-                torch.sigmoid(c_truncated_reward - r_truncated_reward)
-            ).mean()
+            loss += -F.logsigmoid(c_truncated_reward - r_truncated_reward).mean()
         return loss / bs
 
     @classmethod
