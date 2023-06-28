@@ -2064,6 +2064,10 @@ class CatFrames(ObservationTransform):
             parent = self.parent
             if parent is not None:
                 parent_device = parent.device
+                if self.as_inverse:
+                    raise Exception(
+                        "CatFrames as inverse is not supported as a transform for environments, only for replay buffers."
+                    )
             else:
                 parent_device = None
             _reset = torch.ones(
@@ -2166,10 +2170,10 @@ class CatFrames(ObservationTransform):
 
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or tensordict.names[-1] != "time":
-            raise ValueError(
-                "The last dimension of the tensordict must be marked as 'time'."
-            )
+        # if not tensordict.ndim or tensordict.names[-1] != "time":
+        #     raise ValueError(
+        #         "The last dimension of the tensordict must be marked as 'time'."
+        #     )
         # first sort the in_keys with strings and non-strings
         in_keys = list(
             zip(
