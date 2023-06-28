@@ -425,6 +425,7 @@ class _BatchedEnv(EnvBase):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+        self.shared_tensordict_parent.lock_()
         if self.pin_memory:
             self.shared_tensordict_parent.pin_memory()
 
@@ -1024,7 +1025,7 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            shared_tensordict = data
+            shared_tensordict = data.lock_()
             next_shared_tensordict = shared_tensordict.get("next")
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
