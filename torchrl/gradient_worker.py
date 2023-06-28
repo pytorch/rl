@@ -1,13 +1,11 @@
-from typing import Callable, Dict, Iterator, List, OrderedDict, Union, Optional
-
 import copy
-import torch
 import itertools
+from typing import Callable, Dict, Iterator, List, Optional, OrderedDict, Union
+
+import torch
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
-import torch
 from torch import nn
-from tensordict import TensorDict
 
 
 def set_grad(p):
@@ -45,16 +43,16 @@ class GradientWorker:
         self.weights.lock_()
 
     def update_policy_weights_(
-            self,
-            weights: TensorDictBase,
+        self,
+        weights: TensorDictBase,
     ) -> None:
         self.weights.apply(apply_weights, weights)
         # self.weights.update_(weights)  # RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         # self.weights.update(weights)  #  RuntimeError: Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method and make sure the key is present.
 
     def compute_gradients(
-            self,
-            mini_batch: TensorDictBase,
+        self,
+        mini_batch: TensorDictBase,
     ) -> TensorDictBase:
         """Computes gradients for the given mini-batch."""
 
@@ -67,7 +65,9 @@ class GradientWorker:
         # Backprop loss
         print("Computing remote gradients...")
         loss_sum.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.objective.parameters(), max_norm=0.5)
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.objective.parameters(), max_norm=0.5
+        )
 
         # Get gradients
         grads = self.weights.apply(lambda p: p.grad)

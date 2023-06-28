@@ -11,6 +11,7 @@ Both state and pixel-based environments are supported.
 The helper functions are coded in the utils.py associated with this script.
 """
 import copy
+
 import hydra
 
 
@@ -26,6 +27,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
     from tensordict import TensorDict
     from torchrl.envs.utils import ExplorationType, set_exploration_type
+    from torchrl.gradient_worker import GradientWorker
     from utils import (
         make_collector,
         make_data_buffer,
@@ -35,7 +37,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_ppo_models,
         make_test_env,
     )
-    from torchrl.gradient_worker import GradientWorker
 
     # Correct for frame_skip
     cfg.collector.total_frames = cfg.collector.total_frames // cfg.env.frame_skip
