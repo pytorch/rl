@@ -331,7 +331,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     torch.manual_seed(seed)
     env.set_seed(seed)
 
-    fake_tensordict = env.fake_tensordict()  # .flatten_keys(".")
+    fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
 
     if return_contiguous:
