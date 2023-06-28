@@ -480,9 +480,7 @@ class TestCatFrames(TransformBase):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
         )
-        obs_dim = env.specs["output_spec"]["_observation_spec"][
-            "observation_orig"
-        ].shape[0]
+        obs_dim = env.observation_spec["observation_orig"].shape[0]
         td = env.rollout(rollout_length)
 
         transformed_td = cat_frames._inv_call(td)
