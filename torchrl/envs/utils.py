@@ -177,7 +177,7 @@ def step_mdp(
     elif exclude_done:
         excluded = {"done"}
     if excluded:
-        out = out.exclude(*excluded)
+        out = out.exclude(*excluded, inplace=True)
     # TODO: make it work with LazyStackedTensorDict
     # def _valid_key(key):
     #     if key == "next" or key in out.keys():
