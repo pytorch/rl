@@ -821,9 +821,9 @@ class SyncDataCollector(DataCollectorBase):
 
         # self._tensordict.fill_(("collector", "step_count"), 0)
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
-        tensordicts = []
+
         with set_exploration_type(self.exploration_type):
-            for _ in range(self.frames_per_batch):
+            for j in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -831,7 +831,18 @@ class SyncDataCollector(DataCollectorBase):
                     self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.to(self.storing_device))
+                try:
+                    self._tensordict_out[..., j] = self._tensordict
+                except RuntimeError:
+                    # unlock the output tensordict to allow for new keys to be written
+                    # these will be missed during the sync but at least we won't get an error during the update
+                    is_shared = self._tensordict_out.is_shared()
+                    self._tensordict_out.unlock_()
+                    self._tensordict_out[..., j] = self._tensordict
+                    if is_shared:
+                        self._tensordict_out.share_memory_()
+                    else:
+                        self._tensordict_out.lock()
 
                 self._step_and_maybe_reset()
                 if (
@@ -839,19 +850,7 @@ class SyncDataCollector(DataCollectorBase):
                     and self.interruptor.collection_stopped()
                 ):
                     break
-        try:
-            self._tensordict_out = torch.stack(
-                tensordicts,
-                self._tensordict_out.ndim - 1,
-                out=self._tensordict_out,
-            )
-        except RuntimeError:
-            with self._tensordict_out.unlock_():
-                self._tensordict_out = torch.stack(
-                    tensordicts,
-                    self._tensordict_out.ndim - 1,
-                    out=self._tensordict_out,
-                )
+
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
