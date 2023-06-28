@@ -1208,10 +1208,6 @@ class OnlineDTActor(nn.Module):
         action: torch.Tensor,
         return_to_go: torch.Tensor,
     ) -> torch.Tensor:
-        if observation.ndim == 2:
-            observation = observation.unsqueeze(0)
-            action = action.unsqueeze(0)
-            return_to_go = return_to_go.unsqueeze(0)
         hidden_state = self.transformer(observation, action, return_to_go)
         out = self.action_layer(hidden_state)
         mu, log_std = torch.chunk(out, 2, -1)
@@ -1291,10 +1287,6 @@ class DTActor(nn.Module):
         action: torch.Tensor,
         return_to_go: torch.Tensor,
     ) -> torch.Tensor:
-        if observation.ndim == 2:
-            observation = observation.unsqueeze(0)
-            action = action.unsqueeze(0)
-            return_to_go = return_to_go.unsqueeze(0)
         hidden_state = self.transformer(observation, action, return_to_go)
         out = self.action_layer(hidden_state)
         return out
