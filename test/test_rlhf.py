@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
@@ -22,6 +23,7 @@ from torchrl.data.rlhf.dataset import (
 )
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
+from torchrl.modules.models.rlhf import GPT2RewardModel
 
 HERE = Path(__file__).parent
 
@@ -339,6 +341,48 @@ class TestTokenizers:
                 assert len(obj) >= max_length
             else:
                 assert len(obj) == max_length
+
+
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
+@pytest.mark.parametrize("batch_size", [5, 6])
+@pytest.mark.parametrize("block_size", [550, 560])
+@pytest.mark.parametrize("device", get_default_devices())
+def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, device):
+    dl = get_dataloader(
+        batch_size,
+        block_size,
+        PairwiseDataset,
+        device,
+        dataset_name=minidata_dir_comparison,
+        infinite=True,
+        prefetch=0,
+        split="train",
+        root_dir=tmpdir1,
+        from_disk=True,
+    )
+
+    reward_model = GPT2RewardModel().to(device)
+
+    batch = next(dl)
+    chosen_rewards, chosen_end_scores = reward_model(
+        input_ids=batch.chosen_data.input_ids,
+        attention_mask=batch.chosen_data.attention_mask,
+    )
+    rejected_rewards, _ = reward_model(
+        input_ids=batch.rejected_data.input_ids,
+        attention_mask=batch.rejected_data.attention_mask,
+    )
+
+    assert chosen_rewards.shape == torch.Size([batch_size, block_size])
+    assert chosen_end_scores.shape == torch.Size([batch_size])
+
+    batch.chosen_data.rewards = chosen_rewards
+    batch.rejected_data.rewards = rejected_rewards
+
+    loss = reward_model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
+    assert loss.shape == torch.Size([])
 
 
 if __name__ == "__main__":
