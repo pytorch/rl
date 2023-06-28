@@ -72,6 +72,10 @@ class TD3Loss(LossModule):
         spec (TensorSpec, optional): the action tensor spec. If not provided
             and the target entropy is ``"auto"``, it will be retrieved from
             the actor.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -217,6 +221,7 @@ class TD3Loss(LossModule):
         delay_qvalue: bool = True,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         if not _has_functorch:
             raise ImportError(
@@ -235,13 +240,18 @@ class TD3Loss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         for p in self.parameters():

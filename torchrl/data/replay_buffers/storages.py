@@ -629,9 +629,13 @@ def _reset_batch_size(x):
     they will be expanded to the right to match it.
 
     """
-    shape = x.pop("_batch_size", None)
-    data = x.pop("_data", None)
+    shape = x.get("_rb_batch_size", None)
     if shape is not None:
+        warnings.warn(
+            "Reshaping nested tensordicts will be deprecated soon.",
+            category=DeprecationWarning,
+        )
+        data = x.get("_data")
         # we need to reset the batch-size
         if isinstance(shape, MemmapTensor):
             shape = shape.as_tensor()
@@ -649,6 +653,7 @@ def _reset_batch_size(x):
         if locked:
             data.lock_()
         return data
+    data = x.get("_data", None)
     if data is not None:
         return data
     return x
