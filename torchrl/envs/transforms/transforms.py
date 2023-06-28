@@ -2171,7 +2171,7 @@ class CatFrames(ObservationTransform):
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
         if not tensordict.ndim or tensordict.names[-1] != "time":
-            raise ValueError(
+            warnings.warn(
                 "The last dimension of the tensordict must be marked as 'time'."
             )
         # first sort the in_keys with strings and non-strings
