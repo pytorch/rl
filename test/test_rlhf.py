@@ -405,7 +405,7 @@ class TestRollout:
 
     @staticmethod
     def init_transformer(device="cpu", as_tensordictmodule=True, inference=False):
-        from transformers import GPT2LMHeadModel, GPT2Config
+        from transformers import GPT2Config, GPT2LMHeadModel
 
         model = GPT2LMHeadModel(GPT2Config())
         model.to(device)

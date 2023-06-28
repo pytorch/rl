@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
 from typing import Tuple
 
 import torch
@@ -11,8 +12,8 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from torchrl.data.rlhf.prompt import PromptData
-from transformers import GenerationConfig
 
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 class RolloutFromModel:
     """A class for performing rollouts with causal language models.
@@ -87,6 +88,11 @@ class RolloutFromModel:
     def __init__(
         self, model, ref_model, reward_model, max_new_tokens=50, score_clip=10.0
     ):
+        if not _has_transformers:
+            raise ImportError(
+            "transformers module couldn't be found. Make sure it is installed in your "
+            "environment."
+        )
         self.model = model
         self.ref_model = ref_model
         self.reward_model = reward_model
@@ -259,6 +265,8 @@ class RolloutFromModel:
 
     @property
     def _default_conf(self):
+        from transformers import GenerationConfig
+
         return GenerationConfig(
             pad_token_id=self.EOS_TOKEN_ID,
             max_new_tokens=self.max_new_tokens,
