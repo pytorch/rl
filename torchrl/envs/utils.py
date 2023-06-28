@@ -110,7 +110,7 @@ def step_mdp(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -118,7 +118,7 @@ def step_mdp(
         TensorDict(
             fields={
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -127,7 +127,8 @@ def step_mdp(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -137,7 +138,7 @@ def step_mdp(
                 action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -145,7 +146,7 @@ def step_mdp(
         TensorDict(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
