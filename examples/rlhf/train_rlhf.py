@@ -272,8 +272,9 @@ def main():
                 # generation stopped early, so we empty first before repopulating
                 rb.extend(flatten_td(td))
                 done = td.get(("next", "done"))
-                next_reward = td.get(("next", "reward_raw"))[done]
-                next_kl = td.get(("next", "reward_kl"))[done]
+                td_done = td[done.view(td.shape)]
+                next_reward = td_done.get(("next", "reward_raw"))
+                next_kl = td_done.get(("next", "reward_kl"))
                 rollout_rewards.append(next_reward.mean().cpu().item())
                 rollout_kl.append(next_kl.mean().cpu().item())
             rollout_reward = torch.tensor(rollout_rewards).mean().cpu().item()
