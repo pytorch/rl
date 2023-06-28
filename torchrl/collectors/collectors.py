@@ -831,7 +831,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.env.step(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.to(self.storing_device))
+                tensordicts.append(self._tensordict.clone(False).to(self.storing_device))
 
                 self._step_and_maybe_reset()
                 if (
