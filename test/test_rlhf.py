@@ -27,7 +27,6 @@ from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
 from torchrl.data.rlhf.utils import RolloutFromModel
 from torchrl.modules.models.rlhf import GPT2RewardModel
-from transformers import GPT2Config
 
 HERE = Path(__file__).parent
 
@@ -398,12 +397,15 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
     assert loss.shape == torch.Size([])
 
 
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
 class TestRollout:
     kl_coef = 0.1
 
     @staticmethod
     def init_transformer(device="cpu", as_tensordictmodule=True, inference=False):
-        from transformers import GPT2LMHeadModel
+        from transformers import GPT2LMHeadModel, GPT2Config
 
         model = GPT2LMHeadModel(GPT2Config())
         model.to(device)
