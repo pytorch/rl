@@ -179,13 +179,11 @@ def step_mdp(
         return out
     out = tensordict.get("next").clone(False)
     excluded = set()
-    if exclude_done and exclude_reward:
-        excluded = {done_key, reward_key}
-    elif exclude_reward:
-        excluded = {reward_key}
-    elif exclude_done:
-        excluded = {done_key}
-    if excluded:
+    if exclude_done:
+        excluded.add(done_key)
+    if exclude_reward:
+        excluded.add(reward_key)
+    if len(excluded):
         out = out.exclude(*excluded, inplace=True)
     td_keys = None
     if keep_other:
