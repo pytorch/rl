@@ -11,9 +11,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+import torch.nn.functional as F
 
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModule
 from torchrl.data.rlhf import TensorDictTokenizer
 from torchrl.data.rlhf.dataset import (
     _has_datasets,
@@ -23,6 +25,7 @@ from torchrl.data.rlhf.dataset import (
 )
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
+from torchrl.data.rlhf.utils import RolloutFromModel
 from torchrl.modules.models.rlhf import GPT2RewardModel
 from transformers import GPT2Config
 
@@ -36,20 +39,29 @@ def tmpdir1(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def minidata_dir_comparison(tmp_path_factory):
-    dest = tmp_path_factory.mktemp("tldr")
-    dataset_path = f"{HERE}/assets/openai_summarize_comparisons.zip"
+    dest = tmp_path_factory.mktemp("comparisons")
+    dataset_path = HERE / "assets" / "openai_summarize_comparisons.zip"
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
-        yield dest / Path(dataset_path).name[:-4]
+        yield dest / Path(dataset_path).stem
 
 
 @pytest.fixture(scope="session")
 def minidata_dir_tldr(tmp_path_factory):
     dest = tmp_path_factory.mktemp("tldr")
-    dataset_path = f"{HERE}/assets/openai_summarize_tldr.zip"
+    dataset_path = HERE / "assets" / "openai_summarize_tldr.zip"
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
-        yield dest / Path(dataset_path).name[:-4]
+        yield dest / Path(dataset_path).stem
+
+
+@pytest.fixture(scope="session")
+def tldr_batch_dir(tmp_path_factory):
+    dest = tmp_path_factory.mktemp("tldr_batch")
+    dataset_path = HERE / "assets" / "tldr_batch.zip"
+    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
+        zip_ref.extractall(dest)
+        yield dest / Path(dataset_path).stem
 
 
 @pytest.mark.skipif(
@@ -390,12 +402,7 @@ class TestRollout:
     kl_coef = 0.1
 
     @staticmethod
-    def init_transformer(
-        dropout=0.1,
-        device="cpu",
-        as_tensordictmodule=True,
-        inference=False,
-    ):
+    def init_transformer(device="cpu", as_tensordictmodule=True, inference=False):
         from transformers import GPT2LMHeadModel
 
         model = GPT2LMHeadModel(GPT2Config())
@@ -426,10 +433,8 @@ class TestRollout:
         return model
 
     @staticmethod
-    def _get_dummy_batch():
-        return PromptData.from_tensordict(
-            TensorDict.load_memmap(f"{HERE}/datasets_mini/tldr_batch")
-        )
+    def _get_dummy_batch(batch_dir):
+        return PromptData.from_tensordict(TensorDict.load_memmap(batch_dir))
 
     @property
     def _model(self):
@@ -509,9 +514,9 @@ class TestRollout:
                 scores_comp.squeeze() == scores.log_softmax(-1)[..., -1].squeeze()
             ).all()
 
-    def test_generate(self, max_new_tokens=10):
+    def test_generate(self, tldr_batch_dir, max_new_tokens=10):
         model = self._get_rollout_model(max_new_tokens)
-        batch = self._get_dummy_batch()
+        batch = self._get_dummy_batch(tldr_batch_dir)
         generated, log_probs, log_ratio = model.generate(batch)
         batch_size = batch.shape[0]
 
@@ -522,9 +527,9 @@ class TestRollout:
         assert (log_probs <= 0).all().item()
         assert log_ratio.shape == torch.Size([batch_size, max_new_tokens])
 
-    def test_rollout_from_data(self, max_new_tokens=10):
+    def test_rollout_from_data(self, tldr_batch_dir, max_new_tokens=10):
         model = self._get_rollout_model(max_new_tokens)
-        batch = self._get_dummy_batch()
+        batch = self._get_dummy_batch(tldr_batch_dir)
         td = model.rollout_from_data(batch)
         batch_size = batch.shape[0]
 
