@@ -42,7 +42,7 @@ class GPT2RewardModel(nn.Module):
         self.pad_id = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
 
     def forward(self, input_ids, attention_mask):
-        """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token"""
+        """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token."""
         outputs = self.transformer(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = outputs[0]
         rewards = self.lm_head(hidden_states).squeeze(-1)
@@ -62,7 +62,6 @@ class GPT2RewardModel(nn.Module):
             end_scores.append(rewards[i, first_pad_ind - 1])
 
         return torch.stack(end_scores)
-
 
     @staticmethod
     def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):

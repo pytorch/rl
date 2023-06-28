@@ -24,7 +24,6 @@ from torchrl.data.rlhf.dataset import (
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
 from torchrl.modules.models.rlhf import GPT2RewardModel
-from transformers import AutoTokenizer
 
 HERE = Path(__file__).parent
 
@@ -345,33 +344,32 @@ class TestTokenizers:
 
 
 @pytest.mark.parametrize("batch_size", [5, 6])
-@pytest.mark.parametrize("block_size", [500, 550])
+@pytest.mark.parametrize("block_size", [550, 560])
 @pytest.mark.parametrize("device", get_default_devices())
-def test_reward_model(tmpdir1, tmpdir2, batch_size, block_size, device):
-    dataset_path = f"{HERE}/assets/openai_summarize_comparisons.zip"
-    with zipfile.ZipFile(dataset_path, "r") as zip_ref:
-        zip_ref.extractall(tmpdir2)
-        dl = get_dataloader(
-            batch_size,
-            block_size,
-            PairwiseDataset,
-            device,
-            dataset_name=tmpdir2 / "openai_summarize_comparisons",
-            infinite=True,
-            prefetch=0,
-            split="train",
-            root_dir=tmpdir1,
-            from_disk=True,
-        )
+def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, device):
+    dl = get_dataloader(
+        batch_size,
+        block_size,
+        PairwiseDataset,
+        device,
+        dataset_name=minidata_dir_comparison,
+        infinite=True,
+        prefetch=0,
+        split="train",
+        root_dir=tmpdir1,
+        from_disk=True,
+    )
 
     reward_model = GPT2RewardModel().to(device)
 
     batch = next(dl)
     chosen_rewards, chosen_end_scores = reward_model(
-        input_ids=batch.chosen_data.input_ids, attention_mask=batch.chosen_data.attention_mask
+        input_ids=batch.chosen_data.input_ids,
+        attention_mask=batch.chosen_data.attention_mask,
     )
     rejected_rewards, _ = reward_model(
-        input_ids=batch.rejected_data.input_ids, attention_mask=batch.rejected_data.attention_mask
+        input_ids=batch.rejected_data.input_ids,
+        attention_mask=batch.rejected_data.attention_mask,
     )
 
     assert chosen_rewards.shape == torch.Size([batch_size, block_size])
