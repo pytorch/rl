@@ -1400,8 +1400,6 @@ class TestNestedSpecs:
         assert ("next", *env.done_key) in next_state.keys(True)
         assert ("next", *env.reward_key) in next_state.keys(True)
 
-        # check_env_specs(env)
-
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
 
@@ -1453,7 +1451,7 @@ class TestNestedSpecs:
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
-        # NestedCountingEnv,
+        NestedCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):
