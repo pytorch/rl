@@ -3,9 +3,6 @@ Example use of a distributed collector
 ======================================
 
 This example illustrates how a TorchRL collector can be converted into a distributed collector.
-
-This example should create 3 collector instances, 1 local and 2 remote, but 4 instances seem to
-be created. Why?
 """
 
 from tensordict.nn import TensorDictModule

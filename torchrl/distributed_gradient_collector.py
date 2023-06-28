@@ -60,11 +60,12 @@ def get_weights_and_grad(loss_module: LossModule):
 def _run_gradient_worker(
         rank: int,
         world_size: int,
-        loss_module: LossModule,
+        model: nn.Module,
         rank0_ip: str,
         tcpport: str,
         backend: str = "gloo",
         verbose: bool = True,
+        collector: DataCollectorBase = None,
 ):
     """Run a gradient worker."""
     os.environ["MASTER_ADDR"] = str(rank0_ip)
@@ -85,13 +86,12 @@ def _run_gradient_worker(
         init_method=f"tcp://{rank0_ip}:{tcpport}",
     )
 
-    loss_module = create_model()  # TODO: testing only
-    weigths, grad = get_weights_and_grad(loss_module)
+    weigths, grad = get_weights_and_grad(model)
 
     # while True:
-    for _ in range(10):
+    for i in range(10):
 
-        # pretend we compute something here
+        # TODO: pretend to compute something here, just for testing
         grad.apply_(lambda x: torch.ones_like(x))
         grad.reduce(0)  # send grads to server, operation is SUM
 
@@ -113,16 +113,17 @@ class DistributedGradientCollector:
 
     def __init__(
         self,
-        loss_module: LossModule,
+        model: nn.Module,
+        num_workers: int,
         *,
         backend="gloo",
         launcher="mp",  # For now, only support multiprocessing
         tcp_port=None,
     ):
 
-        self.num_workers = 2
+        self.num_workers = num_workers
         self.backend = backend
-        self.loss_module = loss_module
+        self.model = model
         if tcp_port is None:
             self.tcp_port = os.environ.get("TCP_PORT", TCP_PORT)
         else:
@@ -171,8 +172,7 @@ class DistributedGradientCollector:
             init_method=f"tcp://{self.IPAddr}:{TCP_PORT}",
         )
 
-        loss_module = create_model()  # TODO: testing only
-        self.weights, self.grad = get_weights_and_grad(loss_module)
+        self.weights, self.grad = get_weights_and_grad(self.model)
 
         if self._VERBOSE:
             print("main initiated!", end="\t")
@@ -184,7 +184,7 @@ class DistributedGradientCollector:
             args=(
                 i + 1,
                 self.num_workers + 1,
-                self.loss_module,
+                self.model,
                 self.IPAddr,
                 int(TCP_PORT),
                 self.backend,
@@ -231,13 +231,12 @@ class DistributedGradientCollector:
         pass
 
     def update_policy_weights_(self, weights, worker_rank=None) -> None:
-        """Updates the weights of the worker nodes.
+        """Updates weights and send updated version to worker nodes
 
         Args:
             worker_rank (int, optional): if provided, only this worker weights
                 will be updated.
         """
-        # update params and send updated version to workers
         self.weights.update_(weights)
         for i in range(self.num_workers):
             if worker_rank is None or worker_rank == i:
@@ -256,16 +255,18 @@ class DistributedGradientCollector:
 
 if __name__ == "__main__":
 
-    local_model = create_model()
-    local_model.weight.data.fill_(0.0)
-    local_model.bias.data.fill_(0.0)
-    weights, grad = get_weights_and_grad(local_model)
+    model = create_model()
+    model.weight.data.fill_(0.0)
+    model.bias.data.fill_(0.0)
+    weights, _ = get_weights_and_grad(model)
 
     grad_collector = DistributedGradientCollector(
-        loss_module=None,  # TODO: testing only
+        model=model,
+        num_workers=2,
     )
 
     for grads in grad_collector:
-
+        print(grads["weight"])
+        print(weights["weight"])
         import ipdb; ipdb.set_trace()
         grad_collector.update_policy_weights_(weights)

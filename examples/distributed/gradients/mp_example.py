@@ -5,8 +5,6 @@ from torch import distributed as dist
 from tensordict import TensorDict
 from torch import nn
 
-from torchrl.objectives import PPOLoss
-
 
 def create_model():
     return nn.Linear(3, 4)
