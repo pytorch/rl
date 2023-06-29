@@ -2,9 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import abc
 import importlib
 from typing import Tuple
 
+import numpy as np
 import torch
 
 from tensordict import TensorDict
@@ -14,6 +16,72 @@ from torch.nn import functional as F
 from torchrl.data.rlhf.prompt import PromptData
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
+
+
+class KLControllerBase(abc.ABC):
+    """Base class for KL controllers.
+
+    Each controller must implement an update method that takes the current KL value and
+    the number of steps and updates the self.coef attribute, which will multiply
+    the KL during calculation of the reward.
+    """
+
+    @abc.abstractmethod
+    def update(self, kl_value: float, n_steps: int):
+        pass
+
+
+class ConstantKLController(KLControllerBase):
+    """Constant KL Controller.
+
+    This controller maintains a fixed coefficient no matter what values it is updated
+    with.
+
+    Arguments:
+        coefficient (float): The coefficient to multiply KL with when calculating the
+            reward.
+    """
+
+    def __init__(self, coefficient):
+        self.coef = coefficient
+
+    def update(self, kl_value: float, n_steps: int):
+        pass
+
+
+class AdaptiveKLController(KLControllerBase):
+    """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences".
+
+    Arguments:
+        init_kl_coef (float): The starting value of the coefficient.
+        target (float): The target KL value. When the observed KL is smaller, the
+            coefficient is decreased, thereby relaxing the KL penalty in the training
+            objective and allowing the model to stray further from the reference model.
+            When the observed KL is greater than the target, the KL coefficient is
+            increased, thereby pulling the model back towards the reference model.
+        horizon (int): Scaling factor to control how aggressively we update the
+            coefficient.
+
+    Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
+    Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
+    """
+
+    def __init__(self, init_kl_coef: float, target: float, horizon: int):
+        self.coef = init_kl_coef
+        self.target = target
+        self.horizon = horizon
+
+    def update(self, kl_value: float, n_steps: int):
+        """Update ``self.coef`` adaptively.
+
+        Arguments:
+            kl_value: The current KL value between the newest policy and the initial
+                policy.
+            n_steps: The number of training steps taken since last update.
+        """
+        proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
+        mult = 1 + proportional_error * n_steps / self.horizon
+        self.coef *= mult  # βₜ₊₁
 
 
 class RolloutFromModel:
@@ -87,7 +155,13 @@ class RolloutFromModel:
     EOS_TOKEN_ID = 50256
 
     def __init__(
-        self, model, ref_model, reward_model, max_new_tokens=50, score_clip=10.0
+        self,
+        model,
+        ref_model,
+        reward_model,
+        kl_controller,
+        max_new_tokens=50,
+        score_clip=10.0,
     ):
         if not _has_transformers:
             raise ImportError(
@@ -99,18 +173,19 @@ class RolloutFromModel:
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
         self.score_clip = score_clip
+        self.kl_controller = kl_controller
 
-    def kl_step(self):
+    def kl_update(self, kl_value, n_steps):
         """Makes a step in the KL coefficient schedule."""
-        raise NotImplementedError
+        self.kl_controller.update(kl_value, n_steps)
 
     @torch.no_grad()
-    def rollout_from_data(self, batch, kl_coef=0.1):
+    def rollout_from_data(self, batch):
         generated, log_probs, log_ratio = self.generate(batch)
-        return self.create_rollout_td(batch, generated, log_probs, log_ratio, kl_coef)
+        return self.create_rollout_td(batch, generated, log_probs, log_ratio)
 
     @torch.no_grad()
-    def create_rollout_td(self, batch, generated, log_probs, log_ratio, kl_coef=0.1):
+    def create_rollout_td(self, batch, generated, log_probs, log_ratio):
         """A TensorDict wrapper for generated data.
 
         This function takes a batch plus the generated tokens and replicates the
@@ -167,7 +242,7 @@ class RolloutFromModel:
         )
         reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
         reward_raw = reward_raw * done
-        reward_kl = -kl_coef * log_ratio.unsqueeze(-1)
+        reward_kl = -self.kl_controller.coef * log_ratio.unsqueeze(-1)
         reward = reward_raw + reward_kl
         td = {
             "action": action,

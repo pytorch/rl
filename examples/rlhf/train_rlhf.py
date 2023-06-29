@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from copy import deepcopy
 
-import numpy as np
 import torch
 
 import wandb
@@ -21,12 +20,15 @@ from torchrl.data.replay_buffers import (
 )
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.prompt import PromptData
-from torchrl.data.rlhf.utils import RolloutFromModel
+from torchrl.data.rlhf.utils import (
+    RolloutFromModel,
+    ConstantKLController,
+    AdaptiveKLController,
+)
 
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
-from transformers import GenerationConfig, GPT2Tokenizer
 from utils import (
     flatten_td,
     get_file_logger,
@@ -34,28 +36,6 @@ from utils import (
     setup,
     TestPromptLogger,
 )
-
-
-class AdaptiveKLController:
-    """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences"
-    Reference: Section 2.2 https://arxiv.org/pdf/1909.08593.pdf#page=2
-    Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
-    """
-
-    def __init__(self, init_kl_coef: float, target: float, horizon: int):
-        self.value = init_kl_coef
-        self.target = target
-        self.horizon = horizon
-
-    def update(self, current: float, n_steps: int):
-        """Returns adaptively updated KL coefficient, βₜ₊₁.
-        Arguments:
-            current: The current KL value between the newest policy and the initial policy.
-        """
-        proportional_error = np.clip(current / self.target - 1, -0.2, 0.2)  # ϵₜ
-        mult = 1 + proportional_error * n_steps / self.horizon
-        self.value *= mult  # βₜ₊₁
-        return self.value
 
 
 class RewardEstimator:
@@ -90,13 +70,16 @@ class RewardEstimator:
     @torch.no_grad()
     def __call__(self, model, dataloader):
         rollout_from_model = RolloutFromModel(
-            model, self.ref_model, self.reward_model, max_new_tokens=self.episode_length
+            model,
+            self.ref_model,
+            self.reward_model,
+            kl_controller=ConstantKLController(0.0),  # disable KL for evaluation
+            max_new_tokens=self.episode_length,
         )
         rewards = torch.zeros(self.eval_iters)
         for k in range(self.eval_iters):
             batch = next(dataloader)
-            # NOTE: disable kl for evaluation
-            td = rollout_from_model.rollout_from_data(batch, kl_coef=0.0)
+            td = rollout_from_model.rollout_from_data(batch)
             rewards[k] = td.get(("next", "reward")).sum(dim=1).mean().item()
         test_reward = rewards.mean()
 
@@ -220,7 +203,7 @@ def main():
         prefetch=10,
     )
 
-    rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
+    rollout_from_model = RolloutFromModel(model, ref_model, reward_model, kl_controller)
 
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
@@ -231,9 +214,7 @@ def main():
             rollout_kl = []
             for _ in range(0, num_rollouts_per_epoch, batch_size):
                 batch = next(train_loader)
-                td = rollout_from_model.rollout_from_data(
-                    batch, kl_coef=kl_controller.value
-                )
+                td = rollout_from_model.rollout_from_data(batch)
                 with torch.no_grad(), ctx:
                     # moving this to within epoch
                     adv_fn(td)
@@ -249,8 +230,8 @@ def main():
             rollout_reward = torch.tensor(rollout_rewards).mean().cpu().item()
             rollout_kl_reward = torch.tensor(rollout_kl).mean().cpu().item()
             # recover true kl
-            rollout_kl = -rollout_kl_reward / kl_controller.value
-            kl_controller.update(rollout_kl, num_rollouts_per_epoch / batch_size)
+            rollout_kl = -rollout_kl_reward / kl_controller.coef
+            rollout_from_model.kl_update(rollout_kl, num_rollouts_per_epoch / batch_size)
 
             # FIXME: THIS PPO CYCLE WAS DIFFERENT wrt trlx. @tcbegley please double check
             # they sample batch_size from rb and then do minibatches ppo_batch_size within
