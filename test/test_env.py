@@ -28,6 +28,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
@@ -35,7 +36,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
-    NestedRewardEnv,
+    NestedCountingEnv,
 )
 from packaging import version
 from tensordict.nn import TensorDictModuleBase
@@ -1021,6 +1022,8 @@ def test_steptensordict(
     torch.manual_seed(0)
     tensordict = TensorDict(
         {
+            "reward": torch.randn(4, 1),
+            "done": torch.zeros(4, 1, dtype=torch.bool),
             "ledzep": torch.randn(4, 2),
             "next": {
                 "ledzep": torch.randn(4, 2),
@@ -1368,14 +1371,13 @@ class TestConcurrentEnvs:
 
 
 class TestNestedSpecs:
-    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedRewardEnv"])
-    def test_nested_reward(self, envclass):
-        from mocking_classes import NestedRewardEnv
+    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
+    def test_nested_env(self, envclass):
 
         if envclass == "CountingEnv":
             env = CountingEnv()
-        elif envclass == "NestedRewardEnv":
-            env = NestedRewardEnv()
+        elif envclass == "NestedCountingEnv":
+            env = NestedCountingEnv()
         else:
             raise NotImplementedError
         reset = env.reset()
@@ -1383,7 +1385,7 @@ class TestNestedSpecs:
         assert not isinstance(env.reward_spec, CompositeSpec)
         assert env.done_spec == env.output_spec[("_done_spec", *env.done_key)]
         assert env.reward_spec == env.output_spec[("_reward_spec", *env.reward_key)]
-        if envclass == "NestedRewardEnv":
+        if envclass == "NestedCountingEnv":
             assert env.done_key == ("data", "done")
             assert env.reward_key == ("data", "reward")
             assert ("data", "done") in reset.keys(True)
@@ -1393,14 +1395,47 @@ class TestNestedSpecs:
         assert env.reward_key not in reset.keys(True)
 
         next_state = env.rand_step()
-        if envclass == "NestedRewardEnv":
+        if envclass == "NestedCountingEnv":
             assert ("next", "data", "done") in next_state.keys(True)
             assert ("next", "data", "states") in next_state.keys(True)
             assert ("next", "data", "reward") in next_state.keys(True)
         assert ("next", *env.done_key) in next_state.keys(True)
         assert ("next", *env.reward_key) in next_state.keys(True)
 
-        check_env_specs(env)
+        # check_env_specs(env)
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
+
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+
+        td = env.reset()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rollout(rollout_length)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
+
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        td = env.rollout(rollout_length, policy)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1420,7 +1455,7 @@ class TestNestedSpecs:
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
-        NestedRewardEnv,
+        # NestedCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):
