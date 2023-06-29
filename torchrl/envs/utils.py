@@ -16,7 +16,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -49,11 +49,14 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
+    reward_key: NestedKey = "reward",
+    done_key: NestedKey = "done",
+    action_key: NestedKey = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
     Given a tensordict retrieved after a step, returns the :obj:`"next"` indexed-tensordict.
-    THe arguments allow for a precise control over what should be kept and what
+    The arguments allow for a precise control over what should be kept and what
     should be copied from the ``"next"`` entry. The default behaviour is:
     move the observation entries, reward and done states to the root, exclude
     the current action and keep all extra keys (non-action, non-done, non-reward).
@@ -76,6 +79,12 @@ def step_mdp(
             be kept in the root tensordict (since it should not be present in
             the ``"next"`` entry).
             Default is ``True``.
+        reward_key (key, optional): the key where the reward is written. Defaults
+            to "reward".
+        done_key (key, optional): the key where the done is written. Defaults
+            to "done".
+        action_key (key, optional): the key where the action is written. Defaults
+            to "action".
 
     Returns:
          A new tensordict (or next_tensordict) containing the tensors of the t+1 step.
@@ -83,6 +92,7 @@ def step_mdp(
     Examples:
     This funtion allows for this kind of loop to be used:
         >>> from tensordict import TensorDict
+        >>> import torch
         >>> td = TensorDict({
         ...     "done": torch.zeros((), dtype=torch.bool),
         ...     "reward": torch.zeros(()),
@@ -100,8 +110,7 @@ def step_mdp(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -109,17 +118,17 @@ def step_mdp(
         TensorDict(
             fields={
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
-        >>> print(step_mdp(td, exclude_reward=True))  # "reward" is dropped
+        >>> print(step_mdp(td, exclude_reward=False))  # "reward" is kept
         TensorDict(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -129,8 +138,7 @@ def step_mdp(
                 action: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
                 extra: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -138,8 +146,7 @@ def step_mdp(
         TensorDict(
             fields={
                 done: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.bool, is_shared=False),
-                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                obs: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
@@ -159,6 +166,9 @@ def step_mdp(
                     exclude_reward=exclude_reward,
                     exclude_done=exclude_done,
                     exclude_action=exclude_action,
+                    reward_key=reward_key,
+                    done_key=done_key,
+                    action_key=action_key,
                 )
                 for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
             ],
@@ -179,29 +189,19 @@ def step_mdp(
         excluded = {"done"}
     if excluded:
         out = out.exclude(*excluded, inplace=True)
-    # TODO: make it work with LazyStackedTensorDict
-    # def _valid_key(key):
-    #     if key == "next" or key in out.keys():
-    #         return False
-    #     if exclude_action and key == "action":
-    #         return False
-    #     if keep_other or key == "action":
-    #         return True
-    #     return False
     td_keys = None
     if keep_other:
         # we could select the leafs because otherwise we just copy root
         # tensordicts and modifying their values results in a modification
         # of the previous td. Alternatively, we select from tensordict and clone
         # (see below)
-        out_keys = set(
-            out.keys()
-        )  # Q: is True, True here and below faster than the clone(False) here under?
+        # Q: is True, True here and below faster than the clone(False) here under?
+        out_keys = set(out.keys())
         td_keys = set(tensordict.keys()) - out_keys - {"next"}
         if exclude_action:
-            td_keys = td_keys - {"action"}
+            td_keys = td_keys - {action_key}
     elif not exclude_action:
-        td_keys = {"action"}
+        td_keys = {action_key}
 
     if td_keys:
         # update does some checks that we can spare

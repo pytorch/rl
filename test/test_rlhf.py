@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
 from _utils_internal import get_default_devices
 from tensordict import is_tensor_collection, MemmapTensor, TensorDict, TensorDictBase
@@ -22,6 +23,7 @@ from torchrl.data.rlhf.dataset import (
 )
 from torchrl.data.rlhf.prompt import PromptData, PromptTensorDictTokenizer
 from torchrl.data.rlhf.reward import PairwiseDataset, pre_tokenization_hook
+from torchrl.modules.models.rlhf import GPT2RewardModel
 
 HERE = Path(__file__).parent
 
@@ -117,18 +119,12 @@ def test_create_or_load_dataset(
 )
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
-    "dataset,make_process_fn,pre_tokenization_hook",
+    "dataset,make_process_fn,pre_tokenization_hook,split",
     [
-        (
-            "comp",
-            TensorDictTokenizer,
-            pre_tokenization_hook,
-        ),
-        (
-            "tldr",
-            PromptTensorDictTokenizer,
-            None,
-        ),
+        ("comp", TensorDictTokenizer, pre_tokenization_hook, "train"),
+        ("comp", TensorDictTokenizer, pre_tokenization_hook, "valid1"),
+        ("tldr", PromptTensorDictTokenizer, None, "train"),
+        ("tldr", PromptTensorDictTokenizer, None, "valid"),
     ],
 )
 def test_preproc_data(
@@ -139,7 +135,7 @@ def test_preproc_data(
     pre_tokenization_hook,
     minidata_dir_tldr,
     minidata_dir_comparison,
-    split="train",
+    split,
 ):
     import datasets
 
@@ -157,6 +153,7 @@ def test_preproc_data(
         pre_tokenization_hook=pre_tokenization_hook,
         from_disk=True,
         root_dir=tmpdir1,
+        valid_size=500,
     )
     dataset = loader._load_dataset()
     assert isinstance(dataset, datasets.Dataset)
@@ -339,6 +336,48 @@ class TestTokenizers:
                 assert len(obj) >= max_length
             else:
                 assert len(obj) == max_length
+
+
+@pytest.mark.skipif(
+    not (_has_transformers and _has_datasets), reason="missing dependencies"
+)
+@pytest.mark.parametrize("batch_size", [5, 6])
+@pytest.mark.parametrize("block_size", [550, 560])
+@pytest.mark.parametrize("device", get_default_devices())
+def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, device):
+    dl = get_dataloader(
+        batch_size,
+        block_size,
+        PairwiseDataset,
+        device,
+        dataset_name=minidata_dir_comparison,
+        infinite=True,
+        prefetch=0,
+        split="train",
+        root_dir=tmpdir1,
+        from_disk=True,
+    )
+
+    reward_model = GPT2RewardModel().to(device)
+
+    batch = next(dl)
+    chosen_rewards, chosen_end_scores = reward_model(
+        input_ids=batch.chosen_data.input_ids,
+        attention_mask=batch.chosen_data.attention_mask,
+    )
+    rejected_rewards, _ = reward_model(
+        input_ids=batch.rejected_data.input_ids,
+        attention_mask=batch.rejected_data.attention_mask,
+    )
+
+    assert chosen_rewards.shape == torch.Size([batch_size, block_size])
+    assert chosen_end_scores.shape == torch.Size([batch_size])
+
+    batch.chosen_data.rewards = chosen_rewards
+    batch.rejected_data.rewards = rejected_rewards
+
+    loss = reward_model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
+    assert loss.shape == torch.Size([])
 
 
 if __name__ == "__main__":
