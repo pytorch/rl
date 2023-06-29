@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from torchrl.modules.tensordict_module.actors import LMActorCritic
+from torchrl.modules.tensordict_module.actors import LMHeadActorValueOperator
 from torchrl.modules.tensordict_module.common import VmapModule
 
 from .transformer import init_transformer
@@ -19,7 +19,7 @@ def init_actor_critic(transformer_name_or_path, dropout, device, compile_):
         compile_=compile_,
         inference=True,
     )
-    model = LMActorCritic(base_model)
+    model = LMHeadActorValueOperator(base_model)
     model.to(device)
     model.eval()
     actor = model.get_policy_operator()

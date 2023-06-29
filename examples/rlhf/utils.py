@@ -8,6 +8,7 @@ from contextlib import nullcontext
 import torch
 import torch._dynamo
 from hydra.utils import to_absolute_path
+from transformers import GPT2Tokenizer, GenerationConfig
 
 
 def resolve_name_or_path(name_or_path):
@@ -58,23 +59,24 @@ def flatten_td(td):
     mask = ~mask.cumsum(-2).bool().squeeze()
     return td[mask]
 
-class TestPromptLogger():
-    def __init__(self, test_prompt, reward_model, logger):
+
+class TestPromptLogger:
+    def __init__(self, batch, reward_model, logger, episode_length):
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = tokenizer.eos_token
-        test_rindex = test_prompt.prompt_rindex[0]
-        test_prompt_ids = test_prompt.input_ids[:1, :test_rindex]
-        test_label_ids = test_prompt.input_ids[:1, test_rindex:]
+        test_rindex = batch.prompt_rindex[0]
+        test_prompt_ids = batch.input_ids[:1, :test_rindex]
+        test_label_ids = batch.input_ids[:1, test_rindex:]
         test_prompt = tokenizer.decode(test_prompt_ids[0, :test_rindex].tolist())
         test_label = tokenizer.decode(
-        test_label_ids[0, test_label_ids[0] != tokenizer.pad_token_id].tolist()
+            test_label_ids[0, test_label_ids[0] != tokenizer.pad_token_id].tolist()
         )
         _, test_label_reward = reward_model(
-        input_ids=test_prompt.input_ids[:1], attention_mask=test_prompt.attention_mask[:1]
+            input_ids=batch.input_ids[:1], attention_mask=batch.attention_mask[:1]
         )
         self.generation_config = GenerationConfig(
-                pad_token_id=tokenizer.pad_token_id, max_new_tokens=episode_length
-            )
+            pad_token_id=tokenizer.pad_token_id, max_new_tokens=episode_length
+        )
         self.test_prompt_ids = test_prompt_ids
         self.reward_model = reward_model
         self.tokenizer = tokenizer
@@ -83,19 +85,19 @@ class TestPromptLogger():
         self.test_prompt = test_prompt
         self.test_label = test_label
         self.logger = logger
-        
+
     def log(self, model):
         response_ids = model.generate(
             input_ids=self.test_prompt_ids, generation_config=self.generation_config
         )
         _, response_reward = self.reward_model(
-                input_ids=response_ids,
-                attention_mask=(response_ids != self.tokenizer.pad_token_id).to(
-                    torch.int64
-                ),
-            )
+            input_ids=response_ids,
+            attention_mask=(response_ids != self.tokenizer.pad_token_id).to(
+                torch.int64
+            ),
+        )
         reward = (response_reward - self.test_label_reward).item()
-        response_ids = response_ids[0, self.test_rindex:]
+        response_ids = response_ids[0, self.test_rindex :]
         response = self.tokenizer.decode(
             response_ids[response_ids != self.tokenizer.eos_token_id].tolist()
         )

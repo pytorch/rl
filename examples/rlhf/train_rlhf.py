@@ -27,7 +27,13 @@ from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 from tqdm import tqdm
 from transformers import GenerationConfig, GPT2Tokenizer
-from utils import flatten_td, get_file_logger, resolve_name_or_path, setup, TestPromptLogger
+from utils import (
+    flatten_td,
+    get_file_logger,
+    resolve_name_or_path,
+    setup,
+    TestPromptLogger,
+)
 
 
 class AdaptiveKLController:
@@ -63,19 +69,18 @@ class RewardEstimator:
     quality of the model can be visually assessed during training.
 
     """
-    def __init__(
-            self, eval_iters, episode_length, reward_model, ref_model
-    ):
+
+    def __init__(self, eval_iters, episode_length, reward_model, ref_model):
         """
-            Args:
-                eval_iters (int): number of batches on which we would like to estimate reward
+        Args:
+            eval_iters (int): number of batches on which we would like to estimate reward
 
-                episode_length (int): max number of generated new tokens
+            episode_length (int): max number of generated new tokens
 
-                reward_model (GPT2RewardModel): reward model
+            reward_model (GPT2RewardModel): reward model
 
-                ref_model (GPT2LMHeadModel): original transformer model that it is used to 
-                    correctly compute kl component of reward.
+            ref_model (GPT2LMHeadModel): original transformer model that it is used to
+                correctly compute kl component of reward.
         """
         self.ref_model = ref_model
         self.reward_model = reward_model
@@ -84,7 +89,9 @@ class RewardEstimator:
 
     @torch.no_grad()
     def __call__(self, model, dataloader):
-        rollout_from_model = RolloutFromModel(model, self.ref_model, self.reward_model, max_new_tokens=self.episode_length)
+        rollout_from_model = RolloutFromModel(
+            model, self.ref_model, self.reward_model, max_new_tokens=self.episode_length
+        )
         rewards = torch.zeros(self.eval_iters)
         for k in range(self.eval_iters):
             batch = next(dataloader)
@@ -182,13 +189,15 @@ def main():
 
     test_prompt = next(val_loader)
     reward_estimator = RewardEstimator(
-        eval_iters,
-        episode_length,
-        reward_model,
-        ref_model
+        eval_iters, episode_length, reward_model, ref_model
     )
 
-    prompt_logger = TestPromptLogger(test_prompt=test_prompt, reward_model=reward_model, logger=query_logger)
+    prompt_logger = TestPromptLogger(
+        batch=test_prompt,
+        reward_model=reward_model,
+        logger=query_logger,
+        episode_length=episode_length,
+    )
 
     optimizer = torch.optim.AdamW(
         [p for p in loss_fn.parameters() if p.requires_grad], **train_cfg.optimizer
@@ -266,6 +275,7 @@ def main():
                     optimizer.zero_grad()
                     for minibatch in rb_ppo:  # GO over RB
                         minibatch = minibatch.to(device, non_blocking=True)
+                        import ipdb; ipdb.set_trace()
                         with ctx:
                             loss_vals = loss_fn(minibatch)
                         loss_val = sum(
@@ -294,9 +304,6 @@ def main():
                                 f"saving checkpoint to {rlhf_out_dir}"
                             )
                             model.save_pretrained(rlhf_out_dir)
-                    
-
-
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ python train.py --batch_size=128
 
 ### Training the reward model
 
-Next you can train the reward model with
+Once you have completed supervised fine-tuning, copy the desired model checkpoint to `./out` or update the config to point `model.name_or_path` at the relevant checkpoint in the timestamped working directory created by Hydra. You can then train the reward model with
 
 ```sh
 python train_reward.py
@@ -38,7 +38,7 @@ python train_reward.py
 
 ### Training the final model with RLHF
 
-To train the final model run
+Once again, make sure you have either updated the configuration to point `reward_model.name_or_path` at the relevant timestamped working directory, or copy the checkpoint to `./out_reward`. You can then train the final model by running
 
 ```sh
 python train_rlhf.py
