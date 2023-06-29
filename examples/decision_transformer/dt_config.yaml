@@ -51,7 +51,7 @@ optim:
 
 # loss
 loss: 
-  alpha_init: 0.1
+  loss_function: "l2"
 
 transformer:
   n_embd: 128
