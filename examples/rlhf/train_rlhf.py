@@ -275,7 +275,6 @@ def main():
                     optimizer.zero_grad()
                     for minibatch in rb_ppo:  # GO over RB
                         minibatch = minibatch.to(device, non_blocking=True)
-                        import ipdb; ipdb.set_trace()
                         with ctx:
                             loss_vals = loss_fn(minibatch)
                         loss_val = sum(
