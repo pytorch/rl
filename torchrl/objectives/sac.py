@@ -92,6 +92,10 @@ class SACLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -267,6 +271,7 @@ class SACLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -283,7 +288,13 @@ class SACLoss(LossModule):
             create_target_params=self.delay_actor,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
+            q_value_policy_params = None
         # Value
         if value_network is not None:
             self._version = 1
@@ -292,7 +303,7 @@ class SACLoss(LossModule):
                 value_network,
                 "value_network",
                 create_target_params=self.delay_value,
-                compare_against=list(actor_network.parameters()),
+                compare_against=policy_params,
             )
         else:
             self._version = 2
@@ -301,15 +312,19 @@ class SACLoss(LossModule):
         self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
         if self._version == 1:
-            value_params = list(value_network.parameters())
+            if separate_losses:
+                value_params = list(value_network.parameters())
+                q_value_policy_params = policy_params + value_params
+            else:
+                q_value_policy_params = policy_params
         else:
-            value_params = []
+            q_value_policy_params = policy_params
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()) + value_params,
+            compare_against=q_value_policy_params,
         )
 
         self.loss_function = loss_function
@@ -751,6 +766,10 @@ class DiscreteSACLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Key where to write the priority value for prioritized replay buffers.
             Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
     >>> import torch
@@ -919,6 +938,7 @@ class DiscreteSACLoss(LossModule):
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
         priority_key: str = None,
+        separate_losses: bool = False,
     ):
         self._in_keys = None
         if not _has_functorch:
@@ -932,14 +952,19 @@ class DiscreteSACLoss(LossModule):
             create_target_params=self.delay_actor,
             funs_to_decorate=["forward", "get_dist_params"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.loss_function = loss_function
