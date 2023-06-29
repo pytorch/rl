@@ -1592,12 +1592,10 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             observations and produces an action value
 
     Keyword Args:
+        loss_module (TensorDictModule): The loss module that computes the DT loss to receive the input keys of the model.
         inference_context (int): The number of previous actions that will not be masked in the context.
             For example for an observation input of shape [batch_size, context, obs_dim] with context=20 and inference_context=5, the first 15 entries
             of the context will be masked. Defaults to 5.
-        observation_key (str): The key of the observation in the input TensorDict, defaults to "observation".
-        action_key (str): The key of the action in the input TensorDict, defaults to "action".
-        return_to_go_key (str): The key of the return to go in the input TensorDict, defaults to "return_to_go".
         spec (Optional[TensorSpec]): The spec of the input TensorDict. If None, it will be inferred from the policy module.
 
     Examples:
@@ -1623,11 +1621,11 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         ...     "tanh_loc": False,
         ... }
         >>> actor = ProbabilisticActor(
-            in_keys=["loc", "scale"],
-            out_keys=["action", "log_prob"],
-            module=actor_module,
-            distribution_class=dist_class,
-            distribution_kwargs=dist_kwargs)
+        ...     in_keys=["loc", "scale"],
+        ...     out_keys=["action", "log_prob"],
+        ...     module=actor_module,
+        ...     distribution_class=dist_class,
+        ...     distribution_kwargs=dist_kwargs)
         >>> inference_actor = DecisionTransformerInferenceWrapper(actor)
         >>> print(inference_actor)
         >>> sequence_length = 20
