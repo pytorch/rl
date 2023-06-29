@@ -6438,7 +6438,8 @@ class TestTransforms:
         td.set("dont touch", dont_touch.clone())
         if not batch:
             with pytest.raises(
-                ValueError, match="The last dimension of the tensordict"
+                ValueError,
+                match="CatFrames cannot process unbatched tensordict instances",
             ):
                 compose(td.clone(False))
         with pytest.raises(
