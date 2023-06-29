@@ -18,6 +18,18 @@ class DecisionTransformer(nn.Module):
 
     Desdescribed in https://arxiv.org/abs/2202.05607 .
 
+    The transformer utilizes a default config to create the GPT2 model if the user does not provide a specific config.
+    default_config = {
+        "n_embd": 256,
+        "n_layer": 4,
+        "n_head": 4,
+        "n_inner": 1024,
+        "activation": "relu",
+        "n_positions": 1024,
+        "resid_pdrop": 0.1,
+        "attn_pdrop": 0.1,
+    }
+
     Args:
         state_dim (int): dimension of the state space
         action_dim (int): dimension of the action space
@@ -31,7 +43,7 @@ class DecisionTransformer(nn.Module):
         ...     "n_head": 4,
         ...     "n_inner": 1024,
         ...     "activation": "relu",
-        ...     "n_positions": 1024,
+        ...     "n_positions": 1024,clear
         ...     "resid_pdrop": 0.1,
         ...     "attn_pdrop": 0.1,
         ... }
@@ -45,11 +57,22 @@ class DecisionTransformer(nn.Module):
 
     """
 
+    default_config = {
+        "n_embd": 256,
+        "n_layer": 4,
+        "n_head": 4,
+        "n_inner": 1024,
+        "activation": "relu",
+        "n_positions": 1024,
+        "resid_pdrop": 0.1,
+        "attn_pdrop": 0.1,
+    }
+
     def __init__(
         self,
         state_dim,
         action_dim,
-        config,
+        config: dict = default_config,
     ):
         if not _has_transformers:
             raise ImportError(
@@ -57,20 +80,22 @@ class DecisionTransformer(nn.Module):
             )
         super(DecisionTransformer, self).__init__()
 
+        self.default_config.update(config)
+
         gpt_config = transformers.GPT2Config(
-            n_embd=config["n_embd"],
-            n_layer=config["n_layer"],
-            n_head=config["n_head"],
-            n_inner=config["n_inner"],
-            activation_function=config["activation"],
-            n_positions=config["n_positions"],
-            resid_pdrop=config["resid_pdrop"],
-            attn_pdrop=config["attn_pdrop"],
+            n_embd=self.default_config["n_embd"],
+            n_layer=self.default_config["n_layer"],
+            n_head=self.default_config["n_head"],
+            n_inner=self.default_config["n_inner"],
+            activation_function=self.default_config["activation"],
+            n_positions=self.default_config["n_positions"],
+            resid_pdrop=self.default_config["resid_pdrop"],
+            attn_pdrop=self.default_config["attn_pdrop"],
             vocab_size=1,
         )
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.hidden_size = config["n_embd"]
+        self.hidden_size = self.default_config["n_embd"]
 
         self.transformer = GPT2Model(config=gpt_config)
 
