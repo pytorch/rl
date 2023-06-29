@@ -42,10 +42,8 @@ class create_rb:
         )
         if self.populated:
             rb.extend(data)
-            print("returning")
             return ((rb,), {})
         else:
-            print("returning")
             return ((rb, data), {})
 
 

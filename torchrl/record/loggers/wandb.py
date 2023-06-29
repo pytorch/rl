@@ -5,7 +5,7 @@
 
 import os
 import warnings
-from typing import Optional
+from typing import Optional, Sequence
 
 from torch import Tensor
 
@@ -177,3 +177,24 @@ class WandbLogger(Logger):
 
     def __repr__(self) -> str:
         return f"WandbLogger(experiment={self.experiment.__repr__()})"
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        """Add histogram to log.
+
+        Args:
+            name (str): Data identifier
+            data (torch.Tensor, numpy.ndarray, or string/blobname): Values to build histogram
+
+        Keyword Args:
+            step (int): Global step value to record
+            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
+
+        """
+        num_bins = kwargs.pop("bins", None)
+        step = kwargs.pop("step", None)
+        extra_kwargs = {}
+        if step is not None:
+            extra_kwargs["trainer/step"] = step
+        self.experiment.log(
+            {name: wandb.Histogram(data, num_bins=num_bins), **extra_kwargs}
+        )

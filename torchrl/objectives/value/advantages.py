@@ -34,6 +34,16 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_return_estimate,
 )
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError:
+        raise ImportError(
+            "vmap couldn't be found. Make sure you have torch>1.13 installed."
+        ) from err
+
 
 def _self_set_grad_enabled(fun):
     @wraps(fun)
@@ -111,9 +121,9 @@ def _call_value_nets(
             )
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0)
-            data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
+            data_out = vmap(value_net, (0, 0))(data_in, params_stack)
         else:
-            data_out = torch.vmap(value_net, (0,))(data_in)
+            data_out = vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
     data.set(value_key, value)

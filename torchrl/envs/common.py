@@ -77,7 +77,7 @@ class EnvMetaData:
     @staticmethod
     def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        tensordict.set("_reset", torch.zeros_like(tensordict.get("done")))
+        tensordict.set("_reset", torch.zeros_like(tensordict.get(env.done_key)))
 
         specs = env.specs.to("cpu")
 
