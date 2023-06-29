@@ -84,6 +84,38 @@ jobs:
           name: torchrl-batch.whl
           path: dist/*.whl
 
+  build-wheel-m1:
+    runs-on: macos-m1-12
+    strategy:
+      matrix:
+        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python_version[1] }}
+          architecture: x64
+      - name: Checkout torchrl
+        uses: actions/checkout@v2
+      - name: Install PyTorch RC
+        run: |
+          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: Build wheel
+        run: |
+          export CC=clang CXX=clang++
+          python3 -mpip install wheel
+          BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+      - name: Upload wheel for the test-wheel job
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-mac-${{ matrix.python_version[0] }}.whl
+          path: dist/torchrl-*.whl
+      - name: Upload wheel for download
+        uses: actions/upload-artifact@v2
+        with:
+          name: torchrl-batch.whl
+          path: dist/*.whl
+
   build-wheel-windows:
     runs-on: windows-latest
     strategy:
