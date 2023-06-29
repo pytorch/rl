@@ -119,18 +119,12 @@ def test_create_or_load_dataset(
 )
 @pytest.mark.parametrize("max_length", [12, 550])
 @pytest.mark.parametrize(
-    "dataset,make_process_fn,pre_tokenization_hook",
+    "dataset,make_process_fn,pre_tokenization_hook,split",
     [
-        (
-            "comp",
-            TensorDictTokenizer,
-            pre_tokenization_hook,
-        ),
-        (
-            "tldr",
-            PromptTensorDictTokenizer,
-            None,
-        ),
+        ("comp", TensorDictTokenizer, pre_tokenization_hook, "train"),
+        ("comp", TensorDictTokenizer, pre_tokenization_hook, "valid1"),
+        ("tldr", PromptTensorDictTokenizer, None, "train"),
+        ("tldr", PromptTensorDictTokenizer, None, "valid"),
     ],
 )
 def test_preproc_data(
@@ -141,7 +135,7 @@ def test_preproc_data(
     pre_tokenization_hook,
     minidata_dir_tldr,
     minidata_dir_comparison,
-    split="train",
+    split,
 ):
     import datasets
 
@@ -159,6 +153,7 @@ def test_preproc_data(
         pre_tokenization_hook=pre_tokenization_hook,
         from_disk=True,
         root_dir=tmpdir1,
+        valid_size=500,
     )
     dataset = loader._load_dataset()
     assert isinstance(dataset, datasets.Dataset)
