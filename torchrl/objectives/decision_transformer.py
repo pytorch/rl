@@ -28,6 +28,8 @@ class OnlineDTLoss(LossModule):
 
     Args:
         actor_network (ProbabilisticActor): stochastic actor
+
+    Keyword Args:
         alpha_init (float, optional): initial entropy multiplier.
             Default is 1.0.
         min_alpha (float, optional): min value of alpha.
@@ -147,9 +149,8 @@ class OnlineDTLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.return_to_go),
             ("next", self.tensor_keys.done),
-            *self.tensor_keys.action,
-            *[("next", key) for key in self.tensor_keys.action],
-            *self.tensor_keys.observation,
+            self.tensor_keys.action,
+            self.tensor_keys.observation,
         ]
 
         self._in_keys = list(set(keys))
@@ -223,6 +224,9 @@ class DTLoss(LossModule):
     Args:
         actor_network (ProbabilisticActor): stochastic actor
 
+    Keyword Args:
+        loss_function (str): loss function to use. Defaults to ``"l2"``.
+
     """
 
     @dataclass
@@ -254,6 +258,8 @@ class DTLoss(LossModule):
     def __init__(
         self,
         actor_network: ProbabilisticActor,
+        *,
+        loss_function: str = "l2",
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -266,15 +272,15 @@ class DTLoss(LossModule):
             create_target_params=False,
             funs_to_decorate=["forward"],
         )
+        self.loss_function = loss_function
 
     def _set_in_keys(self):
         keys = [
             self.tensor_keys.action,
             ("next", self.tensor_keys.return_to_go),
             ("next", self.tensor_keys.done),
-            *self.tensor_keys.action,
-            *[("next", key) for key in self.tensor_keys.action],
-            *self.tensor_keys.observation,
+            self.tensor_keys.action,
+            self.tensor_keys.observation,
         ]
 
         self._in_keys = list(set(keys))
@@ -312,7 +318,7 @@ class DTLoss(LossModule):
         loss = distance_loss(
             pred_actions,
             target_actions,
-            loss_function="l2",
+            loss_function=self.loss_function,
         ).mean()
         out = {
             "loss": loss,
