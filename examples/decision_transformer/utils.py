@@ -408,9 +408,10 @@ def make_odt_loss(loss_cfg, actor_network):
     return loss
 
 
-def make_dt_loss(actor_network):
+def make_dt_loss(loss_cfg, actor_network):
     loss = DTLoss(
         actor_network,
+        loss_function=loss_cfg.loss_function,
     )
     return loss
 
