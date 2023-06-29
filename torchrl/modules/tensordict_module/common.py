@@ -12,8 +12,9 @@ from typing import Iterable, Optional, Type, Union
 
 import torch
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
+
 from torch import nn
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -401,3 +402,49 @@ def ensure_tensordict_compatible(
     if out_keys is not None:
         kwargs["out_keys"] = out_keys
     return wrapper_type(module, **kwargs)
+
+
+class VmapModule(TensorDictModuleBase):
+    """A TensorDictModule wrapper to vmap over the input.
+
+    It is intended to be used with modules that accept data with one less batch
+    dimension than the one provided. By using this wrapper, one can hide a
+    batch dimension and satisfy the wrapped module.
+
+    Args:
+        module (TensorDictModuleBase): the module to vmap over.
+        vmap_dim (int, optional): the vmap input and output dim.
+            If none is provided, the last dimension of the tensordict is
+            assumed.
+
+    .. note::
+
+      Since vmap requires to have control over the batch size of the input
+      this module does not support dispatched arguments
+
+    Example:
+        >>> lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
+        >>> sample_in = torch.ones((10,3,2))
+        >>> sample_in_td = TensorDict({"x":sample_in}, batch_size=[10])
+        >>> lam(sample_in)
+        >>> vm = VmapModule(lam, 0)
+        >>> vm(sample_in_td)
+        >>> assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
+    """
+
+    def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+        super().__init__()
+        self.in_keys = module.in_keys
+        self.out_keys = module.out_keys
+        self.module = module
+        self.vmap_dim = vmap_dim
+
+    def forward(self, tensordict):
+        # TODO: there is a risk of segfault if input is not a tensordict.
+        # We should investigate (possibly prevent it c++ side?)
+        vmap_dim = self.vmap_dim
+        if vmap_dim is None:
+            ndim = tensordict.ndim
+            vmap_dim = ndim - 1
+        td = torch.vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        return tensordict.update(td)
