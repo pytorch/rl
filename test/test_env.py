@@ -1177,6 +1177,7 @@ class TestStepMdp:
         td_nested_keys = td.keys(True, True)
         td_keys = td.keys()
 
+        assert td.batch_size == input_td.batch_size
         # Obs will always be present
         assert obs_key in td_nested_keys
         # Nested key should not be present in this specific conditions
