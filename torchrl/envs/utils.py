@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from copy import copy
+
 import pkg_resources
 import torch
 from tensordict.nn.probabilistic import (  # noqa
@@ -194,7 +196,15 @@ def step_mdp(
     td_keys = td.keys(True, True)
     td_next_keys = td_next.keys(True, True)
 
-    out = TensorDict({}, td_next.batch_size)
+    out = TensorDict(
+        source={},
+        batch_size=td_next.batch_size,
+        device=td_next.device,
+        names=copy(td_next._td_dim_names),
+        _run_checks=False,
+        _is_shared=td_next.is_shared(),
+        _is_memmap=td_next.is_memmap(),
+    )
 
     # Set the keys from next
     excluded = {
