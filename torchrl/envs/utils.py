@@ -214,7 +214,6 @@ def step_mdp(
                 _set(tensordict, out, key, total_key, excluded)
     elif not exclude_action:
         _set_single_key(tensordict, out, action_key)
-    print("stop")
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
 
