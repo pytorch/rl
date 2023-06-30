@@ -1124,15 +1124,17 @@ class TestStepMdp:
         exclude_action,
         keep_other,
     ):
+        td_batch_size = (4,)
+        nested_batch_size = (4, 3)
         nested_key = ("data",)
         td = TensorDict(
             {
-                nested_key: TensorDict({}, [4, 3]),
+                nested_key: TensorDict({}, nested_batch_size),
                 "next": {
-                    nested_key: TensorDict({}, [4, 3]),
+                    nested_key: TensorDict({}, nested_batch_size),
                 },
             },
-            [4],
+            td_batch_size,
         )
         reward_key = ("reward",)
         if nested_reward:
@@ -1150,15 +1152,17 @@ class TestStepMdp:
         if nested_other:
             other_key = nested_key + other_key
 
-        td[reward_key] = torch.zeros(4, 3, 1)
-        td[done_key] = torch.zeros(4, 3, 1)
-        td[obs_key] = torch.zeros(4, 3, 1)
-        td[action_key] = torch.zeros(4, 3, 1)
-        td[other_key] = torch.zeros(4, 3, 1)
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+        td[other_key] = torch.zeros(*nested_batch_size, 1)
 
-        td["next", reward_key] = torch.ones(4, 3, 1)
-        td["next", done_key] = torch.ones(4, 3, 1)
-        td["next", obs_key] = torch.ones(4, 3, 1)
+        td["next", reward_key] = torch.ones(*nested_batch_size, 1)
+        td["next", done_key] = torch.ones(*nested_batch_size, 1)
+        td["next", obs_key] = torch.ones(*nested_batch_size, 1)
+
+        input_td = td
 
         td = step_mdp(
             td,
@@ -1170,28 +1174,143 @@ class TestStepMdp:
             action_key=action_key,
             keep_other=keep_other,
         )
-        td_keys = td.keys(True, True)
-        assert obs_key in td_keys
+        td_nested_keys = td.keys(True, True)
+        td_keys = td.keys()
+
+        # Obs will always be present
+        assert obs_key in td_nested_keys
+        # Nested key will always be cloned(False) with its batch size
+        assert not td[nested_key] is input_td["next", nested_key]
+        assert not td[nested_key] is input_td[nested_key]
+        assert td[nested_key].batch_size == nested_batch_size
+        # If we exclude everything we are left with just obs
+        if exclude_done and exclude_reward and exclude_action and not keep_other:
+            if nested_obs:
+                assert len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key
+            else:
+                assert (
+                    len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key[0]
+                )
+        # Key-wise exclusions
         if not exclude_reward:
-            assert reward_key in td_keys
+            assert reward_key in td_nested_keys
             assert (td[reward_key] == 1).all()
         else:
-            assert reward_key not in td_keys
+            assert reward_key not in td_nested_keys
         if not exclude_action:
-            assert action_key in td_keys
+            assert action_key in td_nested_keys
             assert (td[action_key] == 0).all()
         else:
-            assert action_key not in td_keys
+            assert action_key not in td_nested_keys
         if not exclude_done:
-            assert done_key in td_keys
+            assert done_key in td_nested_keys
             assert (td[done_key] == 1).all()
         else:
-            assert done_key not in td_keys
+            assert done_key not in td_nested_keys
         if keep_other:
-            assert other_key in td_keys
+            assert other_key in td_nested_keys
             assert (td[other_key] == 0).all()
         else:
-            assert other_key not in td_keys
+            assert other_key not in td_nested_keys
+
+    @pytest.mark.parametrize("nested_other", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("keep_other", [True, False])
+    def test_nested_partially(
+        self,
+        nested_other,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+        keep_other,
+    ):
+        # General
+        td_batch_size = (4,)
+        nested_batch_size = (4, 3)
+        nested_key = ("data",)
+        reward_key = ("reward",)
+        done_key = ("done",)
+        action_key = ("action",)
+        obs_key = ("state",)
+        other_key = ("beatles",)
+        if nested_other:
+            other_key = nested_key + other_key
+
+        # Nested only in root
+        td = TensorDict(
+            {
+                nested_key: TensorDict({}, nested_batch_size),
+                "next": {},
+            },
+            td_batch_size,
+        )
+
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+        td[other_key] = torch.zeros(*nested_batch_size, 1)
+
+        td["next", reward_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", done_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
+
+        td = step_mdp(
+            td,
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=reward_key,
+            done_key=done_key,
+            action_key=action_key,
+            keep_other=keep_other,
+        )
+        td_keys_nested = td.keys(True, True)
+        td_keys = td.keys()
+        if keep_other:
+            if nested_other:
+                assert nested_key[0] in td_keys
+                assert td[nested_key].batch_size == nested_batch_size
+            else:
+                assert nested_key[0] not in td_keys
+            assert (td[other_key] == 0).all()
+        else:
+            assert other_key not in td_keys_nested
+
+        # Nested only in next
+        td = TensorDict(
+            {
+                "next": {nested_key: TensorDict({}, nested_batch_size)},
+            },
+            td_batch_size,
+        )
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+
+        td["next", other_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", reward_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", done_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
+
+        td = step_mdp(
+            td,
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=reward_key,
+            done_key=done_key,
+            action_key=action_key,
+            keep_other=keep_other,
+        )
+        td_keys = td.keys()
+
+        assert nested_key[0] in td_keys
+        assert td[nested_key].batch_size == nested_batch_size
+        assert (td[other_key] == 0).all()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
