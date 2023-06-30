@@ -8,8 +8,7 @@ import pytest
 import torch
 
 from tensordict import TensorDict
-from torchrl.envs import ParallelEnv, SerialEnv, StepCounter, TransformedEnv, \
-    step_mdp
+from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
 
 
@@ -40,26 +39,36 @@ def make_parallel_env():
     env.rollout(3)
     return ((env,), {})
 
+
 def make_nested_td():
-    return TensorDict({
-        ("agent", "action"): 0,
-        ("agent", "done"): 0,
-        ("agent", "obs"): 0,
-        ("next", "agent", "action"): 1,
-        ("next", "agent", "reward"): 1,
-        ("next", "agent", "done"): 1,
-        ("next", "agent", "obs"): 1,
-    }, [])
+    return TensorDict(
+        {
+            ("agent", "action"): 0,
+            ("agent", "done"): 0,
+            ("agent", "obs"): 0,
+            ("next", "agent", "action"): 1,
+            ("next", "agent", "reward"): 1,
+            ("next", "agent", "done"): 1,
+            ("next", "agent", "obs"): 1,
+        },
+        [],
+    )
+
+
 def make_flat_td():
-    return TensorDict({
-        ( "action"): 0,
-        ( "done"): 0,
-        ( "obs"): 0,
-        ("next",  "action"): 1,
-        ("next",  "reward"): 1,
-        ("next",  "done"): 1,
-        ("next",  "obs"): 1,
-    }, [])
+    return TensorDict(
+        {
+            ("action"): 0,
+            ("done"): 0,
+            ("obs"): 0,
+            ("next", "action"): 1,
+            ("next", "reward"): 1,
+            ("next", "done"): 1,
+            ("next", "obs"): 1,
+        },
+        [],
+    )
+
 
 def execute_env(env):
     env.rollout(1000, break_when_any_done=False)
@@ -84,12 +93,15 @@ def test_parallel(benchmark):
     (c,), _ = make_parallel_env()
     benchmark(execute_env, c)
 
+
 @pytest.mark.parametrize("nested", [True, False])
 @pytest.mark.parametrize("keep_other", [True, False])
 @pytest.mark.parametrize("exclude_reward", [True, False])
 @pytest.mark.parametrize("exclude_done", [True, False])
 @pytest.mark.parametrize("exclude_action", [True, False])
-def test_step_mdp_speed(benchmark, nested, keep_other, exclude_reward, exclude_done, exclude_action):
+def test_step_mdp_speed(
+    benchmark, nested, keep_other, exclude_reward, exclude_done, exclude_action
+):
     if nested:
         td = make_nested_td()
         reward_key = ("agent", "reward")
@@ -101,7 +113,18 @@ def test_step_mdp_speed(benchmark, nested, keep_other, exclude_reward, exclude_d
         done_key = "done"
         action_key = "action"
 
-    benchmark(step_mdp, td, action_key=action_key, reward_key=reward_key, done_key=done_key, keep_other=keep_other, exclude_reward=exclude_reward, exclude_done=exclude_done, exclude_action=exclude_action)
+    benchmark(
+        step_mdp,
+        td,
+        action_key=action_key,
+        reward_key=reward_key,
+        done_key=done_key,
+        keep_other=keep_other,
+        exclude_reward=exclude_reward,
+        exclude_done=exclude_done,
+        exclude_action=exclude_action,
+    )
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

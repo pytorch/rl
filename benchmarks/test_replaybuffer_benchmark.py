@@ -81,14 +81,13 @@ def iterate(rb):
 )
 def test_sample_rb(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
-            rb=TensorDictReplayBuffer,
-            storage=ListStorage,
-            sampler=RandomSampler,
-            populated=True,
-            size=size,
-        )()
-    benchmark(
-        sample, rb)
+        rb=TensorDictReplayBuffer,
+        storage=ListStorage,
+        sampler=RandomSampler,
+        populated=True,
+        size=size,
+    )()
+    benchmark(sample, rb)
 
 
 @pytest.mark.parametrize(
@@ -107,15 +106,13 @@ def test_sample_rb(benchmark, rb, storage, sampler, size):
 )
 def test_iterate_rb(benchmark, rb, storage, sampler, size):
     (rb,), _ = create_rb(
-            rb=TensorDictReplayBuffer,
-            storage=ListStorage,
-            sampler=RandomSampler,
-            populated=True,
-            size=size,
-        )()
-    benchmark(
-        iterate, rb
-    )
+        rb=TensorDictReplayBuffer,
+        storage=ListStorage,
+        sampler=RandomSampler,
+        populated=True,
+        size=size,
+    )()
+    benchmark(iterate, rb)
 
 
 @pytest.mark.parametrize(
@@ -145,6 +142,7 @@ def test_populate_rb(benchmark, rb, storage, sampler, size):
         iterations=1,
         rounds=50,
     )
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
