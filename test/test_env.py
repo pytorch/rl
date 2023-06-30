@@ -1053,7 +1053,7 @@ class TestStepMdp:
         if has_out and lazy_stack:
             next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
         out = step_mdp(
-            tensordict,
+            tensordict.lock_(),
             keep_other=keep_other,
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
@@ -1165,7 +1165,7 @@ class TestStepMdp:
         input_td = td
 
         td = step_mdp(
-            td,
+            td.lock_(),
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
@@ -1266,7 +1266,7 @@ class TestStepMdp:
         td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
 
         td = step_mdp(
-            td,
+            td.lock_(),
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
@@ -1305,7 +1305,7 @@ class TestStepMdp:
         td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
 
         td = step_mdp(
-            td,
+            td.lock_(),
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
