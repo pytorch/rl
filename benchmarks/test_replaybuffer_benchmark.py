@@ -50,19 +50,16 @@ class create_rb:
 
 
 def populate(rb, td):
-    for _ in range(1000):
-        rb.extend(td)
+    rb.extend(td)
 
 
 def sample(rb):
-    for _ in range(1000):
-        rb.sample()
+    rb.sample()
 
 
 def iterate(rb):
-    for i, _ in enumerate(rb):
-        if i == 5:
-            break
+    for _ in rb:
+        break
 
 
 @pytest.mark.parametrize(
