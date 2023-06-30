@@ -155,13 +155,6 @@ def step_mdp(
             is_shared=False)
 
     """
-    if isinstance(done_key, tuple) and len(done_key) == 1:
-        done_key = done_key[0]
-    if isinstance(reward_key, tuple) and len(reward_key) == 1:
-        reward_key = reward_key[0]
-    if isinstance(action_key, tuple) and len(action_key) == 1:
-        action_key = action_key[0]
-
     if isinstance(tensordict, LazyStackedTensorDict):
         if next_tensordict is not None:
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
@@ -188,7 +181,6 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-
     out = tensordict.get("next").clone(False)
     excluded = set()
     if exclude_done:
@@ -197,16 +189,20 @@ def step_mdp(
         excluded.add(reward_key)
     if len(excluded):
         out = out.exclude(*excluded, inplace=True)
-
-    if not exclude_action:
-        out._set(action_key, tensordict.get(action_key))
-
+    td_keys = None
     if keep_other:
-        excluded = set.union(excluded, set(out.keys(True, True)))
-        for key in tensordict.exclude("next").keys(True, True):
-            if key not in excluded:
-                out._set(key, tensordict.get(key))
+        out_keys = set(out.keys())
+        td_keys = set(tensordict.keys()) - out_keys - excluded - {"next"}
+        if exclude_action:
+            td_keys = td_keys - {action_key}
+    elif not exclude_action:
+        td_keys = {action_key}
 
+    if td_keys:
+        # update does some checks that we can spare
+        # out.update(tensordict.select(*td_keys))
+        for key in td_keys:
+            out._set(key, tensordict.get(key))
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
