@@ -1,4 +1,4 @@
-name: Continuous Benchmark
+name: Continuous Benchmark (PR)
 
 on:
   pull_request:
