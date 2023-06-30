@@ -196,6 +196,10 @@ def step_mdp(
         # of the previous td. Alternatively, we select from tensordict and clone
         # (see below)
         # Q: is True, True here and below faster than the clone(False) here under?
+        # if exclude_action and isinstance(action_key, tuple):
+        #     out_keys = set(out.keys(True, True))
+        #     td_keys = set(tensordict.keys(True, True)) - out_keys - {"next"}
+        # else:
         out_keys = set(out.keys())
         td_keys = set(tensordict.keys()) - out_keys - {"next"}
         if exclude_action:
