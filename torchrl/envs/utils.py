@@ -230,7 +230,7 @@ def _set_single_key(source, dest, key):
             new_val = dest.get(k, None)
             if new_val is None:
                 new_val = _clone_no_keys(val)
-            dest._set(k, new_val)
+                dest._set(k, new_val)
             source = val
             dest = new_val
         else:
