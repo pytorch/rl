@@ -16,7 +16,12 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+)
 
 __all__ = [
     "exploration_mode",
@@ -28,6 +33,7 @@ __all__ = [
     "step_mdp",
     "make_composite_from_td",
 ]
+
 
 from torchrl.data import CompositeSpec
 
@@ -181,32 +187,44 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-    out = tensordict.get("next").clone(False)
-    excluded = set()
-    if exclude_done:
-        excluded.add(done_key)
-    if exclude_reward:
-        excluded.add(reward_key)
-    if len(excluded):
-        out = out.exclude(*excluded, inplace=True)
-    td_keys = None
-    if keep_other:
-        out_keys = set(out.keys())
-        td_keys = set(tensordict.keys()) - out_keys - excluded - {"next"}
-        if exclude_action:
-            td_keys = td_keys - {action_key}
-    elif not exclude_action:
-        td_keys = {action_key}
 
-    if td_keys:
-        # update does some checks that we can spare
-        # out.update(tensordict.select(*td_keys))
+    td = tensordict.exclude("next")
+    td_next = tensordict.get("next")
+
+    td_keys = td.keys(True, True)
+    td_next_keys = td_next.keys(True, True)
+
+    out = TensorDict({}, td_next.batch_size)
+
+    # Set the keys from next
+    excluded = {
+        done_key if exclude_done else None,
+        reward_key if exclude_reward else None,
+    }
+    for key in td_next_keys:
+        if key not in excluded:
+            _set_key(dest=out, source=td_next, key=key)
+
+    # Set the keys from root
+    if not exclude_action:
+        _set_key(dest=out, source=tensordict, key=action_key)
+    if keep_other:
+        excluded = set.union(excluded, {action_key}, td_next_keys)
         for key in td_keys:
-            out._set(key, tensordict.get(key))
+            if key not in excluded:
+                _set_key(dest=out, source=tensordict, key=key)
+
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
         return out
+
+
+def _set_key(dest, source, key):
+    dest._set(key, source.get(key))
+    if isinstance(key, tuple) and len(key) > 1:  # Setting the batch_sizes
+        for k in range(1, len(key)):
+            dest[key[:k]].batch_size = source[key[:k]].batch_size
 
 
 def get_available_libraries():

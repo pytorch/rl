@@ -1136,21 +1136,21 @@ class TestStepMdp:
             },
             td_batch_size,
         )
-        reward_key = ("reward",)
+        reward_key = "reward"
         if nested_reward:
-            reward_key = nested_key + reward_key
-        done_key = ("done",)
+            reward_key = nested_key + (reward_key,)
+        done_key = "done"
         if nested_done:
-            done_key = nested_key + done_key
-        action_key = ("action",)
+            done_key = nested_key + (done_key,)
+        action_key = "action"
         if nested_action:
-            action_key = nested_key + action_key
-        obs_key = ("state",)
+            action_key = nested_key + (action_key,)
+        obs_key = "state"
         if nested_obs:
-            obs_key = nested_key + obs_key
-        other_key = ("beatles",)
+            obs_key = nested_key + (obs_key,)
+        other_key = "beatles"
         if nested_other:
-            other_key = nested_key + other_key
+            other_key = nested_key + (other_key,)
 
         td[reward_key] = torch.zeros(*nested_batch_size, 1)
         td[done_key] = torch.zeros(*nested_batch_size, 1)
@@ -1179,18 +1179,25 @@ class TestStepMdp:
 
         # Obs will always be present
         assert obs_key in td_nested_keys
-        # Nested key will always be cloned(False) with its batch size
-        assert not td[nested_key] is input_td["next", nested_key]
-        assert not td[nested_key] is input_td[nested_key]
-        assert td[nested_key].batch_size == nested_batch_size
+        # Nested key should not be present in this specific conditions
+        if (
+            (exclude_done or not nested_done)
+            and (exclude_reward or not nested_reward)
+            and (exclude_action or not nested_action)
+            and not nested_obs
+            and ((not keep_other) or (keep_other and not nested_other))
+        ):
+            assert nested_key[0] not in td_keys
+        else:  # Nested key is present
+            assert not td[nested_key] is input_td["next", nested_key]
+            assert not td[nested_key] is input_td[nested_key]
+            assert td[nested_key].batch_size == nested_batch_size
         # If we exclude everything we are left with just obs
         if exclude_done and exclude_reward and exclude_action and not keep_other:
             if nested_obs:
                 assert len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key
             else:
-                assert (
-                    len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key[0]
-                )
+                assert len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key
         # Key-wise exclusions
         if not exclude_reward:
             assert reward_key in td_nested_keys
@@ -1230,13 +1237,13 @@ class TestStepMdp:
         td_batch_size = (4,)
         nested_batch_size = (4, 3)
         nested_key = ("data",)
-        reward_key = ("reward",)
-        done_key = ("done",)
-        action_key = ("action",)
-        obs_key = ("state",)
-        other_key = ("beatles",)
+        reward_key = "reward"
+        done_key = "done"
+        action_key = "action"
+        obs_key = "state"
+        other_key = "beatles"
         if nested_other:
-            other_key = nested_key + other_key
+            other_key = nested_key + (other_key,)
 
         # Nested only in root
         td = TensorDict(
@@ -1308,8 +1315,11 @@ class TestStepMdp:
         )
         td_keys = td.keys()
 
-        assert nested_key[0] in td_keys
-        assert td[nested_key].batch_size == nested_batch_size
+        if nested_other:
+            assert nested_key[0] in td_keys
+            assert td[nested_key].batch_size == nested_batch_size
+        else:
+            assert nested_key[0] not in td_keys
         assert (td[other_key] == 0).all()
 
 
