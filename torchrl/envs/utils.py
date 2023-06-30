@@ -16,7 +16,12 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+)
 
 __all__ = [
     "exploration_mode",
@@ -155,6 +160,11 @@ def step_mdp(
             is_shared=False)
 
     """
+    if isinstance(done_key, tuple) and len(done_key) == 1:
+        done_key = done_key[0]
+    if isinstance(reward_key, tuple) and len(reward_key) == 1:
+        reward_key = reward_key[0]
+
     if isinstance(tensordict, LazyStackedTensorDict):
         if next_tensordict is not None:
             next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
@@ -181,28 +191,33 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-    out = tensordict.get("next").clone(False)
+
+    if keep_other:
+        out = tensordict.exclude("next").clone(recurse=False)
+        if exclude_action:
+            del out[action_key]
+        if exclude_done:
+            del out[done_key]
+        if exclude_reward:
+            del out[reward_key]
+    else:
+        out = TensorDict({}, tensordict.batch_size)
+        if not exclude_action:
+            out._set(action_key, tensordict.get(action_key))
+
     excluded = set()
     if exclude_done:
         excluded.add(done_key)
     if exclude_reward:
         excluded.add(reward_key)
-    if len(excluded):
-        out = out.exclude(*excluded, inplace=True)
-    td_keys = None
-    if keep_other:
-        out_keys = set(out.keys())
-        td_keys = set(tensordict.keys()) - out_keys - excluded - {"next"}
-        if exclude_action:
-            td_keys = td_keys - {action_key}
-    elif not exclude_action:
-        td_keys = {action_key}
 
-    if td_keys:
-        # update does some checks that we can spare
-        # out.update(tensordict.select(*td_keys))
-        for key in td_keys:
-            out._set(key, tensordict.get(key))
+    out_next = tensordict["next"]
+    for key in out_next.keys(True, True):
+        if key == action_key:
+            raise ValueError("action_key should not be present in 'next' tensordict")
+        if key not in excluded:
+            out._set(key, out_next.get(key))
+
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
