@@ -207,10 +207,11 @@ def step_mdp(
     )
 
     # Set the keys from next
-    excluded = {
-        done_key if exclude_done else None,
-        reward_key if exclude_reward else None,
-    }
+    excluded = set()
+    if exclude_done:
+        excluded.add(done_key)
+    if exclude_reward:
+        excluded.add(reward_key)
     for key in td_next_keys:
         if key not in excluded:
             _set_key(dest=out, source=td_next, key=key)
