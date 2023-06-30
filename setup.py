@@ -67,9 +67,11 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
+    if is_nightly:
+        return "torch>=2.1.0.dev"
     return "torch"
 
 
@@ -164,6 +166,10 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
+    if is_nightly:
+        tensordict_dep = "tensordict-nightly"
+    else:
+        tensordict_dep = "tensordict>=0.1.1"
 
     if is_nightly:
         version = get_nightly_version()
@@ -173,7 +179,7 @@ def _main(argv):
     else:
         version = get_version()
 
-    pytorch_package_dep = _get_pytorch_version()
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
@@ -204,7 +210,7 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.1",
+            tensordict_dep,
         ],
         extras_require={
             "atari": [

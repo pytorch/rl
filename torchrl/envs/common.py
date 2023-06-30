@@ -77,7 +77,7 @@ class EnvMetaData:
     @staticmethod
     def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        tensordict.set("_reset", torch.zeros_like(tensordict.get("done")))
+        tensordict.set("_reset", torch.zeros_like(tensordict.get(env.done_key)))
 
         specs = env.specs.to("cpu")
 
@@ -1048,7 +1048,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f" match the tensordict one."
             )
         action = self.action_spec.rand(shape)
-        tensordict.set("action", action)
+        tensordict.set(self.action_key, action)
         return tensordict
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:

@@ -44,6 +44,8 @@ class IQLLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model
         value_network (TensorDictModule, optional): V(s) parametric model.
+
+    Keyword Args:
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -57,6 +59,10 @@ class IQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -231,6 +237,7 @@ class IQLLoss(LossModule):
         expectile: float = 0.5,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -250,26 +257,35 @@ class IQLLoss(LossModule):
             create_target_params=False,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # Value Function Network
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=False,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         # Q Function Network
         self.delay_qvalue = True
         self.num_qvalue_nets = num_qvalue_nets
-
+        if separate_losses and policy_params is not None:
+            qvalue_policy_params = list(actor_network.parameters()) + list(
+                value_network.parameters()
+            )
+        else:
+            qvalue_policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=True,
-            compare_against=list(actor_network.parameters())
-            + list(value_network.parameters()),
+            compare_against=qvalue_policy_params,
         )
 
         self.loss_function = loss_function

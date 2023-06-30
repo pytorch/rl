@@ -15,6 +15,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
+from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 
 from torchrl.modules import ProbabilisticActor
@@ -69,6 +70,9 @@ class SACLoss(LossModule):
             Default is None (no minimum value).
         max_alpha (float, optional): max value of alpha.
             Default is None (no maximum value).
+        action_spec (TensorSpec, optional): the action tensor spec. If not provided
+            and the target entropy is ``"auto"``, it will be retrieved from
+            the actor.
         fixed_alpha (bool, optional): if ``True``, alpha will be fixed to its
             initial value. Otherwise, alpha will be optimized to
             match the 'target_entropy' value.
@@ -88,6 +92,10 @@ class SACLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Tensordict key where to write the
             priority (for prioritized replay buffer usage). Defaults to ``"td_error"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -255,6 +263,7 @@ class SACLoss(LossModule):
         alpha_init: float = 1.0,
         min_alpha: float = None,
         max_alpha: float = None,
+        action_spec=None,
         fixed_alpha: bool = False,
         target_entropy: Union[str, float] = "auto",
         delay_actor: bool = False,
@@ -262,6 +271,7 @@ class SACLoss(LossModule):
         delay_value: bool = True,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -278,7 +288,13 @@ class SACLoss(LossModule):
             create_target_params=self.delay_actor,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
+            q_value_policy_params = None
         # Value
         if value_network is not None:
             self._version = 1
@@ -287,7 +303,7 @@ class SACLoss(LossModule):
                 value_network,
                 "value_network",
                 create_target_params=self.delay_value,
-                compare_against=list(actor_network.parameters()),
+                compare_against=policy_params,
             )
         else:
             self._version = 2
@@ -296,15 +312,19 @@ class SACLoss(LossModule):
         self.delay_qvalue = delay_qvalue
         self.num_qvalue_nets = num_qvalue_nets
         if self._version == 1:
-            value_params = list(value_network.parameters())
+            if separate_losses:
+                value_params = list(value_network.parameters())
+                q_value_policy_params = policy_params + value_params
+            else:
+                q_value_policy_params = policy_params
         else:
-            value_params = []
+            q_value_policy_params = policy_params
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()) + value_params,
+            compare_against=q_value_policy_params,
         )
 
         self.loss_function = loss_function
@@ -341,17 +361,9 @@ class SACLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
-        if target_entropy == "auto":
-            if actor_network.spec is None:
-                raise RuntimeError(
-                    "Cannot infer the dimensionality of the action. Consider providing "
-                    "the target entropy explicitely or provide the spec of the "
-                    "action tensor in the actor network."
-                )
-            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
-        self.register_buffer(
-            "target_entropy", torch.tensor(target_entropy, device=device)
-        )
+        self._target_entropy = target_entropy
+        self._action_spec = action_spec
+        self.target_entropy_buffer = None
         if self._version == 1:
             self.actor_critic = ActorCriticWrapper(
                 self.actor_network, self.value_network
@@ -360,6 +372,38 @@ class SACLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+
+    @property
+    def target_entropy(self):
+        target_entropy = self.target_entropy_buffer
+        if target_entropy is None:
+            delattr(self, "target_entropy_buffer")
+            target_entropy = self._target_entropy
+            action_spec = self._action_spec
+            actor_network = self.actor_network
+            device = next(self.parameters()).device
+            if target_entropy == "auto":
+                action_spec = (
+                    action_spec
+                    if action_spec is not None
+                    else getattr(actor_network, "spec", None)
+                )
+                if action_spec is None:
+                    raise RuntimeError(
+                        "Cannot infer the dimensionality of the action. Consider providing "
+                        "the target entropy explicitely or provide the spec of the "
+                        "action tensor in the actor network."
+                    )
+                if not isinstance(action_spec, CompositeSpec):
+                    action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                target_entropy = -float(
+                    np.prod(action_spec[self.tensor_keys.action].shape)
+                )
+            self.register_buffer(
+                "target_entropy_buffer", torch.tensor(target_entropy, device=device)
+            )
+            return self.target_entropy_buffer
+        return target_entropy
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -722,6 +766,10 @@ class DiscreteSACLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             Key where to write the priority value for prioritized replay buffers.
             Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
     >>> import torch
@@ -878,7 +926,7 @@ class DiscreteSACLoss(LossModule):
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
-        num_actions: int,
+        num_actions: int,  # replace with spec?
         *,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
@@ -890,6 +938,7 @@ class DiscreteSACLoss(LossModule):
         target_entropy: Union[str, Number] = "auto",
         delay_qvalue: bool = True,
         priority_key: str = None,
+        separate_losses: bool = False,
     ):
         self._in_keys = None
         if not _has_functorch:
@@ -903,14 +952,19 @@ class DiscreteSACLoss(LossModule):
             create_target_params=self.delay_actor,
             funs_to_decorate=["forward", "get_dist_params"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.loss_function = loss_function

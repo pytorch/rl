@@ -95,6 +95,18 @@ class TestTensorboard:
                     step=steps[i] if steps else None,
                 )
 
+    def test_log_histogram(self):
+        torch.manual_seed(0)
+        with tempfile.TemporaryDirectory() as log_dir:
+            exp_name = "ramala"
+            logger = TensorboardLogger(log_dir=log_dir, exp_name=exp_name)
+            # test with torch
+            data = torch.randn(10)
+            logger.log_histogram("hist", data, step=0, bins=2)
+            # test with np
+            data = torch.randn(10).numpy()
+            logger.log_histogram("hist", data, step=1, bins=2)
+
 
 class TestCSVLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
@@ -159,6 +171,15 @@ class TestCSVLogger:
                     video=video_wrong_format,
                     step=steps[i] if steps else None,
                 )
+
+    def test_log_histogram(self):
+        torch.manual_seed(0)
+        with tempfile.TemporaryDirectory() as log_dir:
+            exp_name = "ramala"
+            logger = CSVLogger(log_dir=log_dir, exp_name=exp_name)
+            with pytest.raises(NotImplementedError):
+                data = torch.randn(10)
+                logger.log_histogram("hist", data, step=0, bins=2)
 
 
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
@@ -228,6 +249,18 @@ class TestWandbLogger:
             logger.experiment.finish()
             del logger
 
+    def test_log_histogram(self):
+        torch.manual_seed(0)
+        with tempfile.TemporaryDirectory() as log_dir:
+            exp_name = "ramala"
+            logger = WandbLogger(log_dir=log_dir, exp_name=exp_name, offline=True)
+            # test with torch
+            data = torch.randn(10)
+            logger.log_histogram("hist", data, step=0, bins=2)
+            # test with np
+            data = torch.randn(10).numpy()
+            logger.log_histogram("hist", data, step=1, bins=2)
+
 
 @pytest.fixture
 def mlflow_fixture():
@@ -294,6 +327,13 @@ class TestMLFlowLogger:
                     assert torch.allclose(
                         loaded_video.int(), videos[-1].int(), rtol=0.1
                     )
+
+    def test_log_histogram(self, mlflow_fixture):
+        logger, client = mlflow_fixture
+        torch.manual_seed(0)
+        with pytest.raises(NotImplementedError):
+            data = torch.randn(10)
+            logger.log_histogram("hist", data, step=0, bins=2)
 
 
 if __name__ == "__main__":

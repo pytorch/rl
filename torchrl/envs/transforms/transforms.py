@@ -1959,6 +1959,7 @@ class CatFrames(ObservationTransform):
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
+        as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2031,6 +2032,7 @@ class CatFrames(ObservationTransform):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         padding="same",
+        as_inverse=False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2052,6 +2054,7 @@ class CatFrames(ObservationTransform):
             )
         # keeps track of calls to _reset since it's only _call that will populate the buffer
         self._just_reset = False
+        self.as_inverse = as_inverse
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -2060,6 +2063,10 @@ class CatFrames(ObservationTransform):
             parent = self.parent
             if parent is not None:
                 parent_device = parent.device
+                if self.as_inverse:
+                    raise Exception(
+                        "CatFrames as inverse is not supported as a transform for environments, only for replay buffers."
+                    )
             else:
                 parent_device = None
             _reset = torch.ones(
@@ -2090,6 +2097,12 @@ class CatFrames(ObservationTransform):
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
         setattr(self, buffer_name, buffer)
         return buffer
+
+    def _inv_call(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.as_inverse:
+            return self.unfolding(tensordict)
+        else:
+            return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
@@ -2149,11 +2162,35 @@ class CatFrames(ObservationTransform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.as_inverse:
+            return tensordict
+        else:
+            return self.unfolding(tensordict)
+
+    def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or tensordict.names[-1] != "time":
+        if not tensordict.ndim:
             raise ValueError(
-                "The last dimension of the tensordict must be marked as 'time'."
+                "CatFrames cannot process unbatched tensordict instances. "
+                "Make sure your input has more than one dimension and "
+                "the time dimension is marked as 'time', e.g., "
+                "`tensordict.refine_names(None, 'time', None)`."
             )
+        i = 0
+        for i, name in enumerate(tensordict.names):  # noqa: B007
+            if name == "time":
+                break
+        else:
+            warnings.warn(
+                "The last dimension of the tensordict should be marked as 'time'. "
+                "CatFrames will unfold the data along the time dimension assuming that "
+                "the time dimension is the last dimension of the input tensordict. "
+                "Define a 'time' dimension name (e.g., `tensordict.refine_names(..., 'time')`) to skip this warning. ",
+                category=UserWarning,
+            )
+        tensordict_orig = tensordict
+        if i != tensordict.ndim - 1:
+            tensordict = tensordict.transpose(tensordict.ndim - 1, i)
         # first sort the in_keys with strings and non-strings
         in_keys = list(
             zip(
@@ -2216,7 +2253,7 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
-        return tensordict
+        return tensordict_orig
 
     def __repr__(self) -> str:
         return (
