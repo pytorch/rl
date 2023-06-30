@@ -214,6 +214,7 @@ def step_mdp(
                 _set(tensordict, out, key, total_key, excluded)
     elif not exclude_action:
         _set_single_key(tensordict, out, action_key)
+    print("stop")
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
 
@@ -253,6 +254,7 @@ def _set(source, dest, key, total_key, excluded):
                 )
             if non_empty_local:
                 dest._set(key, new_val)
+            non_empty = non_empty_local
         else:
             non_empty = True
             dest._set(key, val)
