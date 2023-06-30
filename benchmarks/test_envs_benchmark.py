@@ -46,6 +46,7 @@ def make_nested_td():
             ("agent", "action"): 0,
             ("agent", "done"): 0,
             ("agent", "obs"): 0,
+            ("agent", "other"): 0,
             ("next", "agent", "action"): 1,
             ("next", "agent", "reward"): 1,
             ("next", "agent", "done"): 1,
@@ -58,9 +59,10 @@ def make_nested_td():
 def make_flat_td():
     return TensorDict(
         {
-            ("action"): 0,
-            ("done"): 0,
-            ("obs"): 0,
+            "action": 0,
+            "done": 0,
+            "obs": 0,
+            "other": 0,
             ("next", "action"): 1,
             ("next", "reward"): 1,
             ("next", "done"): 1,
