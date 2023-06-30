@@ -136,12 +136,18 @@ class UnityWrapper(_EnvWrapper):
                     self._agent_id_to_behavior[agent_id] = behavior_name
 
                     agent_observation_specs = [
-                        _unity_to_torchrl_spec_transform(
-                            spec, dtype=np.dtype("float32"), device=self.device
+                        CompositeSpec(
+                            {
+                                f"observation_{i}": _unity_to_torchrl_spec_transform(
+                                    spec, dtype=np.dtype("float32"), device=self.device
+                                )
+                            }
                         )
-                        for spec in behavior_unity_spec.observation_specs
+                        for i, spec in enumerate(behavior_unity_spec.observation_specs)
                     ]
+                    print("agent_observation_specs", agent_observation_specs)
                     agent_observation_spec = torch.stack(agent_observation_specs, dim=0)
+                    print("agent_observation_spec", agent_observation_spec)
                     observation_specs[agent_id] = agent_observation_spec
 
                     behavior_id_specs[agent_id] = UnboundedDiscreteTensorSpec(
@@ -173,16 +179,63 @@ class UnityWrapper(_EnvWrapper):
                     )
 
         self.observation_spec = CompositeSpec(
-            observation=torch.stack(observation_specs, dim=0)
+            {
+                "agents": CompositeSpec(
+                    {"observation": torch.stack(observation_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
         )
-        self.behavior_id_spec = torch.stack(behavior_id_specs, dim=0)
-        self.agent_id_spec = torch.stack(agent_id_specs, dim=0)
-        self.action_spec = torch.stack(action_specs, dim=0)
+        print("self.observation_spec", self.observation_spec)
+        self.behavior_id_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"behavior_id": torch.stack(behavior_id_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
+        )
+        self.agent_id_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"agent_id": torch.stack(agent_id_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
+        )
+        self.action_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"action": torch.stack(action_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
+        )
         # FIXME: Support action masks
         # self.action_mask_spec = torch.stack(action_mask_specs, dim=0)
-        self.reward_spec = torch.stack(reward_specs, dim=0)
-        self.done_spec = torch.stack(done_specs, dim=0)
-        self.valid_mask_spec = torch.stack(valid_mask_specs, dim=0)
+        self.reward_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"reward": torch.stack(reward_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
+        )
+        self.done_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"done": torch.stack(done_specs, dim=0)}, shape=(self.num_agents,)
+                )
+            }
+        )
+        self.valid_mask_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"valid_mask": torch.stack(valid_mask_specs, dim=0)},
+                    shape=(self.num_agents,),
+                )
+            }
+        )
 
     def __repr__(self) -> str:
         return (
@@ -207,23 +260,32 @@ class UnityWrapper(_EnvWrapper):
     def behavior_id_to_name(self, behavior_id: int):
         return self._behavior_names[behavior_id]
 
-    def read_obs(self, obs):
-        return self.observation_spec.encode({"observation": obs})
+    def read_obs(self, agent_id, obs):
+        print(self.observation_spec)
+        return self.observation_spec["agents", "observation"][agent_id].encode(
+            {f"observation_{i}": observation for i, observation in enumerate(obs)}
+        )
 
     def read_behavior(self, behavior_name):
         behavior_id = np.array(
             [self._behavior_names.index(name) for name in behavior_name]
         )
-        return self.behavior_id_spec.encode(behavior_id)
+        return behavior_id
 
     def read_agent_id(self, agent_id):
-        return self.agent_id_spec.encode(agent_id)
+        return agent_id
 
     def read_reward(self, reward):
-        return self.reward_spec.encode(reward)
+        return reward
+
+    def read_feedback(self, feedback):
+        return feedback
+
+    def read_time(self, time):
+        return time
 
     def read_valid_mask(self, valid):
-        return self.valid_mask_spec.encode(valid)
+        return valid
 
     def read_action(self, action):
         action = self.action_spec.to_numpy(action, safe=False)
@@ -258,57 +320,69 @@ class UnityWrapper(_EnvWrapper):
 
     def _get_next_tensordict(self):
         observations = [None] * self.num_agents
-        behavior_names = [None] * self.num_agents
+        behavior_name = [None] * self.num_agents
         agent_ids = [None] * self.num_agents
         rewards = [None] * self.num_agents
         dones = [None] * self.num_agents
+        feedbacks = [None] * self.num_agents
+        times = [None] * self.num_agents
         valid_masks = [None] * self.num_agents
 
-        for behavior_name in self.behavior_specs.keys():
-            decision_steps, terminal_steps = self.get_steps(behavior_name)
+        for behavior_name_ in self.behavior_specs.keys():
+            decision_steps, terminal_steps = self.get_steps(behavior_name_)
             for i, steps in enumerate([decision_steps, terminal_steps]):
                 for agent_id in steps.agent_id:
                     step = steps[agent_id]
 
                     rewards[agent_id] = step.reward
-                    behavior_names[agent_id] = behavior_name
+                    behavior_name[agent_id] = behavior_name_
                     agent_ids[agent_id] = step.agent_id
-                    observations[agent_id] = np.stack(step.obs, axis=0)
+                    observations[agent_id] = self.read_obs(agent_id, step.obs)
                     dones[agent_id] = False if i == 0 else True
-                    valid_masks[agent_id] = True
+                    valid_masks[agent_id] = torch.Tensor([True])
 
         missing_agents = set(range(self.num_agents)) - set(agent_ids)
         for missing_agent in missing_agents:
-            observations[missing_agent] = self.observation_spec["observation"][
-                missing_agent
-            ].zero()
-            behavior_names[missing_agent] = self._agent_id_to_behavior[missing_agent]
+            observations[missing_agent] = self.observation_spec[
+                "agents", "observation"
+            ][missing_agent].zero()
+            behavior_name[missing_agent] = self._agent_id_to_behavior[missing_agent]
             agent_ids[missing_agent] = missing_agent
-            rewards[missing_agent] = self.reward_spec[missing_agent].zero()
-            dones[missing_agent] = self.done_spec[missing_agent].zero()
-            valid_masks[missing_agent] = False
+            rewards[missing_agent] = 0
+            dones[missing_agent] = False
+            valid_masks[missing_agent] = torch.Tensor([False])
 
         tensordict_out = TensorDict(
-            source=self.read_obs(np.stack(observations, axis=0)),
+            source={
+                "agents": {
+                    "observation": torch.stack(observations, dim=0),
+                    "behavior_id": self.read_behavior(behavior_name),
+                    "agent_id": self.read_agent_id(np.stack(agent_ids, axis=0)),
+                    "reward": self.read_reward(np.stack(rewards, axis=0)),
+                    "feedback": self.read_feedback(np.stack(feedbacks, axis=0)),
+                    "time": self.read_time(np.stack(times, axis=0)),
+                    "done": self.read_done(np.stack(dones, axis=0)),
+                    "valid_mask": self.read_valid_mask(np.stack(valid_masks, axis=0)),
+                }
+            },
             batch_size=self.batch_size,
             device=self.device,
-        )
-        tensordict_out.set("behavior_id", self.read_behavior(behavior_names))
-        tensordict_out.set("agent_id", self.read_agent_id(np.stack(agent_ids, axis=0)))
-        tensordict_out.set("reward", self.read_reward(np.stack(rewards, axis=0)))
-        tensordict_out.set("done", self.read_done(np.stack(dones, axis=0)))
-        tensordict_out.set(
-            "valid_mask", self.read_valid_mask(np.stack(valid_masks, axis=0))
         )
         return tensordict_out
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        print(tensordict)
         eligible_agent_mask = torch.logical_and(
-            tensordict["valid_mask"], torch.logical_not(tensordict["done"])
+            tensordict["agents", "valid_mask"],
+            torch.logical_not(tensordict["agents", "done"]),
         )
-        behavior_ids = tensordict["behavior_id"][eligible_agent_mask]
-        agent_ids = tensordict["agent_id"][eligible_agent_mask]
-        actions = tensordict["action"].unsqueeze(-1)[eligible_agent_mask]
+        behavior_ids = tensordict["agents", "behavior_id"][
+            eligible_agent_mask.squeeze(dim=-1)
+        ]
+        agent_ids = tensordict["agents", "agent_id"][
+            eligible_agent_mask.squeeze(dim=-1)
+        ]
+        actions = tensordict["agents", "action"].unsqueeze(-1)[eligible_agent_mask]
         for action, behavior_id, agent_id in zip(actions, behavior_ids, agent_ids):
             unity_action = self.read_action(action)
             self.set_action_for_agent(
