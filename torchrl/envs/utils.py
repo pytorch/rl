@@ -16,12 +16,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -164,6 +159,8 @@ def step_mdp(
         done_key = done_key[0]
     if isinstance(reward_key, tuple) and len(reward_key) == 1:
         reward_key = reward_key[0]
+    if isinstance(action_key, tuple) and len(action_key) == 1:
+        action_key = action_key[0]
 
     if isinstance(tensordict, LazyStackedTensorDict):
         if next_tensordict is not None:
@@ -192,31 +189,23 @@ def step_mdp(
             return next_tensordict
         return out
 
-    if keep_other:
-        out = tensordict.exclude("next").clone(recurse=False)
-        if exclude_action:
-            del out[action_key]
-        if exclude_done:
-            del out[done_key]
-        if exclude_reward:
-            del out[reward_key]
-    else:
-        out = TensorDict({}, tensordict.batch_size)
-        if not exclude_action:
-            out._set(action_key, tensordict.get(action_key))
-
-    excluded = set()
+    out = tensordict.get("next").clone(False)
+    excluded = {action_key}
     if exclude_done:
         excluded.add(done_key)
     if exclude_reward:
         excluded.add(reward_key)
+    if len(excluded):
+        out = out.exclude(*excluded, inplace=True)
 
-    out_next = tensordict["next"]
-    for key in out_next.keys(True, True):
-        if key == action_key:
-            raise ValueError("action_key should not be present in 'next' tensordict")
-        if key not in excluded:
-            out._set(key, out_next.get(key))
+    if not exclude_action:
+        out._set(action_key, tensordict.get(action_key))
+
+    if keep_other:
+        excluded = set.union(excluded, set(out.keys(True, True)))
+        for key in tensordict.exclude("next").keys(True, True):
+            if key not in excluded:
+                out._set(key, tensordict.get(key))
 
     if next_tensordict is not None:
         return next_tensordict.update(out)
