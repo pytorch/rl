@@ -4,8 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from copy import copy
+
 import pkg_resources
 import torch
+
+from tensordict import is_tensor_collection
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -16,7 +20,13 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.utils import unravel_keys
 
 __all__ = [
     "exploration_mode",
@@ -28,6 +38,7 @@ __all__ = [
     "step_mdp",
     "make_composite_from_td",
 ]
+
 
 from torchrl.data import CompositeSpec
 
@@ -181,44 +192,84 @@ def step_mdp(
             next_tensordict.update(out)
             return next_tensordict
         return out
-    tensordict = tensordict.clone(False)
-    out = tensordict.get("next")
-    excluded = None
-    if exclude_done and exclude_reward:
-        excluded = {"done", "reward"}
-    elif exclude_reward:
-        excluded = {"reward"}
-    elif exclude_done:
-        excluded = {"done"}
-    if excluded:
-        out = out.exclude(*excluded, inplace=True)
-    td_keys = None
-    if keep_other:
-        # we could select the leafs because otherwise we just copy root
-        # tensordicts and modifying their values results in a modification
-        # of the previous td. Alternatively, we select from tensordict and clone
-        # (see below)
-        # Q: is True, True here and below faster than the clone(False) here under?
-        # if exclude_action and isinstance(action_key, tuple):
-        #     out_keys = set(out.keys(True, True))
-        #     td_keys = set(tensordict.keys(True, True)) - out_keys - {"next"}
-        # else:
-        out_keys = set(out.keys())
-        td_keys = set(tensordict.keys()) - out_keys - {"next"}
-        if exclude_action:
-            td_keys = td_keys - {action_key}
-    elif not exclude_action:
-        td_keys = {action_key}
 
-    if td_keys:
-        # update does some checks that we can spare
-        out.update(tensordict.select(*td_keys))
-        # for key in td_keys:
-        #     out.set(key, tensordict.get(key))
+    action_key = unravel_keys((action_key,))
+    done_key = unravel_keys((done_key,))
+    reward_key = unravel_keys((reward_key,))
+
+    excluded = set()
+    if exclude_reward:
+        excluded = {reward_key}
+    if exclude_done:
+        excluded = excluded.union({done_key})
+    if exclude_action:
+        excluded = excluded.union({action_key})
+    next_td = tensordict.get("next")
+    out = _clone_no_keys(next_td)
+
+    total_key = ()
+    if keep_other:
+        for key in tensordict.keys():
+            if key != "next":
+                _set(tensordict, out, key, total_key, excluded)
+    elif not exclude_action:
+        _set_single_key(tensordict, out, action_key)
+    for key in next_td.keys():
+        _set(next_td, out, key, total_key, excluded)
+
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
         return out
+
+
+def _set_single_key(source, dest, key):
+    for k in key:
+        val = source.get(k)
+        if is_tensor_collection(val):
+            new_val = dest.get(k, None)
+            if new_val is None:
+                new_val = _clone_no_keys(val)
+                dest._set(k, new_val)
+            source = val
+            dest = new_val
+        else:
+            dest._set(k, val)
+
+
+def _set(source, dest, key, total_key, excluded):
+    total_key = total_key + (key,)
+    non_empty = False
+    if total_key not in excluded:
+        val = source.get(key)
+        if is_tensor_collection(val):
+            new_val = dest.get(key, None)
+            if new_val is None:
+                new_val = _clone_no_keys(val)
+            non_empty_local = False
+            for subkey in val.keys():
+                non_empty_local = (
+                    _set(val, new_val, subkey, total_key, excluded) or non_empty_local
+                )
+            if non_empty_local:
+                dest._set(key, new_val)
+            non_empty = non_empty_local
+        else:
+            non_empty = True
+            dest._set(key, val)
+    return non_empty
+
+
+def _clone_no_keys(td):
+    return TensorDict(
+        source={},
+        batch_size=td.batch_size,
+        device=td.device,
+        names=copy(td._td_dim_names),
+        _run_checks=False,
+        _is_shared=td.is_shared(),
+        _is_memmap=td.is_memmap(),
+    )
 
 
 def get_available_libraries():
