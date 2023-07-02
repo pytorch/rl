@@ -83,20 +83,28 @@ def _object_to_tensordict(obj, device, batch_size) -> TensorDictBase:
         elif isinstance(value, (jnp.ndarray, np.ndarray)):
             t[name] = _ndarray_to_tensor(value).to(device)
         else:
-            t[name] = _object_to_tensordict(value, device, batch_size)
-    return make_tensordict(t, device=device, batch_size=batch_size)
+            nested = _object_to_tensordict(value, device, batch_size)
+            if nested is not None:
+                t[name] = nested
+    if len(t):
+        return make_tensordict(t, device=device, batch_size=batch_size)
+    # discard empty tensordicts
+    return None
 
 
 def _tensordict_to_object(tensordict: TensorDictBase, object_example):
     """Converts a TensorDict to a namedtuple or a dataclass."""
     t = {}
     _fields = _get_object_fields(object_example)
-    for name, value in tensordict.items():
-        example = _fields[name]
+    for name, example in _fields.items():
+        value = tensordict.get(name, None)
         if isinstance(value, TensorDictBase):
             t[name] = _tensordict_to_object(value, example)
         elif value is None:
-            t[name] = value
+            if isinstance(example, dict):
+                t[name] = _tensordict_to_object({}, example)
+            else:
+                t[name] = None
         else:
             if value.dtype is torch.bool:
                 value = value.to(torch.uint8)

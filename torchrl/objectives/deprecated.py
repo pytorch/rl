@@ -21,7 +21,7 @@ from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING, _cache_values
+from torchrl.objectives.utils import _cache_values, _GAMMA_LMBDA_DEPREC_WARNING
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
