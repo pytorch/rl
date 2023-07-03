@@ -112,7 +112,6 @@ if [[ $OSTYPE != 'darwin'* ]]; then
     pip install ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   fi
-  pip install "gymnasium[atari,accept-rom-license]"
-else
-  pip install "gymnasium[atari,accept-rom-license]"
 fi
+pip install "gymnasium[atari,accept-rom-license]"
+pip intall gym==0.23 # for D4RL's sake...

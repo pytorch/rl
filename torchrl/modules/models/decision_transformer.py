@@ -7,8 +7,6 @@ import importlib
 
 import torch
 import torch.nn as nn
-import transformers
-from transformers.models.gpt2.modeling_gpt2 import GPT2Model
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
@@ -78,6 +76,8 @@ class DecisionTransformer(nn.Module):
             raise ImportError(
                 "transformers is not installed. Please install it with `pip install transformers`."
             )
+        import transformers
+        from transformers.models.gpt2.modeling_gpt2 import GPT2Model
         super(DecisionTransformer, self).__init__()
 
         self.default_config.update(config)
