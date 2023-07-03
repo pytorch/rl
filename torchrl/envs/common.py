@@ -1248,7 +1248,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 break
             tensordict = step_mdp(
                 tensordict,
-                keep_other=False,
+                keep_other=True,
                 exclude_action=True,
                 exclude_reward=True,
                 reward_key=self.reward_key,
