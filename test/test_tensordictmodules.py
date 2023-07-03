@@ -1729,6 +1729,21 @@ class TestLSTMModule:
         )
 
 
+def test_safe_specs():
+
+    out_key = ("a", "b")
+    spec = CompositeSpec(CompositeSpec({out_key: UnboundedContinuousTensorSpec()}))
+    original_spec = spec.clone()
+    mod = SafeModule(
+        module=nn.Linear(3, 1),
+        spec=spec,
+        out_keys=[out_key, ("other", "key")],
+        in_keys=[],
+    )
+    assert original_spec == spec
+    assert spec[out_key] == mod[out_key]
+
+
 def test_vmapmodule():
     lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
     sample_in = torch.ones((10, 3, 2))
