@@ -335,8 +335,8 @@ class _BatchedEnv(EnvBase):
                     key = (key,)
                 self.env_output_keys.append(("next", *key))
                 self.env_obs_keys.append(key)
-            self.env_output_keys.append(("next", "reward"))
-            self.env_output_keys.append(("next", "done"))
+            self.env_output_keys.append(("next", self.reward_key))
+            self.env_output_keys.append(("next", self.done_key))
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -363,7 +363,7 @@ class _BatchedEnv(EnvBase):
                     )
                 )
             env_output_keys = env_output_keys.union(
-                {("next", "reward"), ("next", "done")}
+                {("next", self.reward_key), ("next", self.done_key)}
             )
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
@@ -374,10 +374,10 @@ class _BatchedEnv(EnvBase):
             .union(self.env_input_keys)
             .union(self.env_obs_keys)
         )
-        self._selected_keys.add("done")
+        self._selected_keys.add(self.done_key)
         self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + ["done"] + ["_reset"]
+        self._selected_reset_keys = self.env_obs_keys + [self.done_key] + ["_reset"]
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:
@@ -1187,7 +1187,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     @torch.no_grad()
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         # Action needs to be moved to CPU and converted to numpy before being passed to envpool
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
@@ -1285,7 +1285,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         obs = self.obs.clone(False)
-        obs.update({"done": self.done_spec.zero()})
+        obs.update({self.done_key: self.done_spec.zero()})
         return obs
 
     def _transform_step_output(
@@ -1295,7 +1295,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         obs, reward, done, *_ = envpool_output
 
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        obs.update({"reward": torch.tensor(reward), "done": done})
+        obs.update({self.reward_key: torch.tensor(reward), self.done_key: done})
         self.obs = tensordict_out = TensorDict(
             obs,
             batch_size=self.batch_size,
