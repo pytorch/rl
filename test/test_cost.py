@@ -12,6 +12,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
+from tensordict._tensordict import unravel_keys
+
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule as ProbMod,
@@ -164,6 +166,12 @@ def get_devices():
 
 
 class LossModuleTestBase:
+    def _flatten_in_keys(self, in_keys):
+        return [
+            in_key if isinstance(in_key, str) else "_".join(list(unravel_keys(in_key)))
+            for in_key in in_keys
+        ]
+
     def tensordict_keys_test(self, loss_fn, default_keys, td_est=None):
         self.tensordict_keys_unknown_key_test(loss_fn)
         self.tensordict_keys_default_values_test(loss_fn, default_keys)
@@ -6074,7 +6082,7 @@ class TestDreamer(LossModuleTestBase):
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
 
-class TestOnlineDT:
+class TestOnlineDT(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -6136,7 +6144,11 @@ class TestOnlineDT:
 
         loss_fn = OnlineDTLoss(actor)
         loss = loss_fn(td)
-        loss_transformer = loss["loss"]
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
         loss_alpha = loss["loss_alpha"]
         loss_transformer.backward(retain_graph=True)
         named_parameters = loss_fn.named_parameters()
@@ -6179,7 +6191,11 @@ class TestOnlineDT:
 
         loss_fn = OnlineDTLoss(actor)
         loss = loss_fn(td)
-        loss_transformer = loss["loss"]
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
         loss_alpha = loss["loss_alpha"]
         loss_transformer.backward(retain_graph=True)
         named_parameters = loss_fn.named_parameters()
@@ -6213,8 +6229,56 @@ class TestOnlineDT:
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
+    def test_onlinedt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = OnlineDTLoss(actor)
 
-class TestDT:
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_onlinedt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_odt(device=device)
+        loss_fn = OnlineDTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        torch.manual_seed(0)
+        loss_val_td = loss_fn(td)
+        torch.manual_seed(0)
+        loss_log_likelihood, loss_entropy, loss_alpha, alpha, entropy = loss_fn(
+            **kwargs
+        )
+        torch.testing.assert_close(
+            loss_val_td.get("loss_log_likelihood"), loss_log_likelihood
+        )
+        torch.testing.assert_close(loss_val_td.get("loss_entropy"), loss_entropy)
+        torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_alpha)
+        # test select
+        torch.manual_seed(0)
+        loss_fn.select_out_keys("loss_entropy")
+        if torch.__version__ >= "2.0.0":
+            loss_entropy = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_entropy = loss_fn(**kwargs)
+            return
+        assert loss_entropy == loss_val_td["loss_entropy"]
+
+
+class TestDT(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
@@ -6242,7 +6306,6 @@ class TestDT:
             source={
                 "observation": obs,
                 "action": action,
-                "reward2go": reward2go,
             },
             device=device,
         )
@@ -6254,18 +6317,55 @@ class TestDT:
         # create a tensordict
         obs = torch.randn(batch, T, obs_dim, device=device)
         action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
-        reward2go = torch.randn(batch, T, 1, device=device)
 
         td = TensorDict(
             batch_size=(batch, T),
             source={
                 "observation": obs,
-                "reward": reward2go,
                 "action": action,
             },
             device=device,
         )
         return td
+
+    def test_dt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = DTLoss(actor)
+
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_dt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_dt(device=device)
+        loss_fn = DTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        loss_val_td = loss_fn(td)
+        loss_val = loss_fn(**kwargs)
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        # test select
+        loss_fn.select_out_keys("loss")
+        if torch.__version__ >= "2.0.0":
+            loss_actor = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor = loss_fn(**kwargs)
+            return
+        assert loss_actor == loss_val_td["loss"]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_dt(self, device):

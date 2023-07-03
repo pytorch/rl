@@ -57,19 +57,10 @@ class OnlineDTLoss(LossModule):
         Attributes:
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
-            observation (NestedKey): The input tensordict key where the observation is expected.
-                Defaults to ``"observation"``.
-            return_to_go (NestedKey): The input tensordict key where the return_to_go is expected.
-                Defaults to ``"return_to_go"``.
-            done (NestedKey): The key in the input TensorDict that indicates
-                whether a trajectory is done. Will be used for the underlying value estimator.
-                Defaults to ``"done"``.
+
         """
 
         action: NestedKey = "action"
-        observation: NestedKey = "observation"
-        return_to_go: NestedKey = "return_to_go"
-        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
 
@@ -145,15 +136,13 @@ class OnlineDTLoss(LossModule):
         self._set_in_keys()
 
     def _set_in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            ("next", self.tensor_keys.return_to_go),
-            ("next", self.tensor_keys.done),
-            self.tensor_keys.action,
-            self.tensor_keys.observation,
-        ]
+        keys = self.actor_network.in_keys
+        keys = set(keys)
+        keys.add(self.tensor_keys.action)
+        self._in_keys = sorted(keys, key=str)
 
-        self._in_keys = list(set(keys))
+    def _forward_value_estimator_keys(self, **kwargs):
+        pass
 
     @property
     def alpha(self):
@@ -176,7 +165,13 @@ class OnlineDTLoss(LossModule):
     @property
     def out_keys(self):
         if self._out_keys is None:
-            keys = ["loss", "loss_log_likelihood", "loss_alpha", "alpha", "entropy"]
+            keys = [
+                "loss_log_likelihood",
+                "loss_entropy",
+                "loss_alpha",
+                "alpha",
+                "entropy",
+            ]
             self._out_keys = keys
         return self._out_keys
 
@@ -202,15 +197,15 @@ class OnlineDTLoss(LossModule):
 
         loss_log_likelihood = action_dist.log_prob(target_actions).mean()
         entropy = self.get_entropy_bonus(action_dist).mean()
-        loss = -(loss_log_likelihood + self.alpha.detach() * entropy)
+        loss_entropy = self.alpha.detach() * entropy
 
         loss_alpha = self.log_alpha.exp() * (entropy - self.target_entropy).detach()
 
         out = {
-            "loss": loss,
             "loss_log_likelihood": -loss_log_likelihood,
-            "entropy": entropy.detach(),
+            "loss_entropy": loss_entropy,
             "loss_alpha": loss_alpha,
+            "entropy": entropy.detach(),
             "alpha": self.alpha.detach(),
         }
         return TensorDict(out, [])
@@ -239,19 +234,9 @@ class DTLoss(LossModule):
         Attributes:
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
-            observation (NestedKey): The input tensordict key where the observation is expected.
-                Defaults to ``"observation"``.
-            return_to_go (NestedKey): The input tensordict key where the return_to_go is expected.
-                Defaults to ``"return_to_go"``.
-            done (NestedKey): The key in the input TensorDict that indicates
-                whether a trajectory is done. Will be used for the underlying value estimator.
-                Defaults to ``"done"``.
         """
 
         action: NestedKey = "action"
-        observation: NestedKey = "observation"
-        return_to_go: NestedKey = "return_to_go"
-        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
 
@@ -275,15 +260,13 @@ class DTLoss(LossModule):
         self.loss_function = loss_function
 
     def _set_in_keys(self):
-        keys = [
-            self.tensor_keys.action,
-            ("next", self.tensor_keys.return_to_go),
-            ("next", self.tensor_keys.done),
-            self.tensor_keys.action,
-            self.tensor_keys.observation,
-        ]
+        keys = self.actor_network.in_keys
+        keys = set(keys)
+        keys.add(self.tensor_keys.action)
+        self._in_keys = sorted(keys, key=str)
 
-        self._in_keys = list(set(keys))
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        pass
 
     @property
     def in_keys(self):

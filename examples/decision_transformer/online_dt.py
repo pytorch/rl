@@ -63,7 +63,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data = offline_buffer.sample()
         # loss
         loss_vals = loss_module(data.to(model_device))
-        transformer_loss = loss_vals["loss"]
+        transformer_loss = loss_vals["loss_log_likelihood"] + loss_vals["loss_entropy"]
         temperature_loss = loss_vals["loss_alpha"]
 
         transformer_optim.zero_grad()
