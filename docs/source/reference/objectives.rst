@@ -144,14 +144,6 @@ DT
     :template: rl_template_noinherit.rst
 
     DTLoss
-
-OnlineDT
-----
-
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_noinherit.rst
-
     OnlineDTLoss
 
 TD3
