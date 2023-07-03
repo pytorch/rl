@@ -996,6 +996,13 @@ class TestParallel:
             assert "data" not in td.keys()
             assert "data" not in td["next"].keys()
 
+        if nested_obs_action:
+            assert "observation" not in td.keys()
+            assert (td[..., -1]["data", "states"] == 2).all()
+        else:
+            assert ("data", "states") not in td.keys(True, True)
+            assert (td[..., -1]["observation"] == 2).all()
+
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
