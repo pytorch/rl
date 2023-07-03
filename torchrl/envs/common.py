@@ -1230,9 +1230,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 return td
 
         tensordicts = []
-        done_key = self.done_key
-        if not isinstance(done_key, tuple):
-            done_key = (done_key,)
         for i in range(max_steps):
             if auto_cast_to_device:
                 tensordict = tensordict.to(policy_device, non_blocking=True)
@@ -1242,7 +1239,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.step(tensordict)
 
             tensordicts.append(tensordict.clone(False))
-            done = tensordict.get(("next", *done_key))
+            done = tensordict.get(("next", self.done_key))
             truncated = tensordict.get(
                 ("next", "truncated"),
                 default=torch.zeros((), device=done.device, dtype=torch.bool),
@@ -1252,8 +1249,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 break
             tensordict = step_mdp(
                 tensordict,
-                keep_other=True,
-                exclude_action=False,
+                keep_other=False,
+                exclude_action=True,
+                exclude_reward=True,
+                reward_key=self.reward_key,
+                action_key=self.action_key,
+                done_key=self.done_key,
             )
             if not break_when_any_done and done.any():
                 _reset = done.clone()
