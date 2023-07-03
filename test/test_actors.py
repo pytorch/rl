@@ -14,6 +14,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.data import (
+    BinaryDiscreteTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
@@ -105,10 +106,35 @@ class TestQValue:
         assert spec == action_spec  # Spec wins
         assert space_str == "binary"
 
+        space_str, spec = _process_action_space_spec("binary", action_spec)
+        assert spec == action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec("binary", leaf_action_spec)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        with pytest.raises(
+            ValueError,
+            match="Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match.",
+        ):
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), action_spec)
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), leaf_action_spec)
         with pytest.raises(
             ValueError, match="action_space cannot be of type CompositeSpec"
         ):
             _process_action_space_spec(action_spec, None)
+
+        mod = QValueModule(
+            action_value_key=("data", "action_value"),
+            out_keys=[
+                env.action_key,
+                ("data", "action_value"),
+                ("data", "chosen_action_value"),
+            ],
+            action_space=None,
+            spec=action_spec,
+        )
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
