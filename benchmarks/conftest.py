@@ -50,3 +50,7 @@ def measure_duration(request: pytest.FixtureRequest):
         CALL_TIMES[name] = CALL_TIMES[name] + duration
 
     request.addfinalizer(fin)
+
+
+def pytest_addoption(parser):
+    parser.addoption("--rank", action="store")

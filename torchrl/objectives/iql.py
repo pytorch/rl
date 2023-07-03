@@ -292,6 +292,7 @@ class IQLLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
 
     @property
     def device(self) -> torch.device:
@@ -386,9 +387,7 @@ class IQLLoss(LossModule):
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
@@ -416,9 +415,7 @@ class IQLLoss(LossModule):
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
@@ -437,7 +434,7 @@ class IQLLoss(LossModule):
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params
         ).squeeze(-1)
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
