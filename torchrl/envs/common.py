@@ -1306,18 +1306,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         state_spec = self.state_spec
         observation_spec = self.observation_spec
         action_spec = self.input_spec["_action_spec"]
+        # instantiates reward_spec if needed
         _ = self.reward_spec
         reward_spec = self.output_spec["_reward_spec"]
+        # instantiates done_spec if needed
         _ = self.done_spec
         done_spec = self.output_spec["_done_spec"]
 
         fake_obs = observation_spec.zero()
-        fake_input = state_spec.zero()
-        fake_input = fake_input.update(action_spec.zero())
+
+        fake_state = state_spec.zero()
+        fake_action = action_spec.zero()
+        fake_input = fake_state.update(fake_action)
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
-        fake_in_out = fake_input.clone().update(fake_obs)
+        fake_in_out = fake_input.update(fake_obs)
 
         fake_reward = reward_spec.zero()
         fake_done = done_spec.zero()
@@ -1325,17 +1329,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         next_output = fake_obs.clone()
         next_output.update(fake_reward)
         next_output.update(fake_done)
-
         fake_in_out.update(fake_done.clone())
 
-        fake_td = TensorDict(
-            {
-                **fake_in_out,
-                "next": next_output,
-            },
-            batch_size=self.batch_size,
-            device=self.device,
-        )
+        fake_td = fake_in_out.set("next", next_output)
+        fake_td.batch_size = self.batch_size
+        fake_td = fake_td.to(self.device)
         return fake_td
 
 
