@@ -223,7 +223,10 @@ def step_mdp(
         return out
 
 
-def _set_single_key(source, dest, key):
+def _set_single_key(source, dest, key, clone=False):
+    # key should be already unraveled
+    if isinstance(key, str):
+        key = (key,)
     for k in key:
         val = source.get(k)
         if is_tensor_collection(val):
@@ -234,6 +237,8 @@ def _set_single_key(source, dest, key):
             source = val
             dest = new_val
         else:
+            if clone:
+                val = val.clone()
             dest._set(k, val)
 
 
@@ -482,6 +487,7 @@ class classproperty:
 
 def _sort_keys(element):
     if isinstance(element, tuple):
+        element = unravel_keys(element)
         return "_-|-_".join(element)
     return element
 
