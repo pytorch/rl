@@ -229,11 +229,11 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             self._spec = spec
         elif hasattr(self.td_module, "_spec"):
             self._spec = self.td_module._spec.clone()
-            if action_key not in self._spec.keys():
+            if action_key not in self._spec.keys(True, True):
                 self._spec[action_key] = None
         elif hasattr(self.td_module, "spec"):
             self._spec = self.td_module.spec.clone()
-            if action_key not in self._spec.keys():
+            if action_key not in self._spec.keys(True, True):
                 self._spec[action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
