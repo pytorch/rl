@@ -551,7 +551,7 @@ class SerialEnv(_BatchedEnv):
         if self._single_task:
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
             for key in self._selected_step_keys:
-                out._set(key, self.shared_tensordict_parent.get(key).clone())
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
         else:
             # strict=False ensures that non-homogeneous keys are still there
             out = self.shared_tensordict_parent.select(
@@ -791,7 +791,7 @@ class ParallelEnv(_BatchedEnv):
         if self._single_task:
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
             for key in self._selected_step_keys:
-                out._set(key, self.shared_tensordict_parent.get(key).clone())
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
         else:
             # strict=False ensures that non-homogeneous keys are still there
             out = self.shared_tensordict_parent.select(
@@ -854,7 +854,7 @@ class ParallelEnv(_BatchedEnv):
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
             for key in self._selected_reset_keys:
                 if key != "_reset":
-                    out._set(key, self.shared_tensordict_parent.get(key).clone())
+                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
