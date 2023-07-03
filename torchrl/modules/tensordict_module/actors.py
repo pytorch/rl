@@ -676,12 +676,22 @@ class DistributionalQValueModule(QValueModule):
 
 
 def _process_action_space_spec(action_space, spec):
-    nest_action = False
+    original_spec = spec
+    composite_spec = False
     if isinstance(spec, CompositeSpec):
+        # this will break whenever our action is more complex than a single tensor
         try:
-            # this will break whenever our action is more complex than a single tensor
-            spec = spec["action"]
-            nest_action = True
+            spec_keys = spec.keys(True, True)
+            if "action" in spec_keys:
+                _key = "action"
+            else:
+                # the first key is the action
+                for _key in spec_keys:
+                    break
+                else:
+                    raise KeyError
+            spec = spec[_key]
+            composite_spec = True
         except KeyError:
             raise KeyError(
                 "action could not be found in the spec. Make sure "
@@ -713,8 +723,8 @@ def _process_action_space_spec(action_space, spec):
         raise ValueError(
             "Neither action_space nor spec was defined. The action space cannot be inferred."
         )
-    if nest_action:
-        spec = CompositeSpec(action=spec)
+    if composite_spec:
+        spec = original_spec
     return action_space, spec
 
 
