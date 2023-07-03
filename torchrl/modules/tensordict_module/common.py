@@ -225,15 +225,16 @@ class SafeModule(TensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        spec_keys = spec.keys(True, True)
+        if set(spec_keys) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
-                if key not in spec.keys(True, True):
+                if key not in spec_keys:
                     spec[key] = None
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        if set(spec_keys) != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec
