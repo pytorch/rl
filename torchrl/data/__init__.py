@@ -27,6 +27,7 @@ from .rlhf import (
     PromptData,
     PromptTensorDictTokenizer,
     RewardData,
+    RolloutFromModel,
     TensorDictTokenizer,
     TokenizedDatasetLoader,
 )
