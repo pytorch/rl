@@ -78,6 +78,7 @@ class DecisionTransformer(nn.Module):
             )
         import transformers
         from transformers.models.gpt2.modeling_gpt2 import GPT2Model
+
         super(DecisionTransformer, self).__init__()
 
         self.default_config.update(config)
