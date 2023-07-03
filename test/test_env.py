@@ -1634,11 +1634,29 @@ class TestNestedSpecs:
 
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
-        td = env.reset()
+        td_reset = env.reset()
+        assert td_reset.batch_size == batch_size
+        assert td_reset["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_action()
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
 
+        td = env.rand_action(td_reset)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
         td = env.rand_step()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td_reset)
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
         assert td["next", "data"].batch_size == (*batch_size, nested_dim)
