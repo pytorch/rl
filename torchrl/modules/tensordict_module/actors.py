@@ -6,14 +6,17 @@
 from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
+
 from tensordict import TensorDictBase
 from tensordict.nn import (
     dispatch,
     TensorDictModule,
     TensorDictModuleBase,
     TensorDictModuleWrapper,
+    TensorDictSequential,
 )
 from torch import nn
+from torch.distributions import Categorical
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.models.models import DistributionalDQNnet
@@ -1898,3 +1901,47 @@ class TanhModule(TensorDictModuleBase):
                 feature = low + (high - low) * (feature + 1) / 2
             tensordict.set(out_key, feature)
         return tensordict
+
+
+class LMHeadActorValueOperator(ActorValueOperator):
+    """Builds an Actor-Value operator from an huggingface-like *LMHeadModel.
+
+    This method:
+        - takes as input an huggingface-like *LMHeadModel
+        - extracts the final linear layer uses it as a base layer of the actor_head and
+            adds the sampling layer
+        - uses the common transformer as common model
+        - adds a linear critic
+
+    Args:
+        base_model (nn.Module): a torch model composed by a `.transformer` model and `.lm_head` linear layer
+
+      .. note:: For more details regarding the class construction, please refer to :class:`~.ActorValueOperator`.
+    """
+
+    def __init__(self, base_model):
+        actor_head = base_model.lm_head
+        value_head = nn.Linear(actor_head.in_features, 1, bias=False)
+        common = TensorDictSequential(
+            TensorDictModule(
+                base_model.transformer,
+                in_keys={"input_ids": "input_ids", "attention_mask": "attention_mask"},
+                out_keys=["x"],
+            ),
+            TensorDictModule(lambda x: x[:, -1, :], in_keys=["x"], out_keys=["x"]),
+        )
+        actor_head = TensorDictModule(actor_head, in_keys=["x"], out_keys=["logits"])
+        actor_head = SafeProbabilisticTensorDictSequential(
+            actor_head,
+            SafeProbabilisticModule(
+                in_keys=["logits"],
+                out_keys=["action"],
+                distribution_class=Categorical,
+                return_log_prob=True,
+            ),
+        )
+        value_head = TensorDictModule(
+            value_head, in_keys=["x"], out_keys=["state_value"]
+        )
+
+        return super().__init__(common, actor_head, value_head)
