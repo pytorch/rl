@@ -1646,6 +1646,11 @@ class TestNestedSpecs:
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
 
+        td = env.rand_step(td)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
         td = env.rand_step()
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
