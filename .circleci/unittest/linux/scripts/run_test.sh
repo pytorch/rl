@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
@@ -22,5 +23,11 @@ export CKPT_BACKEND=torch
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
+
+printf "Calling coverage combine\n"
+
 coverage combine
+
+printf "Calling coverage xml\n"
+
 coverage xml -i
