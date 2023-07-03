@@ -20,12 +20,14 @@ from torchrl.modules import LSTMModule, NormalParamWrapper, SafeModule, TanhNorm
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
+    VmapModule,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+
 
 _has_functorch = False
 try:
@@ -1725,6 +1727,16 @@ class TestLSTMModule:
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
+
+
+def test_vmapmodule():
+    lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
+    sample_in = torch.ones((10, 3, 2))
+    sample_in_td = TensorDict({"x": sample_in}, batch_size=[10])
+    lam(sample_in)
+    vm = VmapModule(lam, 0)
+    vm(sample_in_td)
+    assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
 
 
 if __name__ == "__main__":
