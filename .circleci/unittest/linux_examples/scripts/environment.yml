@@ -27,4 +27,3 @@ dependencies:
     - mlflow
     - av
     - coverage
-    - mujoco-py

@@ -38,7 +38,7 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-# 3. Install mujoco
+# 3a. Install mujoco
 printf "* Installing mujoco and related\n"
 mkdir -p $root_dir/.mujoco
 cd $root_dir/.mujoco/
@@ -47,6 +47,14 @@ tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
 wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
 tar -xf mujoco210-linux-x86_64.tar.gz
 cd $this_dir
+
+# 3b. install mujoco-py
+mkdir third_party
+cd third_party
+git clone https://github.com/openai/mujoco-py
+cd mujoco-py
+pip install -e .
+cd ../..
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
@@ -115,3 +123,4 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 fi
 pip install "gymnasium[atari,accept-rom-license]"
 pip install gym==0.23 # for D4RL's sake...
+python -c """import gym"""
