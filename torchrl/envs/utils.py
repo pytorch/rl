@@ -224,7 +224,7 @@ def step_mdp(
 
 
 def _set_single_key(source, dest, key, clone=False):
-    # key should be unraveled
+    # key should be already unraveled
     if isinstance(key, str):
         key = (key,)
     for k in key:
