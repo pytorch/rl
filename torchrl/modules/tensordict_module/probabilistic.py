@@ -141,7 +141,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
-                if key not in spec_keys:
+                if key not in spec:
                     spec[key] = None
             spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
 
