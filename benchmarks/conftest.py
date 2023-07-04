@@ -4,9 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-
 import time
-import warnings
 from collections import defaultdict
 
 import pytest
@@ -54,10 +52,5 @@ def measure_duration(request: pytest.FixtureRequest):
     request.addfinalizer(fin)
 
 
-@pytest.fixture(autouse=True)
-def set_warnings() -> None:
-    warnings.filterwarnings(
-        "ignore",
-        category=UserWarning,
-        message=r"Lazy modules are a new feature under heavy development",
-    )
+def pytest_addoption(parser):
+    parser.addoption("--rank", action="store")

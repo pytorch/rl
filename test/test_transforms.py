@@ -425,9 +425,23 @@ class TestCatFrames(TransformBase):
         model = nn.Sequential(cat_frames2, nn.Identity())
         model(tdbase)
         assert (td == tdbase).all()
-        with pytest.raises(ValueError, match="The last dimension of the tensordict"):
+        with pytest.warns(UserWarning):
             tdbase0.names = None
             model(tdbase0)
+        tdbase0.batch_size = []
+        with pytest.raises(
+            ValueError, match="CatFrames cannot process unbatched tensordict"
+        ):
+            model(tdbase0)
+        tdbase0.batch_size = [10]
+        tdbase0 = tdbase0.expand(5, 10)
+        tdbase0_copy = tdbase0.transpose(0, 1).to_tensordict()
+        tdbase0.refine_names("time", None)
+        tdbase0_copy.names = [None, "time"]
+        v1 = model(tdbase0)
+        v2 = model(tdbase0_copy)
+        # check that swapping dims and names leads to same result
+        assert (v1 == v2.transpose(0, 1)).all()
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
@@ -6424,7 +6438,8 @@ class TestTransforms:
         td.set("dont touch", dont_touch.clone())
         if not batch:
             with pytest.raises(
-                ValueError, match="The last dimension of the tensordict"
+                ValueError,
+                match="CatFrames cannot process unbatched tensordict instances",
             ):
                 compose(td.clone(False))
         with pytest.raises(
