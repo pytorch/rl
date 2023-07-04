@@ -1748,7 +1748,7 @@ def test_safe_specs():
         in_keys=[],
     )
     assert original_spec == spec
-    assert spec[out_key] == mod[out_key]
+    assert original_spec[out_key] == mod.spec[out_key]
 
 
 def test_actor_critic_specs():

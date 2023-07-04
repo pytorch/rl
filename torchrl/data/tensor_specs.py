@@ -2582,7 +2582,10 @@ class CompositeSpec(TensorSpec):
                     item = CompositeSpec(item, shape=shape)
                 if item is not None:
                     if self._device is None:
-                        self._device = item.device
+                        try:
+                            self._device = item.device
+                        except RuntimeError:
+                            self._device = item._device
                 self[k] = item
 
     @property
