@@ -35,13 +35,8 @@ else
 fi
 
 # install tensordict
-#mkdir "third_party"
-#cd third_party
-#git clone https://github.com/pytorch-labs/tensordict
-#cd tensordict
-#python setup.py develop
-#cd ../..
-pip3 install tensordict-nightly
+pip3 install git+https://github.com/pytorch-labs/tensordict.git
+#pip3 install tensordict-nightly
 
 # smoke test
 python3 -c "import functorch;import tensordict"
