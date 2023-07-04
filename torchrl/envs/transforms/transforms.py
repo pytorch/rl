@@ -1367,9 +1367,9 @@ class CenterCrop(ObservationTransform):
     Args:
         w (int): resulting width
         h (int, optional): resulting height. If None, then w is used (square crop).
-        in_keys (sequence of str, optional): the entries to crop. If none is provided,
+        in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
             :obj:`["pixels"]` is assumed.
-        out_keys (sequence of str, optional): the cropped images keys. If none is
+        out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
             provided, :obj:`in_keys` is assumed.
 
     """
@@ -1417,9 +1417,9 @@ class FlattenObservation(ObservationTransform):
     Args:
         first_dim (int): first dimension of the dimensions to flatten.
         last_dim (int): last dimension of the dimensions to flatten.
-        in_keys (sequence of str, optional): the entries to flatten. If none is provided,
+        in_keys (sequence of NestedKey, optional): the entries to flatten. If none is provided,
             :obj:`["pixels"]` is assumed.
-        out_keys (sequence of str, optional): the flatten observation keys. If none is
+        out_keys (sequence of NestedKey, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
         allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
@@ -1673,15 +1673,15 @@ class ObservationNorm(ObservationTransform):
     Args:
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
-        in_keys (list of int, optional): entries to be normalized. Defaults to ["observation", "pixels"].
+        in_keys (seuqence of NestedKey, optional): entries to be normalized. Defaults to ["observation", "pixels"].
             All entries will be normalized with the same values: if a different behaviour is desired
             (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`
             objects should be used.
-        out_keys (list of int, optional): output entries. Defaults to the value of `in_keys`.
-        in_keys_inv (list of int, optional): ObservationNorm also supports inverse transforms. This will
+        out_keys (seuqence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
+        in_keys_inv (seuqence of NestedKey, optional): ObservationNorm also supports inverse transforms. This will
             only occur if a list of keys is provided to :obj:`in_keys_inv`. If none is provided,
             only the forward transform will be called.
-        out_keys_inv (list of int, optional): output entries for the inverse transform.
+        out_keys_inv (seuqence of NestedKey, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
         standard_normal (bool, optional): if ``True``, the transform will be
 
@@ -1792,7 +1792,7 @@ class ObservationNorm(ObservationTransform):
             cat_dim (int, optional): dimension along which the batches collected will be concatenated.
                 It must be part equal to reduce_dim (if integer) or part of the reduce_dim tuple.
                 Defaults to the same value as reduce_dim.
-            key (str, optional): if provided, the summary statistics will be
+            key (NestedKey, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
             keep_dims (tuple of int, optional): the dimensions to keep in the loc and scale.
@@ -1950,9 +1950,9 @@ class CatFrames(ObservationTransform):
         dim (int): dimension along which concatenate the
             observations. Should be negative, to ensure that it is compatible
             with environments of different batch_size.
-        in_keys (list of int, optional): keys pointing to the frames that have
+        in_keys (seuqence of NestedKey, optional): keys pointing to the frames that have
             to be concatenated. Defaults to ["pixels"].
-        out_keys (list of int, optional): keys pointing to where the output
+        out_keys (seuqence of NestedKey, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
@@ -2026,8 +2026,8 @@ class CatFrames(ObservationTransform):
         self,
         N: int,
         dim: int,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         padding="same",
         as_inverse=False,
     ):
@@ -2348,9 +2348,9 @@ class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
 
     Args:
-        in_keys (list of str, optional): list of double keys to be converted to
+        in_keys (sequence of NestedKey, optional): list of double keys to be converted to
             float before being exposed to external objects and functions.
-        in_keys_inv (list of str, optional): list of float keys to be converted to
+        in_keys_inv (sequence of NestedKey, optional): list of float keys to be converted to
             double before being passed to the contained base_env or storage.
 
     Examples:
@@ -2617,7 +2617,7 @@ class DiscreteActionProjection(Transform):
     Args:
         num_actions_effective (int): max number of action considered.
         max_actions (int): maximum number of actions that this module can read.
-        action_key (str, optional): key name of the action. Defaults to "action".
+        action_key (NestedKey, optional): key name of the action. Defaults to "action".
         include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
             by a replay buffer or an nn.Module chain. Defaults to True.
@@ -3074,7 +3074,7 @@ class VecNorm(Transform):
     observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
 
     Args:
-        in_keys (iterable of str, optional): keys to be updated.
+        in_keys (sequence of NestedKey, optional): keys to be updated.
             default: ["observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
@@ -3291,7 +3291,7 @@ class VecNorm(Transform):
         Args:
             env (EnvBase): example environment to be used to create the
                 tensordict
-            keys (iterable of str, optional): keys that
+            keys (sequence of NestedKey, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if ``True``, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
@@ -3517,7 +3517,7 @@ class StepCounter(Transform):
             entry to ``True``.
             However, the step count will still be
             incremented on each call to step() into the `step_count` attribute.
-        truncated_key (str, optional): the key where the truncated key should
+        truncated_key (NestedKey, optional): the key where the truncated key should
             be written. Defaults to ``"truncated"``, which is recognised by
             data collectors as a reset signal.
     """
@@ -3730,8 +3730,8 @@ class TimeMaxPool(Transform):
     This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
 
     Args:
-        in_keys (sequence of str, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
-        out_keys (sequence of str, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
+        in_keys (sequence of NestedKey, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
+        out_keys (sequence of NestedKey, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
         T (int, optional): Number of time steps over which to apply max pooling.
     """
 
@@ -3944,7 +3944,7 @@ class InitTracker(Transform):
     that is set to ``True`` whenever :meth:`~.reset` is called.
 
     Args:
-         init_key (str, optional): the key to be used for the tracker entry.
+         init_key (NestedKey, optional): the key to be used for the tracker entry.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
