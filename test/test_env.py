@@ -943,6 +943,66 @@ class TestParallel:
         assert (td_reset["done"][~_reset] == 1).all()
         assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    @pytest.mark.parametrize("env_type", ["serial", "parallel"])
+    def test_parallel_env_nested(
+        self,
+        nested_obs_action,
+        nested_done,
+        nested_reward,
+        env_type,
+        n_envs=2,
+        batch_size=(32,),
+        nested_dim=5,
+        rollout_length=3,
+        seed=1,
+    ):
+        env_fn = lambda: NestedCountingEnv(
+            nest_done=nested_done,
+            nest_reward=nested_reward,
+            nest_obs_action=nested_obs_action,
+            batch_size=batch_size,
+            nested_dim=nested_dim,
+        )
+        if env_type == "serial":
+            env = SerialEnv(n_envs, env_fn)
+        else:
+            env = ParallelEnv(n_envs, env_fn)
+        env.set_seed(seed)
+
+        batch_size = (n_envs, *batch_size)
+
+        td = env.reset()
+        assert td.batch_size == batch_size
+        if nested_done or nested_obs_action:
+            assert td["data"].batch_size == (*batch_size, nested_dim)
+        if not nested_done and not nested_reward and not nested_obs_action:
+            assert "data" not in td.keys()
+
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        td = env.rollout(rollout_length, policy)
+        assert td.batch_size == (*batch_size, rollout_length)
+        if nested_done or nested_obs_action:
+            assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        if nested_reward or nested_done or nested_obs_action:
+            assert td["next", "data"].batch_size == (
+                *batch_size,
+                rollout_length,
+                nested_dim,
+            )
+        if not nested_done and not nested_reward and not nested_obs_action:
+            assert "data" not in td.keys()
+            assert "data" not in td["next"].keys()
+
+        if nested_obs_action:
+            assert "observation" not in td.keys()
+            assert (td[..., -1]["data", "states"] == 2).all()
+        else:
+            assert ("data", "states") not in td.keys(True, True)
+            assert (td[..., -1]["observation"] == 2).all()
+
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
@@ -1634,11 +1694,29 @@ class TestNestedSpecs:
 
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
-        td = env.reset()
+        td_reset = env.reset()
+        assert td_reset.batch_size == batch_size
+        assert td_reset["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_action()
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
 
+        td = env.rand_action(td_reset)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
         td = env.rand_step()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td_reset)
         assert td.batch_size == batch_size
         assert td["data"].batch_size == (*batch_size, nested_dim)
         assert td["next", "data"].batch_size == (*batch_size, nested_dim)
