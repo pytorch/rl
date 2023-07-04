@@ -60,14 +60,15 @@ class VC1Transform(Transform):
     """
 
     inplace = False
+    IMPORT_ERROR = "Could not load vc_models. You can install it via " \
+                   "VC1Transform.install_vc_models()."
 
     def __init__(self, in_keys, out_keys, model_name, del_keys: bool = True):
         try:
             from vc_models.models.vit import model_utils
         except ModuleNotFoundError as err:
             raise ModuleNotFoundError(
-                "Could not load vc_models. You can install it via "
-                "VC1Transform.install_vc_models()."
+                self.IMPORT_ERROR
             ) from err
 
         if model_name == "default":
@@ -80,7 +81,12 @@ class VC1Transform(Transform):
         self._init()
 
     def _init(self):
-        from vc_models.models.vit import model_utils
+        try:
+            from vc_models.models.vit import model_utils
+        except ModuleNotFoundError as err:
+            raise ModuleNotFoundError(
+                self.IMPORT_ERROR
+            ) from err
 
         model, embd_size, model_transforms, model_info = model_utils.load_model(
             self.model_name
