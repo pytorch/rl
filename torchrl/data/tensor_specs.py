@@ -32,7 +32,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _getitem_batch_size
+from tensordict.utils import _getitem_batch_size, unravel_key
 
 from torchrl._utils import get_binary_env_var
 
@@ -3387,3 +3387,13 @@ class _CompositeSpecKeysView:
 
     def __repr__(self):
         return f"_CompositeSpecKeysView(keys={list(self)})"
+
+    def __contains__(self, item):
+        item = unravel_key(item)
+        if len(item) == 1:
+            item = item[0]
+        for key in self.__iter__():
+            if key == item:
+                return True
+        else:
+            return False
