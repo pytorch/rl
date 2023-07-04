@@ -6,6 +6,7 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -123,4 +124,5 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 fi
 pip install "gymnasium[atari,accept-rom-license]"
 pip install gym==0.23 # for D4RL's sake...
-python -c """import gym"""
+pip install git+https://github.com/Farama-Foundation/d4rl.git
+python -c """import gym;import d4rl"""
