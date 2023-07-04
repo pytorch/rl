@@ -4129,9 +4129,9 @@ class RenameTransform(Transform):
             output_spec["_observation_spec"][out_key] = output_spec[
                 "_done_spec"
             ].clone()
-        if "reward" in self.in_keys:
+        if ("reward",) in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == "reward":
+                if self.in_keys[i] == ("reward",):
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")

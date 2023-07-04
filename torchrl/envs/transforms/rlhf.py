@@ -12,7 +12,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     repopulate_module,
 )
-from tensordict.utils import _normalize_key, is_seq_of_nested_key
+from tensordict.utils import is_seq_of_nested_key, unravel_key
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
 
@@ -159,10 +159,10 @@ class KLRewardTransform(Transform):
         output_spec = super().transform_output_spec(output_spec)
         # todo: here we'll need to use the reward_key once it's implemented
         # parent = self.parent
-        in_key = _normalize_key(self.in_keys[0])
-        out_key = _normalize_key(self.out_keys[0])
+        in_key = unravel_key(self.in_keys[0])
+        out_key = unravel_key(self.out_keys[0])
 
-        if in_key == "reward" and out_key == "reward":
+        if in_key == ("reward",) and out_key == ("reward",):
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
@@ -172,7 +172,7 @@ class KLRewardTransform(Transform):
                 {parent.reward_key: reward_spec},
                 shape=output_spec["_reward_spec"].shape,
             )
-        elif in_key == "reward":
+        elif in_key == ("reward",):
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
