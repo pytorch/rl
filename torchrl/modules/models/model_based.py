@@ -6,7 +6,7 @@ import warnings
 
 import torch
 from packaging import version
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn
 
 from torchrl.envs.utils import step_mdp
@@ -186,7 +186,7 @@ class ObsDecoder(nn.Module):
         return obs_decoded
 
 
-class RSSMRollout(nn.Module):
+class RSSMRollout(TensorDictModuleBase):
     """Rollout the RSSM network.
 
     Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate
