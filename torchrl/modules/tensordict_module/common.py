@@ -221,7 +221,7 @@ class SafeModule(TensorDictModule):
                 )
             spec = CompositeSpec(**{self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, CompositeSpec):
-            if "_" in spec.keys():
+            if "_" in spec.keys() and spec["_"] is not None:
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
