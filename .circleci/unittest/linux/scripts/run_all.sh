@@ -83,7 +83,10 @@ echo "installing gymnasium"
 pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
 pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
-
+python3 -c """
+import dm_control
+from dm_control import composer
+"""
 # ================================================================================= #
 
 #bash ${this_dir}/install.sh
