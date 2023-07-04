@@ -26,6 +26,5 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
 
         bash .circleci/unittest/linux_libs/scripts_robohive/setup_env.sh
-        bash .circleci/unittest/linux_libs/scripts_robohive/install.sh
-        bash .circleci/unittest/linux_libs/scripts_robohive/run_test.sh
+        bash .circleci/unittest/linux_libs/scripts_robohive/install_and_run_test.sh
         bash .circleci/unittest/linux_libs/scripts_robohive/post_process.sh
