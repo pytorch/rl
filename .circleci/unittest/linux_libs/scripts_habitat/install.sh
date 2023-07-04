@@ -35,12 +35,13 @@ else
 fi
 
 # install tensordict
-mkdir "third_party"
-cd third_party
-git clone https://github.com/pytorch-labs/tensordict
-cd tensordict
-python setup.py develop
-cd ../..
+#mkdir "third_party"
+#cd third_party
+#git clone https://github.com/pytorch-labs/tensordict
+#cd tensordict
+#python setup.py develop
+#cd ../..
+pip install tensordict-nightly
 
 # smoke test
 python -c "import functorch;import tensordict"
