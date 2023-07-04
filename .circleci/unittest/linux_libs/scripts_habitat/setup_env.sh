@@ -50,7 +50,7 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge gcc=12.1.0 -y
-conda install libgcc=5.2.0 -y
+#conda install libgcc==5.2.0 -y
 conda install -c anaconda libstdcxx-ng -y
 
 
