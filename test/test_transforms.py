@@ -1470,7 +1470,7 @@ class TestCenterCrop(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("h", [None, 21])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, h, nchannels, batch, device):
@@ -1673,7 +1673,7 @@ class TestCenterCrop(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym detected")
-    @pytest.mark.parametrize("out_key", [None, ["outkey"]])
+    @pytest.mark.parametrize("out_key", [None, ["outkey"], [("out", "key")]])
     def test_transform_env(self, out_key):
         keys = ["pixels"]
         ct = Compose(

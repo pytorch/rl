@@ -1378,8 +1378,8 @@ class CenterCrop(ObservationTransform):
         self,
         w: int,
         h: int = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
