@@ -73,6 +73,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 conda install -y -c conda-forge glew
 conda install -y -c conda-forge mesalib
 conda install -y -c anaconda mesa-libgl-cos6-x86_64
+conda install -y -c conda-forge libglvnd-egl-cos7-x86_64
 conda install -y -c menpo glfw3
 
 conda deactivate
