@@ -3611,12 +3611,13 @@ class TestRewardClipping(TransformBase):
         )
         check_env_specs(env)
 
-    def test_transform_no_env(self):
-        t = RewardClipping(-0.1, 0.1)
-        td = TensorDict({"reward": torch.randn(10)}, [])
+    @pytest.mark.parametrize("reward_key", ["reward", ("agents", "reward")])
+    def test_transform_no_env(self, reward_key):
+        t = RewardClipping(-0.1, 0.1, in_keys=[reward_key])
+        td = TensorDict({reward_key: torch.randn(10)}, [])
         t._call(td)
-        assert (td["reward"] <= 0.1).all()
-        assert (td["reward"] >= -0.1).all()
+        assert (td[reward_key] <= 0.1).all()
+        assert (td[reward_key] >= -0.1).all()
 
     def test_transform_compose(self):
         t = Compose(RewardClipping(-0.1, 0.1))

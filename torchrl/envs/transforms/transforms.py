@@ -1215,8 +1215,8 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[NestedKey] = None,
+        out_keys: Optional[NestedKey] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
