@@ -35,7 +35,12 @@ else
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+mkdir "third_party"
+cd third_party
+git clone https://github.com/pytorch-labs/tensordict
+cd tensordict
+python setup.py develop
+cd ../..
 
 # smoke test
 python -c "import functorch;import tensordict"
