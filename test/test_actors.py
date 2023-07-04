@@ -81,9 +81,9 @@ class TestQValue:
     @pytest.mark.parametrize("nested_action", [True, False])
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_keys(self, nested_action, batch_size, nested_dim=5):
-        """_process_action_space_spec can take
-        an action_space argument (which can be string or non-composite spec)
-        and a action_spec, which can be a spec"""
+        # _process_action_space_spec can take
+        # an action_space argument (which can be string or non-composite spec)
+        # and a action_spec, which can be a spec
         env = NestedCountingEnv(
             nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
         )
