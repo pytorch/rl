@@ -6,10 +6,9 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-# Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc c++ git wget freeglut3 freeglut3-dev
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
