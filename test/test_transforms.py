@@ -2474,7 +2474,7 @@ class TestFlattenObservation(TransformBase):
         )
         check_env_specs(env)
         if out_keys:
-            assert out_keys[0] in env.reset().keys()
+            assert out_keys[0] in env.reset().keys(True, True)
             assert env.rollout(3)[out_keys[0]].ndimension() == 2
         else:
             assert env.rollout(3)["pixels"].ndimension() == 2
