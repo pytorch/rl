@@ -15,6 +15,7 @@ import torch
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import unravel_key_list
 
 from torch import nn
 
@@ -226,13 +227,14 @@ class SafeModule(TensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        spec_keys = spec.keys(True, True)
+        spec_keys = unravel_key_list(list(spec.keys(True, True)))
         if set(spec_keys) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec_keys:
                     spec[key] = None
 
+        spec_keys = unravel_key_list(list(spec.keys(True, True)))
         if set(spec_keys) != set(self.out_keys):
             raise RuntimeError(
                 f"spec keys and out_keys do not match, got: {spec_keys} and {set(self.out_keys)} respectively"

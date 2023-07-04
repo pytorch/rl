@@ -13,6 +13,7 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import unravel_key_list
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
@@ -120,7 +121,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )
-
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -136,15 +138,17 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        spec_keys = unravel_key_list(list(spec.keys(True, True)))
+        if set(spec_keys) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
-                if key not in spec:
+                if key not in spec_keys:
                     spec[key] = None
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        spec_keys = unravel_key_list(list(spec.keys(True, True)))
+        if spec_keys != set(self.out_keys):
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True, True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {set(self.out_keys)} respectively"
             )
 
         self._spec = spec
