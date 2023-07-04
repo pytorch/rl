@@ -3961,7 +3961,7 @@ class InitTracker(Transform):
 
     """
 
-    def __init__(self, init_key: bool = "is_init"):
+    def __init__(self, init_key: NestedKey = "is_init"):
         super().__init__(in_keys=[], out_keys=[init_key])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3983,10 +3983,13 @@ class InitTracker(Transform):
             device = torch.device("cpu")
         _reset = tensordict.get("_reset", None)
         if _reset is None:
-            _reset = torch.ones(
-                self.parent.done_spec.shape,
-                device=device,
-                dtype=torch.bool,
+            tensordict.set(
+                self.out_keys[0],
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    device=device,
+                    dtype=torch.bool,
+                ),
             )
         tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
