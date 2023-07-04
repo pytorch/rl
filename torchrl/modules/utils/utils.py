@@ -31,12 +31,11 @@ ACTION_SPACE_MAP["categorical"] = "categorical"
 def _find_action_space(action_space):
     if isinstance(action_space, TensorSpec):
         if isinstance(action_space, CompositeSpec):
-            spec_keys = action_space.keys(True, True)
-            if "action" in spec_keys:
+            if "action" in action_space.keys():
                 _key = "action"
             else:
                 # the first key is the action
-                for _key in spec_keys:
+                for _key in action_space.keys(True, True):
                     break
                 else:
                     raise KeyError

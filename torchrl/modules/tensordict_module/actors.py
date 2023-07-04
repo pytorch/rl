@@ -681,12 +681,11 @@ def _process_action_space_spec(action_space, spec):
     if isinstance(spec, CompositeSpec):
         # this will break whenever our action is more complex than a single tensor
         try:
-            spec_keys = spec.keys(True, True)
-            if "action" in spec_keys:
+            if "action" in spec.keys():
                 _key = "action"
             else:
                 # the first key is the action
-                for _key in spec_keys:
+                for _key in spec.keys(True, True):
                     break
                 else:
                     raise KeyError
