@@ -226,15 +226,15 @@ class SafeModule(TensorDictModule):
             spec = CompositeSpec()
 
         # unravel_key_list(self.out_keys) can be removed once 473 is merged in tensordict
-        spec_keys = sorted(unravel_key_list(list(spec.keys(True, True))), key=str)
-        out_keys = sorted(unravel_key_list(self.out_keys), key=str)
-        if set(spec_keys) != set(out_keys):
+        spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        out_keys = set(unravel_key_list(self.out_keys))
+        if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
-            spec_keys = sorted(unravel_key_list(list(spec.keys(True, True))), key=str)
-        if set(spec_keys) != set(out_keys):
+            spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        if spec_keys != out_keys:
             raise RuntimeError(
                 f"spec keys and out_keys do not match, got: {spec_keys} and {out_keys} respectively"
             )
