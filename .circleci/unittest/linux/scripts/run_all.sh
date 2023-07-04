@@ -43,67 +43,38 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  PRIVATE_MUJOCO_GL=glfw
-else
-  PRIVATE_MUJOCO_GL=egl
-fi
 
-export MUJOCO_GL=$PRIVATE_MUJOCO_GL
-conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
-  DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
+export MUJOCO_GL=egl
+export DISPLAY=:0
+export SDL_VIDEODRIVER=dummy
+
+conda env config vars set \
+  DISPLAY=:0 \
   SDL_VIDEODRIVER=dummy \
-  MUJOCO_GL=$PRIVATE_MUJOCO_GL \
-  PYOPENGL_PLATFORM=$PRIVATE_MUJOCO_GL
+  MUJOCO_GL=egl
 
 # Software rendering requires GLX and OSMesa.
-if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
+if [[ $OSTYPE != 'darwin'* ]]; then
   yum makecache
   yum install -y glfw
   yum install -y glew
-#  yum install -y mesa-libGL
+  yum install -y mesa-libGL
   yum install -y mesa-libGL-devel
 #  yum install -y mesa-libOSMesa-devel
 #  yum -y install egl-utils
 #  yum -y install freeglut
 fi
 
-pip install pip --upgrade
+pip3 install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
 conda deactivate
 conda activate "${env_dir}"
 
-#if [[ $OSTYPE != 'darwin'* ]]; then
-#  # install ale-py: manylinux names are broken for CentOS so we need to manually download and
-#  # rename them
-#  PY_VERSION=$(python --version)
-#  echo "installing ale-py for ${PY_PY_VERSION}"
-#  if [[ $PY_VERSION == *"3.7"* ]]; then
-#    wget https://files.pythonhosted.org/packages/ab/fd/6615982d9460df7f476cad265af1378057eee9daaa8e0026de4cedbaffbd/ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    pip install ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    rm ale_py-0.8.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#  elif [[ $PY_VERSION == *"3.8"* ]]; then
-#    wget https://files.pythonhosted.org/packages/0f/8a/feed20571a697588bc4bfef05d6a487429c84f31406a52f8af295a0346a2/ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    pip install ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    rm ale_py-0.8.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#  elif [[ $PY_VERSION == *"3.9"* ]]; then
-#    wget https://files.pythonhosted.org/packages/a0/98/4316c1cedd9934f9a91b6e27a9be126043b4445594b40cfa391c8de2e5e8/ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    pip install ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    rm ale_py-0.8.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#  elif [[ $PY_VERSION == *"3.10"* ]]; then
-#    wget https://files.pythonhosted.org/packages/60/1b/3adde7f44f79fcc50d0a00a0643255e48024c4c3977359747d149dc43500/ale_py-0.8.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-#    mv ale_py-0.8.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    pip install ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#    rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-#  fi
-#fi
 echo "installing gymnasium"
-pip install "gymnasium[atari,ale-py,accept-rom-license]"
-pip install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
+pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
+pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
 
 # ================================================================================= #
@@ -111,9 +82,6 @@ pip install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 #bash ${this_dir}/install.sh
 
 unset PYTORCH_VERSION
-# For unittest, nightly PyTorch is used as the following section,
-# so no need to set PYTORCH_VERSION.
-# In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
@@ -142,10 +110,10 @@ fi
 python -c "import functorch"
 
 # install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
 python setup.py develop
