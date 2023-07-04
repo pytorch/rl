@@ -128,7 +128,7 @@ class TestQValue:
         mod = QValueModule(
             action_value_key=("data", "action_value"),
             out_keys=[
-                env.action_key,
+                env.action_key if nested_action else "action",
                 ("data", "action_value"),
                 ("data", "chosen_action_value"),
             ],
