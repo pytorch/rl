@@ -1431,8 +1431,8 @@ class FlattenObservation(ObservationTransform):
         self,
         first_dim: int,
         last_dim: int,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         allow_positive_dim: bool = False,
     ):
         if in_keys is None:
@@ -1516,10 +1516,10 @@ class UnsqueezeTransform(Transform):
         self,
         unsqueeze_dim: int,
         allow_positive_dim: bool = False,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = []  # default
@@ -1578,7 +1578,8 @@ class UnsqueezeTransform(Transform):
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.in_keys:
+        reward_key = self.parent.reward_key if self.parent is not None else "reward"
+        if reward_key in self.in_keys:
             reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 

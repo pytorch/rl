@@ -4259,7 +4259,7 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(
@@ -4322,11 +4322,16 @@ class TestUnsqueezeTransform(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
+        "keys_inv",
+        [
+            [],
+            ["action", ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     def test_unsqueeze_inv(
         self, keys, keys_inv, size, nchannels, batch, device, unsqueeze_dim
@@ -4552,11 +4557,19 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
         "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+        [
+            [("next", "observation"), ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
+        "keys_inv",
+        [
+            [],
+            ["action", ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     def test_transform_no_env(
         self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
@@ -4589,11 +4602,20 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys",
+        [
+            [("next", "observation"), ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
-        "keys_inv", [[], ["action", "some_other_key"], ["observation_pixels"]]
+        "keys_inv",
+        [
+            [],
+            ["action", ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     def test_squeeze_inv(
         self, keys, keys_inv, size, nchannels, batch, device, squeeze_dim
@@ -4719,6 +4741,9 @@ class TestSqueezeTransform(TransformBase):
         for key in keys:
             assert td.get(key).shape == torch.Size(expected_size)
 
+    @pytest.mark.parametrize(
+        "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
+    )
     def test_transform_env(self):
         env = TransformedEnv(ContinuousActionVecMockEnv(), self._circular_transform)
         r = env.rollout(3)
