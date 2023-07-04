@@ -35,24 +35,24 @@ else
 fi
 
 # smoke test
-python -c "import functorch"
+python3 -c "import functorch"
 
 # install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python3 setup.py develop
 
 # install vc1
-python -c """
+python3 -c """
 from torchrl.envs.transforms.vc1 import VC1Transform
 VC1Transform.install_vc_models(auto_exit=True)
 """
 
-python -c """
+python3 -c """
 import vc_models
 from vc_models.models.vit import model_utils
 print(model_utils)
