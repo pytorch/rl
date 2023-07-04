@@ -323,7 +323,7 @@ class QValueModule(TensorDictModuleBase):
     Args:
         action_space (str, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
-            This is argumets is exclusive with ``spec``, since ``spec``
+            This argument is exclusive with ``spec``, since ``spec``
             conditions the action_space.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
@@ -517,7 +517,7 @@ class DistributionalQValueModule(QValueModule):
     Args:
         action_space (str, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
-            This is argumets is exclusive with ``spec``, since ``spec``
+            This argument is exclusive with ``spec``, since ``spec``
             conditions the action_space.
         support (torch.Tensor): support of the action values.
         action_value_key (str or tuple of str, optional): The input key
@@ -925,7 +925,7 @@ class QValueActor(SafeSequential):
             method. Default is ``False``.
         action_space (str, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
-            This is argumets is exclusive with ``spec``, since ``spec``
+            This argument is exclusive with ``spec``, since ``spec``
             conditions the action_space.
         action_value_key (str or tuple of str, optional): if the input module
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
@@ -1077,7 +1077,7 @@ class DistributionalQValueActor(QValueActor):
         support (torch.Tensor): support of the action values.
         action_space (str, optional): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
-            This is argumets is exclusive with ``spec``, since ``spec``
+            This argument is exclusive with ``spec``, since ``spec``
             conditions the action_space.
         make_log_softmax (bool, optional): if ``True`` and if the module is not
             of type :class:`torchrl.modules.DistributionalDQNnet`, a log-softmax
