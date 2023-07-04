@@ -3184,11 +3184,15 @@ class TestObservationNorm(TransformBase):
             assert torch.allclose(0.5 * obs + 1, obs_tr)
 
     @pytest.mark.skipif(not _has_gym, reason="No gym")
-    def test_transform_inverse(self):
+    @pytest.mark.parametrize("out_key_inv", ["action_inv", ("nested", "action_inv")])
+    @pytest.mark.parametrize(
+        "out_key", ["observation_out", ("nested", "observation_out")]
+    )
+    def test_transform_inverse(self, out_key, out_key_inv):
         standard_normal = True
-        out_keys = ["observation_out"]
+        out_keys = [out_key]
         in_keys_inv = ["action"]
-        out_keys_inv = ["action_inv"]
+        out_keys_inv = [out_key_inv]
         t = Compose(
             ObservationNorm(
                 loc=torch.ones(()),
@@ -3205,8 +3209,8 @@ class TestObservationNorm(TransformBase):
         td = env.rollout(3)
         check_env_specs(env)
         env.set_seed(0)
-        assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)["action_inv"])
-        assert torch.allclose((td["observation"] - 1) / 0.5, td["observation_out"])
+        assert torch.allclose(td["action"] * 0.5 + 1, t.inv(td)[out_key_inv])
+        assert torch.allclose((td["observation"] - 1) / 0.5, td[out_key])
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
