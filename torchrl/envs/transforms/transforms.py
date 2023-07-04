@@ -1215,8 +1215,8 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        in_keys: Optional[NestedKey] = None,
-        out_keys: Optional[NestedKey] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1269,8 +1269,8 @@ class BinarizeReward(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[NestedKey] = None,
-        out_keys: Optional[NestedKey] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1291,7 +1291,7 @@ class BinarizeReward(Transform):
 
 
 class Resize(ObservationTransform):
-    """Resizes an pixel observation.
+    """Resizes a pixel observation.
 
     Args:
         w (int): resulting width
