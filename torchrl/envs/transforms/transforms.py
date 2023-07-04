@@ -3991,7 +3991,8 @@ class InitTracker(Transform):
                     dtype=torch.bool,
                 ),
             )
-        tensordict.set(self.out_keys[0], _reset.clone())
+        else:
+            tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
