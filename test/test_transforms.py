@@ -2928,7 +2928,9 @@ class TestNoop(TransformBase):
 
 
 class TestObservationNorm(TransformBase):
-    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    @pytest.mark.parametrize(
+        "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
+    )
     def test_single_trans_env_check(
         self,
         out_keys,
@@ -3003,9 +3005,12 @@ class TestObservationNorm(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("standard_normal", [True, False])
-    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
-    def test_transform_no_env(self, out_keys, standard_normal):
-        t = ObservationNorm(in_keys=["observation"], out_keys=out_keys)
+    @pytest.mark.parametrize("in_key", ["observation", ("some_other", "observation")])
+    @pytest.mark.parametrize(
+        "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
+    )
+    def test_transform_no_env(self, out_keys, standard_normal, in_key):
+        t = ObservationNorm(in_keys=[in_key], out_keys=out_keys)
         # test that init fails
         with pytest.raises(
             RuntimeError,
@@ -3015,18 +3020,18 @@ class TestObservationNorm(TransformBase):
         t = ObservationNorm(
             loc=torch.ones(7),
             scale=0.5,
-            in_keys=["observation"],
+            in_keys=[in_key],
             out_keys=out_keys,
             standard_normal=standard_normal,
         )
         obs = torch.randn(7)
-        td = TensorDict({"observation": obs}, [])
+        td = TensorDict({in_key: obs}, [])
         t(td)
         if out_keys:
-            assert out_keys[0] in td.keys()
+            assert out_keys[0] in td.keys(True, True)
             obs_tr = td[out_keys[0]]
         else:
-            obs_tr = td["observation"]
+            obs_tr = td[in_key]
         if standard_normal:
             assert torch.allclose((obs - 1) / 0.5, obs_tr)
         else:

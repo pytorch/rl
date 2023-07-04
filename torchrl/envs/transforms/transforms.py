@@ -1726,17 +1726,14 @@ class ObservationNorm(ObservationTransform):
         self,
         loc: Optional[float, torch.Tensor] = None,
         scale: Optional[float, torch.Tensor] = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            in_keys = [
-                "observation",
-                "pixels",
-            ]
+            in_keys = [("observation", "pixels")]
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -1777,7 +1774,7 @@ class ObservationNorm(ObservationTransform):
         num_iter: int,
         reduce_dim: Union[int, Tuple[int]] = 0,
         cat_dim: Optional[int] = None,
-        key: Optional[str] = None,
+        key: Optional[NestedKey] = None,
         keep_dims: Optional[Tuple[int]] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
