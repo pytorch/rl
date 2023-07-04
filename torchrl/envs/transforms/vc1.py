@@ -23,7 +23,7 @@ from torchrl.envs.transforms.transforms import (
     Transform,
 )
 
-_has_vc = importlib.util.find_spec("vc_models")
+_has_vc = importlib.util.find_spec("vc_models") is not None
 
 
 class VC1Transform(Transform):
