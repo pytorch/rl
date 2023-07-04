@@ -70,10 +70,10 @@ pip3 install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-conda install -c conda-forge glew
-conda install -c conda-forge mesalib
-conda install -c anaconda mesa-libgl-cos6-x86_64
-conda install -c menpo glfw3
+conda install -y -c conda-forge glew
+conda install -y -c conda-forge mesalib
+conda install -y -c anaconda mesa-libgl-cos6-x86_64
+conda install -y -c menpo glfw3
 
 conda deactivate
 conda activate "${env_dir}"
