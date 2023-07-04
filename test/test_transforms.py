@@ -26,6 +26,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
+    NestedCountingEnv,
 )
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -216,23 +217,30 @@ class TestBinarizeReward(TransformBase):
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("batch", [[], [4], [6, 4]])
-    def test_transform_no_env(self, device, batch):
+    @pytest.mark.parametrize("in_key", ["reward", ("agents", "reward")])
+    def test_transform_no_env(self, device, batch, in_key):
         torch.manual_seed(0)
-        br = BinarizeReward()
+        br = BinarizeReward(in_keys=[in_key])
         reward = torch.randn(*batch, 1, device=device)
         reward_copy = reward.clone()
         misc = torch.randn(*batch, 1, device=device)
         misc_copy = misc.clone()
 
         td = TensorDict(
-            {"misc": misc, "reward": reward},
+            {"misc": misc, in_key: reward},
             batch,
             device=device,
         )
         br(td)
-        assert (td["reward"] != reward_copy).all()
+        assert (td[in_key] != reward_copy).all()
         assert (td["misc"] == misc_copy).all()
-        assert (torch.count_nonzero(td["reward"]) == torch.sum(reward_copy > 0)).all()
+        assert (torch.count_nonzero(td[in_key]) == torch.sum(reward_copy > 0)).all()
+
+    def test_nested(self):
+        orig_env = NestedCountingEnv()
+        env = TransformedEnv(orig_env, BinarizeReward(in_keys=[orig_env.reward_key]))
+        env.rollout(3)
+        assert "data" in env._output_spec["_reward_spec"]
 
     def test_transform_compose(self):
         torch.manual_seed(0)

@@ -1269,8 +1269,8 @@ class BinarizeReward(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[NestedKey] = None,
+        out_keys: Optional[NestedKey] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
