@@ -12,6 +12,7 @@ import warnings
 from typing import Iterable, Optional, Type, Union
 
 import torch
+from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
@@ -224,13 +225,17 @@ class SafeModule(TensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        if sorted(unravel_key_list(list(spec.keys(True, True))), key=str) != sorted(
+            self.out_keys, key=str
+        ):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec:
                     spec[key] = None
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        if sorted(unravel_key_list(spec.keys(True, True)), key=str) != sorted(
+            unravel_key_list(self.out_keys), key=str
+        ):
             raise RuntimeError(
                 f"spec keys and out_keys do not match, got: {set(spec.keys(True))} and {set(self.out_keys)} respectively"
             )

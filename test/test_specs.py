@@ -2634,6 +2634,20 @@ def test_valid_indexing(spec_class):
         assert spec_2d[1, ..., None]["k2"].shape == torch.Size([3, 1, 4, 6, 7])
 
 
+def test_composite_contains():
+    spec = CompositeSpec(
+        a=CompositeSpec(b=CompositeSpec(c=UnboundedContinuousTensorSpec()))
+    )
+    assert "a" in spec.keys()
+    assert "a" in spec.keys(True)
+    assert ("a",) in spec.keys()
+    assert ("a",) in spec.keys(True)
+    assert ("a", "b", "c") in spec.keys(True)
+    assert ("a", "b", "c") in spec.keys(True, True)
+    assert ("a", ("b", ("c",))) in spec.keys(True)
+    assert ("a", ("b", ("c",))) in spec.keys(True, True)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
