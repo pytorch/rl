@@ -2650,7 +2650,10 @@ class TestGrayScale(TransformBase):
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
         "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+        [
+            [("next", "observation"), ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, device):
@@ -2684,7 +2687,10 @@ class TestGrayScale(TransformBase):
     @pytest.mark.skipif(not _has_tv, reason="no torchvision")
     @pytest.mark.parametrize(
         "keys",
-        [[("next", "observation"), "some_other_key"], [("next", "observation_pixels")]],
+        [
+            [("next", "observation"), ("some_other", "nested_key")],
+            [("next", "observation_pixels")],
+        ],
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_compose(self, keys, device):
@@ -2715,7 +2721,9 @@ class TestGrayScale(TransformBase):
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([1, 16, 16])
 
-    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    @pytest.mark.parametrize(
+        "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
+    )
     def test_single_trans_env_check(self, out_keys):
         env = TransformedEnv(
             DiscreteActionConvMockEnvNumpy(),
