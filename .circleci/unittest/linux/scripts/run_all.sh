@@ -42,8 +42,6 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-
-
 export MUJOCO_GL=egl
 export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
@@ -57,13 +55,14 @@ conda env config vars set MUJOCO_GL=egl PYOPENGL_PLATFORM=egl DISPLAY=:0 SDL_VID
 ## Software rendering requires GLX and OSMesa.
 #if [[ $OSTYPE != 'darwin'* ]]; then
   yum makecache
-#  yum install -y glfw
-#  yum install -y glew
-#  yum install -y mesa-libGL
-#  yum install -y mesa-libGL-devel
-#  yum install -y mesa-libOSMesa-devel
-  yum -y install egl-utils
-  yum -y install freeglut
+  yum install -y glfw
+  yum install -y glew
+  yum install -y mesa-libGL
+  yum install -y mesa-libGL-devel
+  yum install -y mesa-libEGL-devel
+  yum install -y mesa-libOSMesa-devel
+#  yum -y install egl-utils
+#  yum -y install freeglut
 #fi
 
 pip3 install pip --upgrade
