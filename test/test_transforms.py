@@ -2383,7 +2383,7 @@ class TestFlattenObservation(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("size", [[], [4]])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, keys, size, nchannels, batch, device):
@@ -2465,7 +2465,9 @@ class TestFlattenObservation(TransformBase):
                 assert observation_spec[key].shape[-3] == expected_size
 
     @pytest.mark.skipif(not _has_gym, reason="No gym")
-    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    @pytest.mark.parametrize(
+        "out_keys", [None, ["stuff"], [("some_other", "nested_key")]]
+    )
     def test_transform_env(self, out_keys):
         env = TransformedEnv(
             GymEnv(PONG_VERSIONED), FlattenObservation(-3, -1, out_keys=out_keys)
