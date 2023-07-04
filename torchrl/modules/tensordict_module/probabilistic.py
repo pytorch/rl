@@ -13,7 +13,6 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import unravel_key_list
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
@@ -138,15 +137,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         elif spec is None:
             spec = CompositeSpec()
 
-        spec_keys = unravel_key_list(list(spec.keys(True, True)))
+        spec_keys = spec.keys(True, True)
         if set(spec_keys) != set(self.out_keys):
             # then assume that all the non indicated specs are None
             for key in self.out_keys:
                 if key not in spec_keys:
                     spec[key] = None
 
-        spec_keys = unravel_key_list(list(spec.keys(True, True)))
-        if spec_keys != set(self.out_keys):
+        spec_keys = spec.keys(True, True)
+        if set(spec_keys) != set(self.out_keys):
             raise RuntimeError(
                 f"spec keys and out_keys do not match, got: {spec_keys} and {set(self.out_keys)} respectively"
             )
