@@ -24,7 +24,7 @@ from ..._utils import VERBOSE
 from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv
 
-if torch.has_cuda and torch.cuda.device_count() > 1:
+if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     if VERBOSE:

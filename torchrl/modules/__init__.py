@@ -45,6 +45,7 @@ from .tensordict_module import (
     DistributionalQValueHook,
     DistributionalQValueModule,
     EGreedyWrapper,
+    LMHeadActorValueOperator,
     LSTMModule,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
@@ -55,6 +56,7 @@ from .tensordict_module import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
     SafeSequential,
+    TanhModule,
     ValueOperator,
     WorldModelWrapper,
 )

@@ -12,9 +12,13 @@
 
 # TorchRL
 
+<p align="center">
+  <img src="docs/source/_static/img/icon.png"  width="200" >
+</p>
+
 [**Documentation**](#documentation-and-knowledge-base) | [**TensorDict**](#writing-simplified-and-portable-rl-codebase-with-tensordict) |
-[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Installation**](#installation) |
-[**Asking a question**](#asking-a-question) | [**Citation**](#citation) | [**Contributing**](#contributing)
+[**Features**](#features) | [**Examples, tutorials and demos**](#examples-tutorials-and-demos) | [**Citation**](#citation) | [**Installation**](#installation) |
+[**Asking a question**](#asking-a-question) | [**Contributing**](#contributing)
 
 **TorchRL** is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -26,7 +30,7 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at (1) a high modularity and (2) good runtime performance.
+TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
 ## Documentation and knowledge base
 
@@ -504,7 +508,22 @@ about handling the various configuration settings.
 We also provide [tutorials and demos](https://pytorch.org/rl/#tutorials) that give a sense of
 what the library can do.
 
+## Citation
+
+If you're using TorchRL, please refer to this BibTeX entry to cite this work:
+```
+@misc{bou2023torchrl,
+      title={TorchRL: A data-driven decision-making library for PyTorch}, 
+      author={Albert Bou and Matteo Bettini and Sebastian Dittert and Vikash Kumar and Shagun Sodhani and Xiaomeng Yang and Gianni De Fabritiis and Vincent Moens},
+      year={2023},
+      eprint={2306.00577},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
+
 ## Installation
+
 Create a conda environment where the packages will be installed.
 
 ```
@@ -634,19 +653,6 @@ If you spot a bug in the library, please raise an issue in this repo.
 
 If you have a more generic question regarding RL in PyTorch, post it on
 the [PyTorch forum](https://discuss.pytorch.org/c/reinforcement-learning/6).
-
-## Citation
-
-If you're using TorchRL, please refer to this BibTeX entry to cite this work:
-```
-@software{TorchRL,
-  author = {Moens, Vincent},
-  title = {{TorchRL: an open-source Reinforcement Learning (RL) library for PyTorch}},
-  url = {https://github.com/pytorch/rl},
-  version = {0.1.1},
-  year = {2023}
-}
-```
 
 ## Contributing
 

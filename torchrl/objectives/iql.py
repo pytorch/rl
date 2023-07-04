@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from tensordict.nn import TensorDictModule
+from tensordict.nn import dispatch, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
@@ -44,6 +44,8 @@ class IQLLoss(LossModule):
         actor_network (ProbabilisticActor): stochastic actor
         qvalue_network (TensorDictModule): Q(s, a) parametric model
         value_network (TensorDictModule, optional): V(s) parametric model.
+
+    Keyword Args:
         num_qvalue_nets (integer, optional): number of Q-Value networks used.
             Defaults to ``2``.
         loss_function (str, optional): loss function to be used with
@@ -57,6 +59,127 @@ class IQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.iql import IQLLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = IQLLoss(actor, qvalue, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> data = TensorDict({
+        ...         "observation": torch.randn(*batch, n_obs),
+        ...         "action": action,
+        ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "reward"): torch.randn(*batch, 1),
+        ...         ("next", "observation"): torch.randn(*batch, n_obs),
+        ...     }, batch)
+        >>> loss(data)
+        TensorDict(
+            fields={
+                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor, value, and qvalue network
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_value", "entropy"]``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data import BoundedTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.iql import IQLLoss
+        >>> _ = torch.manual_seed(42)
+        >>> n_act, n_obs = 4, 3
+        >>> spec = BoundedTensorSpec(-torch.ones(n_act), torch.ones(n_act), (n_act,))
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=spec,
+        ...     distribution_class=TanhNormal)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs + n_act, 1)
+        ...     def forward(self, obs, act):
+        ...         return self.linear(torch.cat([obs, act], -1))
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation', 'action'])
+        >>> module = nn.Linear(n_obs, 1)
+        >>> value = ValueOperator(
+        ...     module=module,
+        ...     in_keys=["observation"])
+        >>> loss = IQLLoss(actor, qvalue, value)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> loss_actor, loss_qvalue, loss_value, entropy = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
+
+
+    The output keys can also be filtered using the :meth:`IQLLoss.select_out_keys`
+    method.
+
+    Examples:
+        >>> loss.select_out_keys('loss_actor', 'loss_qvalue')
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
     """
 
     @dataclass
@@ -78,6 +201,11 @@ class IQLLoss(LossModule):
             state_action_value (NestedKey): The input tensordict key where the
                 state action value is expected. Will be used for the underlying
                 value estimator as value key. Defaults to ``"state_action_value"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         value: NestedKey = "state_value"
@@ -85,9 +213,17 @@ class IQLLoss(LossModule):
         log_prob: NestedKey = "_log_prob"
         priority: NestedKey = "td_error"
         state_action_value: NestedKey = "state_action_value"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
+    out_keys = [
+        "loss_actor",
+        "loss_qvalue",
+        "loss_value",
+        "entropy",
+    ]
 
     def __init__(
         self,
@@ -101,7 +237,10 @@ class IQLLoss(LossModule):
         expectile: float = 0.5,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
+        self._in_keys = None
+        self._out_keys = None
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
         super().__init__()
@@ -118,32 +257,42 @@ class IQLLoss(LossModule):
             create_target_params=False,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # Value Function Network
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=False,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         # Q Function Network
         self.delay_qvalue = True
         self.num_qvalue_nets = num_qvalue_nets
-
+        if separate_losses and policy_params is not None:
+            qvalue_policy_params = list(actor_network.parameters()) + list(
+                value_network.parameters()
+            )
+        else:
+            qvalue_policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=True,
-            compare_against=list(actor_network.parameters())
-            + list(value_network.parameters()),
+            compare_against=qvalue_policy_params,
         )
 
         self.loss_function = loss_function
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
 
     @property
     def device(self) -> torch.device:
@@ -152,6 +301,28 @@ class IQLLoss(LossModule):
         raise RuntimeError(
             "At least one of the networks of SACLoss must have trainable " "parameters."
         )
+
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+            *self.value_network.in_keys,
+        ]
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
 
     @staticmethod
     def loss_value_diff(diff, expectile=0.8):
@@ -163,8 +334,12 @@ class IQLLoss(LossModule):
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
                 value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = None
         if tensordict.ndimension() > 1:
@@ -212,9 +387,7 @@ class IQLLoss(LossModule):
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
@@ -242,9 +415,7 @@ class IQLLoss(LossModule):
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
@@ -263,7 +434,7 @@ class IQLLoss(LossModule):
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params
         ).squeeze(-1)
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )
@@ -317,5 +488,7 @@ class IQLLoss(LossModule):
         tensor_keys = {
             "value_target": "value_target",
             "value": self.tensor_keys.value,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)

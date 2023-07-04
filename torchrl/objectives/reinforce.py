@@ -8,7 +8,7 @@ from typing import Optional
 
 import torch
 
-from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.objectives.common import LossModule
@@ -41,6 +41,10 @@ class ReinforceLoss(LossModule):
         value_target_key (str): [Deprecated, use .set_keys(value_target_key=value_target_key) instead]
             The input tensordict key where the target state
             value is expected to be written. Defaults to ``"value_target"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     .. note:
       The advantage (typically GAE) can be computed by the loss function or
@@ -67,6 +71,79 @@ class ReinforceLoss(LossModule):
         >>> data = next(datacollector)
         >>> losses = reinforce_loss(data)
 
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.reinforce import ReinforceLoss
+        >>> from tensordict.tensordict import TensorDict
+        >>> n_obs, n_act = 3, 5
+        >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor_net = ProbabilisticActor(
+        ...     module,
+        ...     distribution_class=TanhNormal,
+        ...     return_log_prob=True,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=UnboundedContinuousTensorSpec(n_act),)
+        >>> loss = ReinforceLoss(actor_net, value_net)
+        >>> batch = 2
+        >>> data = TensorDict({
+        ...     "observation": torch.randn(batch, n_obs),
+        ...     "next": {
+        ...         "observation": torch.randn(batch, n_obs),
+        ...         "reward": torch.randn(batch, 1),
+        ...         "done": torch.zeros(batch, 1, dtype=torch.bool),
+        ...     },
+        ...     "action": torch.randn(batch, n_act),
+        ... }, [batch])
+        >>> loss(data)
+        TensorDict(
+            fields={
+                loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                loss_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and critic network
+    The return value is a tuple of tensors in the following order: ``["loss_actor", "loss_value"]``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import UnboundedContinuousTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.reinforce import ReinforceLoss
+        >>> n_obs, n_act = 3, 5
+        >>> value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        >>> actor_net = ProbabilisticActor(
+        ...     module,
+        ...     distribution_class=TanhNormal,
+        ...     return_log_prob=True,
+        ...     in_keys=["loc", "scale"],
+        ...     spec=UnboundedContinuousTensorSpec(n_act),)
+        >>> loss = ReinforceLoss(actor_net, value_net)
+        >>> batch = 2
+        >>> loss_actor, loss_value = loss(
+        ...     observation=torch.randn(batch, n_obs),
+        ...     next_observation=torch.randn(batch, n_obs),
+        ...     next_reward=torch.randn(batch, 1),
+        ...     next_done=torch.zeros(batch, 1, dtype=torch.bool),
+        ...     action=torch.randn(batch, n_act),)
+        >>> loss_actor.backward()
+
     """
 
     @dataclass
@@ -85,15 +162,26 @@ class ReinforceLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"state_value"``.
             sample_log_prob (NestedKey): The input tensordict key where the sample log probability is expected.
                 Defaults to ``"sample_log_prob"``.
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
         """
 
         advantage: NestedKey = "advantage"
         value_target: NestedKey = "value_target"
         value: NestedKey = "state_value"
         sample_log_prob: NestedKey = "sample_log_prob"
+        action: NestedKey = "action"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
+    out_keys = ["loss_actor", "loss_value"]
 
     @classmethod
     def __new__(cls, *args, **kwargs):
@@ -110,8 +198,10 @@ class ReinforceLoss(LossModule):
         gamma: float = None,
         advantage_key: str = None,
         value_target_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         super().__init__()
+        self.in_keys = None
         self._set_deprecated_ctor_keys(
             advantage=advantage_key, value_target=value_target_key
         )
@@ -125,14 +215,19 @@ class ReinforceLoss(LossModule):
             "actor_network",
             create_target_params=False,
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor.parameters())
+        else:
+            policy_params = None
         # Value
         if critic is not None:
             self.convert_to_functional(
                 critic,
                 "critic",
                 create_target_params=self.delay_value,
-                compare_against=list(actor.parameters()),
+                compare_against=policy_params,
             )
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -141,11 +236,36 @@ class ReinforceLoss(LossModule):
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
             self._value_estimator.set_keys(
-                advantage=self._tensor_keys.advantage,
-                value_target=self._tensor_keys.value_target,
-                value=self._tensor_keys.value,
+                advantage=self.tensor_keys.advantage,
+                value_target=self.tensor_keys.value_target,
+                value=self.tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
             )
+        self._set_in_keys()
 
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.critic.in_keys,
+        ]
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         advantage = tensordict.get(self.tensor_keys.advantage, None)
         if advantage is None:
@@ -163,6 +283,8 @@ class ReinforceLoss(LossModule):
         )
 
         log_prob = tensordict.get(self.tensor_keys.sample_log_prob)
+        if log_prob.shape == advantage.shape[:-1]:
+            log_prob = log_prob.unsqueeze(-1)
         loss_actor = -log_prob * advantage.detach()
         loss_actor = loss_actor.mean()
         td_out = TensorDict({"loss_actor": loss_actor}, [])
@@ -217,5 +339,7 @@ class ReinforceLoss(LossModule):
             "advantage": self.tensor_keys.advantage,
             "value": self.tensor_keys.value,
             "value_target": self.tensor_keys.value_target,
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)

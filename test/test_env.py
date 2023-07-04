@@ -16,7 +16,7 @@ import yaml
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
-    get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -28,6 +28,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
@@ -35,7 +36,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
-    NestedRewardEnv,
+    NestedCountingEnv,
 )
 from packaging import version
 from tensordict.nn import TensorDictModuleBase
@@ -184,7 +185,7 @@ def test_rollout(env_name, frame_skip, seed=0):
     env.close()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_rollout_predictability(device):
     env = MockSerialEnv(device=device)
     env.set_seed(100)
@@ -264,7 +265,7 @@ class TestModelBasedEnvBase:
             ),
         )
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_rollout(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -287,7 +288,7 @@ class TestModelBasedEnvBase:
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", get_default_devices())
     def test_mb_env_batch_lock(self, device, seed=0):
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -340,9 +341,7 @@ class TestParallel:
         env = MockBatchedLockedEnv(device="cpu", batch_size=torch.Size(env_batch_size))
         env.set_seed(1)
         parallel_env = ParallelEnv(num_parallel_env, lambda: env)
-        parallel_env.start()
         assert parallel_env.batch_size == (num_parallel_env, *env_batch_size)
-        parallel_env.close()
 
     @pytest.mark.skipif(not _has_dmc, reason="no dm_control")
     @pytest.mark.parametrize("env_task", ["stand,stand,stand", "stand,walk,stand"])
@@ -444,10 +443,11 @@ class TestParallel:
         assert "observation_stand" not in td[:, 0][1].keys()
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [False, True])
-    @pytest.mark.parametrize("transformed_out", [False, True])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: faster execution
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env(
         self, env_name, frame_skip, transformed_in, transformed_out, T=10, N=3
     ):
@@ -495,9 +495,10 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("frame_skip", [4])  # 1226: faster execution
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: faster execution
     def test_parallel_env_with_policy(
         self,
         env_name,
@@ -574,31 +575,13 @@ class TestParallel:
         "env_name",
         [
             PENDULUM_VERSIONED,
-            PONG_VERSIONED,
         ],
-    )
-    @pytest.mark.parametrize("frame_skip", [4, 1])
+    )  # PONG_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize(
-        "transformed_in",
-        [
-            True,
-            False,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "transformed_out",
-        [
-            False,
-            True,
-        ],
-    )
-    @pytest.mark.parametrize(
-        "static_seed",
-        [
-            False,
-            True,
-        ],
-    )
+        "transformed_in,transformed_out", [[True, True], [False, False]]
+    )  # 1226: effociency
+    @pytest.mark.parametrize("static_seed", [False, True])
     def test_parallel_env_seed(
         self, env_name, frame_skip, transformed_in, transformed_out, static_seed
     ):
@@ -673,10 +656,17 @@ class TestParallel:
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [False, True])
-    @pytest.mark.parametrize("open_before", [False, True])
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: Skip PONG for efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out,open_before",
+        [  # 1226: efficiency
+            [True, True, True],
+            [True, True, False],
+            [False, False, True],
+        ],
+    )
     def test_parallel_env_cast(
         self,
         env_name,
@@ -768,9 +758,14 @@ class TestParallel:
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda device detected")
     @pytest.mark.parametrize("frame_skip", [4])
     @pytest.mark.parametrize("device", [0])
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("transformed_in", [True, False])
-    @pytest.mark.parametrize("transformed_out", [True, False])
+    @pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])  # 1226: efficiency
+    @pytest.mark.parametrize(
+        "transformed_in,transformed_out",
+        [  # 1226
+            [True, True],
+            [False, False],
+        ],
+    )
     def test_parallel_env_device(
         self, env_name, frame_skip, transformed_in, transformed_out, device
     ):
@@ -805,9 +800,14 @@ class TestParallel:
 
     @pytest.mark.skipif(not _has_gym, reason="no gym")
     @pytest.mark.flaky(reruns=3, reruns_delay=1)
-    @pytest.mark.parametrize("env_name", [PONG_VERSIONED, PENDULUM_VERSIONED])
-    @pytest.mark.parametrize("frame_skip", [4, 1])
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize(
+        "env_name", [PENDULUM_VERSIONED]
+    )  # 1226: No pong for efficiency
+    @pytest.mark.parametrize("frame_skip", [4])
+    @pytest.mark.parametrize(
+        "device",
+        [torch.device("cuda:0") if torch.cuda.device_count() else torch.device("cpu")],
+    )
     def test_parallel_env_transform_consistency(self, env_name, frame_skip, device):
         env_parallel_in, env_serial_in, _, env0_in = _make_envs(
             env_name,
@@ -857,7 +857,7 @@ class TestParallel:
 
     @pytest.mark.parametrize("parallel", [True, False])
     def test_parallel_env_kwargs_set(self, parallel):
-        num_env = 3
+        num_env = 2
 
         def make_make_env():
             def make_transformed_env(seed=None):
@@ -943,6 +943,66 @@ class TestParallel:
         assert (td_reset["done"][~_reset] == 1).all()
         assert (td_reset["observation"][~_reset] == max_steps + 1).all()
 
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    @pytest.mark.parametrize("env_type", ["serial", "parallel"])
+    def test_parallel_env_nested(
+        self,
+        nested_obs_action,
+        nested_done,
+        nested_reward,
+        env_type,
+        n_envs=2,
+        batch_size=(32,),
+        nested_dim=5,
+        rollout_length=3,
+        seed=1,
+    ):
+        env_fn = lambda: NestedCountingEnv(
+            nest_done=nested_done,
+            nest_reward=nested_reward,
+            nest_obs_action=nested_obs_action,
+            batch_size=batch_size,
+            nested_dim=nested_dim,
+        )
+        if env_type == "serial":
+            env = SerialEnv(n_envs, env_fn)
+        else:
+            env = ParallelEnv(n_envs, env_fn)
+        env.set_seed(seed)
+
+        batch_size = (n_envs, *batch_size)
+
+        td = env.reset()
+        assert td.batch_size == batch_size
+        if nested_done or nested_obs_action:
+            assert td["data"].batch_size == (*batch_size, nested_dim)
+        if not nested_done and not nested_reward and not nested_obs_action:
+            assert "data" not in td.keys()
+
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        td = env.rollout(rollout_length, policy)
+        assert td.batch_size == (*batch_size, rollout_length)
+        if nested_done or nested_obs_action:
+            assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        if nested_reward or nested_done or nested_obs_action:
+            assert td["next", "data"].batch_size == (
+                *batch_size,
+                rollout_length,
+                nested_dim,
+            )
+        if not nested_done and not nested_reward and not nested_obs_action:
+            assert "data" not in td.keys()
+            assert "data" not in td["next"].keys()
+
+        if nested_obs_action:
+            assert "observation" not in td.keys()
+            assert (td[..., -1]["data", "states"] == 2).all()
+        else:
+            assert ("data", "states") not in td.keys(True, True)
+            assert (td[..., -1]["observation"] == 2).all()
+
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
@@ -1010,64 +1070,321 @@ def test_seed():
     torch.testing.assert_close(rollout1["observation"], rollout2["observation"])
 
 
-@pytest.mark.parametrize("keep_other", [True, False])
-@pytest.mark.parametrize("exclude_reward", [True, False])
-@pytest.mark.parametrize("exclude_done", [True, False])
-@pytest.mark.parametrize("exclude_action", [True, False])
-@pytest.mark.parametrize("has_out", [True, False])
-def test_steptensordict(
-    keep_other, exclude_reward, exclude_done, exclude_action, has_out
-):
-    torch.manual_seed(0)
-    tensordict = TensorDict(
-        {
-            "ledzep": torch.randn(4, 2),
-            "next": {
-                "ledzep": torch.randn(4, 2),
+class TestStepMdp:
+    @pytest.mark.parametrize("keep_other", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("has_out", [True, False])
+    @pytest.mark.parametrize("lazy_stack", [False, True])
+    def test_steptensordict(
+        self,
+        keep_other,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+        has_out,
+        lazy_stack,
+    ):
+        torch.manual_seed(0)
+        tensordict = TensorDict(
+            {
                 "reward": torch.randn(4, 1),
                 "done": torch.zeros(4, 1, dtype=torch.bool),
+                "ledzep": torch.randn(4, 2),
+                "next": {
+                    "ledzep": torch.randn(4, 2),
+                    "reward": torch.randn(4, 1),
+                    "done": torch.zeros(4, 1, dtype=torch.bool),
+                },
+                "beatles": torch.randn(4, 1),
+                "action": torch.randn(4, 2),
             },
-            "beatles": torch.randn(4, 1),
-            "action": torch.randn(4, 2),
-        },
-        [4],
-    )
-    next_tensordict = TensorDict({}, [4]) if has_out else None
-    out = step_mdp(
-        tensordict,
-        keep_other=keep_other,
-        exclude_reward=exclude_reward,
-        exclude_done=exclude_done,
-        exclude_action=exclude_action,
-        next_tensordict=next_tensordict,
-    )
-    assert "ledzep" in out.keys()
-    assert out["ledzep"] is tensordict["next", "ledzep"]
-    if keep_other:
-        assert "beatles" in out.keys()
-        assert out["beatles"] is tensordict["beatles"]
-    else:
-        assert "beatles" not in out.keys()
-    if not exclude_reward:
-        assert "reward" in out.keys()
-        assert out["reward"] is tensordict["next", "reward"]
-    else:
-        assert "reward" not in out.keys()
-    if not exclude_action:
-        assert "action" in out.keys()
-        assert out["action"] is tensordict["action"]
-    else:
-        assert "action" not in out.keys()
-    if not exclude_done:
-        assert "done" in out.keys()
-        assert out["done"] is tensordict["next", "done"]
-    else:
-        assert "done" not in out.keys()
-    if has_out:
-        assert out is next_tensordict
+            [4],
+        )
+        if lazy_stack:
+            # let's spice this a little bit
+            tds = tensordict.unbind(0)
+            tds[0]["this", "one"] = torch.zeros(2)
+            tds[1]["but", "not", "this", "one"] = torch.ones(2)
+            tds[0]["next", "this", "one"] = torch.ones(2) * 2
+            tensordict = torch.stack(tds, 0)
+        next_tensordict = TensorDict({}, [4]) if has_out else None
+        if has_out and lazy_stack:
+            next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
+        out = step_mdp(
+            tensordict.lock_(),
+            keep_other=keep_other,
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            next_tensordict=next_tensordict,
+        )
+        assert "ledzep" in out.keys()
+        if lazy_stack:
+            assert (out["ledzep"] == tensordict["next", "ledzep"]).all()
+            assert (out[0]["this", "one"] == 2).all()
+            if keep_other:
+                assert (out[1]["but", "not", "this", "one"] == 1).all()
+        else:
+            assert out["ledzep"] is tensordict["next", "ledzep"]
+        if keep_other:
+            assert "beatles" in out.keys()
+            if lazy_stack:
+                assert (out["beatles"] == tensordict["beatles"]).all()
+            else:
+                assert out["beatles"] is tensordict["beatles"]
+        else:
+            assert "beatles" not in out.keys()
+        if not exclude_reward:
+            assert "reward" in out.keys()
+            if lazy_stack:
+                assert (out["reward"] == tensordict["next", "reward"]).all()
+            else:
+                assert out["reward"] is tensordict["next", "reward"]
+        else:
+            assert "reward" not in out.keys()
+        if not exclude_action:
+            assert "action" in out.keys()
+            if lazy_stack:
+                assert (out["action"] == tensordict["action"]).all()
+            else:
+                assert out["action"] is tensordict["action"]
+        else:
+            assert "action" not in out.keys()
+        if not exclude_done:
+            assert "done" in out.keys()
+            if lazy_stack:
+                assert (out["done"] == tensordict["next", "done"]).all()
+            else:
+                assert out["done"] is tensordict["next", "done"]
+        else:
+            assert "done" not in out.keys()
+        if has_out:
+            assert out is next_tensordict
+
+    @pytest.mark.parametrize("nested_obs", [True, False])
+    @pytest.mark.parametrize("nested_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    @pytest.mark.parametrize("nested_other", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("keep_other", [True, False])
+    def test_nested(
+        self,
+        nested_obs,
+        nested_action,
+        nested_done,
+        nested_reward,
+        nested_other,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+        keep_other,
+    ):
+        td_batch_size = (4,)
+        nested_batch_size = (4, 3)
+        nested_key = ("data",)
+        td = TensorDict(
+            {
+                nested_key: TensorDict({}, nested_batch_size),
+                "next": {
+                    nested_key: TensorDict({}, nested_batch_size),
+                },
+            },
+            td_batch_size,
+        )
+        reward_key = "reward"
+        if nested_reward:
+            reward_key = nested_key + (reward_key,)
+        done_key = "done"
+        if nested_done:
+            done_key = nested_key + (done_key,)
+        action_key = "action"
+        if nested_action:
+            action_key = nested_key + (action_key,)
+        obs_key = "state"
+        if nested_obs:
+            obs_key = nested_key + (obs_key,)
+        other_key = "beatles"
+        if nested_other:
+            other_key = nested_key + (other_key,)
+
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+        td[other_key] = torch.zeros(*nested_batch_size, 1)
+
+        td["next", reward_key] = torch.ones(*nested_batch_size, 1)
+        td["next", done_key] = torch.ones(*nested_batch_size, 1)
+        td["next", obs_key] = torch.ones(*nested_batch_size, 1)
+
+        input_td = td
+
+        td = step_mdp(
+            td.lock_(),
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=reward_key,
+            done_key=done_key,
+            action_key=action_key,
+            keep_other=keep_other,
+        )
+        td_nested_keys = td.keys(True, True)
+        td_keys = td.keys()
+
+        assert td.batch_size == input_td.batch_size
+        # Obs will always be present
+        assert obs_key in td_nested_keys
+        # Nested key should not be present in this specific conditions
+        if (
+            (exclude_done or not nested_done)
+            and (exclude_reward or not nested_reward)
+            and (exclude_action or not nested_action)
+            and not nested_obs
+            and ((not keep_other) or (keep_other and not nested_other))
+        ):
+            assert nested_key[0] not in td_keys
+        else:  # Nested key is present
+            assert not td[nested_key] is input_td["next", nested_key]
+            assert not td[nested_key] is input_td[nested_key]
+            assert td[nested_key].batch_size == nested_batch_size
+        # If we exclude everything we are left with just obs
+        if exclude_done and exclude_reward and exclude_action and not keep_other:
+            if nested_obs:
+                assert len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key
+            else:
+                assert len(td_nested_keys) == 1 and list(td_nested_keys)[0] == obs_key
+        # Key-wise exclusions
+        if not exclude_reward:
+            assert reward_key in td_nested_keys
+            assert (td[reward_key] == 1).all()
+        else:
+            assert reward_key not in td_nested_keys
+        if not exclude_action:
+            assert action_key in td_nested_keys
+            assert (td[action_key] == 0).all()
+        else:
+            assert action_key not in td_nested_keys
+        if not exclude_done:
+            assert done_key in td_nested_keys
+            assert (td[done_key] == 1).all()
+        else:
+            assert done_key not in td_nested_keys
+        if keep_other:
+            assert other_key in td_nested_keys
+            assert (td[other_key] == 0).all()
+        else:
+            assert other_key not in td_nested_keys
+
+    @pytest.mark.parametrize("nested_other", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("keep_other", [True, False])
+    def test_nested_partially(
+        self,
+        nested_other,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+        keep_other,
+    ):
+        # General
+        td_batch_size = (4,)
+        nested_batch_size = (4, 3)
+        nested_key = ("data",)
+        reward_key = "reward"
+        done_key = "done"
+        action_key = "action"
+        obs_key = "state"
+        other_key = "beatles"
+        if nested_other:
+            other_key = nested_key + (other_key,)
+
+        # Nested only in root
+        td = TensorDict(
+            {
+                nested_key: TensorDict({}, nested_batch_size),
+                "next": {},
+            },
+            td_batch_size,
+        )
+
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+        td[other_key] = torch.zeros(*nested_batch_size, 1)
+
+        td["next", reward_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", done_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
+
+        td = step_mdp(
+            td.lock_(),
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=reward_key,
+            done_key=done_key,
+            action_key=action_key,
+            keep_other=keep_other,
+        )
+        td_keys_nested = td.keys(True, True)
+        td_keys = td.keys()
+        if keep_other:
+            if nested_other:
+                assert nested_key[0] in td_keys
+                assert td[nested_key].batch_size == nested_batch_size
+            else:
+                assert nested_key[0] not in td_keys
+            assert (td[other_key] == 0).all()
+        else:
+            assert other_key not in td_keys_nested
+
+        # Nested only in next
+        td = TensorDict(
+            {
+                "next": {nested_key: TensorDict({}, nested_batch_size)},
+            },
+            td_batch_size,
+        )
+        td[reward_key] = torch.zeros(*nested_batch_size, 1)
+        td[done_key] = torch.zeros(*nested_batch_size, 1)
+        td[obs_key] = torch.zeros(*nested_batch_size, 1)
+        td[action_key] = torch.zeros(*nested_batch_size, 1)
+
+        td["next", other_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", reward_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", done_key] = torch.zeros(*nested_batch_size, 1)
+        td["next", obs_key] = torch.zeros(*nested_batch_size, 1)
+
+        td = step_mdp(
+            td.lock_(),
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=reward_key,
+            done_key=done_key,
+            action_key=action_key,
+            keep_other=keep_other,
+        )
+        td_keys = td.keys()
+
+        if nested_other:
+            assert nested_key[0] in td_keys
+            assert td[nested_key].batch_size == nested_batch_size
+        else:
+            assert nested_key[0] not in td_keys
+        assert (td[other_key] == 0).all()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_locked(device):
     env = MockBatchedLockedEnv(device)
     assert env.batch_locked
@@ -1085,7 +1402,7 @@ def test_batch_locked(device):
         env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked(device):
     env = MockBatchedUnLockedEnv(device)
     assert not env.batch_locked
@@ -1100,7 +1417,7 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1124,7 +1441,7 @@ def test_batch_unlocked_with_batch_size(device):
     gym_version is None or gym_version < version.parse("0.20.0"),
     reason="older versions of half-cheetah do not have 'x_position' info key.",
 )
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_info_dict_reader(device, seed=0):
     try:
         import gymnasium as gym
@@ -1341,14 +1658,13 @@ class TestConcurrentEnvs:
 
 
 class TestNestedSpecs:
-    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedRewardEnv"])
-    def test_nested_reward(self, envclass):
-        from mocking_classes import NestedRewardEnv
+    @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
+    def test_nested_env(self, envclass):
 
         if envclass == "CountingEnv":
             env = CountingEnv()
-        elif envclass == "NestedRewardEnv":
-            env = NestedRewardEnv()
+        elif envclass == "NestedCountingEnv":
+            env = NestedCountingEnv()
         else:
             raise NotImplementedError
         reset = env.reset()
@@ -1356,7 +1672,7 @@ class TestNestedSpecs:
         assert not isinstance(env.reward_spec, CompositeSpec)
         assert env.done_spec == env.output_spec[("_done_spec", *env.done_key)]
         assert env.reward_spec == env.output_spec[("_reward_spec", *env.reward_key)]
-        if envclass == "NestedRewardEnv":
+        if envclass == "NestedCountingEnv":
             assert env.done_key == ("data", "done")
             assert env.reward_key == ("data", "reward")
             assert ("data", "done") in reset.keys(True)
@@ -1366,14 +1682,63 @@ class TestNestedSpecs:
         assert env.reward_key not in reset.keys(True)
 
         next_state = env.rand_step()
-        if envclass == "NestedRewardEnv":
+        if envclass == "NestedCountingEnv":
             assert ("next", "data", "done") in next_state.keys(True)
             assert ("next", "data", "states") in next_state.keys(True)
             assert ("next", "data", "reward") in next_state.keys(True)
         assert ("next", *env.done_key) in next_state.keys(True)
         assert ("next", *env.reward_key) in next_state.keys(True)
 
-        check_env_specs(env)
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
+
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+
+        td_reset = env.reset()
+        assert td_reset.batch_size == batch_size
+        assert td_reset["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_action()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_action(td_reset)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step()
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rand_step(td_reset)
+        assert td.batch_size == batch_size
+        assert td["data"].batch_size == (*batch_size, nested_dim)
+        assert td["next", "data"].batch_size == (*batch_size, nested_dim)
+
+        td = env.rollout(rollout_length)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
+
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        td = env.rollout(rollout_length, policy)
+        assert td.batch_size == (*batch_size, rollout_length)
+        assert td["data"].batch_size == (*batch_size, rollout_length, nested_dim)
+        assert td["next", "data"].batch_size == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1393,7 +1758,7 @@ class TestNestedSpecs:
         MockBatchedLockedEnv,
         MockBatchedUnLockedEnv,
         MockSerialEnv,
-        NestedRewardEnv,
+        NestedCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):

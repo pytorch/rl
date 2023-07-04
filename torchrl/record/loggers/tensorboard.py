@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
+from typing import Sequence
 
 from torch import Tensor
 
@@ -103,3 +104,25 @@ class TensorboardLogger(Logger):
 
     def __repr__(self) -> str:
         return f"TensorboardLogger(experiment={self.experiment.__repr__()})"
+
+    def log_histogram(self, name: str, data: Sequence, **kwargs):
+        """Add histogram to summary.
+
+        Args:
+            name (str): Data identifier
+            data (torch.Tensor, numpy.ndarray, or string/blobname): Values to build histogram
+
+        Keyword Args:
+            step (int): Global step value to record
+            bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
+            walltime (float): Optional override default walltime (time.time()) seconds after epoch of event
+
+        """
+        global_step = kwargs.pop("step", None)
+        bins = kwargs.pop("bins")
+        walltime = kwargs.pop("walltime", None)
+        if len(kwargs):
+            raise TypeError(f"Unrecognised arguments {kwargs}.")
+        self.experiment.add_histogram(
+            tag=name, values=data, global_step=global_step, bins=bins, walltime=walltime
+        )

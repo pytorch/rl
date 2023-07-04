@@ -20,12 +20,14 @@ from torchrl.modules import LSTMModule, NormalParamWrapper, SafeModule, TanhNorm
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
+    VmapModule,
 )
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+
 
 _has_functorch = False
 try:
@@ -840,7 +842,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -920,8 +923,9 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
@@ -995,7 +999,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1082,8 +1087,9 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1163,7 +1169,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1531,7 +1538,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="batch_first"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=False,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
@@ -1539,7 +1546,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=[
                     "observation",
@@ -1550,7 +1557,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys="abc",
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
@@ -1558,7 +1565,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="in_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_key="smth",
                 in_keys=[
@@ -1570,7 +1577,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0")],
@@ -1578,7 +1585,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys="abc",
@@ -1586,7 +1593,7 @@ class TestLSTMModule:
         with pytest.raises(ValueError, match="out_keys"):
             lstm_module = LSTMModule(
                 input_size=3,
-                hidden_size=64,
+                hidden_size=12,
                 batch_first=True,
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_key="smth",
@@ -1594,7 +1601,7 @@ class TestLSTMModule:
             )
         lstm_module = LSTMModule(
             input_size=3,
-            hidden_size=64,
+            hidden_size=12,
             batch_first=True,
             in_keys=["observation", "hidden0", "hidden1"],
             out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
@@ -1638,6 +1645,7 @@ class TestLSTMModule:
         td = lstm_module(td)
         td_next = step_mdp(td, keep_other=True)
         td_next = lstm_module(td_next)
+
         assert not torch.isclose(
             td_next["next", "hidden0"], td["next", "hidden0"]
         ).any()
@@ -1719,6 +1727,16 @@ class TestLSTMModule:
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
+
+
+def test_vmapmodule():
+    lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
+    sample_in = torch.ones((10, 3, 2))
+    sample_in_td = TensorDict({"x": sample_in}, batch_size=[10])
+    lam(sample_in)
+    vm = VmapModule(lam, 0)
+    vm(sample_in_td)
+    assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
 
 
 if __name__ == "__main__":

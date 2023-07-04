@@ -309,6 +309,12 @@ class ReplayBuffer:
 
         return data, info
 
+    def empty(self):
+        """Empties the replay buffer and reset cursor to 0."""
+        self._writer._empty()
+        self._sampler._empty()
+        self._storage._empty()
+
     def sample(
         self, batch_size: Optional[int] = None, return_info: bool = False
     ) -> Any:
@@ -656,7 +662,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 batch_size=[],
             )
             if data.batch_size:
-                data_add["_batch_size"] = torch.tensor(data.batch_size)
+                data_add["_rb_batch_size"] = torch.tensor(data.batch_size)
 
         else:
             data_add = data
@@ -682,14 +688,14 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 else:
                     tensordicts = tensordicts.contiguous()
                 # we keep track of the batch size to reinstantiate it when sampling
-                if "_batch_size" in tensordicts.keys():
+                if "_rb_batch_size" in tensordicts.keys():
                     raise KeyError(
-                        "conflicting key '_batch_size'. Consider removing from data."
+                        "conflicting key '_rb_batch_size'. Consider removing from data."
                     )
                 shape = torch.tensor(tensordicts.batch_size[1:]).expand(
                     tensordicts.batch_size[0], tensordicts.batch_dims - 1
                 )
-                tensordicts.set("_batch_size", shape)
+                tensordicts.set("_rb_batch_size", shape)
             tensordicts.set(
                 "index",
                 torch.zeros(

@@ -66,6 +66,7 @@ def make_base_env(env_cfg, from_pixels=None):
         if from_pixels is None
         else from_pixels,  # for rendering
         "pixels_only": False,
+        "device": env_cfg.device,
     }
     if env_library is DMControlEnv:
         env_task = env_cfg.env_task
@@ -104,11 +105,15 @@ def make_transformed_env_pixels(base_env, env_cfg):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
 
+    obs_norm = ObservationNorm(in_keys=["pixels"], standard_normal=True)
+    env.append_transform(obs_norm)
+
     if env_library is DMControlEnv:
         double_to_float_list += [
             "reward",
         ]
         double_to_float_inv_list += ["action"]  # DMControl requires double-precision
+
     env.append_transform(
         DoubleToFloat(
             in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
@@ -164,16 +169,20 @@ def make_parallel_env(env_cfg, state_dict):
     env = make_transformed_env(
         ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))), env_cfg
     )
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-            t.init_stats(3, cat_dim=1, reduce_dim=[0, 1])
-    env.load_state_dict(state_dict)
+    init_stats(env, 3, env_cfg.from_pixels)
+    env.load_state_dict(state_dict, strict=False)
     return env
 
 
 def get_stats(env_cfg):
     env = make_transformed_env(make_base_env(env_cfg), env_cfg)
-    return env.state_dict()
+    init_stats(env, env_cfg.n_samples_stats, env_cfg.from_pixels)
+    state_dict = env.state_dict()
+    for key in list(state_dict.keys()):
+        if key.endswith("loc") or key.endswith("scale"):
+            continue
+        del state_dict[key]
+    return state_dict
 
 
 def init_stats(env, n_samples_stats, from_pixels):
@@ -182,17 +191,18 @@ def init_stats(env, n_samples_stats, from_pixels):
             if from_pixels:
                 t.init_stats(
                     n_samples_stats,
-                    cat_dim=-3,
-                    reduce_dim=(-1, -2, -3),
+                    cat_dim=-4,
+                    reduce_dim=tuple(
+                        -i for i in range(1, len(t.parent.batch_size) + 5)
+                    ),
                     keep_dims=(-1, -2, -3),
                 )
             else:
                 t.init_stats(n_samples_stats)
 
 
-def make_test_env(env_cfg):
+def make_test_env(env_cfg, state_dict):
     env_cfg.num_envs = 1
-    state_dict = get_stats(env_cfg)
     env = make_parallel_env(env_cfg, state_dict=state_dict)
     return env
 
@@ -213,9 +223,10 @@ def make_collector(cfg, policy):
         frames_per_batch=collector_cfg.frames_per_batch,
         total_frames=collector_cfg.total_frames,
         device=collector_cfg.collector_device,
+        storing_device="cpu",
         max_frames_per_traj=collector_cfg.max_frames_per_traj,
     )
-    return collector
+    return collector, state_dict
 
 
 def make_data_buffer(cfg):
@@ -243,6 +254,7 @@ def make_ppo_models(cfg):
     env_cfg = cfg.env
     from_pixels = env_cfg.from_pixels
     proof_environment = make_transformed_env(make_base_env(env_cfg), env_cfg)
+    init_stats(proof_environment, 3, env_cfg.from_pixels)
 
     if not from_pixels:
         # we must initialize the observation norm transform
@@ -262,7 +274,7 @@ def make_ppo_models(cfg):
         common_operator=common_module,
         policy_operator=policy_module,
         value_operator=value_module,
-    )
+    ).to(cfg.optim.device)
 
     with torch.no_grad():
         td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
@@ -270,9 +282,10 @@ def make_ppo_models(cfg):
         del td
 
     actor = actor_critic.get_policy_operator()
-    critic = actor_critic.get_value_head()
+    critic = actor_critic.get_value_operator()
+    critic_head = actor_critic.get_value_head()
 
-    return actor, critic
+    return actor, critic, critic_head
 
 
 def make_ppo_modules_state(proof_environment):
@@ -303,7 +316,7 @@ def make_ppo_modules_state(proof_environment):
     # Define a shared Module and TensorDictModule
     common_mlp = MLP(
         in_features=input_shape[-1],
-        activation_class=torch.nn.Tanh,
+        activation_class=torch.nn.ReLU,
         activate_last_layer=True,
         out_features=shared_features_size,
         num_cells=[64, 64],
@@ -398,6 +411,7 @@ def make_ppo_modules_pixels(proof_environment):
     policy_net = MLP(
         in_features=common_mlp_output.shape[-1],
         out_features=num_outputs,
+        activation_class=torch.nn.ReLU,
         num_cells=[256],
     )
     policy_module = TensorDictModule(
@@ -411,7 +425,7 @@ def make_ppo_modules_pixels(proof_environment):
         policy_module,
         in_keys=["logits"],
         spec=CompositeSpec(action=proof_environment.action_spec),
-        safe=True,
+        # safe=True,
         distribution_class=distribution_class,
         distribution_kwargs=distribution_kwargs,
         return_log_prob=True,
@@ -420,7 +434,10 @@ def make_ppo_modules_pixels(proof_environment):
 
     # Define another head for the value
     value_net = MLP(
-        in_features=common_mlp_output.shape[-1], out_features=1, num_cells=[256]
+        activation_class=torch.nn.ReLU,
+        in_features=common_mlp_output.shape[-1],
+        out_features=1,
+        num_cells=[256],
     )
     value_module = ValueOperator(
         value_net,
@@ -445,18 +462,17 @@ def make_advantage_module(loss_cfg, value_network):
     return advantage_module
 
 
-def make_loss(loss_cfg, actor_network, value_network):
+def make_loss(loss_cfg, actor_network, value_network, value_head):
     advantage_module = make_advantage_module(loss_cfg, value_network)
     loss_module = ClipPPOLoss(
         actor=actor_network,
-        critic=value_network,
+        critic=value_head,
         clip_epsilon=loss_cfg.clip_epsilon,
         loss_critic_type=loss_cfg.loss_critic_type,
         entropy_coef=loss_cfg.entropy_coef,
         critic_coef=loss_cfg.critic_coef,
         normalize_advantage=True,
     )
-    loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     return loss_module, advantage_module
 
 

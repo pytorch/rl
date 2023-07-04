@@ -70,7 +70,7 @@ def make_replay_buffer(
     return replay_buffer
 
 
-@hydra.main(version_base=None, config_path=".", config_name="online_config")
+@hydra.main(version_base="1.1", config_path=".", config_name="online_config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     device = torch.device(cfg.device)

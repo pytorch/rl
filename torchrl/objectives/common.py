@@ -12,7 +12,12 @@ from typing import Iterator, List, Optional, Tuple, Union
 
 import torch
 
-from tensordict.nn import make_functional, repopulate_module, TensorDictModule
+from tensordict.nn import (
+    make_functional,
+    repopulate_module,
+    TensorDictModule,
+    TensorDictModuleBase,
+)
 
 from tensordict.tensordict import TensorDictBase
 from torch import nn, Tensor
@@ -21,7 +26,7 @@ from torch.nn import Parameter
 from torchrl._utils import RL_WARNINGS
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import _cache_values, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 _has_functorch = False
@@ -39,7 +44,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-class LossModule(nn.Module):
+class LossModule(TensorDictModuleBase):
     """A parent class for RL losses.
 
     LossModule inherits from nn.Module. It is designed to read an input
@@ -99,10 +104,12 @@ class LossModule(nn.Module):
     def __new__(cls, *args, **kwargs):
         cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
         cls._tensor_keys = cls._AcceptedKeys()
-        return super().__new__(cls)
+        self = super().__new__(cls)
+        return self
 
     def __init__(self):
         super().__init__()
+        self._cache = {}
         self._param_maps = {}
         self._value_estimator = None
         self._has_update_associated = False
@@ -384,6 +391,7 @@ class LossModule(nn.Module):
             property(lambda _self=self: _self._target_param_getter(module_name)),
         )
 
+    @_cache_values
     def _param_getter(self, network_name):
         name = "_" + network_name + "_params"
         param_name = network_name + "_params"
@@ -412,6 +420,7 @@ class LossModule(nn.Module):
                 f"{self.__class__.__name__} does not have the target param {name}"
             )
 
+    @_cache_values
     def _target_param_getter(self, network_name):
         target_name = "_target_" + network_name + "_params"
         param_name = network_name + "_params"
@@ -421,7 +430,7 @@ class LossModule(nn.Module):
                 if not self._has_update_associated and RL_WARNINGS:
                     warnings.warn(
                         "No target network updater has been associated "
-                        "with this loss module, but target parameters have been found."
+                        "with this loss module, but target parameters have been found. "
                         "While this is supported, it is expected that the target network "
                         "updates will be manually performed. You can deactivate this warning "
                         "by turning the RL_WARNINGS env variable to False.",
@@ -439,12 +448,24 @@ class LossModule(nn.Module):
                 return target_params
             else:
                 params = getattr(self, param_name)
-                return params.detach()
+                # should we clone here?
+                return params.detach()  # .clone()
 
         else:
             raise RuntimeError(
                 f"{self.__class__.__name__} does not have the target param {target_name}"
             )
+
+    def _apply(self, fn):
+        # any call to apply erases the cache: the reason is that detached
+        # params will fail to be cast so we need to get the cache back
+        self._erase_cache()
+        return super()._apply(fn)
+
+    def _erase_cache(self):
+        for key in list(self.__dict__):
+            if key.startswith("_cache"):
+                del self.__dict__[key]
 
     def _networks(self) -> Iterator[nn.Module]:
         for item in self.__dir__():
@@ -485,19 +506,7 @@ class LossModule(nn.Module):
             origin_value = getattr(self, origin)
             target_value = getattr(self, target)
             setattr(self, target, origin_value.expand_as(target_value))
-
-        # lists_of_params = {
-        #     name: value
-        #     for name, value in self.__dict__.items()
-        #     if name.endswith("_params") and isinstance(value, TensorDictBase)
-        # }
-        # for list_of_params in lists_of_params.values():
-        #     for key, param in list(list_of_params.items(True)):
-        #         if isinstance(param, TensorDictBase):
-        #             continue
-        #         # we replace the param by the expanded form if needs be
-        #         if param in self._param_maps:
-        #             list_of_params[key] = self._param_maps[param].data.expand_as(param)
+        out._cache = {}
         return out
 
     def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:

@@ -46,11 +46,11 @@ class Storage:
 
     @abc.abstractmethod
     def set(self, cursor: int, data: Any):
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get(self, index: int) -> Any:
-        raise NotImplementedError
+        ...
 
     def attach(self, buffer: Any) -> None:
         """This function attaches a sampler to this storage.
@@ -80,13 +80,19 @@ class Storage:
 
     @abc.abstractmethod
     def __len__(self):
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
+        ...
 
+    @abc.abstractmethod
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        raise NotImplementedError
+        ...
+
+    @abc.abstractmethod
+    def _empty(self):
+        ...
 
 
 class ListStorage(Storage):
@@ -157,15 +163,66 @@ class ListStorage(Storage):
                     f"Objects of type {type(elt)} are not supported by ListStorage.load_state_dict"
                 )
 
+    def _empty(self):
+        self._storage = []
 
-class LazyTensorStorage(Storage):
-    """A pre-allocated tensor storage for tensors and tensordicts.
+
+class TensorStorage(Storage):
+    """A storage for tensors and tensordicts.
 
     Args:
-        size (int): size of the storage, i.e. maximum number of elements stored
+        data (tensor or TensorDict): the data buffer to be used.
+        max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
+
+    Examples:
+        >>> data = TensorDict({
+        ...     "some data": torch.randn(10, 11),
+        ...     ("some", "nested", "data"): torch.randn(10, 11, 12),
+        ... }, batch_size=[10, 11])
+        >>> storage = TensorStorage(data)
+        >>> len(storage)  # only the first dimension is considered as indexable
+        10
+        >>> storage.get(0)
+        TensorDict(
+            fields={
+                some data: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+                some: TensorDict(
+                    fields={
+                        nested: TensorDict(
+                            fields={
+                                data: Tensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([11]),
+                            device=None,
+                            is_shared=False)},
+                    batch_size=torch.Size([11]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([11]),
+            device=None,
+            is_shared=False)
+        >>> storage.set(0, storage.get(0).zero_()) # zeros the data along index ``0``
+
+    This class also supports tensorclass data.
+
+    Examples:
+        >>> from tensordict import tensorclass
+        >>> @tensorclass
+        ... class MyClass:
+        ...     foo: torch.Tensor
+        ...     bar: torch.Tensor
+        >>> data = MyClass(foo=torch.randn(10, 11), bar=torch.randn(10, 11, 12), batch_size=[10, 11])
+        >>> storage = TensorStorage(data)
+        >>> storage.get(0)
+        MyClass(
+            bar=Tensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+            foo=Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([11]),
+            device=None,
+            is_shared=False)
+
     """
 
     @classmethod
@@ -173,23 +230,37 @@ class LazyTensorStorage(Storage):
         cls._storage = None
         return super().__new__(cls)
 
-    def __init__(self, max_size, scratch_dir=None, device=None):
+    def __init__(self, storage, max_size=None, device=None):
+        if not ((storage is None) ^ (max_size is None)):
+            if storage is None:
+                raise ValueError("Expected storage to be non-null.")
+            if max_size != storage.shape[0]:
+                raise ValueError(
+                    "The max-size and the storage shape mismatch: got "
+                    f"max_size={max_size} for a storage of shape {storage.shape}."
+                )
+        elif storage is not None:
+            max_size = storage.shape[0]
         super().__init__(max_size)
-        self.initialized = False
+        self.initialized = storage is not None
+        if self.initialized:
+            self._len = max_size
+        else:
+            self._len = 0
         self.device = device if device else torch.device("cpu")
-        self._len = 0
+        self._storage = storage
 
     def state_dict(self) -> Dict[str, Any]:
         _storage = self._storage
         if isinstance(_storage, torch.Tensor):
             pass
-        elif isinstance(_storage, TensorDictBase):
+        elif is_tensor_collection(_storage):
             _storage = _storage.state_dict()
         elif _storage is None:
             _storage = {}
         else:
             raise TypeError(
-                f"Objects of type {type(_storage)} are not supported by LazyTensorStorage.state_dict"
+                f"Objects of type {type(_storage)} are not supported by {type(self)}.state_dict"
             )
         return {
             "_storage": _storage,
@@ -209,7 +280,7 @@ class LazyTensorStorage(Storage):
                     f"Cannot copy a storage of type {type(_storage)} onto another of type {type(self._storage)}"
                 )
         elif isinstance(_storage, (dict, OrderedDict)):
-            if isinstance(self._storage, TensorDictBase):
+            if is_tensor_collection(self._storage):
                 self._storage.load_state_dict(_storage)
             elif self._storage is None:
                 self._storage = TensorDict({}, []).load_state_dict(_storage)
@@ -223,33 +294,6 @@ class LazyTensorStorage(Storage):
             )
         self.initialized = state_dict["initialized"]
         self._len = state_dict["_len"]
-
-    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
-        if VERBOSE:
-            print("Creating a TensorStorage...")
-        if isinstance(data, torch.Tensor):
-            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
-            out = torch.empty(
-                self.max_size,
-                *data.shape,
-                device=self.device,
-                dtype=data.dtype,
-            )
-        elif is_tensorclass(data):
-            out = (
-                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
-            )
-        else:
-            out = (
-                data.expand(self.max_size, *data.shape)
-                .to_tensordict()
-                .zero_()
-                .clone()
-                .to(self.device)
-            )
-
-        self._storage = out
-        self.initialized = True
 
     def set(
         self,
@@ -282,6 +326,106 @@ class LazyTensorStorage(Storage):
     def __len__(self):
         return self._len
 
+    def _empty(self):
+        # assuming that the data structure is the same, we don't need to to
+        # anything if the cursor is reset to 0
+        self._len = 0
+
+    def _init(self):
+        raise NotImplementedError(
+            f"{type(self)} must be initialized during construction."
+        )
+
+
+class LazyTensorStorage(TensorStorage):
+    """A pre-allocated tensor storage for tensors and tensordicts.
+
+    Args:
+        max_size (int): size of the storage, i.e. maximum number of elements stored
+            in the buffer.
+        device (torch.device, optional): device where the sampled tensors will be
+            stored and sent. Default is :obj:`torch.device("cpu")`.
+
+    Examples:
+        >>> data = TensorDict({
+        ...     "some data": torch.randn(10, 11),
+        ...     ("some", "nested", "data"): torch.randn(10, 11, 12),
+        ... }, batch_size=[10, 11])
+        >>> storage = LazyTensorStorage(100)
+        >>> storage.set(range(10), data)
+        >>> len(storage)  # only the first dimension is considered as indexable
+        10
+        >>> storage.get(0)
+        TensorDict(
+            fields={
+                some data: Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+                some: TensorDict(
+                    fields={
+                        nested: TensorDict(
+                            fields={
+                                data: Tensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([11]),
+                            device=cpu,
+                            is_shared=False)},
+                    batch_size=torch.Size([11]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([11]),
+            device=cpu,
+            is_shared=False)
+        >>> storage.set(0, storage.get(0).zero_()) # zeros the data along index ``0``
+
+    This class also supports tensorclass data.
+
+    Examples:
+        >>> from tensordict import tensorclass
+        >>> @tensorclass
+        ... class MyClass:
+        ...     foo: torch.Tensor
+        ...     bar: torch.Tensor
+        >>> data = MyClass(foo=torch.randn(10, 11), bar=torch.randn(10, 11, 12), batch_size=[10, 11])
+        >>> storage = LazyTensorStorage(10)
+        >>> storage.set(range(10), data)
+        >>> storage.get(0)
+        MyClass(
+            bar=Tensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+            foo=Tensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([11]),
+            device=cpu,
+            is_shared=False)
+
+    """
+
+    def __init__(self, max_size, device=None):
+        super().__init__(None, max_size, device=device)
+
+    def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
+        if VERBOSE:
+            print("Creating a TensorStorage...")
+        if isinstance(data, torch.Tensor):
+            # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
+            out = torch.empty(
+                self.max_size,
+                *data.shape,
+                device=self.device,
+                dtype=data.dtype,
+            )
+        elif is_tensorclass(data):
+            out = (
+                data.expand(self.max_size, *data.shape).clone().zero_().to(self.device)
+            )
+        else:
+            out = (
+                data.expand(self.max_size, *data.shape)
+                .to_tensordict()
+                .zero_()
+                .clone()
+                .to(self.device)
+            )
+
+        self._storage = out
+        self.initialized = True
+
 
 class LazyMemmapStorage(LazyTensorStorage):
     """A memory-mapped storage for tensors and tensordicts.
@@ -292,6 +436,54 @@ class LazyMemmapStorage(LazyTensorStorage):
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
+
+    Examples:
+        >>> data = TensorDict({
+        ...     "some data": torch.randn(10, 11),
+        ...     ("some", "nested", "data"): torch.randn(10, 11, 12),
+        ... }, batch_size=[10, 11])
+        >>> storage = LazyMemmapStorage(100)
+        >>> storage.set(range(10), data)
+        >>> len(storage)  # only the first dimension is considered as indexable
+        10
+        >>> storage.get(0)
+        TensorDict(
+            fields={
+                some data: MemmapTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+                some: TensorDict(
+                    fields={
+                        nested: TensorDict(
+                            fields={
+                                data: MemmapTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([11]),
+                            device=cpu,
+                            is_shared=False)},
+                    batch_size=torch.Size([11]),
+                    device=cpu,
+                    is_shared=False)},
+            batch_size=torch.Size([11]),
+            device=cpu,
+            is_shared=False)
+
+    This class also supports tensorclass data.
+
+    Examples:
+        >>> from tensordict import tensorclass
+        >>> @tensorclass
+        ... class MyClass:
+        ...     foo: torch.Tensor
+        ...     bar: torch.Tensor
+        >>> data = MyClass(foo=torch.randn(10, 11), bar=torch.randn(10, 11, 12), batch_size=[10, 11])
+        >>> storage = LazyMemmapStorage(10)
+        >>> storage.set(range(10), data)
+        >>> storage.get(0)
+        MyClass(
+            bar=MemmapTensor(shape=torch.Size([11, 12]), device=cpu, dtype=torch.float32, is_shared=False),
+            foo=MemmapTensor(shape=torch.Size([11]), device=cpu, dtype=torch.float32, is_shared=False),
+            batch_size=torch.Size([11]),
+            device=cpu,
+            is_shared=False)
+
     """
 
     def __init__(self, max_size, scratch_dir=None, device=None):
@@ -437,9 +629,13 @@ def _reset_batch_size(x):
     they will be expanded to the right to match it.
 
     """
-    shape = x.pop("_batch_size", None)
-    data = x.pop("_data", None)
+    shape = x.get("_rb_batch_size", None)
     if shape is not None:
+        warnings.warn(
+            "Reshaping nested tensordicts will be deprecated soon.",
+            category=DeprecationWarning,
+        )
+        data = x.get("_data")
         # we need to reset the batch-size
         if isinstance(shape, MemmapTensor):
             shape = shape.as_tensor()
@@ -457,6 +653,7 @@ def _reset_batch_size(x):
         if locked:
             data.lock_()
         return data
+    data = x.get("_data", None)
     if data is not None:
         return data
     return x

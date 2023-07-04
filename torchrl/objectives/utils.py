@@ -10,7 +10,7 @@ from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
@@ -178,11 +178,11 @@ class TargetNetUpdater:
             for _source in _source_names:
                 try:
                     getattr(loss_module, _source)
-                except AttributeError:
+                except AttributeError as err:
                     raise RuntimeError(
                         f"Incongruent target and source parameter lists: "
                         f"{_source} is not an attribute of the loss_module"
-                    )
+                    ) from err
 
             self._target_names = _target_names
             self._source_names = _source_names
@@ -450,3 +450,28 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value
+
+
+def _cache_values(fun):
+    """Caches the tensordict returned by a property."""
+    name = fun.__name__
+
+    def new_fun(self, netname=None):
+        __dict__ = self.__dict__
+        _cache = __dict__["_cache"]
+        attr_name = name
+        if netname is not None:
+            attr_name += "_" + netname
+        if attr_name in _cache:
+            out = _cache[attr_name]
+            return out
+        if netname is not None:
+            out = fun(self, netname)
+        else:
+            out = fun(self)
+        if is_tensor_collection(out):
+            out.lock_()
+        _cache[attr_name] = out
+        return out
+
+    return new_fun

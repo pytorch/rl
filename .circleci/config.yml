@@ -136,47 +136,6 @@ jobs:
 #            python .circleci/regenerate.py
 #            git diff --exit-code || (echo ".circleci/config.yml not in sync with config.yml.in! Run .circleci/regenerate.py to update config"; exit 1)
 
-  lint_python_and_config:
-    docker:
-      - image: circleci/python:3.8
-    steps:
-      - checkout
-      - pip_install:
-          args: pre-commit
-          descr: Install lint utilities
-      - run:
-          name: Install pre-commit hooks
-          command: pre-commit install-hooks
-      - run:
-          name: Lint Python code and config files
-          command: pre-commit run --all-files
-      - run:
-          name: Required lint modifications
-          when: on_fail
-          command: git --no-pager diff
-
-  lint_c:
-    docker:
-      - image: circleci/python:3.7
-    steps:
-      - apt_install:
-          args: libtinfo5
-          descr: Install additional system libraries
-      - checkout
-      - run:
-          name: Install lint utilities
-          command: |
-            curl https://oss-clang-format.s3.us-east-2.amazonaws.com/linux64/clang-format-linux64 -o clang-format
-            chmod +x clang-format
-            sudo mv clang-format /opt/clang-format
-      - run:
-          name: Lint C code
-          command: ./.circleci/unittest/linux/scripts/run-clang-format.py -r torchrl/csrc --clang-format-executable /opt/clang-format
-      - run:
-          name: Required lint modifications
-          when: on_fail
-          command: git --no-pager diff
-
   type_check_python:
     docker:
       - image: circleci/python:3.7
@@ -1046,11 +1005,6 @@ jobs:
 
 
 workflows:
-  lint:
-    jobs:
-      - lint_python_and_config
-      - lint_c
-
   unittest:
     jobs:
       - unittest_linux_sklearn_gpu:

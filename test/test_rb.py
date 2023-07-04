@@ -12,7 +12,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, make_tc
+from _utils_internal import get_default_devices, make_tc
 from tensordict import is_tensorclass, tensorclass
 from tensordict.tensordict import assert_allclose_td, TensorDict, TensorDictBase
 from torchrl.data import (
@@ -33,6 +33,7 @@ from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    TensorStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
@@ -187,6 +188,8 @@ class TestComposableBuffers:
                     break
             else:
                 raise RuntimeError("did not find match")
+        data2 = self._get_data(rb_type, size=2 * size + 2)
+        rb.extend(data2)
 
     def test_sample(self, rb_type, sampler, writer, storage, size):
         if rb_type is RemoteTensorDictReplayBuffer and _os_is_windows:
@@ -240,10 +243,68 @@ class TestComposableBuffers:
         assert b
 
 
+@pytest.mark.parametrize("storage_type", [TensorStorage])
+class TestStorages:
+    def _get_tensor(self):
+        return torch.randn(10, 11)
+
+    def _get_tensordict(self):
+        return TensorDict(
+            {"data": torch.randn(10, 11), ("nested", "data"): torch.randn(10, 11, 3)},
+            [10, 11],
+        )
+
+    def _get_tensorclass(self):
+        data = self._get_tensordict()
+        return make_tc(data)(**data, batch_size=data.shape)
+
+    def test_errors(self, storage_type):
+        with pytest.raises(ValueError, match="Expected storage to be non-null"):
+            storage_type(None)
+        data = torch.randn(3)
+        with pytest.raises(
+            ValueError, match="The max-size and the storage shape mismatch"
+        ):
+            storage_type(data, max_size=4)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    def test_get_set(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        storage.set(range(10), torch.zeros_like(data))
+        assert (storage.get(range(10)) == 0).all()
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    def test_state_dict(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        sd = storage.state_dict()
+        storage2 = storage_type(torch.zeros_like(data))
+        storage2.load_state_dict(sd)
+        assert (storage.get(range(10)) == storage2.get(range(10))).all()
+        assert type(storage.get(range(10))) is type(  # noqa: E721
+            storage2.get(range(10))
+        )
+
+
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
 @pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
-class TestStorages:
+class TestLazyStorages:
     def _get_nested_tensorclass(self, shape):
         @tensorclass
         class NestedTensorClass:
@@ -316,7 +377,7 @@ class TestStorages:
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prototype_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -536,6 +597,26 @@ class TestBuffers:
         else:
             assert (s == data).all()
 
+    def test_empty(self, rbtype, storage, size, prefetch):
+        torch.manual_seed(0)
+        rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
+        data = self._get_datum(rbtype)
+        for _ in range(2):
+            rb.add(data)
+            s = rb.sample(1)[0]
+            if isinstance(s, TensorDictBase):
+                s = s.select(*data.keys(True), strict=False)
+                data = data.select(*s.keys(True), strict=False)
+                assert (s == data).all()
+                assert list(s.keys(True, True))
+            else:
+                assert (s == data).all()
+            rb.empty()
+            with pytest.raises(
+                RuntimeError, match="Cannot sample from an empty storage"
+            ):
+                rb.sample()
+
     def test_extend(self, rbtype, storage, size, prefetch):
         torch.manual_seed(0)
         rb = self._get_rb(rbtype, storage=storage, size=size, prefetch=prefetch)
@@ -650,7 +731,7 @@ def test_batch_errors():
 
 @pytest.mark.parametrize("priority_key", ["pk", "td_error"])
 @pytest.mark.parametrize("contiguous", [True, False])
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_default_devices())
 def test_prb(priority_key, contiguous, device):
     torch.manual_seed(0)
     np.random.seed(0)
