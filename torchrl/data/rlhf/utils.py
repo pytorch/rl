@@ -22,8 +22,8 @@ class KLControllerBase(abc.ABC):
     """Base class for KL controllers.
 
     Each controller must implement an update method that takes the current KL value and
-    the number of steps and updates the self.coef attribute, which will multiply
-    the KL during calculation of the reward.
+    the number of steps and updates the kl_coef attribute of the wrapped model, 
+    which will multiply the KL during calculation of the reward.
     """
 
     @abc.abstractmethod
@@ -38,21 +38,27 @@ class ConstantKLController(KLControllerBase):
     with.
 
     Arguments:
-        coefficient (float): The coefficient to multiply KL with when calculating the
+        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
+        kl_coef (float): The coefficient to multiply KL with when calculating the
             reward.
     """
 
-    def __init__(self, coefficient):
-        self.coef = coefficient
+    def __init__(self, model, kl_coef):
+        self.model = model
+        if not hasattr(model, "kl_coef"):
+            raise AttributeError("Model input to ConstantKLController doesn't have attribute 'kl_coef'")
+        self.coef = kl_coef
+        self.model.kl_coef = self.coef
 
     def update(self, kl_value: float, n_steps: int):
-        pass
+        self.model.kl_coef = self.coef
 
 
 class AdaptiveKLController(KLControllerBase):
     """Adaptive KL Controller as described in Ziegler et al. "Fine-Tuning Language Models from Human Preferences".
 
     Arguments:
+        model: wrapped model that needs to be controlled. Must have attribute 'kl_coef'
         init_kl_coef (float): The starting value of the coefficient.
         target (float): The target KL value. When the observed KL is smaller, the
             coefficient is decreased, thereby relaxing the KL penalty in the training
@@ -66,10 +72,12 @@ class AdaptiveKLController(KLControllerBase):
     Source: https://github.com/openai/lm-human-preferences/blob/master/lm_human_preferences/train_policy.py
     """
 
-    def __init__(self, init_kl_coef: float, target: float, horizon: int):
+    def __init__(self, model, init_kl_coef: float, target: float, horizon: int):
+        self.model = model
         self.coef = init_kl_coef
         self.target = target
         self.horizon = horizon
+        self.model.kl_coef = self.coef
 
     def update(self, kl_value: float, n_steps: int):
         """Update ``self.coef`` adaptively.
@@ -82,6 +90,7 @@ class AdaptiveKLController(KLControllerBase):
         proportional_error = np.clip(kl_value / self.target - 1, -0.2, 0.2)  # ϵₜ
         mult = 1 + proportional_error * n_steps / self.horizon
         self.coef *= mult  # βₜ₊₁
+        self.model.kl_coef = self.coef
 
 
 class RolloutFromModel:
@@ -101,6 +110,7 @@ class RolloutFromModel:
         reward_model: (nn.Module, tensordict.nn.TensorDictModule): a model which, given
             ``input_ids`` and ``attention_mask``, calculates rewards for each token and
             end_scores (the reward for the final token in each sequence).
+        kl_coef: (float, optional): initial kl coefficient.  
         max_new_tokens (int, optional): the maximum length of the sequence.
             Defaults to 50.
         score_clip (float, optional): Scores from the reward model are clipped to the
@@ -159,7 +169,7 @@ class RolloutFromModel:
         model,
         ref_model,
         reward_model,
-        kl_controller,
+        kl_coef=0.1,
         max_new_tokens=50,
         score_clip=10.0,
     ):
@@ -173,11 +183,7 @@ class RolloutFromModel:
         self.reward_model = reward_model
         self.max_new_tokens = max_new_tokens
         self.score_clip = score_clip
-        self.kl_controller = kl_controller
-
-    def kl_update(self, kl_value, n_steps):
-        """Makes a step in the KL coefficient schedule."""
-        self.kl_controller.update(kl_value, n_steps)
+        self.kl_coef = kl_coef
 
     @torch.no_grad()
     def rollout_from_data(self, batch):
@@ -242,7 +248,7 @@ class RolloutFromModel:
         )
         reward_raw = clipped_scores.unsqueeze(-1).unsqueeze(-1)
         reward_raw = reward_raw * done
-        reward_kl = -self.kl_controller.coef * log_ratio.unsqueeze(-1)
+        reward_kl = -self.kl_coef * log_ratio.unsqueeze(-1)
         reward = reward_raw + reward_kl
         td = {
             "action": action,

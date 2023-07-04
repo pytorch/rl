@@ -73,7 +73,7 @@ class RewardEstimator:
             model,
             self.ref_model,
             self.reward_model,
-            kl_controller=ConstantKLController(0.0),  # disable KL for evaluation
+            kl_coef=0, # disable KL for evaluation
             max_new_tokens=self.episode_length,
         )
         rewards = torch.zeros(self.eval_iters)
@@ -188,7 +188,6 @@ def main():
     scheduler = None
     if train_cfg.decay_lr:
         scheduler = CosineAnnealingLR(optimizer, **train_cfg.scheduler)
-    kl_controller = AdaptiveKLController(0.1, 6, 10000)
 
     rb = TensorDictReplayBuffer(
         storage=LazyTensorStorage(episode_length * num_rollouts_per_epoch),
@@ -203,7 +202,8 @@ def main():
         prefetch=10,
     )
 
-    rollout_from_model = RolloutFromModel(model, ref_model, reward_model, kl_controller)
+    rollout_from_model = RolloutFromModel(model, ref_model, reward_model)
+    kl_controller = AdaptiveKLController(rollout_from_model, 0.1, 6, 10000)
 
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
@@ -231,7 +231,7 @@ def main():
             rollout_kl_reward = torch.tensor(rollout_kl).mean().cpu().item()
             # recover true kl
             rollout_kl = -rollout_kl_reward / kl_controller.coef
-            rollout_from_model.kl_update(
+            kl_controller.update(
                 rollout_kl, num_rollouts_per_epoch / batch_size
             )
 
