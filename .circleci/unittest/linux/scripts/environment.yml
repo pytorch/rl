@@ -28,4 +28,3 @@ dependencies:
     - av
     - coverage
     - ray
-    - pyopengl
