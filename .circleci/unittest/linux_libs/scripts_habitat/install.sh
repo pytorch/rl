@@ -41,13 +41,13 @@ fi
 #cd tensordict
 #python setup.py develop
 #cd ../..
-pip install tensordict-nightly
+pip3 install tensordict-nightly
 
 # smoke test
-python -c "import functorch;import tensordict"
+python3 -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
 pip3 install -e .
 
 # smoke test
-python -c "import torchrl"
+python3 -c "import torchrl"
