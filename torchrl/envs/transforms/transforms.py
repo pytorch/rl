@@ -15,7 +15,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right, unravel_keys
+from tensordict.utils import expand_as_right, NestedKey, unravel_key
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -141,10 +141,10 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[str],
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Sequence[NestedKey],
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
         if isinstance(in_keys, str):
@@ -787,10 +787,10 @@ class ObservationTransform(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = [
@@ -992,8 +992,8 @@ class ToTensorImage(ObservationTransform):
         from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1116,8 +1116,8 @@ class TargetReturn(Transform):
         self,
         target_return: float,
         mode: str = "reduce",
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1163,9 +1163,7 @@ class TargetReturn(Transform):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for out_key in self.out_keys:
-            if isinstance(out_key, str):
-                out_key = (out_key,)
-                tensordict.set(("next", *out_key), tensordict.get(out_key))
+            tensordict.set(("next", out_key), tensordict.get(out_key))
         return super()._step(tensordict)
 
     def _apply_transform(
@@ -1199,7 +1197,7 @@ class TargetReturn(Transform):
             dtype=self.parent.reward_spec.dtype,
             device=self.parent.reward_spec.device,
         )
-        observation_spec["target_return"] = target_return_spec
+        observation_spec[self.out_keys[0]] = target_return_spec
 
         return observation_spec
 
@@ -3644,7 +3642,7 @@ class ExcludeTransform(Transform):
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            excluded_keys = [unravel_keys(key) for key in excluded_keys]
+            excluded_keys = [unravel_key(key) for key in excluded_keys]
         except ValueError:
             raise ValueError(
                 "excluded keys must be a list or tuple of strings or tuples of strings."
@@ -3690,7 +3688,7 @@ class SelectTransform(Transform):
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            selected_keys = [unravel_keys(key) for key in selected_keys]
+            selected_keys = [unravel_key(key) for key in selected_keys]
         except ValueError:
             raise ValueError(
                 "selected keys must be a list or tuple of strings or tuples of strings."

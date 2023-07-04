@@ -4868,16 +4868,20 @@ class TestTargetReturn(TransformBase):
         raise pytest.skip("No inverse method for TargetReturn")
 
     @pytest.mark.parametrize("mode", ["reduce", "constant"])
-    def test_transform_no_env(self, mode):
-        t = TargetReturn(target_return=10.0, mode=mode)
+    @pytest.mark.parametrize("in_key", ["reward", ("agents", "reward")])
+    @pytest.mark.parametrize("out_key", ["target_return", ("agents", "target_return")])
+    def test_transform_no_env(self, mode, in_key, out_key):
+        t = TargetReturn(
+            target_return=10.0, mode=mode, in_keys=[in_key], out_keys=[out_key]
+        )
         reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
+        td = TensorDict({("next", in_key): reward}, [])
         td = t.reset(td)
         td = t._step(td)
         if mode == "reduce":
-            assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
+            assert (td["next", out_key] + td["next", in_key] == 10.0).all()
         else:
-            assert (td["next", "target_return"] == 10.0).all()
+            assert (td["next", out_key] == 10.0).all()
 
     def test_transform_model(
         self,
@@ -5049,7 +5053,7 @@ class TestToTensorImage(TransformBase):
         )
         check_env_specs(env)
 
-    @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
+    @pytest.mark.parametrize("out_keys", [None, ["stuff"], [("nested", "stuff")]])
     @pytest.mark.parametrize("default_dtype", [torch.float32, torch.float64])
     def test_transform_env(self, out_keys, default_dtype):
         prev_dtype = torch.get_default_dtype()
@@ -5060,7 +5064,7 @@ class TestToTensorImage(TransformBase):
         )
         r = env.rollout(3)
         if out_keys is not None:
-            assert out_keys[0] in r.keys()
+            assert out_keys[0] in r.keys(True, True)
             obs = r[out_keys[0]]
         else:
             obs = r["pixels"]
