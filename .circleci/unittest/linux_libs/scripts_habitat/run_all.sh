@@ -6,8 +6,8 @@ set -v
 # Avoid error: "fatal: unsafe repository"
 apt-get update
 apt-get install -y git wget
-apt-get update
-apt-get install -y gcc g++ --fix-missing
+apt-get update --fix-missing
+apt-get install -y gcc g++
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 bash ${this_dir}/setup_env.sh
