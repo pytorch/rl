@@ -87,7 +87,7 @@ class RoboHiveEnv(GymEnv):
 
         if not _has_robohive:
             raise ImportError("Cannot load robohive.")
-        from robohive import robohive_envs
+        from robohive import robohive_env_suite as robohive_envs
         from robohive.utils.prompt_utils import Prompt, set_prompt_verbosity
 
         set_prompt_verbosity(Prompt.WARN)
