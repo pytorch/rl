@@ -188,7 +188,8 @@ class LSTMModule(ModuleBase):
             out_keys = [out_key, *self.DEFAULT_OUT_KEYS]
 
         if not isinstance(in_keys, (tuple, list)) or (
-            len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init")
+            len(in_keys) != 3
+            and not (len(in_keys) == 4 and in_keys[-1] == ("is_init",))
         ):
             raise ValueError(
                 f"LSTMModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."
