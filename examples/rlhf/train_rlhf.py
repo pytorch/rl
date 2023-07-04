@@ -21,9 +21,9 @@ from torchrl.data.replay_buffers import (
 from torchrl.data.rlhf.dataset import get_dataloader
 from torchrl.data.rlhf.prompt import PromptData
 from torchrl.data.rlhf.utils import (
-    RolloutFromModel,
-    ConstantKLController,
     AdaptiveKLController,
+    ConstantKLController,
+    RolloutFromModel,
 )
 
 from torchrl.objectives import ClipPPOLoss
@@ -208,7 +208,7 @@ def main():
     best_val_reward = float("-inf")
     it = 0  # it is equivalent to batch_size number of episodes
     with tqdm(total=int(max_epochs * num_rollouts_per_epoch / batch_size)) as pbar:
-        for epoch in range(1, max_epochs + 1):
+        for _ in range(1, max_epochs + 1):
             rb.empty()
             rollout_rewards = []
             rollout_kl = []
@@ -231,7 +231,9 @@ def main():
             rollout_kl_reward = torch.tensor(rollout_kl).mean().cpu().item()
             # recover true kl
             rollout_kl = -rollout_kl_reward / kl_controller.coef
-            rollout_from_model.kl_update(rollout_kl, num_rollouts_per_epoch / batch_size)
+            rollout_from_model.kl_update(
+                rollout_kl, num_rollouts_per_epoch / batch_size
+            )
 
             # FIXME: THIS PPO CYCLE WAS DIFFERENT wrt trlx. @tcbegley please double check
             # they sample batch_size from rb and then do minibatches ppo_batch_size within

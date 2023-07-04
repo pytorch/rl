@@ -8,7 +8,7 @@ from contextlib import nullcontext
 import torch
 import torch._dynamo
 from hydra.utils import to_absolute_path
-from transformers import GPT2Tokenizer, GenerationConfig
+from transformers import GenerationConfig, GPT2Tokenizer
 
 
 def resolve_name_or_path(name_or_path):
