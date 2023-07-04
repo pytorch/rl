@@ -9,6 +9,8 @@ set -e
 set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+# Avoid error: "fatal: unsafe repository"
+#apt-get update && apt-get install -y git wget gcc g++ unzip
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -47,7 +49,7 @@ cat "${this_dir}/environment.yml"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-conda install -c conda-forge gcc=12.1.0 -y
+#conda install -c conda-forge gcc=12.1.0 -y
 
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
