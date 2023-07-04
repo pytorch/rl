@@ -209,7 +209,8 @@ class SafeModule(TensorDictModule):
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
-        spec = spec.clone()
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
