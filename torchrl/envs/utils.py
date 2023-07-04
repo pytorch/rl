@@ -406,7 +406,6 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
-
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
