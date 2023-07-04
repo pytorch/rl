@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -321,13 +321,10 @@ class QValueModule(TensorDictModuleBase):
     It works with both tensordict and regular tensors.
 
     Args:
-        action_space (str or TensorSpec, optional): Action space. Must be one of
-            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-            This is argumets is exclusive with ``spec``, since the ``action_spec``
-            conditions the action spec.
+        action_space (str, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+            This is argumets is exclusive with ``spec``, since ``spec``
+            conditions the action_space.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
         out_keys (list of str or tuple of str, optional): The output keys
@@ -379,13 +376,19 @@ class QValueModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        action_space: Optional[Union[str, TensorSpec]],
+        action_space: Optional[str],
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
         var_nums: Optional[int] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
     ):
+        if isinstance(action_space, TensorSpec):
+            warnings.warn(
+                "Using specs in action_space will be deprecated soon,"
+                " please use the 'spec' argument if you want to provide an action spec",
+                category=DeprecationWarning,
+            )
         action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.var_nums = var_nums
@@ -512,13 +515,10 @@ class DistributionalQValueModule(QValueModule):
     https://arxiv.org/pdf/1707.06887.pdf
 
     Args:
-        action_space (str or TensorSpec, optional): Action space. Must be one of
-            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-            This is argumets is exclusive with ``spec``, since the ``action_spec``
-            conditions the action spec.
+        action_space (str, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+            This is argumets is exclusive with ``spec``, since ``spec``
+            conditions the action_space.
         support (torch.Tensor): support of the action values.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
@@ -574,7 +574,7 @@ class DistributionalQValueModule(QValueModule):
 
     def __init__(
         self,
-        action_space: str,
+        action_space: Optional[str],
         support: torch.Tensor,
         action_value_key: Union[List[str], List[Tuple[str]]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
@@ -782,6 +782,12 @@ class QValueHook:
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
+        if isinstance(action_space, TensorSpec):
+            warnings.warn(
+                "Using specs in action_space will be deprecated soon,"
+                " please use the 'spec' argument if you want to provide an action spec",
+                category=DeprecationWarning,
+            )
         action_space, _ = _process_action_space_spec(action_space, None)
 
         self.qvalue_model = QValueModule(
@@ -866,6 +872,12 @@ class DistributionalQValueHook(QValueHook):
         action_value_key: Union[str, Tuple[str]] = None,
         out_keys: Union[List[str], List[Tuple[str]]] = None,
     ):
+        if isinstance(action_space, TensorSpec):
+            warnings.warn(
+                "Using specs in action_space will be deprecated soon,"
+                " please use the 'spec' argument if you want to provide an action spec",
+                category=DeprecationWarning,
+            )
         action_space, _ = _process_action_space_spec(action_space, None)
         self.qvalue_model = DistributionalQValueModule(
             action_space=action_space,
@@ -911,13 +923,10 @@ class QValueActor(SafeSequential):
             issues. If this value is out of bounds, it is projected back onto the
             desired space using the :obj:`TensorSpec.project`
             method. Default is ``False``.
-        action_space (str or TensorSpec, optional): Action space. Must be one of
-            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-            This is argumets is exclusive with ``spec``, since the ``action_spec``
-            conditions the action spec.
+        action_space (str, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+            This is argumets is exclusive with ``spec``, since ``spec``
+            conditions the action_space.
         action_value_key (str or tuple of str, optional): if the input module
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
@@ -978,9 +987,15 @@ class QValueActor(SafeSequential):
         in_keys=None,
         spec=None,
         safe=False,
-        action_space: str = None,
+        action_space: Optional[str] = None,
         action_value_key=None,
     ):
+        if isinstance(action_space, TensorSpec):
+            warnings.warn(
+                "Using specs in action_space will be deprecated soon,"
+                " please use the 'spec' argument if you want to provide an action spec",
+                category=DeprecationWarning,
+            )
         action_space, spec = _process_action_space_spec(action_space, spec)
 
         self.action_space = action_space
@@ -1060,13 +1075,10 @@ class DistributionalQValueActor(QValueActor):
             this value represents the cardinality of each
             action component.
         support (torch.Tensor): support of the action values.
-        action_space (str or TensorSpec, optional): Action space. Must be one of
-            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``,
-            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-            This is argumets is exclusive with ``spec``, since the ``action_spec``
-            conditions the action spec.
+        action_space (str, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+            This is argumets is exclusive with ``spec``, since ``spec``
+            conditions the action_space.
         make_log_softmax (bool, optional): if ``True`` and if the module is not
             of type :class:`torchrl.modules.DistributionalDQNnet`, a log-softmax
             operation will be applied along dimension -2 of the action value tensor.
@@ -1112,11 +1124,16 @@ class DistributionalQValueActor(QValueActor):
         spec=None,
         safe=False,
         var_nums: Optional[int] = None,
-        action_space: str = None,
+        action_space: Optional[str] = None,
         action_value_key: str = "action_value",
         make_log_softmax: bool = True,
     ):
-
+        if isinstance(action_space, TensorSpec):
+            warnings.warn(
+                "Using specs in action_space will be deprecated soon,"
+                " please use the 'spec' argument if you want to provide an action spec",
+                category=DeprecationWarning,
+            )
         action_space, spec = _process_action_space_spec(action_space, spec)
         self.action_space = action_space
         self.action_value_key = action_value_key
