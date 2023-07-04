@@ -240,9 +240,13 @@ class TestDQN(LossModuleTestBase):
             return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
-                chosen_action_value=None,
+                {
+                    "action": action_spec,
+                    "action_value"
+                    if action_value_key is None
+                    else action_value_key: None,
+                    "chosen_action_value": None,
+                },
                 shape=[],
             ),
             action_space=action_spec_type,
@@ -285,8 +289,10 @@ class TestDQN(LossModuleTestBase):
         #     return module
         actor = DistributionalQValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
+                {
+                    "action": action_spec,
+                    action_value_key: None,
+                },
                 shape=[],
             ),
             module=module,
