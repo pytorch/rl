@@ -3442,7 +3442,7 @@ class TestResize(TransformBase):
     @pytest.mark.parametrize("nchannels", [1, 3])
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize(
-        "keys", [["observation", "some_other_key"], ["observation_pixels"]]
+        "keys", [["observation", ("some_other", "nested_key")], ["observation_pixels"]]
     )
     @pytest.mark.parametrize("device", get_default_devices())
     def test_transform_no_env(self, interpolation, keys, nchannels, batch, device):
@@ -3555,14 +3555,17 @@ class TestResize(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_gym, reason="No gym")
-    def test_transform_env(self):
+    @pytest.mark.parametrize("out_key", ["pixels", ("agents", "pixels")])
+    def test_transform_env(self, out_key):
         env = TransformedEnv(
             GymEnv(PONG_VERSIONED),
-            Compose(ToTensorImage(), Resize(20, 21, in_keys=["pixels"])),
+            Compose(
+                ToTensorImage(), Resize(20, 21, in_keys=["pixels"], out_keys=[out_key])
+            ),
         )
         check_env_specs(env)
         td = env.rollout(3)
-        assert td["pixels"].shape[-3:] == torch.Size([3, 20, 21])
+        assert td[out_key].shape[-3:] == torch.Size([3, 20, 21])
 
     def test_transform_model(self):
         module = nn.Sequential(Resize(20, 21, in_keys=["pixels"]), nn.Identity())

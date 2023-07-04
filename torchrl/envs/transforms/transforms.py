@@ -1304,8 +1304,8 @@ class Resize(ObservationTransform):
         w: int,
         h: int,
         interpolation: str = "bilinear",
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if not _has_tv:
             raise ImportError(
