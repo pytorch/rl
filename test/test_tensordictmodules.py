@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -1530,7 +1530,7 @@ def test_ensure_tensordict_compatible():
         in_keys=["x"],
         out_keys=["out_1", "out_2", "out_3"],
     )
-    assert set(ensured_module.in_keys) == {("x",)}
+    assert set(unravel_key_list(ensured_module.in_keys)) == {("x",)}
     assert isinstance(ensured_module, TensorDictModule)
 
 
@@ -1555,7 +1555,7 @@ class TestLSTMModule:
                 ],
                 out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
             )
-        with pytest.raises(ValueError, match="in_keys"):
+        with pytest.raises(TypeError, match="incompatible function arguments"):
             lstm_module = LSTMModule(
                 input_size=3,
                 hidden_size=12,
@@ -1583,7 +1583,7 @@ class TestLSTMModule:
                 in_keys=["observation", "hidden0", "hidden1"],
                 out_keys=["intermediate", ("next", "hidden0")],
             )
-        with pytest.raises(ValueError, match="out_keys"):
+        with pytest.raises(TypeError, match="incompatible function arguments"):
             lstm_module = LSTMModule(
                 input_size=3,
                 hidden_size=12,
