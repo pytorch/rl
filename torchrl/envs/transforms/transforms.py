@@ -4192,9 +4192,9 @@ class Reward2GoTransform(Transform):
     and not to the collector.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename. Defaults to
+        in_keys (sequence of NestedKey): the entries to rename. Defaults to
             ``("next", "reward")`` if none is provided.
-        out_keys (list of str/tuples of str): the entries to rename. Defaults to
+        out_keys (sequence of NestedKey): the entries to rename. Defaults to
             the values of ``in_keys`` if none is provided.
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
 
@@ -4288,8 +4288,8 @@ class Reward2GoTransform(Transform):
     def __init__(
         self,
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = [("next", "reward")]
@@ -4308,7 +4308,8 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = tensordict.get(("next", "done"))
+        done_key = self.parent.done_key if self.parent else "done"
+        done = tensordict.get(("next", done_key))
         truncated = tensordict.get(("next", "truncated"), None)
         if truncated is not None:
             done_or_truncated = done | truncated

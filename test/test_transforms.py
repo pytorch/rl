@@ -4403,7 +4403,10 @@ class TestReward2Go(TransformBase):
 
     @pytest.mark.parametrize("gamma", [0.99, 1.0])
     @pytest.mark.parametrize("done_flags", [1, 5])
-    def test_transform_no_env(self, gamma, done_flags):
+    @pytest.mark.parametrize(
+        "in_key", [("next", "reward"), ("next", "other", "nested")]
+    )
+    def test_transform_no_env(self, gamma, done_flags, in_key):
         device = "cpu"
         torch.manual_seed(0)
         batch = 10
@@ -4411,7 +4414,7 @@ class TestReward2Go(TransformBase):
         out_key = "reward2go"
         batch_size = [batch, t]
         torch.manual_seed(0)
-        r2g = Reward2GoTransform(gamma=gamma, out_keys=[out_key])
+        r2g = Reward2GoTransform(gamma=gamma, in_keys=[in_key], out_keys=[out_key])
         done = torch.zeros(*batch_size, 1, dtype=torch.bool)
         for i in range(batch):
             while not done[i].any():
@@ -4419,7 +4422,14 @@ class TestReward2Go(TransformBase):
         reward = torch.randn(*batch_size, 1, device=device)
         misc = torch.randn(*batch_size, 1, device=device)
         td = TensorDict(
-            {"misc": misc, "next": {"reward": reward, "done": done}},
+            {
+                "misc": misc,
+                "next": {
+                    "reward": reward,
+                    "done": done,
+                    "other": {"nested": reward.clone()},
+                },
+            },
             batch,
             device=device,
         )
