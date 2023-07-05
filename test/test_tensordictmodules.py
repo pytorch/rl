@@ -28,6 +28,7 @@ from torchrl.modules.tensordict_module.common import (
     is_tensordict_compatible,
     VmapModule,
 )
+from torchrl.modules.tensordict_module.ensemble import Reduce
 from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticModule,
     SafeProbabilisticTensorDictSequential,
@@ -48,6 +49,20 @@ try:
     _has_functorch = True
 except ImportError:
     pass
+
+
+class TestEnsembleReduce:
+    def test_reduce(self):
+        module = TensorDictModule(nn.Linear(2, 3), in_keys=["bork"], out_keys=["dork"])
+        m0 = EnsembleModule(module, num_copies=2)
+        m1 = Reduce(["dork"], ["spork"])
+        seq = TensorDictSequential(
+           m0, m1 
+        )
+        td = TensorDict({"bork": torch.randn(5, 2)}, batch_size=[5])
+        out = seq(td)
+        assert "spork" in out.keys()
+        assert out.shape == (5,)
 
 
 class TestEnsembleModule:

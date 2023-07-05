@@ -59,6 +59,7 @@ from .tensordict_module import (
     TanhModule,
     ValueOperator,
     WorldModelWrapper,
-    EnsembleModule
+    EnsembleModule,
+    Reduce
 )
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip

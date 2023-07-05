@@ -1,7 +1,31 @@
+from typing import Callable
 import torch
 from tensordict import TensorDict
-from tensordict.nn import make_functional, TensorDictModuleBase
+from tensordict.nn import make_functional, TensorDictModuleBase, TensorDictModule
 from torch import nn
+
+
+class Reduce(TensorDictModuleBase):
+    def __init__(
+        self,
+        in_keys: list[str],
+        out_keys: list[str],
+        reduce_function: Callable = lambda x: x.min(dim=0).values,
+    ):
+        super().__init__()
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+        self.reduce_function = reduce_function
+        assert len(in_keys) == len(out_keys) == 1, "Reduce only supports one input and one output"
+
+    def forward(self, tensordict):
+        reduced = self.reduce_function(tensordict.get(self.in_keys[0]))
+        # We assume that all inputs are identical across the ensemble dim
+        # except for the input/output keys
+        tensordict_reduced = tensordict[0]
+        tensordict_reduced.set(self.out_keys[0], reduced)
+        return tensordict_reduced
+
 
 
 class EnsembleModule(TensorDictModuleBase):
@@ -64,10 +88,10 @@ class EnsembleModule(TensorDictModuleBase):
         super().__init__()
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys
+        self.module = module
         params_td = make_functional(module).expand(num_copies).to_tensordict()
         module.reset_parameters(params_td)
 
-        self.module = module
         self.params_td = params_td
         self.params = nn.ParameterList(list(self.params_td.values(True, True)))
         if expand_input:
