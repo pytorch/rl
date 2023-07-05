@@ -13,6 +13,7 @@ from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
+from tensordict import unravel_key_list
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey, unravel_key
@@ -1733,7 +1734,10 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            in_keys = ["observation", "pixels"]
+            in_keys = [
+                "observation",
+                "pixels",
+            ]
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -3648,9 +3652,9 @@ class ExcludeTransform(Transform):
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            excluded_keys = [unravel_key(key) for key in excluded_keys]
-        except ValueError:
-            raise ValueError(
+            excluded_keys = unravel_key_list(excluded_keys)
+        except TypeError:
+            raise TypeError(
                 "excluded keys must be a list or tuple of strings or tuples of strings."
             )
         self.excluded_keys = excluded_keys
@@ -3668,10 +3672,10 @@ class ExcludeTransform(Transform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if any(key in observation_spec.keys(True, True) for key in self.excluded_keys):
             return CompositeSpec(
-                **{
+                {
                     key: value
                     for key, value in observation_spec.items()
-                    if key not in self.excluded_keys
+                    if unravel_key(key) not in self.excluded_keys
                 },
                 shape=observation_spec.shape,
             )
@@ -3694,9 +3698,9 @@ class SelectTransform(Transform):
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            selected_keys = [unravel_key(key) for key in selected_keys]
-        except ValueError:
-            raise ValueError(
+            selected_keys = unravel_key_list(selected_keys)
+        except TypeError:
+            raise TypeError(
                 "selected keys must be a list or tuple of strings or tuples of strings."
             )
         self.selected_keys = selected_keys
@@ -3727,10 +3731,10 @@ class SelectTransform(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         return CompositeSpec(
-            **{
+            {
                 key: value
                 for key, value in observation_spec.items()
-                if key in self.selected_keys
+                if unravel_key(key) in self.selected_keys
             },
             shape=observation_spec.shape,
         )
