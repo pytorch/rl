@@ -1733,7 +1733,7 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
-            in_keys = [("observation", "pixels")]
+            in_keys = ["observation", "pixels"]
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
