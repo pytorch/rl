@@ -120,7 +120,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )
-
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -139,8 +140,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         out_keys = set(unravel_key_list(self.out_keys))
         if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
+            for key in out_keys:
+                if key not in spec_keys:
                     spec[key] = None
             spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
 
