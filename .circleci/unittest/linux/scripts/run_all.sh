@@ -5,6 +5,7 @@ set -v
 
 apt-get update && apt-get upgrade -y
 apt-get install -y vim git wget g++ gcc
+
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
 
@@ -69,8 +70,6 @@ from dm_control import composer
 """
 # ================================================================================= #
 
-#bash ${this_dir}/install.sh
-
 unset PYTORCH_VERSION
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
@@ -110,16 +109,9 @@ python setup.py develop
 
 # ================================================================================= #
 
-#bash ${this_dir}/run_test.sh
-
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
-git config --global --add safe.directory '*'
-
-root_dir="$(git rev-parse --show-toplevel)"
-env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
@@ -128,7 +120,7 @@ export CKPT_BACKEND=torch
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
+python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
 coverage combine
 coverage xml -i
 
