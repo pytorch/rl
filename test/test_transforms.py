@@ -23,6 +23,7 @@ from _utils_internal import (  # noqa
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnvNumpy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
@@ -356,6 +357,39 @@ class TestCatFrames(TransformBase):
         )
         check_env_specs(env)
 
+    def test_nested(self, nested_dim=3, batch_size=(32, 1), rollout_length=6, cat_N=5):
+        env = NestedCountingEnv(
+            max_steps=20, nested_dim=nested_dim, batch_size=batch_size
+        )
+        policy = CountingEnvCountPolicy(
+            action_spec=env.action_spec, action_key=env.action_key
+        )
+        td = env.rollout(rollout_length, policy=policy)
+        assert td[("data", "states")].shape == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+            1,
+        )
+        tranformed_env = TransformedEnv(
+            env, CatFrames(dim=-1, N=cat_N, in_keys=[("data", "states")])
+        )
+        td = tranformed_env.rollout(rollout_length, policy=policy)
+        assert td[("data", "states")].shape == (
+            *batch_size,
+            rollout_length,
+            nested_dim,
+            cat_N,
+        )
+        assert (
+            (td[("data", "states")][0, 0, -1, 0]).eq(torch.arange(1, 1 + cat_N)).all()
+        )
+        assert (
+            (td[("next", "data", "states")][0, 0, -1, 0])
+            .eq(torch.arange(2, 2 + cat_N))
+            .all()
+        )
+
     @pytest.mark.skipif(not _has_gym, reason="Gym not available")
     def test_transform_env(self):
         env = TransformedEnv(
@@ -567,7 +601,7 @@ class TestCatFrames(TransformBase):
     @pytest.mark.parametrize("N", [2, 4])
     def test_transform_no_env(self, device, d, batch_size, dim, N):
         key1 = "first key"
-        key2 = "second key"
+        key2 = ("second", "key")
         keys = [key1, key2]
         extra_d = (3,) * (-dim - 1)
         key1_tensor = torch.ones(*batch_size, d, *extra_d, device=device) * 2
