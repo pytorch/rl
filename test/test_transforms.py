@@ -2181,7 +2181,9 @@ class TestExcludeTransform(TransformBase):
             {
                 "a": torch.randn(1),
                 "b": torch.randn(1),
-                "c": torch.randn(1),
+                "c": {
+                    "d": torch.randn(1),
+                },
             },
             [],
         )
@@ -2189,6 +2191,18 @@ class TestExcludeTransform(TransformBase):
         assert "a" not in td.keys()
         assert "b" in td.keys()
         assert "c" in td.keys()
+        t = ExcludeTransform("a", ("c", "d"))
+        td = t._call(td)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" in td.keys()
+        assert ("c", "d") not in td.keys(True, True)
+        t = ExcludeTransform("a", "c")
+        td = t._call(td)
+        assert "a" not in td.keys()
+        assert "b" in td.keys()
+        assert "c" not in td.keys()
+        assert ("c", "d") not in td.keys(True, True)
 
     def test_transform_compose(self):
         t = Compose(ExcludeTransform("a"))
