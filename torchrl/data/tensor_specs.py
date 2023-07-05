@@ -2584,8 +2584,11 @@ class CompositeSpec(TensorSpec):
                     if self._device is None:
                         try:
                             self._device = item.device
-                        except RuntimeError:
-                            self._device = item._device
+                        except RuntimeError as err:
+                            if DEVICE_ERR_MSG in str(err):
+                                self._device = item._device
+                            else:
+                                raise err
                 self[k] = item
 
     @property
