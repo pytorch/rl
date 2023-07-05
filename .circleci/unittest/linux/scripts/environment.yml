@@ -22,7 +22,7 @@ dependencies:
     - hydra-core
     - tensorboard
     - imageio==2.26.0
-    - wandb
+    - wandb==0.15.3
     - dm_control
     - mlflow
     - av
