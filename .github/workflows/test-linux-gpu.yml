@@ -44,8 +44,6 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
-        
-        cd /work
 
         ## setup_env.sh
-        ./.circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux/scripts/run_all.sh

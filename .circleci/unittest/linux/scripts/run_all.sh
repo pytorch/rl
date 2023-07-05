@@ -3,6 +3,10 @@
 set -euxo pipefail
 set -v
 
+apt-get update
+apt-get install -y vim git wget g++ gcc
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 #bash ${this_dir}/setup_env.sh
 
@@ -47,33 +51,10 @@ export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
 conda env config vars set MUJOCO_GL=egl PYOPENGL_PLATFORM=egl DISPLAY=:0 SDL_VIDEODRIVER=dummy
-#conda env config vars set \
-#  DISPLAY=:0 \
-#  SDL_VIDEODRIVER=dummy \
-#  MUJOCO_GL=egl
-
-## Software rendering requires GLX and OSMesa.
-#if [[ $OSTYPE != 'darwin'* ]]; then
-yum makecache
-#yum install -y glfw
-#yum install -y glew
-#yum install -y mesa-libGL
-#yum install -y mesa-libGL-devel
-yum install -y mesa-libEGL-devel
-#yum install -y mesa-libOSMesa-devel
-yum -y install egl-utils
-yum -y install freeglut
-#fi
 
 pip3 install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-
-#conda install -y -c conda-forge glew
-#conda install -y -c conda-forge mesalib
-#conda install -y -c anaconda mesa-libgl-cos6-x86_64
-#conda install -y -c conda-forge libglvnd-egl-cos7-x86_64
-#conda install -y -c menpo glfw3
 
 conda deactivate
 conda activate "${env_dir}"
