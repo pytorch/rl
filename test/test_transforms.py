@@ -5540,7 +5540,7 @@ class TestTimeMaxPool(TransformBase):
     def test_transform_no_env(self, T, seq_len, device):
         batch = 1
         nodes = 4
-        keys = ["observation"]
+        keys = ["observation", ("nested", "key")]
         time_max_pool = TimeMaxPool(keys, T=T)
 
         tensor_list = []
@@ -5552,6 +5552,7 @@ class TestTimeMaxPool(TransformBase):
             env_td = TensorDict(
                 {
                     "observation": tensor_list[i],
+                    ("nested", "key"): tensor_list[i].clone(),
                 },
                 device=device,
                 batch_size=[batch],
@@ -5559,6 +5560,7 @@ class TestTimeMaxPool(TransformBase):
             transformed_td = time_max_pool._call(env_td)
 
         assert (max_vals == transformed_td["observation"]).all()
+        assert (max_vals == transformed_td["nested", "key"]).all()
 
     @pytest.mark.parametrize("T", [2, 4])
     @pytest.mark.parametrize("seq_len", [8])
@@ -5638,16 +5640,21 @@ class TestTimeMaxPool(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_gym, reason="Gym not available")
-    def test_transform_env(self):
+    @pytest.mark.parametrize("out_keys", [None, ["obs2"], [("some", "other")]])
+    def test_transform_env(self, out_keys):
         env = TransformedEnv(
             GymEnv(PENDULUM_VERSIONED, frame_skip=4),
             TimeMaxPool(
                 in_keys=["observation"],
+                out_keys=out_keys,
                 T=3,
             ),
         )
         td = env.reset()
-        assert td["observation"].shape[-1] == 3
+        if out_keys:
+            assert td[out_keys[0]].shape[-1] == 3
+        else:
+            assert td["observation"].shape[-1] == 3
 
     def test_transform_model(self):
         key1 = "first key"

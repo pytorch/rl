@@ -3751,8 +3751,8 @@ class TimeMaxPool(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         T: int = 1,
     ):
         if in_keys is None:
