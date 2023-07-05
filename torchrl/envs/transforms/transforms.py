@@ -1552,7 +1552,7 @@ class UnsqueezeTransform(Transform):
         observation = observation.squeeze(self.unsqueeze_dim)
         return observation
 
-    def _transform_spec(self, spec: TensorSpec) -> None:
+    def _transform_spec(self, spec: TensorSpec):
         space = spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -2367,8 +2367,8 @@ class DoubleToFloat(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
 
@@ -2408,7 +2408,8 @@ class DoubleToFloat(Transform):
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.in_keys:
+        reward_key = self.parent.reward_key if self.parent is not None else "reward"
+        if reward_key in self.in_keys:
             if reward_spec.dtype is not torch.double:
                 raise TypeError("reward_spec.dtype is not double")
 

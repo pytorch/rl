@@ -1841,7 +1841,7 @@ class TestDoubleToFloat(TransformBase):
     @pytest.mark.parametrize(
         "keys",
         [
-            ["observation", "some_other_key"],
+            ["observation", ("some_other", "nested_key")],
             ["observation_pixels"],
             ["action"],
         ],
@@ -1849,7 +1849,7 @@ class TestDoubleToFloat(TransformBase):
     @pytest.mark.parametrize(
         "keys_inv",
         [
-            ["action", "some_other_key"],
+            ["action", ("some_other", "nested_key")],
             ["action"],
             [],
         ],
