@@ -3386,8 +3386,8 @@ class RewardSum(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
@@ -3404,22 +3404,22 @@ class RewardSum(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
         # Non-batched environments
-        _reset = tensordict.get(
-            "_reset",
-            torch.ones(
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device,
-            ),
-        )
+            )
         if _reset.any():
+            reward_key = self.parent.reward_key if self.parent else "reward"
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if out_key in tensordict.keys():
+                if out_key in tensordict.keys(True, True):
                     value = tensordict[out_key]
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
-                elif in_key in ("reward", ("reward",)):
+                elif unravel_key(in_key) == reward_key:
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict[out_key] = self.parent.reward_spec.zero()

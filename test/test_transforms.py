@@ -29,6 +29,7 @@ from mocking_classes import (
     MockBatchedUnLockedEnv,
     NestedCountingEnv,
 )
+from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
 from torch import multiprocessing as mp, nn, Tensor
@@ -3941,12 +3942,11 @@ class TestRewardSum(TransformBase):
         env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), RewardSum())
         check_env_specs(env)
 
-    def test_transform_no_env(
-        self,
-    ):
-        t = RewardSum()
+    @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
+    def test_transform_no_env(self, in_key):
+        t = RewardSum(in_keys=[in_key], out_keys=[("some", "nested_sum")])
         reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
+        td = TensorDict({("next", in_key): reward}, [])
         with pytest.raises(
             ValueError, match="At least one dimension of the tensordict"
         ):
@@ -3956,9 +3956,11 @@ class TestRewardSum(TransformBase):
         with pytest.raises(KeyError):
             t(td)
         t = RewardSum(
-            in_keys=[("next", "reward")], out_keys=[("next", "episode_reward")]
+            in_keys=[unravel_key(("next", in_key))],
+            out_keys=[("some", "nested_sum")],
         )
-        t(td)
+        res = t(td)
+        assert ("some", "nested_sum") in res.keys(True, True)
 
     def test_transform_compose(
         self,
@@ -3980,10 +3982,9 @@ class TestRewardSum(TransformBase):
         t(td)
 
     @pytest.mark.skipif(not _has_gym, reason="No Gym")
-    def test_transform_env(
-        self,
-    ):
-        t = Compose(RewardSum())
+    @pytest.mark.parametrize("out_key", ["reward_sum", ("some", "nested")])
+    def test_transform_env(self, out_key):
+        t = Compose(RewardSum(in_keys=["reward"], out_keys=[out_key]))
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), t)
         env.set_seed(0)
         torch.manual_seed(0)
@@ -3994,7 +3995,7 @@ class TestRewardSum(TransformBase):
         reward = td_base["next", "reward"]
         final_reward = td_base["next", "reward"].sum(-2)
         assert torch.allclose(td["next", "reward"], reward)
-        assert torch.allclose(td["next", "episode_reward"][..., -1, :], final_reward)
+        assert torch.allclose(td["next", out_key][..., -1, :], final_reward)
 
     def test_transform_model(
         self,
