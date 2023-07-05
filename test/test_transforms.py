@@ -1159,6 +1159,53 @@ class TestStepCounter(TransformBase):
         assert td["step_count"].max() == 9
         assert td.shape[-1] == 100
 
+    @pytest.mark.parametrize("step_key", ["step_count", ("other", "key")])
+    @pytest.mark.parametrize("max_steps", [None, 10])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    def test_nested(
+        self, step_key, nested_done, max_steps, batch_size=(32, 2), rollout_length=15
+    ):
+        env = NestedCountingEnv(
+            max_steps=20, nest_done=nested_done, batch_size=batch_size
+        )
+        policy = CountingEnvCountPolicy(
+            action_spec=env.action_spec, action_key=env.action_key
+        )
+        transformed_env = TransformedEnv(
+            env,
+            StepCounter(
+                max_steps=max_steps, step_count_key=step_key, truncated_key=env.done_key
+            ),
+        )
+        td = transformed_env.rollout(
+            rollout_length, policy=policy, break_when_any_done=False
+        )
+        if nested_done:
+            step = td[step_key][0, 0, :, 0, 0].clone()
+            last_step = td[step_key][:, :, -1, :, :].clone()
+        else:
+            step = td[step_key][0, 0, :, 0].clone()
+            last_step = td[step_key][:, :, -1, :].clone()
+        if max_steps is None:
+            if nested_done:
+                assert step.eq(torch.arange(rollout_length)).all()
+            else:
+                assert step.eq(torch.arange(rollout_length)).all()
+        else:
+            assert step[:max_steps].eq(torch.arange(max_steps)).all()
+            assert step[max_steps:].eq(torch.arange(rollout_length - max_steps)).all()
+
+        _reset = env.done_spec.rand()
+        td_reset = transformed_env.reset(
+            TensorDict(
+                {"_reset": _reset, step_key: last_step},
+                batch_size=env.batch_size,
+                device=env.device,
+            )
+        )
+        assert (td_reset[step_key][_reset] == 0).all()
+        assert (td_reset[step_key][~_reset] == last_step[~_reset]).all()
+
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, rbclass):
         transform = StepCounter(10)

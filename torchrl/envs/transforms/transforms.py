@@ -3520,21 +3520,29 @@ class StepCounter(Transform):
         truncated_key (NestedKey, optional): the key where the truncated key should
             be written. Defaults to ``"truncated"``, which is recognised by
             data collectors as a reset signal.
+        step_count_key (NestedKey, optional): the key where the step_count key should
+            be written. Defaults to ``"step_count"``, which is recognised by
+            data collectors.
     """
 
     invertible = False
 
     def __init__(
-        self, max_steps: Optional[int] = None, truncated_key: str = "truncated"
+        self,
+        max_steps: Optional[int] = None,
+        truncated_key: Optional[NestedKey] = "truncated",
+        step_count_key: Optional[NestedKey] = "step_count",
     ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
         self.max_steps = max_steps
         self.truncated_key = truncated_key
+        self.step_count_key = step_count_key
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = tensordict.get("done", None)
+        done_key = self.parent.done_key if self.parent else "done"
+        done = tensordict.get(done_key, None)
         if done is None:
             done = torch.ones(
                 self.parent.done_spec.shape,
@@ -3549,7 +3557,7 @@ class StepCounter(Transform):
         if _reset is None:
             _reset = torch.ones_like(done)
         step_count = tensordict.get(
-            "step_count",
+            self.step_count_key,
             default=None,
         )
         if step_count is None:
@@ -3557,7 +3565,7 @@ class StepCounter(Transform):
 
         step_count[_reset] = 0
         tensordict.set(
-            "step_count",
+            self.step_count_key,
             step_count,
         )
         if self.max_steps is not None:
@@ -3568,10 +3576,10 @@ class StepCounter(Transform):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         step_count = tensordict.get(
-            "step_count",
+            self.step_count_key,
         )
         next_step_count = step_count + 1
-        tensordict.set(("next", "step_count"), next_step_count)
+        tensordict.set(("next", self.step_count_key), next_step_count)
         if self.max_steps is not None:
             truncated = next_step_count >= self.max_steps
             tensordict.set(("next", self.truncated_key), truncated)
@@ -3584,17 +3592,17 @@ class StepCounter(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
+        observation_spec[self.step_count_key] = UnboundedDiscreteTensorSpec(
             shape=self.parent.done_spec.shape
             if self.parent
             else observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
-        observation_spec["step_count"].space.minimum = (
-            observation_spec["step_count"].space.minimum * 0
+        observation_spec[self.step_count_key].space.minimum = (
+            observation_spec[self.step_count_key].space.minimum * 0
         )
-        if self.max_steps is not None and self.truncated_key != "done":
+        if self.max_steps is not None and self.truncated_key != self.parent.done_key:
             observation_spec[self.truncated_key] = self.parent.done_spec.clone()
         return observation_spec
 
@@ -3607,14 +3615,14 @@ class StepCounter(Transform):
             input_spec["_state_spec"] = CompositeSpec(
                 shape=input_spec.shape, device=input_spec.device
             )
-        input_spec["_state_spec", "step_count"] = UnboundedDiscreteTensorSpec(
+        step_spec = UnboundedDiscreteTensorSpec(
             shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
-        input_spec["_state_spec", "step_count"].space.minimum = (
-            input_spec["_state_spec", "step_count"].space.minimum * 0
-        )
+        step_spec.space.minimum *= 0
+        input_spec["_state_spec", self.step_count_key] = step_spec
+
         return input_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
