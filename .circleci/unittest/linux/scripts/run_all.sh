@@ -154,8 +154,20 @@ export CKPT_BACKEND=torch
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest \
-  test/test_libs.py test/test_loggers.py test/test_modules.py test/test_postprocs.py test/test_rb.py test/test_rb_distributed.py test/test_recipe.py test/test_shared.py test/test_specs.py test/test_tensordictmodules.py test/test_trainer.py test/test_transforms.py test/test_utils.py \
+  test/test_libs.py \
+  test/test_loggers.py \
+  test/test_modules.py \
+  test/test_postprocs.py \
+  test/test_rb.py \
+  test/test_rb_distributed.py \
   --instafail --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
+#  test/test_recipe.py \
+#  test/test_shared.py \
+#  test/test_specs.py \
+#  test/test_tensordictmodules.py \
+#  test/test_trainer.py \
+#  test/test_transforms.py \
+#  test/test_utils.py \
 coverage combine
 coverage xml -i
 
