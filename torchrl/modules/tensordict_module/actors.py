@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import warnings
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import torch
 
@@ -15,6 +15,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.utils import NestedKey
 from torch import nn
 from torch.distributions import Categorical
 
@@ -92,8 +93,8 @@ class Actor(SafeModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         *,
         spec: Optional[TensorSpec] = None,
         **kwargs,
@@ -214,8 +215,8 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     def __init__(
         self,
         module: TensorDictModule,
-        in_keys: Union[str, Sequence[str]],
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Union[NestedKey, Sequence[NestedKey]],
+        out_keys: Optional[Sequence[NestedKey]] = None,
         *,
         spec: Optional[TensorSpec] = None,
         **kwargs,
@@ -295,8 +296,8 @@ class ValueOperator(TensorDictModule):
     def __init__(
         self,
         module: nn.Module,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ) -> None:
 
         if in_keys is None:
@@ -377,8 +378,8 @@ class QValueModule(TensorDictModuleBase):
     def __init__(
         self,
         action_space: Optional[str],
-        action_value_key: Union[List[str], List[Tuple[str]]] = None,
-        out_keys: Union[List[str], List[Tuple[str]]] = None,
+        action_value_key: Optional[NestedKey] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         var_nums: Optional[int] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
@@ -576,8 +577,8 @@ class DistributionalQValueModule(QValueModule):
         self,
         action_space: Optional[str],
         support: torch.Tensor,
-        action_value_key: Union[List[str], List[Tuple[str]]] = None,
-        out_keys: Union[List[str], List[Tuple[str]]] = None,
+        action_value_key: Optional[NestedKey] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         var_nums: Optional[int] = None,
         spec: TensorSpec = None,
         safe: bool = False,
@@ -779,8 +780,8 @@ class QValueHook:
         self,
         action_space: str,
         var_nums: Optional[int] = None,
-        action_value_key: Union[str, Tuple[str]] = None,
-        out_keys: Union[List[str], List[Tuple[str]]] = None,
+        action_value_key: Optional[NestedKey] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
@@ -869,8 +870,8 @@ class DistributionalQValueHook(QValueHook):
         action_space: str,
         support: torch.Tensor,
         var_nums: Optional[int] = None,
-        action_value_key: Union[str, Tuple[str]] = None,
-        out_keys: Union[List[str], List[Tuple[str]]] = None,
+        action_value_key: Optional[NestedKey] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
