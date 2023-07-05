@@ -2983,9 +2983,7 @@ class TensorDictPrimer(Transform):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key in self.primers.keys():
-            if isinstance(key, str):
-                key = (key,)
-            tensordict.setdefault(("next", *key), tensordict.get(key, default=None))
+            tensordict.setdefault(("next", key), tensordict.get(key, default=None))
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
