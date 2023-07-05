@@ -41,8 +41,8 @@ do
   conda env remove --prefix ./cloned_env
 done
 
-# we need to clone as gym 0.19 breaks with current setuptools
-for GYM_VERSION in '0.19.0'
+# gym[atari]==0.19 is broken, so we install only gym without dependencies.
+for GYM_VERSION in '0.19'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
@@ -50,12 +50,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  cd third_party/gym
-  git checkout 0.19.0
-  # still valid? gym[atari]==0.19 is broken, so we install only gym without dependencies.
-  python setup.py develop --extras_require=atari
-  cd ../..
-
+  pip3 install gym==$GYM_VERSION
   $DIR/run_test.sh
 
   # delete the conda copy
@@ -72,10 +67,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  cd third_party/gym
-  git checkout 0.20.0
-  python setup.py develop --extras_require=atari
-  cd ../..
+  pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install ale-py==0.7
   $DIR/run_test.sh
 
@@ -92,10 +84,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  cd third_party/gym
-  git checkout 0.25.0
-  python setup.py develop --extras_require=atari
-  cd ../..
+  pip3 install 'gym[atari]'==$GYM_VERSION
   $DIR/run_test.sh
 
   # delete the conda copy
@@ -112,10 +101,8 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  cd third_party/gym
-  git checkout v0.26.0
-  python setup.py develop --extras_require=atari --extras_require=accept-rom-license
-  cd ../..
+  pip3 install 'gym[accept-rom-license]'==$GYM_VERSION
+  pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install gym-super-mario-bros
   $DIR/run_test.sh
 
