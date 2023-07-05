@@ -3725,7 +3725,7 @@ class TestRewardScaling(TransformBase):
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     @pytest.mark.parametrize("scale", [0.1, 10])
     @pytest.mark.parametrize("loc", [1, 5])
-    @pytest.mark.parametrize("keys", [None, ["reward_1"]])
+    @pytest.mark.parametrize("keys", [None, ["reward_1"], [("nested", "key")]])
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("standard_normal", [True, False])
     def test_reward_scaling(self, batch, scale, loc, keys, device, standard_normal):
@@ -3757,6 +3757,16 @@ class TestRewardScaling(TransformBase):
                 original_key = td.get(key)
                 scaled_key = td_copy.get(key) * scale + loc
                 torch.testing.assert_close(original_key, scaled_key)
+        if keys is None:
+            if standard_normal:
+                original_key = td.get("reward")
+                scaled_key = (td_copy.get("reward") - loc) / scale
+                torch.testing.assert_close(original_key, scaled_key)
+            else:
+                original_key = td.get("reward")
+                scaled_key = td_copy.get("reward") * scale + loc
+                torch.testing.assert_close(original_key, scaled_key)
+
         assert (td.get("dont touch") == td_copy.get("dont touch")).all()
 
         if len(keys_total) == 1:

@@ -2282,7 +2282,7 @@ class RewardScaling(Transform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
