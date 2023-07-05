@@ -28,6 +28,7 @@ jobs:
     with:
       runner: linux.12xlarge
       repository: pytorch/rl
+      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
         # Set env vars from matrix
@@ -36,17 +37,6 @@ jobs:
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
-        
-        cd /work
 
         ## setup_env.sh
-        ./.circleci/unittest/linux/scripts/setup_env.sh
-
-        ## install.sh
-        ./.circleci/unittest/linux/scripts/install.sh
-
-        ## run_test.sh
-        ./.circleci/unittest/linux/scripts/run_test.sh
-
-        ## post_process.sh
-        ./.circleci/unittest/linux/scripts/post_process.sh
+        bash .circleci/unittest/linux/scripts/run_all.sh
