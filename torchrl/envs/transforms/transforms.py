@@ -2642,7 +2642,7 @@ class DiscreteActionProjection(Transform):
         self,
         num_actions_effective: int,
         max_actions: int,
-        action_key: str = "action",
+        action_key: NestedKey = "action",
         include_forward: bool = True,
     ):
         in_keys_inv = [action_key]
@@ -2690,9 +2690,7 @@ class DiscreteActionProjection(Transform):
     def transform_input_spec(self, input_spec: CompositeSpec):
         input_spec = input_spec.clone()
         for key in input_spec["_action_spec"].keys(True, True):
-            if not isinstance(key, tuple):
-                key = (key,)
-            key = ("_action_spec", *key)
+            key = ("_action_spec", key)
             break
         else:
             raise KeyError("key not found in action_spec.")

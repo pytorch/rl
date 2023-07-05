@@ -1764,17 +1764,18 @@ class TestDiscreteActionProjection(TransformBase):
         )
         check_env_specs(env)
 
-    def test_transform_no_env(self):
-        t = DiscreteActionProjection(7, 10)
+    @pytest.mark.parametrize("action_key", ["action", ("nested", "stuff")])
+    def test_transform_no_env(self, action_key):
+        t = DiscreteActionProjection(7, 10, action_key=action_key)
         td = TensorDict(
-            {"action": nn.functional.one_hot(torch.randint(10, (10, 4, 1)), 10)},
+            {action_key: nn.functional.one_hot(torch.randint(10, (10, 4, 1)), 10)},
             [10, 4],
         )
-        assert td["action"].shape[-1] == 10
-        assert (td["action"].sum(-1) == 1).all()
+        assert td[action_key].shape[-1] == 10
+        assert (td[action_key].sum(-1) == 1).all()
         out = t.inv(td)
-        assert out["action"].shape[-1] == 7
-        assert (out["action"].sum(-1) == 1).all()
+        assert out[action_key].shape[-1] == 7
+        assert (out[action_key].sum(-1) == 1).all()
 
     def test_transform_compose(self):
         t = Compose(DiscreteActionProjection(7, 10))
