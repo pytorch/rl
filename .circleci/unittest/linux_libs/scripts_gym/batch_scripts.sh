@@ -19,6 +19,11 @@ apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-de
 # solves "'extras_require' must be a dictionary"
 pip install --upgrade setuptools
 
+mkdir third_party
+cd third_party
+git clone https://github.com/vmoens/gym
+cd ..
+
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
 do
@@ -37,7 +42,7 @@ do
 done
 
 # gym[atari]==0.19 is broken, so we install only gym without dependencies.
-for GYM_VERSION in '0.19'
+for GYM_VERSION in '0.19.0'
 do
   # Create a copy of the conda env and work with this
   conda deactivate
@@ -45,7 +50,11 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install gym==$GYM_VERSION
+  cd third_party/gym
+  git checkout v0.19.0
+  python setup.py develop --extras_require=atari
+  cd ../..
+
   $DIR/run_test.sh
 
   # delete the conda copy
@@ -62,7 +71,10 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari]'==$GYM_VERSION
+  cd third_party/gym
+  git checkout v0.20.0
+  python setup.py develop --extras_require=atari
+  cd ../..
   pip3 install ale-py==0.7
   $DIR/run_test.sh
 
@@ -79,7 +91,10 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[atari]'==$GYM_VERSION
+  cd third_party/gym
+  git checkout v0.25.0
+  python setup.py develop --extras_require=atari
+  cd ../..
   $DIR/run_test.sh
 
   # delete the conda copy
@@ -96,8 +111,10 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip3 install 'gym[accept-rom-license]'==$GYM_VERSION
-  pip3 install 'gym[atari]'==$GYM_VERSION
+  cd third_party/gym
+  git checkout v0.19.0
+  python setup.py develop --extras_require=atari --extras_require=accept-rom-license
+  cd ../..
   pip3 install gym-super-mario-bros
   $DIR/run_test.sh
 
