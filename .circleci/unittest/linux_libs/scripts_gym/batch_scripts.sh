@@ -17,7 +17,7 @@ $DIR/install.sh
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
 
 # solves "'extras_require' must be a dictionary"
-pip install --upgrade setuptools
+pip install setuptools==65.3.0
 
 mkdir third_party
 cd third_party
@@ -42,7 +42,6 @@ do
 done
 
 # we need to clone as gym 0.19 breaks with current setuptools
-# gym[atari]==0.19 is broken, so we install only gym without dependencies.
 for GYM_VERSION in '0.19.0'
 do
   # Create a copy of the conda env and work with this
@@ -53,6 +52,7 @@ do
   echo "Testing gym version: ${GYM_VERSION}"
   cd third_party/gym
   git checkout 0.19.0
+  # still valid? gym[atari]==0.19 is broken, so we install only gym without dependencies.
   python setup.py develop --extras_require=atari
   cd ../..
 
