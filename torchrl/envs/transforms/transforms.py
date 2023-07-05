@@ -3876,7 +3876,7 @@ class RandomCropTensorDict(Transform):
             should occur. Negative dimensions should be preferred to make
             the transform robust to tensordicts of varying batch dimensions.
             Defaults to -1 (the default time dimension in TorchRL).
-        mask_key (str): If provided, this represents the mask key to be looked
+        mask_key (NestedKey): If provided, this represents the mask key to be looked
             for when doing the sampling. If provided, it only valid elements will
             be returned. It is assumed that the mask is a boolean tensor with
             first True values and then False values, not mixed together.
@@ -3886,7 +3886,10 @@ class RandomCropTensorDict(Transform):
     """
 
     def __init__(
-        self, sub_seq_len: int, sample_dim: int = -1, mask_key: Optional[str] = None
+        self,
+        sub_seq_len: int,
+        sample_dim: int = -1,
+        mask_key: Optional[NestedKey] = None,
     ):
         self.sub_seq_len = sub_seq_len
         if sample_dim > 0:
@@ -4027,11 +4030,11 @@ class RenameTransform(Transform):
     """A transform to rename entries in the output tensordict.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename
-        out_keys (list of str/tuples of str): the name of the entries after renaming.
-        in_keys_inv (list of str/tuples of str): the entries to rename before
+        in_keys (sequence of NestedKey): the entries to rename
+        out_keys (sequence of NestedKey): the name of the entries after renaming.
+        in_keys_inv (sequence of NestedKey, optional): the entries to rename before
             passing the input tensordict to :meth:`EnvBase._step`.
-        out_keys_inv (list of str/tuples of str): the names of the renamed
+        out_keys_inv (sequence of NestedKey, optional): the names of the renamed
             entries passed to :meth:`EnvBase._step`.
         create_copy (bool, optional): if ``True``, the entries will be copied
             with a different name rather than being renamed. This allows for

@@ -7285,20 +7285,30 @@ class TestRenameTransform(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("mode", ["forward", "_call"])
-    def test_transform_no_env(self, create_copy, mode):
-        t = RenameTransform(["a"], ["b"], create_copy=create_copy)
-        tensordict = TensorDict({"a": torch.randn(())}, [])
+    @pytest.mark.parametrize(
+        "in_out_key",
+        [
+            ("a", "b"),
+            (("nested", "stuff"), "b"),
+            (("nested", "stuff"), "b"),
+            (("nested", "stuff"), ("nested", "other")),
+        ],
+    )
+    def test_transform_no_env(self, create_copy, mode, in_out_key):
+        in_key, out_key = in_out_key
+        t = RenameTransform([in_key], [out_key], create_copy=create_copy)
+        tensordict = TensorDict({in_key: torch.randn(())}, [])
         if mode == "forward":
             t(tensordict)
         elif mode == "_call":
             t._call(tensordict)
         else:
             raise NotImplementedError
-        assert "b" in tensordict.keys()
+        assert out_key in tensordict.keys(True, True)
         if create_copy:
-            assert "a" in tensordict.keys()
+            assert in_key in tensordict.keys(True, True)
         else:
-            assert "a" not in tensordict.keys()
+            assert in_key not in tensordict.keys(True, True)
 
     @pytest.mark.parametrize("mode", ["forward", "_call"])
     def test_transform_compose(self, create_copy, mode):
