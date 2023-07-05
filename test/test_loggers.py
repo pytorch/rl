@@ -182,84 +182,79 @@ class TestCSVLogger:
                 logger.log_histogram("hist", data, step=0, bins=2)
 
 
+@pytest.fixture(scope="class")
+def wandb_logger(tmp_path_factory):
+    tmpdir1 = tmp_path_factory.mktemp("tmpdir1")
+    exp_name = "ramala"
+    logger = WandbLogger(log_dir=tmpdir1, exp_name=exp_name, offline=True)
+    yield logger
+    logger.experiment.finish()
+    del logger
+
+
 @pytest.mark.skipif(not _has_wandb, reason="Wandb not installed")
 class TestWandbLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_scalar(self, steps):
+    def test_log_scalar(self, steps, wandb_logger):
         torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = WandbLogger(log_dir=log_dir, exp_name=exp_name, offline=True)
 
-            values = torch.rand(3)
-            for i in range(3):
-                scalar_name = "foo"
-                scalar_value = values[i].item()
-                logger.log_scalar(
-                    value=scalar_value,
-                    name=scalar_name,
-                    step=steps[i] if steps else None,
-                )
-
-            assert logger.experiment.summary["foo"] == values[-1].item()
-            assert logger.experiment.summary["_step"] == i if not steps else steps[i]
-
-            logger.experiment.finish()
-            del logger
-
-    def test_log_video(self):
-        torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = WandbLogger(log_dir=log_dir, exp_name=exp_name, offline=True)
-
-            # creating a sample video (T, C, H, W), where T - number of frames,
-            # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
-            # the first 64 frames are black and the next 64 are white
-            video = torch.cat(
-                (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+        values = torch.rand(3)
+        for i in range(3):
+            scalar_name = "foo"
+            scalar_value = values[i].item()
+            wandb_logger.log_scalar(
+                value=scalar_value,
+                name=scalar_name,
+                step=steps[i] if steps else None,
             )
-            video = video[None, :]
-            logger.log_video(
+
+        assert wandb_logger.experiment.summary["foo"] == values[-1].item()
+        assert wandb_logger.experiment.summary["_step"] == i if not steps else steps[i]
+
+    def test_log_video(self, wandb_logger):
+        torch.manual_seed(0)
+
+        # creating a sample video (T, C, H, W), where T - number of frames,
+        # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
+        # the first 64 frames are black and the next 64 are white
+        video = torch.cat(
+            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+        )
+        video = video[None, :]
+        wandb_logger.log_video(
+            name="foo",
+            video=video,
+            fps=6,
+        )
+        wandb_logger.log_video(
+            name="foo_12fps",
+            video=video,
+            fps=24,
+        )
+        sleep(0.01)  # wait until events are registered
+
+        # check that fps can be passed and that it has impact on the length of the video
+        video_6fps_size = wandb_logger.experiment.summary["foo"]["size"]
+        video_24fps_size = wandb_logger.experiment.summary["foo_12fps"]["size"]
+        assert video_6fps_size > video_24fps_size, video_6fps_size
+
+        # check that we catch the error in case the format of the tensor is wrong
+        video_wrong_format = torch.zeros(64, 2, 32, 32)
+        video_wrong_format = video_wrong_format[None, :]
+        with pytest.raises(Exception):
+            wandb_logger.log_video(
                 name="foo",
-                video=video,
-                fps=6,
+                video=video_wrong_format,
             )
-            logger.log_video(
-                name="foo_12fps",
-                video=video,
-                fps=24,
-            )
-            sleep(0.01)  # wait until events are registered
 
-            # check that fps can be passed and that it has impact on the length of the video
-            video_6fps_size = logger.experiment.summary["foo"]["size"]
-            video_24fps_size = logger.experiment.summary["foo_12fps"]["size"]
-            assert video_6fps_size > video_24fps_size, video_6fps_size
-
-            # check that we catch the error in case the format of the tensor is wrong
-            video_wrong_format = torch.zeros(64, 2, 32, 32)
-            video_wrong_format = video_wrong_format[None, :]
-            with pytest.raises(Exception):
-                logger.log_video(
-                    name="foo",
-                    video=video_wrong_format,
-                )
-
-            logger.experiment.finish()
-            del logger
-
-    def test_log_histogram(self):
+    def test_log_histogram(self, wandb_logger):
         torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = WandbLogger(log_dir=log_dir, exp_name=exp_name, offline=True)
-            # test with torch
-            data = torch.randn(10)
-            logger.log_histogram("hist", data, step=0, bins=2)
-            # test with np
-            data = torch.randn(10).numpy()
-            logger.log_histogram("hist", data, step=1, bins=2)
+        # test with torch
+        data = torch.randn(10)
+        wandb_logger.log_histogram("hist", data, step=0, bins=2)
+        # test with np
+        data = torch.randn(10).numpy()
+        wandb_logger.log_histogram("hist", data, step=1, bins=2)
 
 
 @pytest.fixture

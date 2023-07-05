@@ -8,11 +8,13 @@ import pytest
 import torch
 
 from _utils_internal import get_default_devices
+
+from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
-
 from torchrl.data import (
+    BinaryDiscreteTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
@@ -75,6 +77,64 @@ class TestQValue:
             ValueError, match="Neither action_space nor spec was defined"
         ):
             _process_action_space_spec(None, None)
+
+    @pytest.mark.parametrize("nested_action", [True, False])
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    def test_nested_keys(self, nested_action, batch_size, nested_dim=5):
+        # _process_action_space_spec can take
+        # an action_space argument (which can be string or non-composite spec)
+        # and a action_spec, which can be a spec
+        env = NestedCountingEnv(
+            nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
+        )
+        action_spec = env._input_spec["_action_spec"]
+        leaf_action_spec = env.action_spec
+
+        space_str, spec = _process_action_space_spec(None, action_spec)
+        assert spec == action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(None, leaf_action_spec)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(leaf_action_spec, None)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(leaf_action_spec, action_spec)
+        assert spec == action_spec  # Spec wins
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec("binary", action_spec)
+        assert spec == action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec("binary", leaf_action_spec)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        with pytest.raises(
+            ValueError,
+            match="Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match.",
+        ):
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), action_spec)
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), leaf_action_spec)
+        with pytest.raises(
+            ValueError, match="action_space cannot be of type CompositeSpec"
+        ):
+            _process_action_space_spec(action_spec, None)
+
+        mod = QValueModule(
+            action_value_key=("data", "action_value"),
+            out_keys=[
+                env.action_key,
+                ("data", "action_value"),
+                ("data", "chosen_action_value"),
+            ],
+            action_space=None,
+            spec=action_spec,
+        )
 
     @pytest.mark.parametrize(
         "action_space, expected_action",

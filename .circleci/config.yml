@@ -1032,14 +1032,6 @@ workflows:
           cu_version: cu117
           name: unittest_linux_vmas_gpu_py3.8
           python_version: '3.8'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_gpu:
-          cu_version: cu117
-          name: unittest_linux_gpu_py3.9
-          python_version: '3.9'
       - unittest_linux_distributed_gpu:
           cu_version: cu117
           name: unittest_linux_distributed_gpu_py3.9
