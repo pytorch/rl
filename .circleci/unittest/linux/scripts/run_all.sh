@@ -47,11 +47,16 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-export MUJOCO_GL=egl
+if [ "${CU_VERSION:-}" == cpu ] ; then
+  export MUJOCO_GL=glfw
+else
+  export MUJOCO_GL=egl
+fi
+
 export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
-conda env config vars set MUJOCO_GL=egl PYOPENGL_PLATFORM=egl DISPLAY=:0 SDL_VIDEODRIVER=dummy
+conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
 pip3 install pip --upgrade
 
@@ -64,10 +69,6 @@ echo "installing gymnasium"
 pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
 pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
-python3 -c """
-import dm_control
-from dm_control import composer
-"""
 # ================================================================================= #
 
 unset PYTORCH_VERSION
