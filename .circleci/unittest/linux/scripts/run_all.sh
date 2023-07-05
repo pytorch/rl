@@ -95,6 +95,7 @@ python3 -c """
 import dm_control
 from dm_control import composer
 from tensorboard import *
+from google.protobuf import descriptor as _descriptor
 """
 
 # ============================================================================================ #
