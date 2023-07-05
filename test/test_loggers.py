@@ -257,7 +257,7 @@ class TestWandbLogger:
         wandb_logger.log_histogram("hist", data, step=1, bins=2)
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
 def mlflow_fixture():
     torch.manual_seed(0)
 
