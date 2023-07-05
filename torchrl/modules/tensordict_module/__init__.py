@@ -32,3 +32,4 @@ from .probabilistic import (
 from .rnn import LSTMModule
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper
+from .ensemble import EnsembleModule
