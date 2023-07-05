@@ -216,7 +216,6 @@ def step_mdp(
         _set_single_key(tensordict, out, action_key)
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
-
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
@@ -245,7 +244,7 @@ def _set_single_key(source, dest, key, clone=False):
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
-    if total_key not in excluded:
+    if unravel_key(total_key) not in excluded:
         val = source.get(key)
         if is_tensor_collection(val):
             new_val = dest.get(key, None)

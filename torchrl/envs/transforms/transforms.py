@@ -2781,11 +2781,14 @@ class NoopResetEnv(Transform):
         tensordict = tensordict.clone(False)
         # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
+        done_key = parent.done_key
+        reward_key = parent.reward_key
+
         if parent is None:
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
-        if tensordict.get("done").numel() > 1:
+        if tensordict.get(done_key).numel() > 1:
             raise ValueError(
                 "there is more than one done state in the parent environment. "
                 "NoopResetEnv is designed to work on single env instances, as partial reset "
@@ -2806,7 +2809,7 @@ class NoopResetEnv(Transform):
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get("done"):
+                if tensordict.get(done_key):
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:
@@ -2815,15 +2818,15 @@ class NoopResetEnv(Transform):
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
                 tensordict = parent.rand_step(tensordict)
-                if tensordict.get(("next", "done")):
+                if tensordict.get(("next", done_key)):
                     raise RuntimeError(
                         f"parent is still done after a single random step (i={i})."
                     )
                 break
 
-        if tensordict.get("done"):
+        if tensordict.get(done_key):
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        return tensordict
+        return tensordict.exclude(reward_key, inplace=True)
 
     def __repr__(self) -> str:
         random = self.random
