@@ -3640,7 +3640,7 @@ class ExcludeTransform(Transform):
     """Excludes keys from the input tensordict.
 
     Args:
-        *excluded_keys (iterable of str): The name of the keys to exclude. If the key is
+        *excluded_keys (iterable of NestedKey): The name of the keys to exclude. If the key is
             not present, it is simply ignored.
 
     """
