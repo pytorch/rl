@@ -49,10 +49,6 @@ cat "${this_dir}/environment.yml"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-#conda install -c conda-forge gcc=12.1.0 -y
-#conda install libgcc==5.2.0 -y
-conda install -c anaconda libstdcxx-ng -y
-
 
 conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightly -y
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab

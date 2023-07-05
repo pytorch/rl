@@ -379,63 +379,6 @@ jobs:
       - store_test_results:
           path: test-results
 
-  unittest_linux_habitat_gpu:
-    <<: *binary_common
-    machine:
-      image: ubuntu-2004-cuda-11.4:202110-01
-    resource_class: gpu.nvidia.medium
-    environment:
-      image_name: "nvidia/cudagl:11.4.0-base"
-      TAR_OPTIONS: --no-same-owner
-      PYTHON_VERSION: << parameters.python_version >>
-      CU_VERSION: << parameters.cu_version >>
-
-    steps:
-      - checkout
-      - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-          keys:
-            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_libs/scripts_habitat/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-      - run:
-          name: Setup
-          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/setup_env.sh
-      - save_cache:
-
-          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_libs/scripts_habitat/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
-      - run:
-          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-          # They're available in all the other workflows (OSX and Windows).
-          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-          name: export CIRCLECI env var
-          command: echo "CIRCLECI=true" >> ./env.list
-      - run:
-          name: Install torchrl
-          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/install.sh
-      - run:
-          name: Run tests
-          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/run_test.sh
-      - run:
-          name: Codecov upload
-          command: |
-            curl -Os https://uploader.codecov.io/latest/linux/codecov
-            chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F habitat-gpu
-      - run:
-          name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_libs/scripts_habitat/post_process.sh
-      - store_test_results:
-          path: test-results
-
   unittest_linux_d4rl_gpu:
     <<: *binary_common
     machine:
@@ -1044,11 +987,6 @@ workflows:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
-      - unittest_linux_habitat_gpu:
-          cu_version: cu117
-          name: unittest_linux_habitat_gpu_py3.9
-          python_version: '3.9'
-
       - unittest_linux_olddeps_gpu:
           cu_version: cu116
           name: unittest_linux_olddeps_gpu_py3.9
