@@ -686,7 +686,8 @@ def _process_action_space_spec(action_space, spec):
             else:
                 # the first key is the action
                 for _key in spec.keys(True, True):
-                    break
+                    if isinstance(_key, tuple) and _key[-1] == "action":
+                        break
                 else:
                     raise KeyError
             spec = spec[_key]
@@ -695,7 +696,7 @@ def _process_action_space_spec(action_space, spec):
             raise KeyError(
                 "action could not be found in the spec. Make sure "
                 "you pass a spec that is either a native action spec or a composite action spec "
-                "with an 'action' entry. Otherwise, simply remove the spec and use the action_space only."
+                "with a leaf 'action' entry. Otherwise, simply remove the spec and use the action_space only."
             )
     if action_space is not None:
         if isinstance(action_space, CompositeSpec):

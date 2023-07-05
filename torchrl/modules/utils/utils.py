@@ -36,7 +36,8 @@ def _find_action_space(action_space):
             else:
                 # the first key is the action
                 for _key in action_space.keys(True, True):
-                    break
+                    if isinstance(_key, tuple) and _key[-1] == "action":
+                        break
                 else:
                     raise KeyError
             action_space = action_space[_key]
