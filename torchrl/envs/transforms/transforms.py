@@ -2437,10 +2437,10 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        in_keys (Sequence of str): keys to be concatenated. If `None` (or not provided)
+        in_keys (sequence of NestedKey): keys to be concatenated. If `None` (or not provided)
             the keys will be retrieved from the parent environment the first time
             the transform is used. This behaviour will only work if a parent is set.
-        out_key: key of the resulting tensor.
+        out_key (NestedKey): key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
         del_keys (bool, optional): if ``True``, the input values will be deleted after
@@ -2470,8 +2470,8 @@ class CatTensors(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_key: str = "observation_vector",
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_key: NestedKey = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
@@ -2484,8 +2484,10 @@ class CatTensors(Transform):
                 )
         else:
             in_keys = sorted(in_keys, key=_sort_keys)
-        if type(out_key) != str:
-            raise Exception("CatTensors requires out_key to be of type string")
+        if not isinstance(out_key, str) and not (
+            isinstance(out_key, tuple) and set(map(type, out_key)) == {str}
+        ):
+            raise Exception("CatTensors requires out_key to be of type NestedKey")
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim

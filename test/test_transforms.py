@@ -1345,12 +1345,13 @@ class TestCatTensors(TransformBase):
     @pytest.mark.parametrize(
         "keys",
         [
-            ["observation", "observation_other"],
+            ["observation", ("some", "other")],
             ["observation_pixels"],
         ],
     )
-    def test_transform_no_env(self, keys, device):
-        cattensors = CatTensors(in_keys=keys, out_key="observation_out", dim=-2)
+    @pytest.mark.parametrize("out_key", ["observation_out", ("some", "nested")])
+    def test_transform_no_env(self, keys, device, out_key):
+        cattensors = CatTensors(in_keys=keys, out_key=out_key, dim=-2)
 
         dont_touch = torch.randn(1, 3, 3, dtype=torch.double, device=device)
         td = TensorDict(
@@ -1373,11 +1374,11 @@ class TestCatTensors(TransformBase):
         td.set("dont touch", dont_touch.clone())
 
         tdc = cattensors(td.clone())
-        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get(out_key).shape[-2] == len(keys) * 4
         assert tdc.get("dont touch").shape == dont_touch.shape
 
         tdc = cattensors._call(td.clone())
-        assert tdc.get("observation_out").shape[-2] == len(keys) * 4
+        assert tdc.get(out_key).shape[-2] == len(keys) * 4
         assert tdc.get("dont touch").shape == dont_touch.shape
 
         if len(keys) == 1:
@@ -1389,9 +1390,7 @@ class TestCatTensors(TransformBase):
                 {key: BoundedTensorSpec(0, 1, (1, 4, 32)) for key in keys}
             )
             observation_spec = cattensors.transform_observation_spec(observation_spec)
-            assert observation_spec["observation_out"].shape == torch.Size(
-                [1, len(keys) * 4, 32]
-            )
+            assert observation_spec[out_key].shape == torch.Size([1, len(keys) * 4, 32])
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
@@ -1436,17 +1435,18 @@ class TestCatTensors(TransformBase):
 
     @pytest.mark.parametrize("del_keys", [True, False])
     @pytest.mark.skipif(not _has_gym, reason="Gym not found")
-    def test_transform_env(self, del_keys):
+    @pytest.mark.parametrize("out_key", ["observation_out", ("some", "nested")])
+    def test_transform_env(self, del_keys, out_key):
         ct = CatTensors(
             in_keys=[
                 "observation",
             ],
-            out_key="observation_out",
+            out_key=out_key,
             dim=-1,
             del_keys=del_keys,
         )
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), ct)
-        assert env.observation_spec["observation_out"]
+        assert env.observation_spec[out_key]
         if del_keys:
             assert "observation" not in env.observation_spec
         else:
