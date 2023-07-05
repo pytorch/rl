@@ -16,7 +16,7 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 
   if [ "${CU_VERSION:-}" == cpu ] ; then
     # solves version `GLIBCXX_3.4.29' not found for tensorboard
-    apt-get install -y gcc-4.9
+#    apt-get install -y gcc-4.9
     apt-get upgrade -y libstdc++6
     apt-get dist-upgrade -y
   else
