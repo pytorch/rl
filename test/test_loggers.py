@@ -188,7 +188,6 @@ def wandb_logger(tmp_path_factory):
     exp_name = "ramala"
     logger = WandbLogger(log_dir=tmpdir1, exp_name=exp_name, offline=True)
     yield logger
-    print("\n\nclosing\n\n")
     logger.experiment.finish()
     del logger
 
