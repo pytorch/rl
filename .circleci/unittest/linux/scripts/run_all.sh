@@ -3,11 +3,17 @@
 set -euxo pipefail
 set -v
 
-apt-get update && apt-get upgrade -y
-apt-get install -y vim git wget g++ gcc
+# ==================================================================================== #
+# ================================ Setup env ========================================= #
 
-apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+
+if [[ $OSTYPE != 'darwin'* ]]; then
+  apt-get update && apt-get upgrade -y
+  apt-get install -y vim git wget g++ gcc
+
+  apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+fi
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
@@ -56,12 +62,14 @@ fi
 export DISPLAY=:0
 export SDL_VIDEODRIVER=dummy
 
+# legacy from bash scripts: remove?
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
 pip3 install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
+# Reset conda env variables
 conda deactivate
 conda activate "${env_dir}"
 
@@ -69,12 +77,14 @@ echo "installing gymnasium"
 pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
 pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
+# sanity check: remove?
 python3 -c """
 import dm_control
 from dm_control import composer
 """
 
-# ================================================================================= #
+# ============================================================================================ #
+# ================================ PyTorch & TorchRL ========================================= #
 
 unset PYTORCH_VERSION
 
@@ -113,7 +123,9 @@ pip3 install git+https://github.com/pytorch-labs/tensordict.git
 printf "* Installing torchrl\n"
 python setup.py develop
 
-# ================================================================================= #
+# ==================================================================================== #
+# ================================ Run tests ========================================= #
+
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -129,5 +141,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
 coverage combine
 coverage xml -i
+
+# ==================================================================================== #
+# ================================ Post-proc ========================================= #
 
 bash ${this_dir}/post_process.sh
