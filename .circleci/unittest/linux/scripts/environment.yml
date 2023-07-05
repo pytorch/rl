@@ -20,7 +20,7 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - tensorboard
+    - tensorboard==2.12.0
     - imageio==2.26.0
     - wandb==0.15.3
     - dm_control
