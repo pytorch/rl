@@ -15,10 +15,8 @@ apt-get dist-upgrade -y
 apt-get install -y g++ gcc
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-if [[ $OSTYPE != 'darwin'* ]]; then
-  # from cudagl docker image
-  cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
-fi
+# from cudagl docker image
+cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 bash ${this_dir}/setup_env.sh
 bash ${this_dir}/install.sh
