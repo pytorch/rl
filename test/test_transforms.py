@@ -7431,6 +7431,53 @@ class TestInitTracker(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for InitTracker")
 
+    @pytest.mark.parametrize("init_key", ["is_init", "loool", ("other", "key")])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("max_steps", [5])
+    def test_nested(
+        self,
+        nested_done,
+        max_steps,
+        init_key,
+        batch_size=(32, 2),
+        rollout_length=9,
+    ):
+        env = NestedCountingEnv(
+            max_steps=max_steps, nest_done=nested_done, batch_size=batch_size
+        )
+        policy = CountingEnvCountPolicy(
+            action_spec=env.action_spec, action_key=env.action_key
+        )
+        transformed_env = TransformedEnv(
+            env,
+            InitTracker(init_key=init_key),
+        )
+        td = transformed_env.rollout(
+            rollout_length, policy=policy, break_when_any_done=False
+        )
+        if nested_done:
+            is_init = td[init_key][0, 0, :, 0, 0].clone()
+        else:
+            is_init = td[init_key][0, 0, :, 0].clone()
+        if max_steps == 20:
+            assert (is_init[0] is True).all()
+            assert (is_init[1:] is False).all()
+        else:
+            assert (is_init[0] is True).all()
+            assert (is_init[1 : max_steps + 1] is False).all()
+            assert (is_init[max_steps + 1] is True).all()
+            assert (is_init[max_steps + 2 :] is False).all()
+
+        _reset = env.done_spec.rand()
+        td_reset = transformed_env.reset(
+            TensorDict(
+                {"_reset": _reset},
+                batch_size=env.batch_size,
+                device=env.device,
+            )
+        )
+        assert (td_reset[init_key] == _reset).all()
+
 
 class TestKLRewardTransform(TransformBase):
     envclass = ContinuousActionVecMockEnv

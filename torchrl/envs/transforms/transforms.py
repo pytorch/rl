@@ -3970,7 +3970,7 @@ class InitTracker(Transform):
         super().__init__(in_keys=[], out_keys=[init_key])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.out_keys[0] not in tensordict.keys():
+        if self.out_keys[0] not in tensordict.keys(True, True):
             device = tensordict.device
             if device is None:
                 device = torch.device("cpu")
