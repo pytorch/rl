@@ -162,7 +162,7 @@ class KLRewardTransform(Transform):
         in_key = unravel_key(self.in_keys[0])
         out_key = unravel_key(self.out_keys[0])
 
-        if in_key == ("reward",) and out_key == ("reward",):
+        if in_key == "reward" and out_key == "reward":
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
@@ -172,7 +172,7 @@ class KLRewardTransform(Transform):
                 {parent.reward_key: reward_spec},
                 shape=output_spec["_reward_spec"].shape,
             )
-        elif in_key == ("reward",):
+        elif in_key == "reward":
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
