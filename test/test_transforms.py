@@ -2957,6 +2957,24 @@ class TestNoop(TransformBase):
 
     @pytest.mark.parametrize("random", [True, False])
     @pytest.mark.parametrize("compose", [True, False])
+    def test_nested(self, random, compose):
+        torch.manual_seed(0)
+        env = NestedCountingEnv(nest_done=False, max_steps=50, nested_dim=6)
+        env.set_seed(100)
+        noop_reset_env = NoopResetEnv(random=random)
+        if compose:
+            transformed_env = TransformedEnv(env)
+            transformed_env.append_transform(noop_reset_env)
+        else:
+            transformed_env = TransformedEnv(env, noop_reset_env)
+        transformed_env.reset()
+        if random:
+            assert transformed_env.count > 0
+        else:
+            assert transformed_env.count == 30
+
+    @pytest.mark.parametrize("random", [True, False])
+    @pytest.mark.parametrize("compose", [True, False])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_noop_reset_env_error(self, random, device, compose):
         torch.manual_seed(0)
