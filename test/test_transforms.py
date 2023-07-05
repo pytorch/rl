@@ -2622,6 +2622,16 @@ class TestFrameSkipTransform(TransformBase):
             for key in td1.keys():
                 torch.testing.assert_close(td1[key], td2[key])
 
+    def test_nested(self, skip=4):
+        env = NestedCountingEnv(max_steps=20)
+        policy = CountingEnvCountPolicy(
+            action_spec=env.action_spec, action_key=env.action_key
+        )
+        trnasformed_env = TransformedEnv(env, FrameSkipTransform(frame_skip=skip))
+        td = trnasformed_env.rollout(2, policy=policy)
+        (td[0] == 0).all()
+        (td[1] == skip).all()
+
     def test_transform_model(self):
         t = FrameSkipTransform(2)
         t = nn.Sequential(t, nn.Identity())

@@ -2731,11 +2731,12 @@ class FrameSkipTransform(Transform):
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
-        reward = tensordict.get(("next", "reward"))
+        reward_key = parent.reward_key
+        reward = tensordict.get(("next", reward_key))
         for _ in range(self.frame_skip - 1):
             tensordict = parent._step(tensordict)
-            reward = reward + tensordict.get(("next", "reward"))
-        return tensordict.set(("next", "reward"), reward)
+            reward = reward + tensordict.get(("next", reward_key))
+        return tensordict.set(("next", reward_key), reward)
 
     def forward(self, tensordict):
         raise RuntimeError(
