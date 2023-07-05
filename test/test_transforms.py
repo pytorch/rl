@@ -4949,7 +4949,7 @@ class TestSqueezeTransform(TransformBase):
     @pytest.mark.parametrize(
         "keys_inv", [[], ["action", "some_other_key"], [("next", "observation_pixels")]]
     )
-    def test_transform_env(self):
+    def test_transform_env(self, keys_inv):
         env = TransformedEnv(ContinuousActionVecMockEnv(), self._circular_transform)
         r = env.rollout(3)
         assert "observation" in r.keys()
@@ -7535,13 +7535,13 @@ class TestInitTracker(TransformBase):
         else:
             is_init = td[init_key][0, 0, :, 0].clone()
         if max_steps == 20:
-            assert (is_init[0] is True).all()
-            assert (is_init[1:] is False).all()
+            assert torch.all(is_init[0] == 1)
+            assert torch.all(is_init[1:] == 0)
         else:
-            assert (is_init[0] is True).all()
-            assert (is_init[1 : max_steps + 1] is False).all()
-            assert (is_init[max_steps + 1] is True).all()
-            assert (is_init[max_steps + 2 :] is False).all()
+            assert torch.all(is_init[0] == 1)
+            assert torch.all(is_init[1 : max_steps + 1] == 0)
+            assert torch.all(is_init[max_steps + 1] == 1)
+            assert torch.all(is_init[max_steps + 2 :] == 0)
 
         _reset = env.done_spec.rand()
         td_reset = transformed_env.reset(
