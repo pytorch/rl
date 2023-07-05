@@ -3686,7 +3686,7 @@ class SelectTransform(Transform):
         keys but other may be necessary.
 
     Args:
-        *selected_keys (iterable of str): The name of the keys to select. If the key is
+        *selected_keys (iterable of NestedKey): The name of the keys to select. If the key is
             not present, it is simply ignored.
 
     """
@@ -3706,8 +3706,10 @@ class SelectTransform(Transform):
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
+        reward_key = self.parent.reward_key if self.parent else "reward"
+        done_key = self.parent.done_key if self.parent else "done"
         return tensordict.select(
-            *self.selected_keys, "reward", "done", *input_keys, strict=False
+            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
         )
 
     forward = _call
@@ -3717,8 +3719,10 @@ class SelectTransform(Transform):
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
+        reward_key = self.parent.reward_key if self.parent else "reward"
+        done_key = self.parent.done_key if self.parent else "done"
         return tensordict.select(
-            *self.selected_keys, "reward", "done", *input_keys, strict=False
+            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
         )
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:

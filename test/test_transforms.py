@@ -2175,6 +2175,33 @@ class TestExcludeTransform(TransformBase):
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
 
+    @pytest.mark.parametrize("nest_done", [True, False])
+    @pytest.mark.parametrize("nest_reward", [True, False])
+    def test_nested(self, nest_reward, nest_done):
+        env = NestedCountingEnv(
+            nest_reward=nest_reward,
+            nest_done=nest_done,
+        )
+        transformed_env = TransformedEnv(env, ExcludeTransform())
+        td = transformed_env.rollout(1)
+        td_keys = td.keys(True, True)
+        assert ("next", env.reward_key) in td_keys
+        assert ("next", env.done_key) in td_keys
+        assert env.done_key in td_keys
+        assert env.action_key in td_keys
+        assert ("data", "states") in td_keys
+        assert ("next", "data", "states") in td_keys
+
+        transformed_env = TransformedEnv(env, ExcludeTransform(("data", "states")))
+        td = transformed_env.rollout(1)
+        td_keys = td.keys(True, True)
+        assert ("next", env.reward_key) in td_keys
+        assert ("next", env.done_key) in td_keys
+        assert env.done_key in td_keys
+        assert env.action_key in td_keys
+        assert ("data", "states") not in td_keys
+        assert ("next", "data", "states") not in td_keys
+
     def test_transform_no_env(self):
         t = ExcludeTransform("a")
         td = TensorDict(
@@ -2353,6 +2380,33 @@ class TestSelectTransform(TransformBase):
         assert "a" not in env.reset().keys()
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
+
+    @pytest.mark.parametrize("nest_done", [True, False])
+    @pytest.mark.parametrize("nest_reward", [True, False])
+    def test_nested(self, nest_reward, nest_done):
+        env = NestedCountingEnv(
+            nest_reward=nest_reward,
+            nest_done=nest_done,
+        )
+        transformed_env = TransformedEnv(env, SelectTransform())
+        td = transformed_env.rollout(1)
+        td_keys = td.keys(True, True)
+        assert ("next", env.reward_key) in td_keys
+        assert ("next", env.done_key) in td_keys
+        assert env.done_key in td_keys
+        assert env.action_key in td_keys
+        assert ("data", "states") not in td_keys
+        assert ("next", "data", "states") not in td_keys
+
+        transformed_env = TransformedEnv(env, SelectTransform(("data", "states")))
+        td = transformed_env.rollout(1)
+        td_keys = td.keys(True, True)
+        assert ("next", env.reward_key) in td_keys
+        assert ("next", env.done_key) in td_keys
+        assert env.done_key in td_keys
+        assert env.action_key in td_keys
+        assert ("data", "states") in td_keys
+        assert ("next", "data", "states") in td_keys
 
     def test_transform_no_env(self):
         t = SelectTransform("b", "c")
