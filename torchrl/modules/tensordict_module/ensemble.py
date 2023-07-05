@@ -1,22 +1,57 @@
 from typing import Callable
+
 import torch
 from tensordict import TensorDict
-from tensordict.nn import make_functional, TensorDictModuleBase, TensorDictModule
+from tensordict.nn import make_functional, TensorDictModuleBase
 from torch import nn
 
 
 class Reduce(TensorDictModuleBase):
+    """A reduction operator that reduces across the ensemble dimension.
+
+    Args:
+        in_keys (list[str]): The input keys to reduce, this must be length one.
+        out_keys (list[str]): The output keys to reduce, this must be length one.
+        reduce_function (Callable): The function to use to reduce across the ensemble dimension.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> from torchrl.modules import EnsembleModule, Reduce
+        >>> from tensordict import TensorDict
+        >>> module = TensorDictModule(nn.Linear(2, 3), in_keys=["bork"], out_keys=["dork"])
+        >>> m0 = EnsembleModule(module, num_copies=2)
+        >>> m1 = Reduce(["dork"], ["spork"])
+        >>> seq = TensorDictSequential(m0, m1)
+        >>> td = TensorDict({"bork": torch.randn(5, 2)}, batch_size=[5])
+        >>> seq(td)
+        TensorDict(
+            fields={
+                bork: Tensor(shape=torch.Size([5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                dork: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                spork: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=None,
+            is_shared=False)
+        >>> m0(td).shape
+        torch.Size([2, 5])
+        >>> seq(td).shape
+        torch.Size([5])
+    """
     def __init__(
         self,
         in_keys: list[str],
         out_keys: list[str],
-        reduce_function: Callable = lambda x: x.min(dim=0).values,
+        reduce_function: Callable[[torch.Tensor], torch.Tensor] = lambda x: x.min(dim=0).values,
     ):
         super().__init__()
         self.in_keys = in_keys
         self.out_keys = out_keys
         self.reduce_function = reduce_function
-        assert len(in_keys) == len(out_keys) == 1, "Reduce only supports one input and one output"
+        assert (
+            len(in_keys) == len(out_keys) == 1
+        ), "Reduce only supports one input and one output"
 
     def forward(self, tensordict):
         reduced = self.reduce_function(tensordict.get(self.in_keys[0]))
@@ -25,7 +60,6 @@ class Reduce(TensorDictModuleBase):
         tensordict_reduced = tensordict[0]
         tensordict_reduced.set(self.out_keys[0], reduced)
         return tensordict_reduced
-
 
 
 class EnsembleModule(TensorDictModuleBase):
