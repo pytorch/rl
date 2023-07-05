@@ -16,6 +16,9 @@ $DIR/install.sh
 # Extracted from run_test.sh to run once.
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
 
+# solves "'extras_require' must be a dictionary"
+pip install --upgrade setuptools
+
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
 do
