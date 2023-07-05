@@ -1537,7 +1537,7 @@ def test_ensure_tensordict_compatible():
         in_keys=["x"],
         out_keys=["out_1", "out_2", "out_3"],
     )
-    assert set(unravel_key_list(ensured_module.in_keys)) == {("x",)}
+    assert set(unravel_key_list(ensured_module.in_keys)) == {"x"}
     assert isinstance(ensured_module, TensorDictModule)
 
 

@@ -2781,16 +2781,15 @@ class NoopResetEnv(Transform):
         tensordict = tensordict.clone(False)
         # check that there is a single done state -- behaviour is undefined for multiple dones
         parent = self.parent
-        done_key = parent.done_key
-        reward_key = parent.reward_key
-
         if parent is None:
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
-        if tensordict.get(done_key).numel() > 1:
+        done_key = parent.done_key
+        reward_key = parent.reward_key
+        if parent.batch_size.numel() > 1:
             raise ValueError(
-                "there is more than one done state in the parent environment. "
+                "The parent environment batch-size is non-null. "
                 "NoopResetEnv is designed to work on single env instances, as partial reset "
                 "is currently not supported. If you feel like this is a missing feature, submit "
                 "an issue on TorchRL github repo. "
@@ -2798,6 +2797,7 @@ class NoopResetEnv(Transform):
                 "that you can have a transformed batch of transformed envs, such as: "
                 "`TransformedEnv(ParallelEnv(3, lambda: TransformedEnv(MyEnv(), NoopResetEnv(3))), OtherTransform())`."
             )
+
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
