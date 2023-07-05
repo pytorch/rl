@@ -1187,10 +1187,7 @@ class TestStepCounter(TransformBase):
             step = td[step_key][0, 0, :, 0].clone()
             last_step = td[step_key][:, :, -1, :].clone()
         if max_steps is None:
-            if nested_done:
-                assert step.eq(torch.arange(rollout_length)).all()
-            else:
-                assert step.eq(torch.arange(rollout_length)).all()
+            assert step.eq(torch.arange(rollout_length)).all()
         else:
             assert step[:max_steps].eq(torch.arange(max_steps)).all()
             assert step[max_steps:].eq(torch.arange(rollout_length - max_steps)).all()
