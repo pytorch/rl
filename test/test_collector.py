@@ -14,16 +14,18 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnv,
+    CountingEnvCountPolicy,
     DiscreteActionConvMockEnv,
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
     MockSerialEnv,
+    NestedCountingEnv,
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
-from torchrl._utils import seed_generator
+from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
 from torchrl.collectors.collectors import (
     _Interruptor,
@@ -33,7 +35,14 @@ from torchrl.collectors.collectors import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs import EnvBase, EnvCreator, ParallelEnv, SerialEnv, StepCounter
+from torchrl.envs import (
+    EnvBase,
+    EnvCreator,
+    InitTracker,
+    ParallelEnv,
+    SerialEnv,
+    StepCounter,
+)
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -1344,6 +1353,119 @@ def test_reset_heterogeneous_envs():
         data[1]["next", "truncated"].squeeze()
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
+
+
+class TestNestedEnvsCollector:
+    def test_multi_collector_nested_env_consistency(self, seed=1):
+        env = NestedCountingEnv()
+        torch.manual_seed(seed)
+        env_fn = lambda: TransformedEnv(env, InitTracker())
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("nested_reward", [True, False])
+    def test_collector_nested_env_combinations(
+        self,
+        nested_obs_action,
+        nested_done,
+        nested_reward,
+        seed=1,
+        frames_per_batch=20,
+    ):
+        env = NestedCountingEnv(
+            nest_reward=nested_reward,
+            nest_done=nested_done,
+            nest_obs_action=nested_obs_action,
+        )
+        torch.manual_seed(seed)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+
+    @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
+    def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
+        from mocking_classes import CountingEnvCountPolicy, NestedCountingEnv
+
+        env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        env_fn = lambda: NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
+        torch.manual_seed(0)
+        policy = CountingEnvCountPolicy(env.action_spec, env.action_key)
+        policy(env.reset())
+        ccollector = SyncDataCollector(
+            create_env_fn=env_fn,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+
+        # assert ("data","reward") not in td.keys(True) # this can be activates once step_mdp is fixed for nested keys
+        assert _td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
+        assert _td["data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
+        assert _td["next", "data"].batch_size == (
+            *batch_size,
+            frames_per_batch // prod(batch_size),
+            nested_dim,
+        )
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")

@@ -430,7 +430,7 @@ class LossModule(TensorDictModuleBase):
                 if not self._has_update_associated and RL_WARNINGS:
                     warnings.warn(
                         "No target network updater has been associated "
-                        "with this loss module, but target parameters have been found."
+                        "with this loss module, but target parameters have been found. "
                         "While this is supported, it is expected that the target network "
                         "updates will be manually performed. You can deactivate this warning "
                         "by turning the RL_WARNINGS env variable to False.",

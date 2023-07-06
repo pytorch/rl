@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -72,11 +73,12 @@ class RandomPolicy:
         >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
     """
 
-    def __init__(self, action_spec: TensorSpec):
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         self.action_spec = action_spec
+        self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand())
+        return td.set(self.action_key, self.action_spec.rand())
 
 
 class _Interruptor:
@@ -208,7 +210,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec)
+            policy = RandomPolicy(self.env.action_spec, self.env.action_key)
         elif isinstance(policy, nn.Module):
             # TODO: revisit these checks when we have determined whether arbitrary
             # callables should be supported as policies.
@@ -240,7 +242,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 # we check if all the mandatory params are there
                 if not required_params.difference(set(next_observation)):
                     in_keys = [str(k) for k in sig.parameters if k in next_observation]
-                    out_keys = ["action"]
+                    if not hasattr(self, "env") or self.env is None:
+                        out_keys = ["action"]
+                    else:
+                        out_keys = [self.env.action_key]
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
@@ -766,7 +771,7 @@ class SyncDataCollector(DataCollectorBase):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", "done"))
+        done = self._tensordict.get(("next", *self.env.done_key))
         truncated = self._tensordict.get(("next", "truncated"), None)
         traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
@@ -796,7 +801,7 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 self._tensordict.update(td_reset, inplace=True)
 
-            done = self._tensordict.get("done")
+            done = self._tensordict.get(self.env.done_key)
             if done.any():
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."

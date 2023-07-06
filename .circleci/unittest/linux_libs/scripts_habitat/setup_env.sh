@@ -6,10 +6,11 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
-apt-get update && apt-get install -y git wget gcc g++
+#apt-get update && apt-get install -y git wget gcc g++ unzip
 
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
@@ -53,6 +54,3 @@ conda install habitat-sim withbullet headless -c conda-forge -c aihabitat-nightl
 conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-lab
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
-
-# smoke test
-python -c "import habitat;import habitat.gym"

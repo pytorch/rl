@@ -106,6 +106,7 @@ class TokenizedDatasetLoader:
         self.pre_tokenization_hook = pre_tokenization_hook
         self.root_dir = root_dir
         self.from_disk = from_disk
+        self.valid_size = valid_size
         if num_workers is None:
             num_workers = max(os.cpu_count() // 2, 1)
         self.num_workers = num_workers
