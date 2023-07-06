@@ -15,7 +15,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
 
 from torchrl._utils import unravel_key, unravel_key_list
@@ -2489,9 +2489,7 @@ class CatTensors(Transform):
                 )
         else:
             in_keys = sorted(in_keys, key=_sort_keys)
-        if not isinstance(out_key, str) and not (
-            isinstance(out_key, tuple) and set(map(type, out_key)) == {str}
-        ):
+        if not isinstance(out_key, (str, tuple)):
             raise Exception("CatTensors requires out_key to be of type NestedKey")
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
