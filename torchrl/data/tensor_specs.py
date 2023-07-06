@@ -32,9 +32,9 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _getitem_batch_size, unravel_key
+from tensordict.utils import _getitem_batch_size
 
-from torchrl._utils import get_binary_env_var
+from torchrl._utils import get_binary_env_var, unravel_key
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
