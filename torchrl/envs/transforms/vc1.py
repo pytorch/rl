@@ -258,7 +258,7 @@ model:
   _target_: vc_models.models.vit.vit.load_mae_encoder
   checkpoint_path:
   model:
-    _target_: torchrl.envs.transforms.vc1.vit_base_patch16
+    _target_: torchrl.envs.transforms.vc1._vit_base_patch16
     img_size: 224
     use_cls: True
     drop_path_rate: 0.0
@@ -277,7 +277,7 @@ metadata:
             file.write(config)
 
 
-def vit_base_patch16(**kwargs):
+def _vit_base_patch16(**kwargs):
     from vc_models.models.vit.vit import VisionTransformer
 
     model = VisionTransformer(
