@@ -548,7 +548,7 @@ def unravel_key_list(key_list):
 
 
 def unravel_key(key):
-    """Temporary fix for change in behaviour in unravel_key(s).
+    """Temporary fix for change in behaviour in the tensordict version.
 
     The current behaviour is the behavious after update in tensordict.
 
