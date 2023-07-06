@@ -13,12 +13,12 @@ from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import torch
+
+from tensordict import unravel_key, unravel_key_list
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
-
-from torchrl._utils import unravel_key, unravel_key_list
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,

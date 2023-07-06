@@ -9,7 +9,7 @@ from copy import copy
 import pkg_resources
 import torch
 
-from tensordict import is_tensor_collection
+from tensordict import is_tensor_collection, unravel_key
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -26,9 +26,6 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-
-# from tensordict.utils import unravel_keys
-from torchrl._utils import unravel_key
 
 __all__ = [
     "exploration_mode",
