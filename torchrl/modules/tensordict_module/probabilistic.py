@@ -6,7 +6,7 @@
 import warnings
 from typing import Optional, Sequence, Type, Union
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, unravel_key_list
 
 from tensordict.nn import (
     InteractionType,
@@ -14,7 +14,6 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from torchrl._utils import unravel_key_list
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
