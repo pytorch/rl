@@ -539,7 +539,7 @@ def unravel_key_list(key_list):
         raise TypeError("incompatible function arguments")
     key_list_out = []
     for key in key_list:
-        key = unravel_keys(key)
+        key = unravel_key(key)
         if isinstance(key, tuple) and len(key) == 1:
             key_list_out.append(key[0])
         else:
@@ -547,7 +547,7 @@ def unravel_key_list(key_list):
     return key_list_out
 
 
-def unravel_keys(key):
+def unravel_key(key):
     """Temporary fix for change in behaviour in unravel_key(s).
 
     The current behaviour is the behavious after update in tensordict.
@@ -560,7 +560,7 @@ def unravel_keys(key):
         return key
     out = []
     for subkey in key:
-        subkey = unravel_keys(subkey)
+        subkey = unravel_key(subkey)
         if isinstance(subkey, str):
             subkey = (subkey,)
         out += subkey
