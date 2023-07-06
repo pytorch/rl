@@ -17,6 +17,8 @@ import warnings
 from copy import copy
 from distutils.util import strtobool
 from functools import wraps
+
+# from tensordict._tensordict import unravel_keys
 from importlib import import_module
 from typing import Any, Callable, cast, TypeVar, Union
 
@@ -529,3 +531,39 @@ class _DecoratorContextManager:
 def get_trace():
     """A simple debugging util to spot where a function is being called."""
     traceback.print_stack()
+
+
+def unravel_key_list(key_list):
+    """Temporary fix for change in behaviour in unravel_key_list."""
+    if isinstance(key_list, str):
+        raise TypeError("incompatible function arguments")
+    key_list_out = []
+    for key in key_list:
+        key = unravel_key(key)
+        if isinstance(key, tuple) and len(key) == 1:
+            key_list_out.append(key[0])
+        else:
+            key_list_out.append(key)
+    return key_list_out
+
+
+def unravel_key(key):
+    """Temporary fix for change in behaviour in the tensordict version.
+
+    The current behaviour is the behavious after update in tensordict.
+
+    This ensures that tests will be passing before and after merge on both parts.
+    """
+    if not isinstance(key, (tuple, str)):
+        raise RuntimeError("key should be a Sequence<NestedKey>")
+    if isinstance(key, str):
+        return key
+    out = []
+    for subkey in key:
+        subkey = unravel_key(subkey)
+        if isinstance(subkey, str):
+            subkey = (subkey,)
+        out += subkey
+    if len(out) == 1:
+        return out[0]
+    return tuple(out)

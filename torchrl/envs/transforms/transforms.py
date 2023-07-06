@@ -15,8 +15,10 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right, unravel_key, unravel_key_list
+from tensordict.utils import expand_as_right
 from torch import nn, Tensor
+
+from torchrl._utils import unravel_key, unravel_key_list
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -2785,9 +2787,11 @@ class NoopResetEnv(Transform):
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
-        if tensordict.get("done").numel() > 1:
+        done_key = parent.done_key
+        reward_key = parent.reward_key
+        if parent.batch_size.numel() > 1:
             raise ValueError(
-                "there is more than one done state in the parent environment. "
+                "The parent environment batch-size is non-null. "
                 "NoopResetEnv is designed to work on single env instances, as partial reset "
                 "is currently not supported. If you feel like this is a missing feature, submit "
                 "an issue on TorchRL github repo. "
@@ -2795,6 +2799,7 @@ class NoopResetEnv(Transform):
                 "that you can have a transformed batch of transformed envs, such as: "
                 "`TransformedEnv(ParallelEnv(3, lambda: TransformedEnv(MyEnv(), NoopResetEnv(3))), OtherTransform())`."
             )
+
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -2806,7 +2811,7 @@ class NoopResetEnv(Transform):
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get("done"):
+                if tensordict.get(done_key):
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:
@@ -2815,15 +2820,15 @@ class NoopResetEnv(Transform):
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
                 tensordict = parent.rand_step(tensordict)
-                if tensordict.get(("next", "done")):
+                if tensordict.get(("next", done_key)):
                     raise RuntimeError(
                         f"parent is still done after a single random step (i={i})."
                     )
                 break
 
-        if tensordict.get("done"):
+        if tensordict.get(done_key):
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        return tensordict
+        return tensordict.exclude(reward_key, inplace=True)
 
     def __repr__(self) -> str:
         random = self.random
@@ -4129,9 +4134,9 @@ class RenameTransform(Transform):
             output_spec["_observation_spec"][out_key] = output_spec[
                 "_done_spec"
             ].clone()
-        if "reward" in self.in_keys:
+        if ("reward",) in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == "reward":
+                if self.in_keys[i] == ("reward",):
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")
