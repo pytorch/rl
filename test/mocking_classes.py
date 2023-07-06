@@ -944,13 +944,18 @@ class ActionObsMergeLinear(nn.Module):
         return self.linear(torch.cat([observation, action], dim=-1))
 
 
-class CountingEnvCountPolicy:
+class CountingEnvCountPolicy(nn.Module):
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        super().__init__()
         self.action_spec = action_spec
         self.action_key = action_key
 
-    def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set(self.action_key, self.action_spec.zero() + 1)
+    def __call__(self, t):
+        action = self.action_spec.zero() + 1
+        if isinstance(t, torch.Tensor):
+            return action
+        elif isinstance(t, TensorDictBase):
+            return t.set(self.action_key, action)
 
 
 class CountingEnv(EnvBase):
