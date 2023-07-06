@@ -15,6 +15,6 @@ dependencies:
     - pytest-rerunfailures
     - expecttest
     - pyyaml
-    - scipy
+    - scipy==1.9.1
     - hydra-core
     - ninja
