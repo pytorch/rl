@@ -6059,8 +6059,8 @@ class TestVIP(TransformBase):
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
 
-# @pytest.mark.skipif(not _has_vc, reason="vc_models not installed")
-# @pytest.mark.skipif(not torch.cuda.device_count(), reason="VC1 should run on cuda")
+@pytest.mark.skipif(not _has_vc, reason="vc_models not installed")
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="VC1 should run on cuda")
 @pytest.mark.parametrize("device", [torch.device('cuda:0')])
 class TestVC1(TransformBase):
     def test_transform_inverse(self, device):
