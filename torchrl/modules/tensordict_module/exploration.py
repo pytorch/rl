@@ -548,7 +548,7 @@ class _OrnsteinUhlenbeckProcess:
     def _make_noise_pair(
         self,
         action_tensordict: TensorDictBase,
-        tensordict,
+        tensordict: TensorDictBase,
         is_init: torch.Tensor,
     ):
         if self.steps_key not in tensordict.keys():
@@ -574,7 +574,7 @@ class _OrnsteinUhlenbeckProcess:
 
         # Get the nested tensordict where the action lives
         if isinstance(self.key, tuple) and len(self.key) > 1:
-            action_tensordict = tensordict.get(self.key[:-1])
+            action_tensordict = tensordict.get(self.key[-1])
         else:
             action_tensordict = tensordict
 
