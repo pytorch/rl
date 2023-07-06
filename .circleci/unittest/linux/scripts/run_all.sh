@@ -79,6 +79,7 @@ export SDL_VIDEODRIVER=dummy
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
 pip3 install pip --upgrade
+pip install virtualenv
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
