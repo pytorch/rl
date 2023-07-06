@@ -2414,7 +2414,7 @@ class DoubleToFloat(Transform):
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
         reward_key = self.parent.reward_key if self.parent is not None else "reward"
-        if reward_key in self.in_keys:
+        if unravel_key(reward_key) in self.in_keys:
             if reward_spec.dtype is not torch.double:
                 raise TypeError("reward_spec.dtype is not double")
 
