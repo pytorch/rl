@@ -26,7 +26,7 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import unravel_keys
+from tensordict.utils import unravel_key
 
 __all__ = [
     "exploration_mode",
@@ -193,9 +193,9 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_keys((action_key,))
-    done_key = unravel_keys((done_key,))
-    reward_key = unravel_keys((reward_key,))
+    action_key = unravel_key((action_key,))
+    done_key = unravel_key((done_key,))
+    reward_key = unravel_key((reward_key,))
 
     excluded = set()
     if exclude_reward:
@@ -223,7 +223,10 @@ def step_mdp(
         return out
 
 
-def _set_single_key(source, dest, key):
+def _set_single_key(source, dest, key, clone=False):
+    # key should be already unraveled
+    if isinstance(key, str):
+        key = (key,)
     for k in key:
         val = source.get(k)
         if is_tensor_collection(val):
@@ -234,6 +237,8 @@ def _set_single_key(source, dest, key):
             source = val
             dest = new_val
         else:
+            if clone:
+                val = val.clone()
             dest._set(k, val)
 
 
@@ -401,7 +406,6 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
-
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
@@ -482,6 +486,7 @@ class classproperty:
 
 def _sort_keys(element):
     if isinstance(element, tuple):
+        element = unravel_key(element)
         return "_-|-_".join(element)
     return element
 

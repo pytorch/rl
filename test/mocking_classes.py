@@ -1127,10 +1127,15 @@ class NestedCountingEnv(CountingEnv):
                 shape=self.batch_size,
             )
 
-    def _reset(self, td):
-        if self.nested_done and td is not None and "_reset" in td.keys():
-            td["_reset"] = td["_reset"].sum(-2, dtype=torch.bool)
-        td = super()._reset(td)
+    def _reset(self, tensordict):
+        if (
+            self.nested_done
+            and tensordict is not None
+            and "_reset" in tensordict.keys()
+        ):
+            tensordict = tensordict.clone()
+            tensordict["_reset"] = tensordict["_reset"].sum(-2, dtype=torch.bool)
+        td = super()._reset(tensordict)
         if self.nested_done:
             td[self.done_key] = (
                 td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
@@ -1149,6 +1154,7 @@ class NestedCountingEnv(CountingEnv):
 
     def _step(self, td):
         if self.nested_obs_action:
+            td = td.clone()
             td["data"].batch_size = self.batch_size
             td[self.action_key] = td[self.action_key].max(-2)[0]
         td_root = super()._step(td)

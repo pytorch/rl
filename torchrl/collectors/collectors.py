@@ -267,7 +267,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
         try:
             policy_device = next(policy.parameters()).device
-        except:  # noqa
+        except Exception:
             policy_device = (
                 torch.device(device) if device is not None else torch.device("cpu")
             )
