@@ -18,12 +18,11 @@ from warnings import warn
 
 import numpy as np
 import torch
-from tensordict import TensorDict
+
+from tensordict import TensorDict, unravel_key
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-
-# from tensordict.utils import unravel_keys
-from torchrl._utils import _check_for_faulty_process, unravel_key, VERBOSE
+from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -426,7 +425,6 @@ class _BatchedEnv(EnvBase):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
-        self.shared_tensordict_parent.lock_()
         if self.pin_memory:
             self.shared_tensordict_parent.pin_memory()
 
@@ -1026,7 +1024,7 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            shared_tensordict = data.lock_()
+            shared_tensordict = data
             next_shared_tensordict = shared_tensordict.get("next")
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(

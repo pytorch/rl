@@ -5,6 +5,7 @@
 from typing import Optional, Tuple
 
 import torch
+from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 

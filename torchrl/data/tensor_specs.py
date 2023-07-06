@@ -31,6 +31,7 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict import unravel_key
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import _getitem_batch_size
 
