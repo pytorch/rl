@@ -5517,7 +5517,6 @@ class TestReinforce(LossModuleTestBase):
                     retain_graph=True,
                     allow_unused=False,
                 )
-            print(advantage, gradient_mode, delay_value, td_est)
 
     @pytest.mark.parametrize(
         "td_est",
@@ -6243,7 +6242,7 @@ class TestOnlineDT(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -6439,7 +6438,7 @@ class TestDT(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["param"])
+        module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhDelta,
