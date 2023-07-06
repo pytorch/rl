@@ -494,7 +494,6 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-                is_init = torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
             tensordict = self.ou.add_sample(
                 tensordict, self.eps.item(), is_init=is_init
             )
