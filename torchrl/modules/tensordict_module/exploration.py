@@ -11,7 +11,6 @@ from tensordict.nn import TensorDictModule, TensorDictModuleWrapper
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import expand_as_right, expand_right, NestedKey
 
-from torchrl._utils import unravel_key
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
@@ -174,7 +173,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
             sigma to reach the :obj:`sigma_end` value.
         mean (float, optional): mean of each output element’s normal distribution.
         std (float, optional): standard deviation of each output element’s normal distribution.
-        action_key (str, optional): if the policy module has more than one output key,
+        action_key (NestedKey, optional): if the policy module has more than one output key,
             its output spec will be of type CompositeSpec. One needs to know where to
             find the action spec.
             Default is "action".
@@ -205,7 +204,7 @@ class AdditiveGaussianWrapper(TensorDictModuleWrapper):
         annealing_num_steps: int = 1000,
         mean: float = 0.0,
         std: float = 1.0,
-        action_key: str = "action",
+        action_key: Optional[NestedKey] = "action",
         spec: Optional[TensorSpec] = None,
         safe: Optional[bool] = True,
     ):
@@ -536,9 +535,6 @@ class _OrnsteinUhlenbeckProcess:
         self.is_init_key = is_init_key
         self._noise_key = "_ou_prev_noise"
         self._steps_key = "_ou_steps"
-        if isinstance(self.key, tuple) and len(self.key) > 1:
-            self._noise_key = unravel_key((self.key[:-1], self._noise_key))
-            self._steps_key = unravel_key((self.key[:-1], self._steps_key))
         self.out_keys = [self.noise_key, self.steps_key]
 
     @property
@@ -550,24 +546,27 @@ class _OrnsteinUhlenbeckProcess:
         return self._steps_key  # + str(id(self))
 
     def _make_noise_pair(
-        self, tensordict: TensorDictBase, key: NestedKey, is_init=None
-    ) -> None:
+        self,
+        action_tensordict: TensorDictBase,
+        tensordict,
+        is_init: torch.Tensor,
+    ):
+        if self.steps_key not in tensordict.keys():
+            noise = torch.zeros(
+                tensordict.get(self.key).shape, device=tensordict.device
+            )
+            steps = torch.zeros(
+                action_tensordict.batch_size, dtype=torch.long, device=tensordict.device
+            )
+            tensordict.set(self.noise_key, noise)
+            tensordict.set(self.steps_key, steps)
+        else:
+            noise = tensordict.get(self.noise_key)
+            steps = tensordict.get(self.steps_key)
         if is_init is not None:
-            tensordict = tensordict.get_sub_tensordict(is_init)
-        tensordict.set(
-            self.noise_key,
-            torch.zeros(tensordict.get(key).shape, device=tensordict.device),
-            inplace=is_init is not None,
-        )
-        tensordict.set(
-            self.steps_key,
-            torch.zeros(
-                tensordict.batch_size,
-                dtype=torch.long,
-                device=tensordict.device,
-            ),
-            inplace=is_init is not None,
-        )
+            noise[is_init] = 0
+            steps[is_init] = 0
+        return noise, steps
 
     def add_sample(
         self, tensordict: TensorDictBase, eps: float = 1.0
@@ -576,10 +575,8 @@ class _OrnsteinUhlenbeckProcess:
         # Get the nested tensordict where the action lives
         if isinstance(self.key, tuple) and len(self.key) > 1:
             action_tensordict = tensordict.get(self.key[:-1])
-            action_key = self.key[-1]
         else:
             action_tensordict = tensordict
-            action_key = self.key
 
         is_init = tensordict.get(self.is_init_key, None)
         if (
@@ -602,16 +599,11 @@ class _OrnsteinUhlenbeckProcess:
                     f"got {tensordict.get(self.is_init_key).shape} and {action_tensordict.shape}"
                 )
 
-        if self.noise_key not in action_tensordict.keys():
-            self._make_noise_pair(action_tensordict, action_key)
-        if is_init is not None and is_init.any():
-            self._make_noise_pair(action_tensordict, action_key, is_init)
+        prev_noise, n_steps = self._make_noise_pair(
+            action_tensordict, tensordict, is_init
+        )
 
-        prev_noise = action_tensordict.get(self.noise_key)
         prev_noise = prev_noise + self.x0
-
-        n_steps = action_tensordict.get(self.steps_key)
-
         noise = (
             prev_noise
             + self.theta * (self.mu - prev_noise) * self.dt
@@ -619,11 +611,9 @@ class _OrnsteinUhlenbeckProcess:
             * np.sqrt(self.dt)
             * torch.randn_like(prev_noise)
         )
-        action_tensordict.set_(self.noise_key, noise - self.x0)
-        action_tensordict.set_(
-            action_key, action_tensordict.get(action_key) + eps * noise
-        )
-        action_tensordict.set_(self.steps_key, n_steps + 1)
+        tensordict.set_(self.noise_key, noise - self.x0)
+        tensordict.set_(self.key, tensordict.get(self.key) + eps * noise)
+        tensordict.set_(self.steps_key, n_steps + 1)
         return tensordict
 
     def current_sigma(self, n_steps: torch.Tensor) -> torch.Tensor:
