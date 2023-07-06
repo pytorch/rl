@@ -2428,6 +2428,69 @@ class TestStackComposite:
         with pytest.raises(AssertionError):
             c.to_numpy(td_fail, safe=True)
 
+    def test_unsqueeze(self):
+        c1 = CompositeSpec(a=BoundedTensorSpec(-1, 1, shape=(1, 3)), shape=(1, 3))
+        c2 = CompositeSpec(
+            a=BoundedTensorSpec(-1, 1, shape=(1, 3)),
+            b=UnboundedDiscreteTensorSpec(shape=(1, 3)),
+            shape=(1, 3),
+        )
+        c = torch.stack([c1, c2], 1)
+        for unsq in range(-2, 3):
+            cu = c.unsqueeze(unsq)
+            shape = list(c.shape)
+            new_unsq = unsq if unsq >= 0 else c.ndim + unsq + 1
+            shape.insert(new_unsq, 1)
+            assert cu.shape == torch.Size(shape)
+            cus = cu.squeeze(unsq)
+            assert c.shape == cus.shape, unsq
+            assert cus == c
+
+        assert c.squeeze().shape == torch.Size([2, 3])
+
+        specs = [
+            CompositeSpec(
+                {
+                    "observation_0": UnboundedContinuousTensorSpec(
+                        shape=torch.Size([128, 128, 3]),
+                        device="cpu",
+                        dtype=torch.float32,
+                    )
+                }
+            ),
+            CompositeSpec(
+                {
+                    "observation_1": UnboundedContinuousTensorSpec(
+                        shape=torch.Size([128, 128, 3]),
+                        device="cpu",
+                        dtype=torch.float32,
+                    )
+                }
+            ),
+            CompositeSpec(
+                {
+                    "observation_2": UnboundedContinuousTensorSpec(
+                        shape=torch.Size([128, 128, 3]),
+                        device="cpu",
+                        dtype=torch.float32,
+                    )
+                }
+            ),
+            CompositeSpec(
+                {
+                    "observation_3": UnboundedContinuousTensorSpec(
+                        shape=torch.Size([4]), device="cpu", dtype=torch.float32
+                    )
+                }
+            ),
+        ]
+
+        c = torch.stack(specs, dim=0)
+        cu = c.unsqueeze(0)
+        assert cu.shape == torch.Size([1, 4])
+        cus = cu.squeeze(0)
+        assert cus == c
+
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
