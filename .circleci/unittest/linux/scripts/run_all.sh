@@ -142,15 +142,15 @@ python setup.py develop
 if [ "${CU_VERSION:-}" != cpu ] ; then
   printf "* Installing VC1\n"
   python3 -c """
-  from torchrl.envs.transforms.vc1 import VC1Transform
-  VC1Transform.install_vc_models(auto_exit=True)
-  """
+from torchrl.envs.transforms.vc1 import VC1Transform
+VC1Transform.install_vc_models(auto_exit=True)
+"""
 
   python3 -c """
-  import vc_models
-  from vc_models.models.vit import model_utils
-  print(model_utils)
-  """
+import vc_models
+from vc_models.models.vit import model_utils
+print(model_utils)
+"""
 fi
 
 # ==================================================================================== #

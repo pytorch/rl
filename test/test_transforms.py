@@ -88,13 +88,12 @@ from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv
-from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.transforms.vc1 import _has_vc
+from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
-
 
 
 class TransformBase:
@@ -6061,7 +6060,7 @@ class TestVIP(TransformBase):
 
 @pytest.mark.skipif(not _has_vc, reason="vc_models not installed")
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="VC1 should run on cuda")
-@pytest.mark.parametrize("device", [torch.device('cuda:0')])
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
 class TestVC1(TransformBase):
     def test_transform_inverse(self, device):
         raise pytest.skip("no inverse for VC1Transform")
@@ -6116,11 +6115,11 @@ class TestVC1(TransformBase):
         del_keys = False
         out_keys = ["vec"]
         t = VC1Transform(
-                    in_keys=in_keys,
-                    out_keys=out_keys,
-                    del_keys=del_keys,
-                    model_name="default",
-                )
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
 
         def make_env():
             return TransformedEnv(
