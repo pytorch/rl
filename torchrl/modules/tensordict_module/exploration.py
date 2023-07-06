@@ -574,7 +574,7 @@ class _OrnsteinUhlenbeckProcess:
 
         # Get the nested tensordict where the action lives
         if isinstance(self.key, tuple) and len(self.key) > 1:
-            action_tensordict = tensordict.get(self.key[-1])
+            action_tensordict = tensordict.get(self.key[:-1])
         else:
             action_tensordict = tensordict
 
