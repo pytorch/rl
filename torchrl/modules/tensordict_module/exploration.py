@@ -483,7 +483,8 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = super().forward(tensordict)
         if exploration_type() == ExplorationType.RANDOM or exploration_type() is None:
-            if self.is_init_key not in tensordict.keys(True, True):
+            is_init = tensordict.get(self.is_init_key, None)
+            if is_init is None:
                 warnings.warn(
                     f"The tensordict passed to {self.__class__.__name__} appears to be "
                     f"missing the '{self.is_init_key}' entry. This entry is used to "
@@ -493,11 +494,10 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
                     f"To create a '{self.is_init_key}' entry, simply append an torchrl.envs.InitTracker "
                     f"transform to your environment with `env = TransformedEnv(env, InitTracker())`."
                 )
-                tensordict.set(
-                    self.is_init_key,
-                    torch.zeros(*tensordict.shape, 1, dtype=torch.bool),
-                )
-            tensordict = self.ou.add_sample(tensordict, self.eps.item())
+                is_init = torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
+            tensordict = self.ou.add_sample(
+                tensordict, self.eps.item(), is_init=is_init
+            )
         return tensordict
 
 
@@ -569,7 +569,10 @@ class _OrnsteinUhlenbeckProcess:
         return noise, steps
 
     def add_sample(
-        self, tensordict: TensorDictBase, eps: float = 1.0
+        self,
+        tensordict: TensorDictBase,
+        eps: float = 1.0,
+        is_init: Optional[torch.Tensor] = None,
     ) -> TensorDictBase:
 
         # Get the nested tensordict where the action lives
@@ -578,7 +581,8 @@ class _OrnsteinUhlenbeckProcess:
         else:
             action_tensordict = tensordict
 
-        is_init = tensordict.get(self.is_init_key, None)
+        if is_init is None:
+            is_init = tensordict.get(self.is_init_key, None)
         if (
             is_init is not None
         ):  # is_init has the shape of done_spec, let's bring it to the action_tensordict shape
