@@ -222,7 +222,6 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
             policy, spec=action_spec, action_key=env.action_key
         )
-        policy(env.reset())
         collector = SyncDataCollector(
             create_env_fn=env,
             policy=exploratory_policy,
