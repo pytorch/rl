@@ -1,4 +1,4 @@
-name: Unit-tests on Linux GPU
+name: Habitat Tests on Linux
 
 on:
   pull_request:
@@ -8,9 +8,6 @@ on:
       - main
       - release/*
   workflow_dispatch:
-
-env:
-  CHANNEL: "nightly"
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -42,8 +39,4 @@ jobs:
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-
-        ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux_libs/scripts_habitat/run_all.sh
