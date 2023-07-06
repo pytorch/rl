@@ -6,14 +6,15 @@
 import warnings
 from typing import Optional, Sequence, Type, Union
 
+from tensordict import TensorDictBase
+
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
-from tensordict.tensordict import TensorDictBase
-
+from torchrl._utils import unravel_key_list
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
@@ -120,7 +121,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )
-
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -129,22 +131,24 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
                     f"got more than one out_key for the SafeModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
+            spec = CompositeSpec({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, CompositeSpec):
             if "_" in spec.keys():
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
-
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        out_keys = set(unravel_key_list(self.out_keys))
+        if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
+            for key in out_keys:
+                if key not in spec_keys:
                     spec[key] = None
+            spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        if spec_keys != out_keys:
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True, True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {out_keys} respectively"
             )
 
         self._spec = spec

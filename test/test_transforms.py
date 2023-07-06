@@ -2835,7 +2835,7 @@ class TestNoop(TransformBase):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), NoopResetEnv())
         with pytest.raises(
             ValueError,
-            match="there is more than one done state in the parent environment",
+            match="The parent environment batch-size is non-null",
         ):
             check_env_specs(env)
 
@@ -2909,7 +2909,7 @@ class TestNoop(TransformBase):
         transformed_env.append_transform(noop_reset_env)
         with pytest.raises(
             ValueError,
-            match="there is more than one done state in the parent environment",
+            match="The parent environment batch-size is non-null",
         ):
             transformed_env.reset()
 
