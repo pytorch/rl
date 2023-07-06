@@ -12,6 +12,7 @@ from _utils_internal import get_default_devices
 from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
@@ -22,7 +23,7 @@ from torchrl.data import (
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.rlhf.dataset import _has_transformers
-from torchrl.modules import MLP, SafeModule, TanhDelta
+from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
     ActorValueOperator,
@@ -84,6 +85,73 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
         in_keys={"param": ("data", "param")},
         out_keys=[("data", "action")],
         distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions=3):
+    env = NestedCountingEnv(nested_dim=nested_dim)
+    action_spec = BoundedTensorSpec(
+        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+    )
+    actor_net = nn.Sequential(
+        nn.Linear(1, 2),
+        NormalParamExtractor(),
+    )
+    policy_module = TensorDictModule(
+        actor_net,
+        in_keys=[("data", "states")],
+        out_keys=[("data", "loc"), ("data", "scale")],
+    )
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys=[("data", "loc"), ("data", "scale")],
+        out_keys=[("data", "action")],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+
+    td = env.reset()
+    td["data", "states"] = td["data", "states"].to(torch.float)
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+        out_keys=[("data", "action")],
+        distribution_class=TanhNormal,
         distribution_kwargs={
             "min": action_spec.space.minimum,
             "max": action_spec.space.maximum,
