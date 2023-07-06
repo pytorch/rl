@@ -771,7 +771,7 @@ class SyncDataCollector(DataCollectorBase):
                 break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", *self.env.done_key))
+        done = self._tensordict.get(("next", self.env.done_key))
         truncated = self._tensordict.get(("next", "truncated"), None)
 
         self._tensordict = step_mdp(self._tensordict)
@@ -782,7 +782,6 @@ class SyncDataCollector(DataCollectorBase):
         done_or_terminated = (
             (done | truncated) if truncated is not None else done.clone()
         )
-
         if done_or_terminated.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
@@ -796,7 +795,9 @@ class SyncDataCollector(DataCollectorBase):
                 dtype=torch.bool,
             )
             if td_reset.batch_dims:
-                # self._tensordict = self._tensordict.clone()
+                # better cloning here than when passing the td for stacking
+                # cloning is necessary to avoid modifying dones in-place
+                self._tensordict = self._tensordict.clone()
                 self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
                     td_reset[traj_done_or_terminated]
                 )
