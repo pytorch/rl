@@ -1029,9 +1029,11 @@ class TestBrax:
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 class TestVmas:
     @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
-    def test_all_vmas_scenarios(self, scenario_name):
+    @pytest.mark.parametrize("continuous_actions", [True, False])
+    def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
         env = VmasEnv(
             scenario=scenario_name,
+            continuous_actions=continuous_actions,
             num_envs=4,
         )
         env.set_seed(0)
@@ -1115,14 +1117,14 @@ class TestVmas:
         env.close()
 
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["observation"].shape[1] == env.n_agents
-        assert tdreset["done"].shape[1] == env.n_agents
+        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdrollout["observation"].shape[2] == env.n_agents
-        assert tdrollout["next", "reward"].shape[2] == env.n_agents
-        assert tdrollout["action"].shape[2] == env.n_agents
-        assert tdrollout["done"].shape[2] == env.n_agents
+        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
+        assert tdrollout["agents", "action"].shape[2] == env.n_agents
+        assert tdrollout["done"].shape[2] == 1
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
