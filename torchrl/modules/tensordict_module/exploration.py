@@ -348,6 +348,8 @@ class OrnsteinUhlenbeckProcessWrapper(TensorDictModuleWrapper):
             default: 1000
         action_key (NestedKey, optional): key of the action to be modified.
             default: "action"
+        is_init_key (NestedKey, optional): key where to find the is_init flag used to reset the noise steps.
+            default: "is_init"
         spec (TensorSpec, optional): if provided, the sampled action will be
             projected onto the valid action space once explored. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
