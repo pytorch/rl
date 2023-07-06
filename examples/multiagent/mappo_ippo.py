@@ -92,6 +92,7 @@ def train(seed):
         # Scenario kwargs
         **env_config,
     )
+
     env_test = VmasEnv(
         scenario=scenario_name,
         num_envs=config["evaluation_episodes"],
@@ -127,7 +128,7 @@ def train(seed):
     policy = ProbabilisticActor(
         module=policy_module,
         spec=env.unbatched_action_spec,
-        in_keys={"loc": ("agents", "loc"), "scale": ("agents", "scale")},
+        in_keys=[("agents", "loc"), ("agents", "scale")],
         out_keys=[env.action_key],
         distribution_class=TanhNormal,
         distribution_kwargs={
@@ -216,7 +217,7 @@ def train(seed):
             tensordict_data["next", "done"]
             .unsqueeze(-1)
             .expand(tensordict_data[env.reward_key].shape)
-        ) # We need to expand the done to match the reward shape
+        )  # We need to expand the done to match the reward shape
 
         with torch.no_grad():
             loss_module.value_estimator(
