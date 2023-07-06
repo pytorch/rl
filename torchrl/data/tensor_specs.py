@@ -34,7 +34,7 @@ import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import _getitem_batch_size
 
-from torchrl._utils import get_binary_env_var
+from torchrl._utils import get_binary_env_var, unravel_key
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -2582,7 +2582,13 @@ class CompositeSpec(TensorSpec):
                     item = CompositeSpec(item, shape=shape)
                 if item is not None:
                     if self._device is None:
-                        self._device = item.device
+                        try:
+                            self._device = item.device
+                        except RuntimeError as err:
+                            if DEVICE_ERR_MSG in str(err):
+                                self._device = item._device
+                            else:
+                                raise err
                 self[k] = item
 
     @property
@@ -3384,3 +3390,13 @@ class _CompositeSpecKeysView:
 
     def __repr__(self):
         return f"_CompositeSpecKeysView(keys={list(self)})"
+
+    def __contains__(self, item):
+        item = unravel_key(item)
+        if len(item) == 1:
+            item = item[0]
+        for key in self.__iter__():
+            if key == item:
+                return True
+        else:
+            return False

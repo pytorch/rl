@@ -20,10 +20,10 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import unravel_keys
 from torch import multiprocessing as mp
 
-from torchrl._utils import _check_for_faulty_process, VERBOSE
+# from tensordict.utils import unravel_keys
+from torchrl._utils import _check_for_faulty_process, unravel_key, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -331,10 +331,10 @@ class _BatchedEnv(EnvBase):
             self.env_output_keys = []
             self.env_obs_keys = []
             for key in self.output_spec["_observation_spec"].keys(True, True):
-                self.env_output_keys.append(unravel_keys(("next", key)))
+                self.env_output_keys.append(unravel_key(("next", key)))
                 self.env_obs_keys.append(key)
-            self.env_output_keys.append(unravel_keys(("next", self.reward_key)))
-            self.env_output_keys.append(unravel_keys(("next", self.done_key)))
+            self.env_output_keys.append(unravel_key(("next", self.reward_key)))
+            self.env_output_keys.append(unravel_key(("next", self.done_key)))
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -355,15 +355,15 @@ class _BatchedEnv(EnvBase):
                     )
                 )
                 env_output_keys = env_output_keys.union(
-                    unravel_keys(("next", key))
+                    unravel_key(("next", key))
                     for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
                         True, True
                     )
                 )
             env_output_keys = env_output_keys.union(
                 {
-                    unravel_keys(("next", self.reward_key)),
-                    unravel_keys(("next", self.done_key)),
+                    unravel_key(("next", self.reward_key)),
+                    unravel_key(("next", self.done_key)),
                 }
             )
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)

@@ -56,8 +56,8 @@ cat "${this_dir}/environment.yml"
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   PRIVATE_MUJOCO_GL=glfw
-elif [ "${CU_VERSION:-}" == cpu ]; then
-  PRIVATE_MUJOCO_GL=osmesa
+#elif [ "${CU_VERSION:-}" == cpu ]; then
+#  PRIVATE_MUJOCO_GL=osmesa
 else
   PRIVATE_MUJOCO_GL=egl
 fi
@@ -80,7 +80,7 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
   yum install -y mesa-libGL-devel
   yum install -y mesa-libOSMesa-devel
   yum -y install egl-utils
-  yum -y install freeglut
+#  yum -y install freeglut
 fi
 
 pip install pip --upgrade
