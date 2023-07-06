@@ -6,7 +6,13 @@ set -v
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-# find libstdc
+# we can install this now but not before installing tensordict and torchrl, g++ version will break the compilation
+# https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
+#conda install -y -c conda-forge gcc=12.1.0
+conda install -y -c conda-forge libstdcxx-ng=12
+conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+
+## find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 
 export PYTORCH_TEST_WITH_SLOW='1'
@@ -30,14 +36,9 @@ export MKL_THREADING_LAYER=GNU
 #mv 10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 conda env config vars set MAGNUM_LOG=quiet HABITAT_SIM_LOG=quiet
-conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
 
 conda deactivate && conda activate ./env
 
-# we can install this now but not before installing tensordict and torchrl, g++ version will break the compilation
-# https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
-#conda install -y -c conda-forge gcc=12.1.0
-conda install -y -c conda-forge libstdcxx-ng=12
 
 # this workflow only tests the libs
 python -c "import habitat;import habitat.gym"
