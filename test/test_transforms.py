@@ -425,9 +425,23 @@ class TestCatFrames(TransformBase):
         model = nn.Sequential(cat_frames2, nn.Identity())
         model(tdbase)
         assert (td == tdbase).all()
-        with pytest.raises(ValueError, match="The last dimension of the tensordict"):
+        with pytest.warns(UserWarning):
             tdbase0.names = None
             model(tdbase0)
+        tdbase0.batch_size = []
+        with pytest.raises(
+            ValueError, match="CatFrames cannot process unbatched tensordict"
+        ):
+            model(tdbase0)
+        tdbase0.batch_size = [10]
+        tdbase0 = tdbase0.expand(5, 10)
+        tdbase0_copy = tdbase0.transpose(0, 1).to_tensordict()
+        tdbase0.refine_names("time", None)
+        tdbase0_copy.names = [None, "time"]
+        v1 = model(tdbase0)
+        v2 = model(tdbase0_copy)
+        # check that swapping dims and names leads to same result
+        assert (v1 == v2.transpose(0, 1)).all()
 
     @pytest.mark.parametrize("dim", [-2, -1])
     @pytest.mark.parametrize("N", [3, 4])
@@ -465,6 +479,36 @@ class TestCatFrames(TransformBase):
             assert (tdsample[key] == td[key]).all(), key
         assert (tdsample["out_" + key1] == td["out_" + key1]).all()
         assert (tdsample["next", "out_" + key1] == td["next", "out_" + key1]).all()
+
+    @pytest.mark.parametrize("dim", [-1])
+    @pytest.mark.parametrize("N", [3, 4])
+    @pytest.mark.parametrize("padding", ["same", "zeros"])
+    def test_transform_as_inverse(self, dim, N, padding):
+        # test equivalence between transforms within an env and within a rb
+        in_keys = ["observation", ("next", "observation")]
+        rollout_length = 10
+        cat_frames = CatFrames(
+            N=N, in_keys=in_keys, dim=dim, padding=padding, as_inverse=True
+        )
+
+        env1 = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+        )
+        env2 = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            CatFrames(N=N, in_keys=in_keys, dim=dim, padding=padding, as_inverse=True),
+        )
+        obs_dim = env1.observation_spec["observation_orig"].shape[0]
+        td = env1.rollout(rollout_length)
+
+        transformed_td = cat_frames._inv_call(td)
+        assert transformed_td.get(in_keys[0]).shape == (rollout_length, obs_dim, N)
+        assert transformed_td.get(in_keys[1]).shape == (rollout_length, obs_dim, N)
+        with pytest.raises(
+            Exception,
+            match="CatFrames as inverse is not supported as a transform for environments, only for replay buffers.",
+        ):
+            env2.rollout(rollout_length)
 
     def test_catframes_transform_observation_spec(self):
         N = 4
@@ -2786,7 +2830,7 @@ class TestNoop(TransformBase):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), NoopResetEnv())
         with pytest.raises(
             ValueError,
-            match="there is more than one done state in the parent environment",
+            match="The parent environment batch-size is non-null",
         ):
             check_env_specs(env)
 
@@ -2860,7 +2904,7 @@ class TestNoop(TransformBase):
         transformed_env.append_transform(noop_reset_env)
         with pytest.raises(
             ValueError,
-            match="there is more than one done state in the parent environment",
+            match="The parent environment batch-size is non-null",
         ):
             transformed_env.reset()
 
@@ -6394,7 +6438,8 @@ class TestTransforms:
         td.set("dont touch", dont_touch.clone())
         if not batch:
             with pytest.raises(
-                ValueError, match="The last dimension of the tensordict"
+                ValueError,
+                match="CatFrames cannot process unbatched tensordict instances",
             ):
                 compose(td.clone(False))
         with pytest.raises(

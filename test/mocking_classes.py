@@ -7,6 +7,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
+
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,
@@ -14,6 +16,7 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import EnvBase
@@ -941,6 +944,15 @@ class ActionObsMergeLinear(nn.Module):
         return self.linear(torch.cat([observation, action], dim=-1))
 
 
+class CountingEnvCountPolicy:
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+        self.action_spec = action_spec
+        self.action_key = action_key
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        return td.set(self.action_key, self.action_spec.zero() + 1)
+
+
 class CountingEnv(EnvBase):
     """An env that is done after a given number of steps.
 
@@ -959,6 +971,7 @@ class CountingEnv(EnvBase):
                     *self.batch_size,
                     1,
                 ),
+                dtype=torch.int32,
                 device=self.device,
             ),
             shape=self.batch_size,
@@ -1053,7 +1066,10 @@ class NestedCountingEnv(CountingEnv):
                             .unsqueeze(-1)
                             .expand(*self.batch_size, self.nested_dim, 1)
                         },
-                        shape=(self.nested_dim,),
+                        shape=(
+                            *self.batch_size,
+                            self.nested_dim,
+                        ),
                     )
                 },
                 shape=self.batch_size,
@@ -1066,7 +1082,10 @@ class NestedCountingEnv(CountingEnv):
                                 *self.batch_size, self.nested_dim, 1
                             )
                         },
-                        shape=(self.nested_dim,),
+                        shape=(
+                            *self.batch_size,
+                            self.nested_dim,
+                        ),
                     )
                 },
                 shape=self.batch_size,
@@ -1081,7 +1100,10 @@ class NestedCountingEnv(CountingEnv):
                                 *self.batch_size, self.nested_dim, 1
                             )
                         },
-                        shape=(self.nested_dim,),
+                        shape=(
+                            *self.batch_size,
+                            self.nested_dim,
+                        ),
                     )
                 },
                 shape=self.batch_size,
@@ -1096,17 +1118,24 @@ class NestedCountingEnv(CountingEnv):
                                 *self.batch_size, self.nested_dim, 1
                             )
                         },
-                        shape=(self.nested_dim,),
+                        shape=(
+                            *self.batch_size,
+                            self.nested_dim,
+                        ),
                     )
                 },
                 shape=self.batch_size,
             )
 
-    def _reset(self, td):
-        if self.nested_done and td is not None and "_reset" in td.keys():
-            td["_reset"] = td["_reset"].sum(-2, dtype=torch.bool)
-        td = super()._reset(td)
-        td["observation"] = td["observation"].to(torch.float)
+    def _reset(self, tensordict):
+        if (
+            self.nested_done
+            and tensordict is not None
+            and "_reset" in tensordict.keys()
+        ):
+            tensordict = tensordict.clone()
+            tensordict["_reset"] = tensordict["_reset"].sum(-2, dtype=torch.bool)
+        td = super()._reset(tensordict)
         if self.nested_done:
             td[self.done_key] = (
                 td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
@@ -1125,11 +1154,19 @@ class NestedCountingEnv(CountingEnv):
 
     def _step(self, td):
         if self.nested_obs_action:
+            td = td.clone()
             td["data"].batch_size = self.batch_size
-            td[self.action_key] = td[self.action_key].sum(-2)
+            td[self.action_key] = td[self.action_key].max(-2)[0]
         td_root = super()._step(td)
+        if self.nested_obs_action:
+            td[self.action_key] = (
+                td[self.action_key]
+                .unsqueeze(-1)
+                .expand(*self.batch_size, self.nested_dim, 1)
+            )
+        if "data" in td.keys():
+            td["data"].batch_size = (*self.batch_size, self.nested_dim)
         td = td_root["next"]
-        td["observation"] = td["observation"].to(torch.float)
         if self.nested_done:
             td[self.done_key] = (
                 td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)

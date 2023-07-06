@@ -263,8 +263,10 @@ without shared parameters. It is mainly intended as a replacement for
     ValueOperator
 
 
-Other modules
-~~~~~~~~~~~~~
+Domain-specific TensorDict modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These modules include dedicated solutions for MBRL or RLHF pipelines.
 
 .. currentmodule:: torchrl.modules.tensordict_module
 
@@ -272,6 +274,7 @@ Other modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    LMHeadActorValueOperator
     WorldModelWrapper
 
 Hooks
@@ -394,3 +397,11 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+
+.. currentmodule:: torchrl.modules
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    VmapModule

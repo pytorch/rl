@@ -14,6 +14,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
@@ -411,6 +412,11 @@ class PPOLoss(LossModule):
         )
         return self.critic_coef * loss_value
 
+    @property
+    @_cache_values
+    def _cached_critic_params_detached(self):
+        return self.critic_params.detach()
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -418,7 +424,7 @@ class PPOLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
@@ -615,7 +621,7 @@ class ClipPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
@@ -826,7 +832,7 @@ class KLPENPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)

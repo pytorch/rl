@@ -15,8 +15,10 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right, unravel_keys
+from tensordict.utils import expand_as_right
 from torch import nn, Tensor
+
+from torchrl._utils import unravel_key, unravel_key_list
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -1960,6 +1962,7 @@ class CatFrames(ObservationTransform):
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
+        as_inverse (bool, optional): if ``True``, the transform is applied as an inverse transform. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2032,6 +2035,7 @@ class CatFrames(ObservationTransform):
         in_keys: Optional[Sequence[str]] = None,
         out_keys: Optional[Sequence[str]] = None,
         padding="same",
+        as_inverse=False,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -2053,6 +2057,7 @@ class CatFrames(ObservationTransform):
             )
         # keeps track of calls to _reset since it's only _call that will populate the buffer
         self._just_reset = False
+        self.as_inverse = as_inverse
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets _buffers."""
@@ -2061,6 +2066,10 @@ class CatFrames(ObservationTransform):
             parent = self.parent
             if parent is not None:
                 parent_device = parent.device
+                if self.as_inverse:
+                    raise Exception(
+                        "CatFrames as inverse is not supported as a transform for environments, only for replay buffers."
+                    )
             else:
                 parent_device = None
             _reset = torch.ones(
@@ -2091,6 +2100,12 @@ class CatFrames(ObservationTransform):
         buffer = getattr(self, buffer_name).to(data.dtype).to(data.device).zero_()
         setattr(self, buffer_name, buffer)
         return buffer
+
+    def _inv_call(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self.as_inverse:
+            return self.unfolding(tensordict)
+        else:
+            return tensordict
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Update the episode tensordict with max pooled keys."""
@@ -2150,11 +2165,35 @@ class CatFrames(ObservationTransform):
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self.as_inverse:
+            return tensordict
+        else:
+            return self.unfolding(tensordict)
+
+    def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
         # it is assumed that the last dimension of the tensordict is the time dimension
-        if not tensordict.ndim or tensordict.names[-1] != "time":
+        if not tensordict.ndim:
             raise ValueError(
-                "The last dimension of the tensordict must be marked as 'time'."
+                "CatFrames cannot process unbatched tensordict instances. "
+                "Make sure your input has more than one dimension and "
+                "the time dimension is marked as 'time', e.g., "
+                "`tensordict.refine_names(None, 'time', None)`."
             )
+        i = 0
+        for i, name in enumerate(tensordict.names):  # noqa: B007
+            if name == "time":
+                break
+        else:
+            warnings.warn(
+                "The last dimension of the tensordict should be marked as 'time'. "
+                "CatFrames will unfold the data along the time dimension assuming that "
+                "the time dimension is the last dimension of the input tensordict. "
+                "Define a 'time' dimension name (e.g., `tensordict.refine_names(..., 'time')`) to skip this warning. ",
+                category=UserWarning,
+            )
+        tensordict_orig = tensordict
+        if i != tensordict.ndim - 1:
+            tensordict = tensordict.transpose(tensordict.ndim - 1, i)
         # first sort the in_keys with strings and non-strings
         in_keys = list(
             zip(
@@ -2217,7 +2256,7 @@ class CatFrames(ObservationTransform):
                 *range(data.ndim + self.dim, data.ndim - 1),
             )
             tensordict.set(out_key, data)
-        return tensordict
+        return tensordict_orig
 
     def __repr__(self) -> str:
         return (
@@ -2748,9 +2787,11 @@ class NoopResetEnv(Transform):
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
-        if tensordict.get("done").numel() > 1:
+        done_key = parent.done_key
+        reward_key = parent.reward_key
+        if parent.batch_size.numel() > 1:
             raise ValueError(
-                "there is more than one done state in the parent environment. "
+                "The parent environment batch-size is non-null. "
                 "NoopResetEnv is designed to work on single env instances, as partial reset "
                 "is currently not supported. If you feel like this is a missing feature, submit "
                 "an issue on TorchRL github repo. "
@@ -2758,6 +2799,7 @@ class NoopResetEnv(Transform):
                 "that you can have a transformed batch of transformed envs, such as: "
                 "`TransformedEnv(ParallelEnv(3, lambda: TransformedEnv(MyEnv(), NoopResetEnv(3))), OtherTransform())`."
             )
+
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
@@ -2769,7 +2811,7 @@ class NoopResetEnv(Transform):
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get("done"):
+                if tensordict.get(done_key):
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:
@@ -2778,15 +2820,15 @@ class NoopResetEnv(Transform):
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
                 tensordict = parent.rand_step(tensordict)
-                if tensordict.get(("next", "done")):
+                if tensordict.get(("next", done_key)):
                     raise RuntimeError(
                         f"parent is still done after a single random step (i={i})."
                     )
                 break
 
-        if tensordict.get("done"):
+        if tensordict.get(done_key):
             raise RuntimeError("NoopResetEnv concluded with done environment")
-        return tensordict
+        return tensordict.exclude(reward_key, inplace=True)
 
     def __repr__(self) -> str:
         random = self.random
@@ -3607,9 +3649,9 @@ class ExcludeTransform(Transform):
     def __init__(self, *excluded_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            excluded_keys = [unravel_keys(key) for key in excluded_keys]
-        except ValueError:
-            raise ValueError(
+            excluded_keys = unravel_key_list(excluded_keys)
+        except TypeError:
+            raise TypeError(
                 "excluded keys must be a list or tuple of strings or tuples of strings."
             )
         self.excluded_keys = excluded_keys
@@ -3627,10 +3669,10 @@ class ExcludeTransform(Transform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         if any(key in observation_spec.keys(True, True) for key in self.excluded_keys):
             return CompositeSpec(
-                **{
+                {
                     key: value
                     for key, value in observation_spec.items()
-                    if key not in self.excluded_keys
+                    if unravel_key(key) not in self.excluded_keys
                 },
                 shape=observation_spec.shape,
             )
@@ -3653,9 +3695,9 @@ class SelectTransform(Transform):
     def __init__(self, *selected_keys):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
-            selected_keys = [unravel_keys(key) for key in selected_keys]
-        except ValueError:
-            raise ValueError(
+            selected_keys = unravel_key_list(selected_keys)
+        except TypeError:
+            raise TypeError(
                 "selected keys must be a list or tuple of strings or tuples of strings."
             )
         self.selected_keys = selected_keys
@@ -3682,10 +3724,10 @@ class SelectTransform(Transform):
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         return CompositeSpec(
-            **{
+            {
                 key: value
                 for key, value in observation_spec.items()
-                if key in self.selected_keys
+                if unravel_key(key) in self.selected_keys
             },
             shape=observation_spec.shape,
         )
@@ -4092,9 +4134,9 @@ class RenameTransform(Transform):
             output_spec["_observation_spec"][out_key] = output_spec[
                 "_done_spec"
             ].clone()
-        if "reward" in self.in_keys:
+        if ("reward",) in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == "reward":
+                if self.in_keys[i] == ("reward",):
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")
