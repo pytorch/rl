@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import contextlib
 import functools
 import itertools
 import operator
@@ -16,7 +17,9 @@ from tensordict._tensordict import unravel_keys
 
 from tensordict.nn import (
     InteractionType,
+    ProbabilisticTensorDictModule,
     ProbabilisticTensorDictModule as ProbMod,
+    ProbabilisticTensorDictSequential,
     ProbabilisticTensorDictSequential as ProbSeq,
     TensorDictModule as Mod,
     TensorDictSequential as Seq,
@@ -61,9 +64,6 @@ from torchrl.modules import (
     DistributionalQValueActor,
     OneHotCategorical,
     QValueActor,
-    SafeModule,
-    SafeProbabilisticModule,
-    SafeProbabilisticTensorDictSequential,
     SafeSequential,
     WorldModelWrapper,
 )
@@ -254,9 +254,13 @@ class TestDQN(LossModuleTestBase):
             return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
-                chosen_action_value=None,
+                {
+                    "action": action_spec,
+                    "action_value"
+                    if action_value_key is None
+                    else action_value_key: None,
+                    "chosen_action_value": None,
+                },
                 shape=[],
             ),
             action_space=action_spec_type,
@@ -299,8 +303,10 @@ class TestDQN(LossModuleTestBase):
         #     return module
         actor = DistributionalQValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
+                {
+                    "action": action_spec,
+                    action_value_key: None,
+                },
                 shape=[],
             ),
             module=module,
@@ -403,6 +409,7 @@ class TestDQN(LossModuleTestBase):
                 "action": action,
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
         )
         return td
 
@@ -425,7 +432,11 @@ class TestDQN(LossModuleTestBase):
             return
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
-        with _check_td_steady(td):
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(td):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -466,7 +477,11 @@ class TestDQN(LossModuleTestBase):
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
         ms_td = ms(td.clone())
 
-        with _check_td_steady(ms_td):
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -598,7 +613,14 @@ class TestDQN(LossModuleTestBase):
         elif td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if delay_value
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -867,6 +889,7 @@ class TestDDPG(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -893,7 +916,11 @@ class TestDDPG(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if (delay_actor or delay_value)
+            else contextlib.nullcontext()
+        ):
             loss = loss_fn(td)
 
         assert all(
@@ -984,7 +1011,8 @@ class TestDDPG(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        loss = loss_fn(td)
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss = loss_fn(td)
 
         assert all(
             (p.grad is None) or (p.grad == 0).all()
@@ -1100,7 +1128,11 @@ class TestDDPG(LossModuleTestBase):
 
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
         ms_td = ms(td.clone())
-        with _check_td_steady(ms_td):
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if (delay_value or delay_value)
+            else contextlib.nullcontext()
+        ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
         with torch.no_grad():
             loss = loss_fn(td)
@@ -1186,7 +1218,9 @@ class TestDDPG(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater has been"
+        ):
             _ = loss_fn(td)
 
     def test_ddpg_notensordict(self):
@@ -1205,23 +1239,24 @@ class TestDDPG(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        loss_val_td = loss(td)
-        loss_val = loss(**kwargs)
-        for i, key in enumerate(loss_val_td.keys()):
-            torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
-        # test select
-        loss.select_out_keys("loss_actor", "target_value")
-        if torch.__version__ >= "2.0.0":
-            loss_actor, target_value = loss(**kwargs)
-        else:
-            with pytest.raises(
-                RuntimeError,
-                match="You are likely using tensordict.nn.dispatch with keyword arguments",
-            ):
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss_val_td = loss(td)
+            loss_val = loss(**kwargs)
+            for i, key in enumerate(loss_val_td.keys()):
+                torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+            # test select
+            loss.select_out_keys("loss_actor", "target_value")
+            if torch.__version__ >= "2.0.0":
                 loss_actor, target_value = loss(**kwargs)
-            return
-        assert loss_actor == loss_val_td["loss_actor"]
-        assert (target_value == loss_val_td["target_value"]).all()
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, target_value = loss(**kwargs)
+                return
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert (target_value == loss_val_td["target_value"]).all()
 
 
 @pytest.mark.skipif(
@@ -1398,6 +1433,7 @@ class TestTD3(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action * mask.to(obs.dtype),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -1448,53 +1484,61 @@ class TestTD3(LossModuleTestBase):
             return
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
-        with _check_td_steady(td):
-            loss = loss_fn(td)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if (delay_actor or delay_qvalue)
+            else contextlib.nullcontext()
+        ):
+            with _check_td_steady(td):
+                loss = loss_fn(td)
 
-        assert all(
-            (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn.qvalue_network_params.values(True, True)
-        )
-        assert all(
-            (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn.actor_network_params.values(True, True)
-        )
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(True, True)
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(True, True)
-                )
-            elif k == "loss_qvalue":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(True, True)
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(True, True)
-                )
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.qvalue_network_params.values(True, True)
+            )
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.actor_network_params.values(True, True)
+            )
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                if k == "loss_actor":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(True, True)
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                elif k == "loss_qvalue":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(True, True)
+                    )
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
-        named_parameters = list(loss_fn.named_parameters())
-        named_buffers = list(loss_fn.named_buffers())
+            sum([item for _, item in loss.items()]).backward()
+            named_parameters = list(loss_fn.named_parameters())
+            named_buffers = list(loss_fn.named_buffers())
 
-        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
-        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+            assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+            assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            for name, p in named_parameters:
+                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -1514,62 +1558,64 @@ class TestTD3(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss = loss_fn(td)
 
-        loss = loss_fn(td)
-
-        assert all(
-            (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn.qvalue_network_params.values(True, True)
-        )
-        assert all(
-            (p.grad is None) or (p.grad == 0).all()
-            for p in loss_fn.actor_network_params.values(True, True)
-        )
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(True, True)
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(True, True)
-                )
-            elif k == "loss_qvalue":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(True, True)
-                )
-                if separate_losses:
-                    common_layers_no = len(list(common.parameters()))
-                    common_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                    )
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.qvalue_network_params.values(True, True)
+            )
+            assert all(
+                (p.grad is None) or (p.grad == 0).all()
+                for p in loss_fn.actor_network_params.values(True, True)
+            )
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                if k == "loss_actor":
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
-                    )
-                    qvalue_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
-                    )
-                else:
-                    assert not any(
                         (p.grad is None) or (p.grad == 0).all()
                         for p in loss_fn.qvalue_network_params.values(True, True)
                     )
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                elif k == "loss_qvalue":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(True, True)
+                    )
+                    if separate_losses:
+                        common_layers_no = len(list(common.parameters()))
+                        common_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        qvalue_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in qvalue_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.qvalue_network_params.values(True, True)
+                        )
 
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("n", list(range(4)))
@@ -1602,7 +1648,11 @@ class TestTD3(LossModuleTestBase):
         torch.manual_seed(0)
         np.random.seed(0)
 
-        with _check_td_steady(ms_td):
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if (delay_qvalue or delay_actor)
+            else contextlib.nullcontext()
+        ), _check_td_steady(ms_td):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -1756,24 +1806,25 @@ class TestTD3(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        loss_val_td = loss(td)
-        loss_val = loss(**kwargs)
-        for i, key in enumerate(loss_val_td.keys()):
-            torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
-        # test select
-        loss.select_out_keys("loss_actor", "loss_qvalue")
-        if torch.__version__ >= "2.0.0":
-            loss_actor, loss_qvalue = loss(**kwargs)
-        else:
-            with pytest.raises(
-                RuntimeError,
-                match="You are likely using tensordict.nn.dispatch with keyword arguments",
-            ):
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss_val_td = loss(td)
+            loss_val = loss(**kwargs)
+            for i, key in enumerate(loss_val_td.keys()):
+                torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
+            # test select
+            loss.select_out_keys("loss_actor", "loss_qvalue")
+            if torch.__version__ >= "2.0.0":
                 loss_actor, loss_qvalue = loss(**kwargs)
-            return
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, loss_qvalue = loss(**kwargs)
+                return
 
-        assert loss_actor == loss_val_td["loss_actor"]
-        assert loss_qvalue == loss_val_td["loss_qvalue"]
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert loss_qvalue == loss_val_td["loss_qvalue"]
 
 
 @pytest.mark.skipif(
@@ -1797,7 +1848,9 @@ class TestSAC(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -1971,6 +2024,7 @@ class TestSAC(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -2028,7 +2082,9 @@ class TestSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -2149,73 +2205,76 @@ class TestSAC(LossModuleTestBase):
             num_qvalue_nets=1,
             separate_losses=separate_losses,
         )
-        loss = loss_fn(td)
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss = loss_fn(td)
 
-        assert loss_fn.tensor_keys.priority in td.keys()
+            assert loss_fn.tensor_keys.priority in td.keys()
 
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-            elif k == "loss_qvalue":
-                common_layers_no = len(list(common.parameters()))
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                if separate_losses:
-                    common_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                    )
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                if k == "loss_actor":
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                    qvalue_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
-                    )
-                else:
                     assert not any(
                         (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.qvalue_network_params.values(True, True)
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-            elif k == "loss_alpha":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
+                elif k == "loss_qvalue":
+                    common_layers_no = len(list(common.parameters()))
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
+                    if separate_losses:
+                        common_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        qvalue_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in qvalue_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.qvalue_network_params.values(True, True)
+                        )
+                elif k == "loss_alpha":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_value", (True, False))
@@ -2269,99 +2328,107 @@ class TestSAC(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with _check_td_steady(ms_td):
-            loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority in ms_td.keys()
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            with _check_td_steady(ms_td):
+                loss_ms = loss_fn(ms_td)
+            assert loss_fn.tensor_keys.priority in ms_td.keys()
 
-        with torch.no_grad():
-            torch.manual_seed(0)  # log-prob is computed with a random action
-            np.random.seed(0)
-            loss = loss_fn(td)
-        if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
-            assert (
-                abs(_loss - _loss_ms) < 1e-3
-            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
-        else:
-            with pytest.raises(AssertionError):
-                assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
-        named_parameters = loss_fn.named_parameters()
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            with torch.no_grad():
+                torch.manual_seed(0)  # log-prob is computed with a random action
+                np.random.seed(0)
+                loss = loss_fn(td)
+            if n == 0:
+                assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+                _loss = sum([item for _, item in loss.items()])
+                _loss_ms = sum([item for _, item in loss_ms.items()])
+                assert (
+                    abs(_loss - _loss_ms) < 1e-3
+                ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+            else:
+                with pytest.raises(AssertionError):
+                    assert_allclose_td(loss, loss_ms)
+            sum([item for _, item in loss_ms.items()]).backward()
+            named_parameters = loss_fn.named_parameters()
+            for name, p in named_parameters:
+                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
-        # Check param update effect on targets
-        target_actor = [
-            p.clone()
-            for p in loss_fn.target_actor_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        target_qvalue = [
-            p.clone()
-            for p in loss_fn.target_qvalue_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        if version == 1:
-            target_value = [
+            # Check param update effect on targets
+            target_actor = [
                 p.clone()
-                for p in loss_fn.target_value_network_params.values(
+                for p in loss_fn.target_actor_network_params.values(
                     include_nested=True, leaves_only=True
                 )
             ]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        target_actor2 = [
-            p.clone()
-            for p in loss_fn.target_actor_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        target_qvalue2 = [
-            p.clone()
-            for p in loss_fn.target_qvalue_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        if version == 1:
-            target_value2 = [
+            target_qvalue = [
                 p.clone()
-                for p in loss_fn.target_value_network_params.values(
+                for p in loss_fn.target_qvalue_network_params.values(
                     include_nested=True, leaves_only=True
                 )
             ]
-        if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
-            )
-        if loss_fn.delay_qvalue:
-            assert all(
-                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
-            )
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
-            )
-        if version == 1:
-            if loss_fn.delay_value:
+            if version == 1:
+                target_value = [
+                    p.clone()
+                    for p in loss_fn.target_value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                ]
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
+            target_actor2 = [
+                p.clone()
+                for p in loss_fn.target_actor_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            target_qvalue2 = [
+                p.clone()
+                for p in loss_fn.target_qvalue_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            if version == 1:
+                target_value2 = [
+                    p.clone()
+                    for p in loss_fn.target_value_network_params.values(
+                        include_nested=True, leaves_only=True
+                    )
+                ]
+            if loss_fn.delay_actor:
                 assert all(
-                    (p1 == p2).all() for p1, p2 in zip(target_value, target_value2)
+                    (p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2)
                 )
             else:
                 assert not any(
-                    (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+                    (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
                 )
+            if loss_fn.delay_qvalue:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+            if version == 1:
+                if loss_fn.delay_value:
+                    assert all(
+                        (p1 == p2).all() for p1, p2 in zip(target_value, target_value2)
+                    )
+                else:
+                    assert not any(
+                        (p1 == p2).any() for p1, p2 in zip(target_value, target_value2)
+                    )
 
-        # check that policy is updated after parameter update
-        parameters = [p.clone() for p in actor.parameters()]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+            # check that policy is updated after parameter update
+            parameters = [p.clone() for p in actor.parameters()]
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
+            assert all(
+                (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
+            )
 
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
@@ -2461,7 +2528,8 @@ class TestSAC(LossModuleTestBase):
         # setting the seed for each loss so that drawing the random samples from value network
         # leads to same numbers for both runs
         torch.manual_seed(self.seed)
-        loss_val = loss(**kwargs)
+        with pytest.warns(UserWarning, match="No target network updater"):
+            loss_val = loss(**kwargs)
 
         torch.manual_seed(self.seed)
         loss_val_td = loss(td)
@@ -2512,7 +2580,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         # Actor
         action_spec = OneHotDiscreteTensorSpec(action_dim)
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["logits"])
+        module = TensorDictModule(net, in_keys=[observation_key], out_keys=["logits"])
         actor = ProbabilisticActor(
             spec=action_spec,
             module=module,
@@ -2624,6 +2692,7 @@ class TestDiscreteSAC(LossModuleTestBase):
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "action_value": action_value.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
         )
         return td
 
@@ -2669,7 +2738,9 @@ class TestDiscreteSAC(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -2774,7 +2845,9 @@ class TestDiscreteSAC(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with _check_td_steady(ms_td):
+        with _check_td_steady(ms_td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -2925,36 +2998,37 @@ class TestDiscreteSAC(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        loss_val = loss(**kwargs)
-        loss_val_td = loss(td)
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss_val = loss(**kwargs)
+            loss_val_td = loss(td)
 
-        torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
-        torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
-        torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
-        torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
-        torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-        torch.testing.assert_close(
-            loss_val_td.get("state_action_value_actor"), loss_val[5]
-        )
-        torch.testing.assert_close(
-            loss_val_td.get("action_log_prob_actor"), loss_val[6]
-        )
-        torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
-        torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
-        # test select
-        torch.manual_seed(self.seed)
-        loss.select_out_keys("loss_actor", "loss_alpha")
-        if torch.__version__ >= "2.0.0":
-            loss_actor, loss_alpha = loss(**kwargs)
-        else:
-            with pytest.raises(
-                RuntimeError,
-                match="You are likely using tensordict.nn.dispatch with keyword arguments",
-            ):
+            torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+            torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
+            torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
+            torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
+            torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
+            torch.testing.assert_close(
+                loss_val_td.get("state_action_value_actor"), loss_val[5]
+            )
+            torch.testing.assert_close(
+                loss_val_td.get("action_log_prob_actor"), loss_val[6]
+            )
+            torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
+            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
+            # test select
+            torch.manual_seed(self.seed)
+            loss.select_out_keys("loss_actor", "loss_alpha")
+            if torch.__version__ >= "2.0.0":
                 loss_actor, loss_alpha = loss(**kwargs)
-            return
-        assert loss_actor == loss_val_td["loss_actor"]
-        assert loss_alpha == loss_val_td["loss_alpha"]
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, loss_alpha = loss(**kwargs)
+                return
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert loss_alpha == loss_val_td["loss_alpha"]
 
 
 @pytest.mark.skipif(
@@ -2977,7 +3051,9 @@ class TestREDQ(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -3093,9 +3169,13 @@ class TestREDQ(LossModuleTestBase):
             def forward(self, hidden, act):
                 return self.linear(torch.cat([hidden, act], -1))
 
-        common = SafeModule(CommonClass(), in_keys=["observation"], out_keys=["hidden"])
+        common = TensorDictModule(
+            CommonClass(), in_keys=["observation"], out_keys=["hidden"]
+        )
         actor_subnet = ProbabilisticActor(
-            SafeModule(ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]),
+            TensorDictModule(
+                ActorClass(), in_keys=["hidden"], out_keys=["loc", "scale"]
+            ),
             in_keys=["loc", "scale"],
             distribution_class=TanhNormal,
             return_log_prob=True,
@@ -3168,6 +3248,7 @@ class TestREDQ(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -3197,69 +3278,77 @@ class TestREDQ(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
-            loss = loss_fn(td)
+        with (
+            pytest.warns(
+                UserWarning,
+                match="No target network updater has been associated with this loss module",
+            )
+            if delay_qvalue
+            else contextlib.nullcontext()
+        ):
+            with _check_td_steady(td):
+                loss = loss_fn(td)
 
-        # check td is left untouched
-        assert loss_fn.tensor_keys.priority in td.keys()
+            # check td is left untouched
+            assert loss_fn.tensor_keys.priority in td.keys()
 
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                if k == "loss_actor":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-            elif k == "loss_qvalue":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
+                elif k == "loss_qvalue":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-            elif k == "loss_alpha":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
+                elif k == "loss_alpha":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
-        sum([item for _, item in loss.items()]).backward()
-        named_parameters = list(loss_fn.named_parameters())
-        named_buffers = list(loss_fn.named_buffers())
+            sum([item for _, item in loss.items()]).backward()
+            named_parameters = list(loss_fn.named_parameters())
+            named_buffers = list(loss_fn.named_buffers())
 
-        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
-        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+            assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+            assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            for name, p in named_parameters:
+                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
@@ -3276,73 +3365,79 @@ class TestREDQ(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        loss = loss_fn(td)
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            loss = loss_fn(td)
 
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            if k == "loss_actor":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-            elif k == "loss_qvalue":
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                if separate_losses:
-                    common_layers_no = len(list(common.parameters()))
-                    common_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                    )
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                if k == "loss_actor":
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
-                    )
-                    qvalue_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
-                    )
-                else:
-                    assert not any(
                         (p.grad is None) or (p.grad == 0).all()
                         for p in loss_fn.qvalue_network_params.values(
                             include_nested=True, leaves_only=True
                         )
                     )
-            elif k == "loss_alpha":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
+                elif k == "loss_qvalue":
+                    assert not any(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                )
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+                    if separate_losses:
+                        common_layers_no = len(list(common.parameters()))
+                        common_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        qvalue_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in qvalue_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.qvalue_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                elif k == "loss_alpha":
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    assert all(
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_deprecated_separate_losses(self, separate_losses):
@@ -3359,7 +3454,11 @@ class TestREDQ(LossModuleTestBase):
             separate_losses=separate_losses,
         )
 
-        loss = loss_fn(td)
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            loss = loss_fn(td)
 
         # check that losses are independent
         for k in loss.keys():
@@ -3524,6 +3623,7 @@ class TestREDQ(LossModuleTestBase):
             qvalue_network=deepcopy(qvalue),
             num_qvalue_nets=num_qvalue,
             loss_function="l2",
+            delay_qvalue=delay_qvalue,
         )
         if td_est is ValueEstimators.GAE:
             with pytest.raises(NotImplementedError):
@@ -3535,12 +3635,17 @@ class TestREDQ(LossModuleTestBase):
         td_clone1 = td.clone()
         td_clone2 = td.clone()
         torch.manual_seed(0)
-        with _check_td_steady(td_clone1):
-            loss_fn(td_clone1)
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_qvalue
+            else contextlib.nullcontext()
+        ):
+            with _check_td_steady(td_clone1):
+                loss_fn(td_clone1)
 
-        torch.manual_seed(0)
-        with _check_td_steady(td_clone2):
-            loss_fn_deprec(td_clone2)
+            torch.manual_seed(0)
+            with _check_td_steady(td_clone2):
+                loss_fn_deprec(td_clone2)
 
         # TODO: find a way to compare the losses: problem is that we sample actions either sequentially or in batch,
         #  so setting seed has little impact
@@ -3572,67 +3677,76 @@ class TestREDQ(LossModuleTestBase):
         torch.manual_seed(0)
         np.random.seed(0)
 
-        with _check_td_steady(ms_td):
-            loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority in ms_td.keys()
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_qvalue
+            else contextlib.nullcontext()
+        ):
+            with _check_td_steady(ms_td):
+                loss_ms = loss_fn(ms_td)
+            assert loss_fn.tensor_keys.priority in ms_td.keys()
 
-        with torch.no_grad():
-            torch.manual_seed(0)  # log-prob is computed with a random action
-            np.random.seed(0)
-            loss = loss_fn(td)
-        if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
-            assert (
-                abs(_loss - _loss_ms) < 1e-3
-            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
-        else:
-            with pytest.raises(AssertionError):
-                assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
-        named_parameters = loss_fn.named_parameters()
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            with torch.no_grad():
+                torch.manual_seed(0)  # log-prob is computed with a random action
+                np.random.seed(0)
+                loss = loss_fn(td)
+            if n == 0:
+                assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+                _loss = sum([item for _, item in loss.items()])
+                _loss_ms = sum([item for _, item in loss_ms.items()])
+                assert (
+                    abs(_loss - _loss_ms) < 1e-3
+                ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+            else:
+                with pytest.raises(AssertionError):
+                    assert_allclose_td(loss, loss_ms)
+            sum([item for _, item in loss_ms.items()]).backward()
+            named_parameters = loss_fn.named_parameters()
+            for name, p in named_parameters:
+                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
-        # Check param update effect on targets
-        target_actor = loss_fn.target_actor_network_params.clone().values(
-            include_nested=True, leaves_only=True
-        )
-        target_qvalue = loss_fn.target_qvalue_network_params.clone().values(
-            include_nested=True, leaves_only=True
-        )
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        target_actor2 = loss_fn.target_actor_network_params.clone().values(
-            include_nested=True, leaves_only=True
-        )
-        target_qvalue2 = loss_fn.target_qvalue_network_params.clone().values(
-            include_nested=True, leaves_only=True
-        )
-        if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+            # Check param update effect on targets
+            target_actor = loss_fn.target_actor_network_params.clone().values(
+                include_nested=True, leaves_only=True
             )
-        if loss_fn.delay_qvalue:
+            target_qvalue = loss_fn.target_qvalue_network_params.clone().values(
+                include_nested=True, leaves_only=True
+            )
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
+            target_actor2 = loss_fn.target_actor_network_params.clone().values(
+                include_nested=True, leaves_only=True
+            )
+            target_qvalue2 = loss_fn.target_qvalue_network_params.clone().values(
+                include_nested=True, leaves_only=True
+            )
+            if loss_fn.delay_actor:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+                )
+            if loss_fn.delay_qvalue:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+
+            # check that policy is updated after parameter update
+            actorp_set = set(actor.parameters())
+            loss_fnp_set = set(loss_fn.parameters())
+            assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
+            parameters = [p.clone() for p in actor.parameters()]
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
             assert all(
-                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
-            )
-
-        # check that policy is updated after parameter update
-        actorp_set = set(actor.parameters())
-        loss_fnp_set = set(loss_fn.parameters())
-        assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
-        parameters = [p.clone() for p in actor.parameters()]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
@@ -3722,38 +3836,44 @@ class TestREDQ(LossModuleTestBase):
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
         torch.manual_seed(self.seed)
-        loss_val = loss(**kwargs)
-        torch.manual_seed(self.seed)
-        loss_val_td = loss(td)
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            loss_val = loss(**kwargs)
+            torch.manual_seed(self.seed)
+            loss_val_td = loss(td)
 
-        torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
-        torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
-        torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
-        torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
-        torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-        if not deprec:
-            torch.testing.assert_close(
-                loss_val_td.get("state_action_value_actor"), loss_val[5]
-            )
-            torch.testing.assert_close(
-                loss_val_td.get("action_log_prob_actor"), loss_val[6]
-            )
-            torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
-            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
-        # test select
-        torch.manual_seed(self.seed)
-        loss.select_out_keys("loss_actor", "loss_alpha")
-        if torch.__version__ >= "2.0.0":
-            loss_actor, loss_alpha = loss(**kwargs)
-        else:
-            with pytest.raises(
-                RuntimeError,
-                match="You are likely using tensordict.nn.dispatch with keyword arguments",
-            ):
+            torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+            torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
+            torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
+            torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
+            torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
+            if not deprec:
+                torch.testing.assert_close(
+                    loss_val_td.get("state_action_value_actor"), loss_val[5]
+                )
+                torch.testing.assert_close(
+                    loss_val_td.get("action_log_prob_actor"), loss_val[6]
+                )
+                torch.testing.assert_close(
+                    loss_val_td.get("next.state_value"), loss_val[7]
+                )
+                torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
+            # test select
+            torch.manual_seed(self.seed)
+            loss.select_out_keys("loss_actor", "loss_alpha")
+            if torch.__version__ >= "2.0.0":
                 loss_actor, loss_alpha = loss(**kwargs)
-            return
-        assert loss_actor == loss_val_td["loss_actor"]
-        assert loss_alpha == loss_val_td["loss_alpha"]
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, loss_alpha = loss(**kwargs)
+                return
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert loss_alpha == loss_val_td["loss_alpha"]
 
 
 class TestCQL(LossModuleTestBase):
@@ -3765,7 +3885,9 @@ class TestCQL(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -3850,6 +3972,7 @@ class TestCQL(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -3904,7 +4027,9 @@ class TestCQL(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -4022,76 +4147,81 @@ class TestCQL(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with _check_td_steady(ms_td):
-            loss_ms = loss_fn(ms_td)
-        assert loss_fn.tensor_keys.priority in ms_td.keys()
+        with pytest.warns(UserWarning, match="No target network updater"):
+            with _check_td_steady(ms_td):
+                loss_ms = loss_fn(ms_td)
+            assert loss_fn.tensor_keys.priority in ms_td.keys()
 
-        with torch.no_grad():
-            torch.manual_seed(0)  # log-prob is computed with a random action
-            np.random.seed(0)
-            loss = loss_fn(td)
-        if n == 0:
-            assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
-            _loss = sum([item for _, item in loss.items()])
-            _loss_ms = sum([item for _, item in loss_ms.items()])
-            assert (
-                abs(_loss - _loss_ms) < 1e-3
-            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
-        else:
-            with pytest.raises(AssertionError):
-                assert_allclose_td(loss, loss_ms)
-        sum([item for _, item in loss_ms.items()]).backward()
-        named_parameters = loss_fn.named_parameters()
-        for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            with torch.no_grad():
+                torch.manual_seed(0)  # log-prob is computed with a random action
+                np.random.seed(0)
+                loss = loss_fn(td)
+            if n == 0:
+                assert_allclose_td(td, ms_td.select(*list(td.keys(True, True))))
+                _loss = sum([item for _, item in loss.items()])
+                _loss_ms = sum([item for _, item in loss_ms.items()])
+                assert (
+                    abs(_loss - _loss_ms) < 1e-3
+                ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+            else:
+                with pytest.raises(AssertionError):
+                    assert_allclose_td(loss, loss_ms)
+            sum([item for _, item in loss_ms.items()]).backward()
+            named_parameters = loss_fn.named_parameters()
+            for name, p in named_parameters:
+                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
 
-        # Check param update effect on targets
-        target_actor = [
-            p.clone()
-            for p in loss_fn.target_actor_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        target_qvalue = [
-            p.clone()
-            for p in loss_fn.target_qvalue_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        target_actor2 = [
-            p.clone()
-            for p in loss_fn.target_actor_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        target_qvalue2 = [
-            p.clone()
-            for p in loss_fn.target_qvalue_network_params.values(
-                include_nested=True, leaves_only=True
-            )
-        ]
-        if loss_fn.delay_actor:
-            assert all((p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2))
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
-            )
-        if loss_fn.delay_qvalue:
+            # Check param update effect on targets
+            target_actor = [
+                p.clone()
+                for p in loss_fn.target_actor_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            target_qvalue = [
+                p.clone()
+                for p in loss_fn.target_qvalue_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
+            target_actor2 = [
+                p.clone()
+                for p in loss_fn.target_actor_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            target_qvalue2 = [
+                p.clone()
+                for p in loss_fn.target_qvalue_network_params.values(
+                    include_nested=True, leaves_only=True
+                )
+            ]
+            if loss_fn.delay_actor:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_actor, target_actor2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_actor, target_actor2)
+                )
+            if loss_fn.delay_qvalue:
+                assert all(
+                    (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+            else:
+                assert not any(
+                    (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                )
+
+            # check that policy is updated after parameter update
+            parameters = [p.clone() for p in actor.parameters()]
+            for p in loss_fn.parameters():
+                p.data += torch.randn_like(p)
             assert all(
-                (p1 == p2).all() for p1, p2 in zip(target_qvalue, target_qvalue2)
+                (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
-        else:
-            assert not any(
-                (p1 == p2).any() for p1, p2 in zip(target_qvalue, target_qvalue2)
-            )
-
-        # check that policy is updated after parameter update
-        parameters = [p.clone() for p in actor.parameters()]
-        for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
-        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
 
 class TestPPO(LossModuleTestBase):
@@ -4110,7 +4240,9 @@ class TestPPO(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -4145,7 +4277,9 @@ class TestPPO(LossModuleTestBase):
         net = NormalParamWrapper(
             nn.Sequential(base_layer, nn.Linear(5, 2 * action_dim))
         )
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -4171,7 +4305,7 @@ class TestPPO(LossModuleTestBase):
             base_layer, in_keys=["observation"], out_keys=["hidden"]
         )
         net = nn.Sequential(nn.Linear(5, 2 * action_dim), NormalParamExtractor())
-        module = SafeModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
+        module = TensorDictModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
         actor_head = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,
@@ -4273,6 +4407,7 @@ class TestPPO(LossModuleTestBase):
                 "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
+            names=[None, "time"],
         )
         return td
 
@@ -4740,7 +4875,7 @@ class TestPPO(LossModuleTestBase):
             f"next_{done_key}": td.get(("next", done_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
-        td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
+        td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
 
         # setting the seed for each loss so that drawing the random samples from
         # value network leads to same numbers for both runs
@@ -4784,7 +4919,9 @@ class TestA2C(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -4912,6 +5049,7 @@ class TestA2C(LossModuleTestBase):
                 "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
             device=device,
+            names=[None, "time"],
         )
         return td
 
@@ -5286,7 +5424,9 @@ class TestReinforce(LossModuleTestBase):
         gamma = 0.9
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor_net = ProbabilisticActor(
             module,
             distribution_class=TanhNormal,
@@ -5336,38 +5476,48 @@ class TestReinforce(LossModuleTestBase):
                 "action": torch.randn(batch, n_act),
             },
             [batch],
+            names=["time"],
         )
-
-        params = TensorDict(value_net.state_dict(), []).unflatten_keys(".")
-        if advantage is not None:
-            advantage(td, params=params)
-        elif td_est is not None:
-            loss_fn.make_value_estimator(td_est)
-        loss_td = loss_fn(td)
-        autograd.grad(
-            loss_td.get("loss_actor"),
-            actor_net.parameters(),
-            retain_graph=True,
-        )
-        autograd.grad(
-            loss_td.get("loss_value"),
-            value_net.parameters(),
-            retain_graph=True,
-        )
-        with pytest.raises(RuntimeError, match="One of the "):
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ):
+            if advantage is not None:
+                params = TensorDict.from_module(value_net)
+                if delay_value:
+                    target_params = loss_fn.target_critic_params
+                else:
+                    target_params = None
+                advantage(td, params=params, target_params=target_params)
+            elif td_est is not None:
+                loss_fn.make_value_estimator(td_est)
+            loss_td = loss_fn(td)
             autograd.grad(
                 loss_td.get("loss_actor"),
-                value_net.parameters(),
-                retain_graph=True,
-                allow_unused=False,
-            )
-        with pytest.raises(RuntimeError, match="One of the "):
-            autograd.grad(
-                loss_td.get("loss_value"),
                 actor_net.parameters(),
                 retain_graph=True,
-                allow_unused=False,
             )
+            autograd.grad(
+                loss_td.get("loss_value"),
+                value_net.parameters(),
+                retain_graph=True,
+            )
+            with pytest.raises(RuntimeError, match="One of the "):
+                autograd.grad(
+                    loss_td.get("loss_actor"),
+                    value_net.parameters(),
+                    retain_graph=True,
+                    allow_unused=False,
+                )
+            with pytest.raises(RuntimeError, match="One of the "):
+                autograd.grad(
+                    loss_td.get("loss_value"),
+                    actor_net.parameters(),
+                    retain_graph=True,
+                    allow_unused=False,
+                )
+            print(advantage, gradient_mode, delay_value, td_est)
 
     @pytest.mark.parametrize(
         "td_est",
@@ -5383,7 +5533,9 @@ class TestReinforce(LossModuleTestBase):
         n_act = 5
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=["observation"])
         net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-        module = SafeModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor_net = ProbabilisticActor(
             module,
             distribution_class=TanhNormal,
@@ -5568,7 +5720,9 @@ class TestReinforce(LossModuleTestBase):
         batch = 4
         value_net = ValueOperator(nn.Linear(n_obs, 1), in_keys=[observation_key])
         net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor_net = ProbabilisticActor(
             module,
             distribution_class=TanhNormal,
@@ -5581,7 +5735,6 @@ class TestReinforce(LossModuleTestBase):
 
         observation = torch.randn(batch, n_obs)
         action = torch.randn(batch, n_act)
-        next_observation = torch.randn(batch, n_obs)
         next_reward = torch.randn(batch, 1)
         next_observation = torch.randn(batch, n_obs)
         next_done = torch.zeros(batch, 1, dtype=torch.bool)
@@ -5594,7 +5747,6 @@ class TestReinforce(LossModuleTestBase):
             f"next_{observation_key}": next_observation,
         }
         td = TensorDict(kwargs, [batch]).unflatten_keys("_")
-
         loss_val = loss(**kwargs)
         loss_val_td = loss(td)
         torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
@@ -5690,7 +5842,7 @@ class TestDreamer(LossModuleTestBase):
 
         # World Model and reward model
         rssm_rollout = RSSMRollout(
-            SafeModule(
+            TensorDictModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -5700,7 +5852,7 @@ class TestDreamer(LossModuleTestBase):
                     ("next", "belief"),
                 ],
             ),
-            SafeModule(
+            TensorDictModule(
                 rssm_posterior,
                 in_keys=[("next", "belief"), ("next", "encoded_latents")],
                 out_keys=[
@@ -5715,19 +5867,19 @@ class TestDreamer(LossModuleTestBase):
         )
         # World Model and reward model
         world_modeler = SafeSequential(
-            SafeModule(
+            TensorDictModule(
                 obs_encoder,
                 in_keys=[("next", "pixels")],
                 out_keys=[("next", "encoded_latents")],
             ),
             rssm_rollout,
-            SafeModule(
+            TensorDictModule(
                 obs_decoder,
                 in_keys=[("next", "state"), ("next", "belief")],
                 out_keys=[("next", "reco_pixels")],
             ),
         )
-        reward_module = SafeModule(
+        reward_module = TensorDictModule(
             reward_module,
             in_keys=[("next", "state"), ("next", "belief")],
             out_keys=[("next", "reward")],
@@ -5764,7 +5916,7 @@ class TestDreamer(LossModuleTestBase):
             out_features=1, depth=2, num_cells=mlp_num_units, activation_class=nn.ELU
         )
         transition_model = SafeSequential(
-            SafeModule(
+            TensorDictModule(
                 rssm_prior,
                 in_keys=["state", "belief", "action"],
                 out_keys=[
@@ -5775,7 +5927,7 @@ class TestDreamer(LossModuleTestBase):
                 ],
             ),
         )
-        reward_model = SafeModule(
+        reward_model = TensorDictModule(
             reward_module,
             in_keys=["state", "belief"],
             out_keys=["reward"],
@@ -5811,13 +5963,13 @@ class TestDreamer(LossModuleTestBase):
             num_cells=mlp_num_units,
             activation_class=nn.ELU,
         )
-        actor_model = SafeProbabilisticTensorDictSequential(
-            SafeModule(
+        actor_model = ProbabilisticTensorDictSequential(
+            TensorDictModule(
                 actor_module,
                 in_keys=["state", "belief"],
                 out_keys=["loc", "scale"],
             ),
-            SafeProbabilisticModule(
+            ProbabilisticTensorDictModule(
                 in_keys=["loc", "scale"],
                 out_keys="action",
                 default_interaction_type=InteractionType.RANDOM,
@@ -5836,7 +5988,7 @@ class TestDreamer(LossModuleTestBase):
         return actor_model
 
     def _create_value_model(self, rssm_hidden_dim, state_dim, mlp_num_units=13):
-        value_model = SafeModule(
+        value_model = TensorDictModule(
             MLP(
                 out_features=1,
                 depth=1,
@@ -5940,7 +6092,7 @@ class TestDreamer(LossModuleTestBase):
         # test reconstruction
         with pytest.raises(ValueError, match="No observation decoder provided"):
             mb_env.decode_obs(rollout)
-        mb_env.obs_decoder = SafeModule(
+        mb_env.obs_decoder = TensorDictModule(
             nn.LazyLinear(4, device=device),
             in_keys=["state"],
             out_keys=["reco_observation"],
@@ -6451,7 +6603,9 @@ class TestIQL(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = SafeModule(net, in_keys=[observation_key], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=[observation_key], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             in_keys=["loc", "scale"],
@@ -6639,6 +6793,7 @@ class TestIQL(LossModuleTestBase):
                 "collector": {"mask": mask},
                 "action": action.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
+            names=[None, "time"],
             device=device,
         )
         return td
@@ -6679,7 +6834,9 @@ class TestIQL(LossModuleTestBase):
         if td_est is not None:
             loss_fn.make_value_estimator(td_est)
 
-        with _check_td_steady(td):
+        with _check_td_steady(td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
 
@@ -6770,144 +6927,153 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
-        loss = loss_fn(td)
+        with pytest.warns(UserWarning, match="No target network updater has been"):
+            loss = loss_fn(td)
 
-        assert loss_fn.tensor_keys.priority in td.keys()
+            assert loss_fn.tensor_keys.priority in td.keys()
 
-        # check that losses are independent
-        for k in loss.keys():
-            if not k.startswith("loss"):
-                continue
-            loss[k].sum().backward(retain_graph=True)
-            common_layers_no = len(list(common.parameters()))
-            if k == "loss_actor":
-                if separate_losses:
+            # check that losses are independent
+            for k in loss.keys():
+                if not k.startswith("loss"):
+                    continue
+                loss[k].sum().backward(retain_graph=True)
+                common_layers_no = len(list(common.parameters()))
+                if k == "loss_actor":
+                    if separate_losses:
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.value_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                    else:
+                        common_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        value_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in value_layers
+                        )
                     assert all(
                         (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.value_network_params.values(
+                        for p in loss_fn.qvalue_network_params.values(
                             include_nested=True, leaves_only=True
                         )
                     )
-                else:
-                    common_layers = itertools.islice(
-                        loss_fn.value_network_params.values(True, True),
-                        common_layers_no,
-                    )
                     assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.actor_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                    value_layers = itertools.islice(
-                        loss_fn.value_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
+                elif k == "loss_value":
+                    if separate_losses:
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.actor_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                    else:
+                        common_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        actor_layers = itertools.islice(
+                            loss_fn.actor_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in actor_layers
+                        )
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in value_layers
+                        (p.grad is None) or (p.grad == 0).all()
+                        for p in loss_fn.qvalue_network_params.values(
+                            include_nested=True, leaves_only=True
+                        )
                     )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                assert not any(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-            elif k == "loss_value":
-                if separate_losses:
+                    if separate_losses:
+                        common_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                        )
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        value_layers = itertools.islice(
+                            loss_fn.value_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in value_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.value_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                elif k == "loss_qvalue":
                     assert all(
                         (p.grad is None) or (p.grad == 0).all()
                         for p in loss_fn.actor_network_params.values(
                             include_nested=True, leaves_only=True
                         )
                     )
-                else:
-                    common_layers = itertools.islice(
-                        loss_fn.actor_network_params.values(True, True),
-                        common_layers_no,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
-                    )
-                    actor_layers = itertools.islice(
-                        loss_fn.actor_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
                     assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in actor_layers
-                    )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.qvalue_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                if separate_losses:
-                    common_layers = itertools.islice(
-                        loss_fn.value_network_params.values(True, True),
-                        common_layers_no,
-                    )
-                    assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
-                    )
-                    value_layers = itertools.islice(
-                        loss_fn.value_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in value_layers
-                    )
-                else:
-                    assert not any(
                         (p.grad is None) or (p.grad == 0).all()
                         for p in loss_fn.value_network_params.values(
                             include_nested=True, leaves_only=True
                         )
                     )
-            elif k == "loss_qvalue":
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.actor_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                assert all(
-                    (p.grad is None) or (p.grad == 0).all()
-                    for p in loss_fn.value_network_params.values(
-                        include_nested=True, leaves_only=True
-                    )
-                )
-                if separate_losses:
-                    common_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                    )
-                    assert all(
-                        (p.grad is None) or (p.grad == 0).all() for p in common_layers
-                    )
-                    qvalue_layers = itertools.islice(
-                        loss_fn.qvalue_network_params.values(True, True),
-                        common_layers_no,
-                        None,
-                    )
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all() for p in qvalue_layers
-                    )
-                else:
-                    assert not any(
-                        (p.grad is None) or (p.grad == 0).all()
-                        for p in loss_fn.qvalue_network_params.values(
-                            include_nested=True, leaves_only=True
+                    if separate_losses:
+                        common_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
                         )
-                    )
-            else:
-                raise NotImplementedError(k)
-            loss_fn.zero_grad()
+                        assert all(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in common_layers
+                        )
+                        qvalue_layers = itertools.islice(
+                            loss_fn.qvalue_network_params.values(True, True),
+                            common_layers_no,
+                            None,
+                        )
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in qvalue_layers
+                        )
+                    else:
+                        assert not any(
+                            (p.grad is None) or (p.grad == 0).all()
+                            for p in loss_fn.qvalue_network_params.values(
+                                include_nested=True, leaves_only=True
+                            )
+                        )
+                else:
+                    raise NotImplementedError(k)
+                loss_fn.zero_grad()
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
@@ -6947,7 +7113,9 @@ class TestIQL(LossModuleTestBase):
 
         torch.manual_seed(0)
         np.random.seed(0)
-        with _check_td_steady(ms_td):
+        with _check_td_steady(ms_td), pytest.warns(
+            UserWarning, match="No target network updater"
+        ):
             loss_ms = loss_fn(ms_td)
         assert loss_fn.tensor_keys.priority in ms_td.keys()
 
@@ -7079,27 +7247,31 @@ class TestIQL(LossModuleTestBase):
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
-        loss_val = loss(**kwargs)
-        loss_val_td = loss(td)
-        assert len(loss_val) == 4
-        torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
-        torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
-        torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[2])
-        torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[3])
-        # test select
-        torch.manual_seed(self.seed)
-        loss.select_out_keys("loss_actor", "loss_value")
-        if torch.__version__ >= "2.0.0":
-            loss_actor, loss_value = loss(**kwargs)
-        else:
-            with pytest.raises(
-                RuntimeError,
-                match="You are likely using tensordict.nn.dispatch with keyword arguments",
-            ):
+        with pytest.warns(
+            UserWarning,
+            match="No target network updater has been associated with this loss module",
+        ):
+            loss_val = loss(**kwargs)
+            loss_val_td = loss(td)
+            assert len(loss_val) == 4
+            torch.testing.assert_close(loss_val_td.get("loss_actor"), loss_val[0])
+            torch.testing.assert_close(loss_val_td.get("loss_qvalue"), loss_val[1])
+            torch.testing.assert_close(loss_val_td.get("loss_value"), loss_val[2])
+            torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[3])
+            # test select
+            torch.manual_seed(self.seed)
+            loss.select_out_keys("loss_actor", "loss_value")
+            if torch.__version__ >= "2.0.0":
                 loss_actor, loss_value = loss(**kwargs)
-            return
-        assert loss_actor == loss_val_td["loss_actor"]
-        assert loss_value == loss_val_td["loss_value"]
+            else:
+                with pytest.raises(
+                    RuntimeError,
+                    match="You are likely using tensordict.nn.dispatch with keyword arguments",
+                ):
+                    loss_actor, loss_value = loss(**kwargs)
+                return
+            assert loss_actor == loss_val_td["loss_actor"]
+            assert loss_value == loss_val_td["loss_value"]
 
 
 def test_hold_out():
@@ -7204,7 +7376,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         else:
             raise NotImplementedError
 
-    module = custom_module().to(device).to(dtype)
+    with pytest.warns(UserWarning, match="No target network updater has been"):
+        module = custom_module().to(device).to(dtype)
 
     if mode == "soft":
         with pytest.raises(ValueError, match="One and only one argument"):
@@ -7215,7 +7388,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             )
 
     _ = module.module1_params
-    _ = module.target_module1_params
+    with pytest.warns(UserWarning, match="No target network updater has been"):
+        _ = module.target_module1_params
     if mode == "hard":
         upd = HardUpdate(
             module, value_network_update_interval=value_network_update_interval
@@ -7283,8 +7457,8 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 continue
             d1 += (target_val - source_val).norm().item()
         assert d1 < d0
-
-    upd.init_()
+    with pytest.warns(UserWarning, match="already"):
+        upd.init_()
     upd.step()
     d2 = 0.0
     for key, source_val in upd._sources.items(True, True):
@@ -8391,13 +8565,12 @@ def test_shared_params(dest, expected_dtype, expected_device):
     if torch.cuda.device_count() == 0 and dest == "cuda":
         pytest.skip("no cuda device available")
     module_hidden = torch.nn.Linear(4, 4)
-    td_module_hidden = SafeModule(
+    td_module_hidden = TensorDictModule(
         module=module_hidden,
-        spec=None,
         in_keys=["observation"],
         out_keys=["hidden"],
     )
-    module_action = SafeModule(
+    module_action = TensorDictModule(
         NormalParamWrapper(torch.nn.Linear(4, 8)),
         in_keys=["hidden"],
         out_keys=["loc", "scale"],
@@ -8587,6 +8760,7 @@ class TestAdv:
                 },
             },
             [1, 10],
+            names=[None, "time"],
         )
         td = module(td.clone(False))
         assert td["advantage"].is_leaf

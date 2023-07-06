@@ -4,7 +4,6 @@ set -e
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
-apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
 # find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
@@ -17,7 +16,6 @@ root_dir="$(git rev-parse --show-toplevel)"
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 
-#MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 200
 MUJOCO_GL=egl python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest --instafail -v --durations 200 --ignore test/test_distributed.py --ignore test/test_rlhf.py
 coverage combine
 coverage xml -i

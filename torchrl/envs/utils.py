@@ -9,7 +9,7 @@ from copy import copy
 import pkg_resources
 import torch
 
-from tensordict import is_tensor_collection
+from tensordict import is_tensor_collection, unravel_key
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -26,7 +26,6 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import unravel_keys
 
 __all__ = [
     "exploration_mode",
@@ -193,9 +192,9 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_keys((action_key,))
-    done_key = unravel_keys((done_key,))
-    reward_key = unravel_keys((reward_key,))
+    action_key = unravel_key(action_key)
+    done_key = unravel_key(done_key)
+    reward_key = unravel_key(reward_key)
 
     excluded = set()
     if exclude_reward:
@@ -216,14 +215,16 @@ def step_mdp(
         _set_single_key(tensordict, out, action_key)
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
-
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
         return out
 
 
-def _set_single_key(source, dest, key):
+def _set_single_key(source, dest, key, clone=False):
+    # key should be already unraveled
+    if isinstance(key, str):
+        key = (key,)
     for k in key:
         val = source.get(k)
         if is_tensor_collection(val):
@@ -234,13 +235,15 @@ def _set_single_key(source, dest, key):
             source = val
             dest = new_val
         else:
+            if clone:
+                val = val.clone()
             dest._set(k, val)
 
 
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
-    if total_key not in excluded:
+    if unravel_key(total_key) not in excluded:
         val = source.get(key)
         if is_tensor_collection(val):
             new_val = dest.get(key, None)
@@ -401,7 +404,6 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
-
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
@@ -482,6 +484,7 @@ class classproperty:
 
 def _sort_keys(element):
     if isinstance(element, tuple):
+        element = unravel_key(element)
         return "_-|-_".join(element)
     return element
 

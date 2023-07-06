@@ -5,12 +5,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
 import re
 import warnings
 from typing import Iterable, Optional, Type, Union
 
 import torch
+
+from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
@@ -21,12 +24,10 @@ from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
 from torchrl.data.utils import DEVICE_TYPING
 
-_has_functorch = False
-try:
+_has_functorch = importlib.util.find_spec("functorch") is not None
+if _has_functorch:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
-
-    _has_functorch = True
-except ImportError:
+else:
     warnings.warn(
         "failed to import functorch. TorchRL's features that do not require "
         "functional programming should work, but functionality and performance "
@@ -210,6 +211,8 @@ class SafeModule(TensorDictModule):
         self.register_spec(safe=safe, spec=spec)
 
     def register_spec(self, safe, spec):
+        if spec is not None:
+            spec = spec.clone()
         if spec is not None and not isinstance(spec, TensorSpec):
             raise TypeError("spec must be a TensorSpec subclass")
         elif spec is not None and not isinstance(spec, CompositeSpec):
@@ -218,22 +221,25 @@ class SafeModule(TensorDictModule):
                     f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
                     "Consider using a CompositeSpec object or no spec at all."
                 )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
+            spec = CompositeSpec({self.out_keys[0]: spec})
         elif spec is not None and isinstance(spec, CompositeSpec):
-            if "_" in spec.keys():
+            if "_" in spec.keys() and spec["_"] is not None:
                 warnings.warn('got a spec with key "_": it will be ignored')
         elif spec is None:
             spec = CompositeSpec()
 
-        if set(spec.keys(True, True)) != set(self.out_keys):
+        # unravel_key_list(self.out_keys) can be removed once 473 is merged in tensordict
+        spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        out_keys = set(unravel_key_list(self.out_keys))
+        if spec_keys != out_keys:
             # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
+            for key in out_keys:
+                if key not in spec_keys:
                     spec[key] = None
-
-        if set(spec.keys(True, True)) != set(self.out_keys):
+            spec_keys = set(unravel_key_list(list(spec.keys(True, True))))
+        if spec_keys != out_keys:
             raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {set(spec.keys(True))} and {set(self.out_keys)} respectively"
+                f"spec keys and out_keys do not match, got: {spec_keys} and {out_keys} respectively"
             )
 
         self._spec = spec
@@ -433,11 +439,19 @@ class VmapModule(TensorDictModuleBase):
     """
 
     def __init__(self, module: TensorDictModuleBase, vmap_dim=None):
+        if not _has_functorch:
+            raise ImportError("VmapModule requires torch>=1.13.")
         super().__init__()
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys
         self.module = module
         self.vmap_dim = vmap_dim
+        if torch.__version__ >= "2.0":
+            self._vmap = torch.vmap
+        else:
+            import functorch
+
+            self._vmap = functorch.vmap
 
     def forward(self, tensordict):
         # TODO: there is a risk of segfault if input is not a tensordict.
@@ -446,5 +460,5 @@ class VmapModule(TensorDictModuleBase):
         if vmap_dim is None:
             ndim = tensordict.ndim
             vmap_dim = ndim - 1
-        td = torch.vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
+        td = self._vmap(self.module, (vmap_dim,), (vmap_dim,))(tensordict)
         return tensordict.update(td)

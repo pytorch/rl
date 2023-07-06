@@ -1,4 +1,4 @@
-name: Unit-tests on Linux CPU
+name: Examples Tests on Linux
 
 on:
   pull_request:
@@ -22,21 +22,28 @@ jobs:
   tests:
     strategy:
       matrix:
-        python_version: ["3.8", "3.9", "3.10"]
+        python_version: ["3.9"] # "3.8", "3.9", "3.10", "3.11"
+        cuda_arch_version: ["11.6"] # "11.6", "11.7"
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      runner: linux.12xlarge
+      runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/rl
       docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
+      gpu-arch-type: cuda
+      gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
-        export CU_VERSION="cpu"
+        # Commenting these out for now because the GPU test are not working inside docker
+        export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
+        export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
+        # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
+        #export CU_VERSION="cpu"
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux_examples/scripts/run_all.sh

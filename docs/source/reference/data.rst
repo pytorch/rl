@@ -236,6 +236,7 @@ efficient sampling.
     PromptData
     PromptTensorDictTokenizer
     RewardData
+    RolloutFromModel
     TensorDictTokenizer
     TokenizedDatasetLoader
     create_infinite_iterator

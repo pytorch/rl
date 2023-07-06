@@ -47,6 +47,7 @@ from .tensordict_module import (
     DistributionalQValueHook,
     DistributionalQValueModule,
     EGreedyWrapper,
+    LMHeadActorValueOperator,
     LSTMModule,
     OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
