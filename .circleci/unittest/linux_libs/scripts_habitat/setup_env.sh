@@ -55,9 +55,10 @@ conda run python -m pip install git+https://github.com/facebookresearch/habitat-
 #conda run python -m pip install git+https://github.com/facebookresearch/habitat-lab.git#subdirectory=habitat-baselines
 conda run python -m pip install "gym[atari,accept-rom-license]" pygame
 
-# https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
-conda install -y -c conda-forge gcc=12.1.0
-conda install -y -c conda-forge libstdcxx-ng=12
+## https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin
+## eventually solved by downgrading scipy
+#conda install -y -c conda-forge gcc=12.1.0
+#conda install -y -c conda-forge libstdcxx-ng=12
 
 # smoke test
 python -c "import habitat;import habitat.gym"
