@@ -10,12 +10,10 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import InitTracker, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianWrapper,
-    OrnsteinUhlenbeckProcessWrapper,
     ProbabilisticActor,
     TanhDelta,
     ValueOperator,
@@ -84,19 +82,17 @@ def train(seed):
     }
 
     # Create env and env_test
-    env = TransformedEnv(
-        VmasEnv(
-            scenario=scenario_name,
-            num_envs=vmas_envs,
-            continuous_actions=True,
-            max_steps=max_steps,
-            device=vmas_device,
-            seed=seed,
-            # Scenario kwargs
-            **env_config,
-        ),
-        InitTracker(),
+    env = VmasEnv(
+        scenario=scenario_name,
+        num_envs=vmas_envs,
+        continuous_actions=True,
+        max_steps=max_steps,
+        device=vmas_device,
+        seed=seed,
+        # Scenario kwargs
+        **env_config,
     )
+
     env_test = VmasEnv(
         scenario=scenario_name,
         num_envs=config["evaluation_episodes"],
@@ -127,7 +123,7 @@ def train(seed):
     policy = ProbabilisticActor(
         module=policy_module,
         spec=env.unbatched_action_spec,
-        in_keys={"param": ("agents", "param")},
+        in_keys=[("agents", "param")],
         out_keys=[env.action_key],
         distribution_class=TanhDelta,
         distribution_kwargs={
@@ -137,11 +133,10 @@ def train(seed):
         return_log_prob=False,
     )
 
-    policy_explore = OrnsteinUhlenbeckProcessWrapper(
+    policy_explore = AdditiveGaussianWrapper(
         policy,
         annealing_num_steps=int(total_frames * (1 / 2)),
         action_key=env.action_key,
-        spec=env.unbatched_action_spec,
     )
 
     # Critic
@@ -221,7 +216,7 @@ def train(seed):
             tensordict_data["next", "done"]
             .unsqueeze(-1)
             .expand(tensordict_data[env.reward_key].shape)
-        )
+        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
