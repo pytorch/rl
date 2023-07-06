@@ -186,11 +186,13 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("is_init_key", ["some", ("one", "nested")])
     def test_nested(
         self,
         device,
         nested_obs_action,
         nested_done,
+        is_init_key,
         seed=0,
         n_envs=2,
         nested_dim=5,
@@ -206,7 +208,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
                     nest_done=nested_done,
                     nested_dim=nested_dim,
                 ).to(device),
-                InitTracker(),
+                InitTracker(init_key=is_init_key),
             ),
         )
 
@@ -220,7 +222,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             out_keys=[env.action_key],
         )
         exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
-            policy, spec=action_spec, action_key=env.action_key
+            policy, spec=action_spec, action_key=env.action_key, is_init_key=is_init_key
         )
         collector = SyncDataCollector(
             create_env_fn=env,
@@ -230,6 +232,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             device=device,
         )
         for _td in collector:
+            assert _td[is_init_key].shape == _td[env.done_key].shape
             break
 
         return

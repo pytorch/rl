@@ -3953,7 +3953,7 @@ class InitTracker(Transform):
     that is set to ``True`` whenever :meth:`~.reset` is called.
 
     Args:
-         init_key (str, optional): the key to be used for the tracker entry.
+         init_key (NestedKey, optional): the key to be used for the tracker entry.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -3971,7 +3971,7 @@ class InitTracker(Transform):
         super().__init__(in_keys=[], out_keys=[init_key])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.out_keys[0] not in tensordict.keys():
+        if self.out_keys[0] not in tensordict.keys(True, True):
             device = tensordict.device
             if device is None:
                 device = torch.device("cpu")
