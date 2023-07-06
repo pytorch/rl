@@ -6242,7 +6242,9 @@ class TestOnlineDT(LossModuleTestBase):
             -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
         )
         net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
-        module = TensorDictModule(net, in_keys=["observation"], out_keys=["loc", "scale"])
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
         actor = ProbabilisticActor(
             module=module,
             distribution_class=TanhNormal,

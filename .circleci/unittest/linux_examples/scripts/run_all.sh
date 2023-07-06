@@ -7,29 +7,17 @@ set -v
 # ================================ Init ============================================== #
 
 
-if [[ $OSTYPE != 'darwin'* ]]; then
-  apt-get update && apt-get upgrade -y
-  apt-get install -y vim git wget
+apt-get update && apt-get upgrade -y
+apt-get install -y vim git wget
 
-  apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
-  apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
+apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev
+apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
 
-  if [ "${CU_VERSION:-}" == cpu ] ; then
-    # solves version `GLIBCXX_3.4.29' not found for tensorboard
-#    apt-get install -y gcc-4.9
-    apt-get upgrade -y libstdc++6
-    apt-get dist-upgrade -y
-  else
-    apt-get install -y g++ gcc
-  fi
-
-fi
+apt-get install -y g++ gcc
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-if [[ $OSTYPE != 'darwin'* ]]; then
-  # from cudagl docker image
-  cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
-fi
+# from cudagl docker image
+cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 
 # ==================================================================================== #
@@ -79,6 +67,14 @@ cd "${root_dir}"
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
+
+export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
+export DISPLAY=unix:0.0
+export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
+export SDL_VIDEODRIVER=dummy
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
