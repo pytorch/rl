@@ -32,9 +32,9 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _getitem_batch_size, unravel_key
+from tensordict.utils import _getitem_batch_size
 
-from torchrl._utils import get_binary_env_var
+from torchrl._utils import get_binary_env_var, unravel_keys
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
@@ -3392,7 +3392,7 @@ class _CompositeSpecKeysView:
         return f"_CompositeSpecKeysView(keys={list(self)})"
 
     def __contains__(self, item):
-        item = unravel_key(item)
+        item = unravel_keys(item)
         if len(item) == 1:
             item = item[0]
         for key in self.__iter__():
