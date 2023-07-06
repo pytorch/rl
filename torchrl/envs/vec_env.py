@@ -20,10 +20,10 @@ import numpy as np
 import torch
 from tensordict import TensorDict
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import unravel_key
 from torch import multiprocessing as mp
 
-from torchrl._utils import _check_for_faulty_process, VERBOSE
+# from tensordict.utils import unravel_keys
+from torchrl._utils import _check_for_faulty_process, unravel_key, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,

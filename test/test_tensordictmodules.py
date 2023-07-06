@@ -7,9 +7,10 @@ import argparse
 
 import pytest
 import torch
-from tensordict import TensorDict, unravel_key_list
+from tensordict import TensorDict
 from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
+from torchrl._utils import unravel_key_list
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -1537,7 +1538,7 @@ def test_ensure_tensordict_compatible():
         in_keys=["x"],
         out_keys=["out_1", "out_2", "out_3"],
     )
-    assert set(unravel_key_list(ensured_module.in_keys)) == {("x",)}
+    assert set(unravel_key_list(ensured_module.in_keys)) == {"x"}
     assert isinstance(ensured_module, TensorDictModule)
 
 

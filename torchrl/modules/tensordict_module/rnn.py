@@ -9,9 +9,10 @@ import torch
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
 from tensordict.tensordict import NO_DEFAULT, TensorDictBase
-from tensordict.utils import prod, unravel_key_list
+from tensordict.utils import prod
 
 from torch import nn
+from torchrl._utils import unravel_key_list
 
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (
@@ -190,8 +191,7 @@ class LSTMModule(ModuleBase):
         in_keys = unravel_key_list(in_keys)
         out_keys = unravel_key_list(out_keys)
         if not isinstance(in_keys, (tuple, list)) or (
-            len(in_keys) != 3
-            and not (len(in_keys) == 4 and in_keys[-1] == ("is_init",))
+            len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init")
         ):
             raise ValueError(
                 f"LSTMModule expects 3 inputs: a value, and two hidden states (and potentially an 'is_init' marker). Got in_keys {in_keys} instead."

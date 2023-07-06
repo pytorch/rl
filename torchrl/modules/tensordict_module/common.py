@@ -12,12 +12,14 @@ import warnings
 from typing import Iterable, Optional, Type, Union
 
 import torch
-from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
 
 from torch import nn
+
+# from tensordict import unravel_key_list
+from torchrl._utils import unravel_key_list
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 
