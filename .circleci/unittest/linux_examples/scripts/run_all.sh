@@ -12,9 +12,7 @@ apt-get install -y vim git wget
 
 apt-get install -y libglfw3 libgl1-mesa-glx libosmesa6 libglew-dev libosmesa6-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2
-#apt-get install -y mesalib glew glfw
-
-apt-get install -y g++ gcc
+apt-get install -y g++ gcc patchelf
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # from cudagl docker image
