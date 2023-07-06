@@ -6277,7 +6277,7 @@ class TestVC1(TransformBase):
             }
         )
         if not del_keys:
-            exp_keys.add({("next", "pixels")})
+            exp_keys.add(("next", "pixels"))
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
         del transformed_env
