@@ -6114,14 +6114,14 @@ class TestVC1(TransformBase):
         in_keys = ["pixels"]
         del_keys = False
         out_keys = ["vec"]
-        t = VC1Transform(
-            in_keys=in_keys,
-            out_keys=out_keys,
-            del_keys=del_keys,
-            model_name="default",
-        )
-
         def make_env():
+            t = VC1Transform(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                del_keys=del_keys,
+                model_name="default",
+            )
+
             return TransformedEnv(
                 DiscreteActionConvMockEnvNumpy().to(device),
                 t,
@@ -6150,7 +6150,7 @@ class TestVC1(TransformBase):
         assert "vec" in sample.keys()
         if del_keys:
             assert "pixels" not in sample.keys()
-        assert sample["vec"].shape[-1] == 1024
+        assert sample["vec"].shape[-1] == 16
 
     @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
     def test_transform_rb(self, device, rbclass):
@@ -6171,7 +6171,7 @@ class TestVC1(TransformBase):
         assert "vec" in sample.keys()
         if del_keys:
             assert "pixels" not in sample.keys()
-        assert sample["vec"].shape[-1] == 1024
+        assert sample["vec"].shape[-1] == 16
 
     def test_transform_no_env(self, device):
         in_keys = ["pixels"]
@@ -6188,7 +6188,7 @@ class TestVC1(TransformBase):
         assert "vec" in td.keys()
         if del_keys:
             assert "pixels" not in td.keys()
-        assert td["vec"].shape[-1] == 1024
+        assert td["vec"].shape[-1] == 16
 
     def test_transform_compose(self, device):
         in_keys = ["pixels"]
@@ -6207,7 +6207,7 @@ class TestVC1(TransformBase):
         assert "vec" in td.keys()
         if del_keys:
             assert "pixels" not in td.keys()
-        assert td["vec"].shape[-1] == 1024
+        assert td["vec"].shape[-1] == 16
 
     @pytest.mark.parametrize("del_keys", [False, True])
     def test_vc1_instantiation(self, del_keys, device):
@@ -6244,10 +6244,11 @@ class TestVC1(TransformBase):
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
 
-    def test_transform_env(self, device):
+    @pytest.mark.parametrize("del_keys", [True, False])
+    def test_transform_env(self, device, del_keys):
         in_keys = ["pixels"]
         out_keys = ["vec"]
-        del_keys = False
+
         vc1 = VC1Transform(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -6275,6 +6276,8 @@ class TestVC1(TransformBase):
                 ("next", "done"),
             }
         )
+        if not del_keys:
+            exp_keys.add({("next", "pixels")})
         assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
         transformed_env.close()
         del transformed_env
