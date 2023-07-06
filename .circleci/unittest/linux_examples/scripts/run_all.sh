@@ -118,6 +118,9 @@ elif [[ $PY_VERSION == *"3.10"* ]]; then
 fi
 pip install "gymnasium[atari,accept-rom-license]"
 
+# install d4rl
+pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
+
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
 
@@ -170,6 +173,15 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200
 
 # With batched environments
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_td.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10
+
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   env.device=cuda:0 \
