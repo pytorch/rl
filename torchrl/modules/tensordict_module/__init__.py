@@ -11,6 +11,7 @@ from .actors import (
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    LMHeadActorValueOperator,
     ProbabilisticActor,
     QValueActor,
     QValueHook,
@@ -18,7 +19,7 @@ from .actors import (
     TanhModule,
     ValueOperator,
 )
-from .common import SafeModule
+from .common import SafeModule, VmapModule
 from .exploration import (
     AdditiveGaussianWrapper,
     EGreedyWrapper,

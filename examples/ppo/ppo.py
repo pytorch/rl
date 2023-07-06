@@ -50,7 +50,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         value_head=critic_head,
     )
-    optim = make_optim(cfg.optim, actor_network=actor, value_network=critic_head)
+    optim = make_optim(cfg.optim, loss_module)
 
     batch_size = cfg.collector.total_frames * cfg.env.num_envs
     num_mini_batches = batch_size // mini_batch_size
@@ -122,7 +122,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Backward pass
                 loss_sum.backward()
                 grad_norm = torch.nn.utils.clip_grad_norm_(
-                    list(actor.parameters()) + list(critic.parameters()), max_norm=0.5
+                    list(loss_module.parameters()), max_norm=0.5
                 )
                 losses[j, i]["grad_norm"] = grad_norm
 

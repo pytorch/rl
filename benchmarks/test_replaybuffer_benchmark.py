@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
+
 import pytest
 import torch
 from tensordict import TensorDict
@@ -48,19 +50,16 @@ class create_rb:
 
 
 def populate(rb, td):
-    for _ in range(1000):
-        rb.extend(td)
+    rb.extend(td)
 
 
 def sample(rb):
-    for _ in range(1000):
-        rb.sample()
+    rb.sample()
 
 
 def iterate(rb):
-    for i, _ in enumerate(rb):
-        if i == 5:
-            break
+    for _ in rb:
+        break
 
 
 @pytest.mark.parametrize(
@@ -78,18 +77,14 @@ def iterate(rb):
     ],
 )
 def test_sample_rb(benchmark, rb, storage, sampler, size):
-    benchmark.pedantic(
-        sample,
-        setup=create_rb(
-            rb=TensorDictReplayBuffer,
-            storage=ListStorage,
-            sampler=RandomSampler,
-            populated=True,
-            size=size,
-        ),
-        iterations=1,
-        rounds=5,
-    )
+    (rb,), _ = create_rb(
+        rb=TensorDictReplayBuffer,
+        storage=ListStorage,
+        sampler=RandomSampler,
+        populated=True,
+        size=size,
+    )()
+    benchmark(sample, rb)
 
 
 @pytest.mark.parametrize(
@@ -107,18 +102,14 @@ def test_sample_rb(benchmark, rb, storage, sampler, size):
     ],
 )
 def test_iterate_rb(benchmark, rb, storage, sampler, size):
-    benchmark.pedantic(
-        iterate,
-        setup=create_rb(
-            rb=TensorDictReplayBuffer,
-            storage=ListStorage,
-            sampler=RandomSampler,
-            populated=True,
-            size=size,
-        ),
-        iterations=1,
-        rounds=5,
-    )
+    (rb,), _ = create_rb(
+        rb=TensorDictReplayBuffer,
+        storage=ListStorage,
+        sampler=RandomSampler,
+        populated=True,
+        size=size,
+    )()
+    benchmark(iterate, rb)
 
 
 @pytest.mark.parametrize(
@@ -146,5 +137,10 @@ def test_populate_rb(benchmark, rb, storage, sampler, size):
             size=size,
         ),
         iterations=1,
-        rounds=5,
+        rounds=50,
     )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -58,6 +58,6 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 #yum makecache
 # sudo yum -y install glfw
-yum -y install glfw-devel
+#yum -y install glfw-devel
 #yum -y install libGLEW
 #yum -y install gcc-c++

@@ -75,26 +75,42 @@ def _call_value_nets(
     detach_next: bool,
 ):
     in_keys = value_net.in_keys
-    for i, name in enumerate(data.names):
-        if name == "time":
-            ndim = i + 1
-            break
-    else:
-        if RL_WARNINGS:
-            warnings.warn(
-                "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
-                "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
-            )
-        ndim = i + 1
     if single_call:
-        # get data at t and last of t+1
-        data_in = torch.cat(
-            [
-                data.select(*in_keys, value_key, strict=False),
-                data.get("next").select(*in_keys, value_key, strict=False)[..., -1:],
-            ],
-            -1,
-        )
+        for i, name in enumerate(data.names):
+            if name == "time":
+                ndim = i + 1
+                break
+        else:
+            ndim = None
+        if ndim is not None:
+            # get data at t and last of t+1
+            idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
+            idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False)[idx0],
+                ],
+                ndim - 1,
+            )
+        else:
+            if RL_WARNINGS:
+                warnings.warn(
+                    "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                    "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                )
+            ndim = data.ndim
+            idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(data.shape[ndim - 1], None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False),
+                ],
+                ndim - 1,
+            )
+
         # next_params should be None or be identical to params
         if next_params is not None and next_params is not params:
             raise ValueError(
@@ -104,8 +120,6 @@ def _call_value_nets(
             value_est = value_net(data_in, params).get(value_key)
         else:
             value_est = value_net(data_in).get(value_key)
-        idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-        idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
         value, value_ = value_est[idx], value_est[idx_]
     else:
         data_in = torch.stack(

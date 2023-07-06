@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -72,11 +73,12 @@ class RandomPolicy:
         >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
     """
 
-    def __init__(self, action_spec: TensorSpec):
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         self.action_spec = action_spec
+        self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand())
+        return td.set(self.action_key, self.action_spec.rand())
 
 
 class _Interruptor:
@@ -208,7 +210,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec)
+            policy = RandomPolicy(self.env.action_spec, self.env.action_key)
         elif isinstance(policy, nn.Module):
             # TODO: revisit these checks when we have determined whether arbitrary
             # callables should be supported as policies.
@@ -265,7 +267,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
         try:
             policy_device = next(policy.parameters()).device
-        except:  # noqa
+        except Exception:
             policy_device = (
                 torch.device(device) if device is not None else torch.device("cpu")
             )
