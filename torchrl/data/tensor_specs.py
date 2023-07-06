@@ -979,6 +979,12 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                 )
         self._specs[name] = spec
 
+    def is_in(self, val) -> bool:
+        isin = True
+        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+            isin = isin and spec.is_in(subval)
+        return isin
+
 
 @dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
@@ -3135,14 +3141,22 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
-        pass
+        raise NotImplementedError
 
-    def values(self):
-        for key in self.keys():
+    def values(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ):
+        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield self[key]
 
-    def items(self):
-        for key in self.keys():
+    def items(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ):
+        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield key, self[key]
 
     def keys(
@@ -3155,17 +3169,14 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         )
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
-
-    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        pass
+        raise NotImplementedError
 
     def type_check(
         self,
         value: Union[torch.Tensor, TensorDictBase],
         selected_keys: Union[str, Optional[Sequence[str]]] = None,
     ):
-        pass
+        raise NotImplementedError
 
     def __repr__(self) -> str:
         sub_str = ",\n".join(
@@ -3178,19 +3189,25 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             f"LazyStackedCompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
         )
 
+    def is_in(self, val) -> bool:
+        isin = True
+        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+            isin = isin and spec.is_in(subval)
+        return isin
+
     def encode(
         self, vals: Dict[str, Any], ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
-        pass
+        raise NotImplementedError
 
     def __delitem__(self, key):
-        pass
+        raise NotImplementedError
 
     def __iter__(self):
-        pass
+        raise NotImplementedError
 
     def __setitem__(self, key, value):
-        pass
+        raise NotImplementedError
 
     @property
     def device(self) -> DEVICE_TYPING:
