@@ -26,7 +26,9 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import unravel_key
+
+# from tensordict.utils import unravel_keys
+from torchrl._utils import unravel_keys
 
 __all__ = [
     "exploration_mode",
@@ -193,9 +195,9 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_key((action_key,))
-    done_key = unravel_key((done_key,))
-    reward_key = unravel_key((reward_key,))
+    action_key = unravel_keys(action_key)
+    done_key = unravel_keys(done_key)
+    reward_key = unravel_keys(reward_key)
 
     excluded = set()
     if exclude_reward:
@@ -244,7 +246,7 @@ def _set_single_key(source, dest, key, clone=False):
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
-    if unravel_key(total_key) not in excluded:
+    if unravel_keys(total_key) not in excluded:
         val = source.get(key)
         if is_tensor_collection(val):
             new_val = dest.get(key, None)
@@ -485,7 +487,7 @@ class classproperty:
 
 def _sort_keys(element):
     if isinstance(element, tuple):
-        element = unravel_key(element)
+        element = unravel_keys(element)
         return "_-|-_".join(element)
     return element
 

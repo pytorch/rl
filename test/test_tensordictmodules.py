@@ -7,9 +7,10 @@ import argparse
 
 import pytest
 import torch
-from tensordict import TensorDict, unravel_key_list
+from tensordict import TensorDict
 from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
+from torchrl._utils import unravel_key_list
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
