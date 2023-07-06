@@ -54,3 +54,16 @@ def measure_duration(request: pytest.FixtureRequest):
 
 def pytest_addoption(parser):
     parser.addoption("--rank", action="store")
+
+@pytest.fixture(autouse=True)
+def set_warnings() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Lazy modules are a new feature under heavy development",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Couldn't cast the policy onto the desired device on remote process",
+    )
