@@ -1,4 +1,4 @@
-name: Optdeps Tests on Linux
+name: Examples Tests on Linux
 
 on:
   pull_request:
@@ -8,6 +8,9 @@ on:
       - main
       - release/*
   workflow_dispatch:
+
+env:
+  CHANNEL: "nightly"
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -43,4 +46,4 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux_optdeps/scripts/run_all.sh
+        bash .circleci/unittest/linux_examples/scripts/run_all.sh

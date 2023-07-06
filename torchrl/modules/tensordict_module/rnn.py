@@ -5,6 +5,7 @@
 from typing import Optional, Tuple
 
 import torch
+from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
@@ -12,7 +13,6 @@ from tensordict.tensordict import NO_DEFAULT, TensorDictBase
 from tensordict.utils import prod
 
 from torch import nn
-from torchrl._utils import unravel_key_list
 
 from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.objectives.value.functional import (

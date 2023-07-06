@@ -31,10 +31,11 @@ from typing import (
 
 import numpy as np
 import torch
+from tensordict import unravel_key
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import _getitem_batch_size
 
-from torchrl._utils import get_binary_env_var, unravel_key
+from torchrl._utils import get_binary_env_var
 
 DEVICE_TYPING = Union[torch.device, str, int]
 
