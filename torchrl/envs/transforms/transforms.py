@@ -18,7 +18,7 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right
 from torch import nn, Tensor
 
-from torchrl._utils import unravel_key_list, unravel_keys
+from torchrl._utils import unravel_key_list, unravel_key
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -3672,7 +3672,7 @@ class ExcludeTransform(Transform):
                 {
                     key: value
                     for key, value in observation_spec.items()
-                    if unravel_keys(key) not in self.excluded_keys
+                    if unravel_key(key) not in self.excluded_keys
                 },
                 shape=observation_spec.shape,
             )
@@ -3727,7 +3727,7 @@ class SelectTransform(Transform):
             {
                 key: value
                 for key, value in observation_spec.items()
-                if unravel_keys(key) in self.selected_keys
+                if unravel_key(key) in self.selected_keys
             },
             shape=observation_spec.shape,
         )
