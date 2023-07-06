@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import warnings
-from typing import Optional, Sequence, Type, Union
+from typing import Dict, List, Optional, Type, Union
 
 from tensordict import TensorDictBase
 
@@ -14,6 +14,8 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
+from tensordict.utils import NestedKey
+
 from torchrl._utils import unravel_key_list
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.modules.distributions import Delta
@@ -49,14 +51,14 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
     a deterministic mapping function.
 
     Args:
-        in_keys (str or iterable of str or dict): key(s) that will be read from the
+        in_keys (NestedKey or list of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of string or a string, those keys must match the keywords used by
+            list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
-            the Normal distribution and similar. If in_keys is a dictionary,, the keys
+            the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
             tensordict that will get match to the corresponding distribution keys.
-        out_keys (str or iterable of str): keys where the sampled values will be
+        out_keys (NestedKey or list of NestedKey): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
         spec (TensorSpec): specs of the first output tensor. Used when calling
@@ -85,6 +87,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         return_log_prob (bool, optional): if ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
             `'sample_log_prob'`. Default is ``False``.
+        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+            Defaults to `'sample_log_prob'`.
         cache_dist (bool, optional): EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
@@ -98,8 +102,8 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
 
     def __init__(
         self,
-        in_keys: Union[str, Sequence[str], dict],
-        out_keys: Union[str, Sequence[str]],
+        in_keys: Union[NestedKey, List[NestedKey], Dict[str, NestedKey]],
+        out_keys: Optional[Union[NestedKey, List[NestedKey]]] = None,
         spec: Optional[TensorSpec] = None,
         safe: bool = False,
         default_interaction_mode: str = None,
@@ -107,6 +111,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
         return_log_prob: bool = False,
+        log_prob_key: Optional[NestedKey] = "sample_log_prob",
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ):
@@ -118,6 +123,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             distribution_class=distribution_class,
             distribution_kwargs=distribution_kwargs,
             return_log_prob=return_log_prob,
+            log_prob_key=log_prob_key,
             cache_dist=cache_dist,
             n_empirical_estimate=n_empirical_estimate,
         )

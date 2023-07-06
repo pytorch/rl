@@ -15,13 +15,14 @@ from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.data import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
 )
 from torchrl.data.rlhf.dataset import _has_transformers
-from torchrl.modules import MLP, SafeModule
+from torchrl.modules import MLP, SafeModule, TanhDelta
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
     ActorValueOperator,
@@ -35,6 +36,67 @@ from torchrl.modules.tensordict_module.actors import (
     QValueModule,
     ValueOperator,
 )
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
+    env = NestedCountingEnv(nested_dim=nested_dim)
+    action_spec = BoundedTensorSpec(
+        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+    )
+    policy_module = TensorDictModule(
+        nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
+    )
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys=[("data", "param")],
+        out_keys=[("data", "action")],
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+
+    td = env.reset()
+    td["data", "states"] = td["data", "states"].to(torch.float)
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys={"param": ("data", "param")},
+        out_keys=[("data", "action")],
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
 
 
 class TestQValue:
