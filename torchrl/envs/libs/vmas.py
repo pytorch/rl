@@ -211,7 +211,7 @@ class VmasWrapper(_EnvWrapper):
             shape=torch.Size((1,)),
             dtype=torch.bool,
             device=self.device,
-        )  # shape = (n_agents, 1)
+        )  # shape = (1,)
 
         self.unbatched_action_spec = CompositeSpec(
             {
