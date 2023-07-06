@@ -934,10 +934,10 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         return val.detach().cpu().numpy()
 
     def __len__(self):
-        pass
+        raise NotImplementedError
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
+        raise NotImplementedError
 
     def __repr__(self):
         shape_str = "shape=" + str(self.shape)
@@ -952,10 +952,10 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         return string
 
     def __iter__(self):
-        pass
+        raise NotImplementedError
 
     def __setitem__(self, key, value):
-        pass
+        raise NotImplementedError
 
     @property
     def device(self) -> DEVICE_TYPING:
