@@ -312,7 +312,8 @@ jobs:
           command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_distributed/scripts/post_process.sh
       - store_test_results:
           path: test-results
- unittest_linux_envpool_gpu:
+
+unittest_linux_envpool_gpu:
     <<: *binary_common
     machine:
       image: ubuntu-2004-cuda-11.4:202110-01
