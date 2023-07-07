@@ -18,7 +18,7 @@ from torchrl.modules import (
     TanhDelta,
     ValueOperator,
 )
-from torchrl.objectives import DDPGLoss, ValueEstimators
+from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 from utils.logging import log_evaluation, log_training
@@ -71,6 +71,8 @@ def train(seed):
         "lr": 5e-5,
         "max_grad_norm": 40.0,
         "training_device": training_device,
+        # Target
+        "tau": 0.005,
         # Evaluation
         "evaluation_interval": 20,
         "evaluation_episodes": 200,
@@ -178,13 +180,14 @@ def train(seed):
     )
 
     loss_module = DDPGLoss(
-        actor_network=policy, value_network=value_module, delay_value=False
+        actor_network=policy, value_network=value_module, delay_value=True
     )
     loss_module.set_keys(
         state_action_value=("agents", "state_action_value"),
         reward=env.reward_key,
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
+    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
 
@@ -244,6 +247,7 @@ def train(seed):
 
                 optim.step()
                 optim.zero_grad()
+                target_net_updater.step()
 
         policy_explore.step(frames=current_frames)
         collector.update_policy_weights_()
