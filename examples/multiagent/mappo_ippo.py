@@ -9,7 +9,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.collectors import SyncDataCollector
-from torchrl.data.replay_buffers import ReplayBuffer
+from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
@@ -166,11 +166,10 @@ def train(seed):
         total_frames=total_frames,
     )
 
-    replay_buffer = ReplayBuffer(
+    replay_buffer = TensorDictReplayBuffer(
         storage=LazyTensorStorage(memory_size, device=training_device),
         sampler=SamplerWithoutReplacement(),
         batch_size=config["minibatch_size"],
-        collate_fn=lambda x: x,  # Make it not clone when sampling
     )
 
     # Loss
