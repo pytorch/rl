@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import wandb
 from tensordict import TensorDictBase
-
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.record.loggers.wandb import WandbLogger
 
@@ -18,6 +17,13 @@ def log_training(
     current_frames: int,
     total_frames: int,
 ):
+    if ("next", "agents", "reward") not in sampling_td.keys(True, True):
+        sampling_td["next", "agents", "reward"] = (
+            sampling_td["next", "reward"]
+            .expand(sampling_td["agents"].shape)
+            .unsqueeze(-1)
+        )
+
     logger.experiment.log(
         {
             f"train/learner/{key}": value.mean().item()
