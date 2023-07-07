@@ -20,6 +20,17 @@ from .replay_buffers import (
     TensorStorage,
     Writer,
 )
+from .rlhf import (
+    create_infinite_iterator,
+    get_dataloader,
+    PairwiseDataset,
+    PromptData,
+    PromptTensorDictTokenizer,
+    RewardData,
+    RolloutFromModel,
+    TensorDictTokenizer,
+    TokenizedDatasetLoader,
+)
 from .tensor_specs import (
     BinaryDiscreteTensorSpec,
     BoundedTensorSpec,

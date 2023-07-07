@@ -215,6 +215,32 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec
 
+Reinforcement Learning From Human Feedback (RLHF)
+-------------------------------------------------
+
+Data is of utmost importance in Reinforcement Learning from Human Feedback (RLHF).
+Given that these techniques are commonly employed in the realm of language,
+which is scarcely addressed in other subdomains of RL within the library,
+we offer specific utilities to facilitate interaction with external libraries
+like datasets. These utilities consist of tools for tokenizing data, formatting
+it in a manner suitable for TorchRL modules, and optimizing storage for
+efficient sampling.
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    PairwiseDataset
+    PromptData
+    PromptTensorDictTokenizer
+    RewardData
+    RolloutFromModel
+    TensorDictTokenizer
+    TokenizedDatasetLoader
+    create_infinite_iterator
+    get_dataloader
 
 Utils
 -----
