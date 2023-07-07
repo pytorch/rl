@@ -155,9 +155,7 @@ def train(seed):
         batch_size=config["minibatch_size"],
     )
 
-    loss_module = DQNLoss(
-        qnet,
-    )
+    loss_module = DQNLoss(qnet, delay_value=True)
     loss_module.set_keys(
         action_value=("agents", "action_value"),
         action=env.action_key,
