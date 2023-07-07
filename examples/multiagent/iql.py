@@ -13,7 +13,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
-from torchrl.objectives import DQNLoss, ValueEstimators
+from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 from utils.logging import log_evaluation, log_training
@@ -66,6 +66,8 @@ def train(seed):
         "lr": 5e-5,
         "max_grad_norm": 40.0,
         "training_device": training_device,
+        # Target
+        "tau": 0.005,
         # Evaluation
         "evaluation_interval": 20,
         "evaluation_episodes": 200,
@@ -86,6 +88,7 @@ def train(seed):
         # Scenario kwargs
         **env_config,
     )
+
     env_test = VmasEnv(
         scenario=scenario_name,
         num_envs=config["evaluation_episodes"],
@@ -162,6 +165,7 @@ def train(seed):
         reward=env.reward_key,
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
+    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
 
@@ -191,7 +195,8 @@ def train(seed):
             tensordict_data["next", "done"]
             .unsqueeze(-1)
             .expand(tensordict_data[env.reward_key].shape)
-        )
+        )  # We need to expand the done to match the reward shape
+
         current_frames = tensordict_data.numel()
         total_frames += current_frames
         data_view = tensordict_data.reshape(-1)
@@ -216,6 +221,7 @@ def train(seed):
 
                 optim.step()
                 optim.zero_grad()
+                target_net_updater.step()
 
         qnet_explore.step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
