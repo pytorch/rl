@@ -10,6 +10,8 @@ The helper functions are coded in the utils.py associated with this script.
 import hydra
 import torch
 import tqdm
+
+from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
@@ -23,6 +25,7 @@ from utils import (
 )
 
 
+@set_gym_backend("gym")  # D4RL uses gym so we make sure gymnasium is hidden
 @hydra.main(config_path=".", config_name="dt_config")
 def main(cfg: "DictConfig"):  # noqa: F821
     model_device = cfg.optim.device
