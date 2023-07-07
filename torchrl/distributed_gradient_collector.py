@@ -63,9 +63,9 @@ def _run_gradient_worker(
         world_size: int,
         model: nn.Module,
         collector: DataCollectorBase,
-        # data_buffer: ReplayBuffer,
-        loss_module: LossModule,
+        data_buffer: ReplayBuffer,
         value_estimator: ValueEstimatorBase,
+        loss_module: LossModule,
         rank0_ip: str,
         tcpport: str,
         backend: str = "gloo",
@@ -105,26 +105,30 @@ def _run_gradient_worker(
         with torch.no_grad():
             data_view = value_estimator(data_view)
 
+        assert "advantage" in data_view.keys(), "value estimator must return a TensorDict with key 'advantage'"
+
         # # Add to replay buffer
         # data_buffer.extend(data_view)
         #
         # # Sample batch from replay buffer
         # mini_batch = data_buffer.sample().to(device)
-        mini_batch = data_view.to(device)
+        # mini_batch = data_view.to(device)
 
         # Compute loss
-        loss = loss_module(mini_batch)
+        loss = loss_module(data_view)
         loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
 
         # Backprop loss
         loss_sum.backward()
 
-        grad.apply_(lambda x: torch.ones_like(x))
         grad.reduce(0)  # send grads to server, operation is SUM
 
         # receive latest params
         weigths.irecv(src=0)
         print(f"agent {rank} received params from server")
+
+        # zero out grads
+        grad.zero_()
 
 
 class DistributedGradientCollector:
@@ -224,7 +228,7 @@ class DistributedGradientCollector:
                 self.num_workers + 1,
                 self.model,
                 self.collector,
-                # self.data_buffer,
+                self.data_buffer,
                 self.value_estimator,
                 self.loss_module,
                 self.IPAddr,

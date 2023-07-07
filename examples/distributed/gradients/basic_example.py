@@ -53,8 +53,10 @@ if __name__ == "__main__":
         lmbda=0.95,
         value_network=critic,
         average_gae=True,
+        advantage_key="advantage",
     )
-    loss_module = PPOLoss(actor, critic)
+    loss_module = PPOLoss(actor=actor, critic=critic)
+    import ipdb; ipdb.set_trace()
 
     # 6. Define gradient collector
     gradient_collector = DistributedGradientCollector(
