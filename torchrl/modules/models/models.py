@@ -1153,21 +1153,12 @@ class OnlineDTActor(nn.Module):
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
     Examples:
-        >>> config = {
-        ...     "n_embd": 256,
-        ...     "n_layer": 4,
-        ...     "n_head": 4,
-        ...     "n_inner": 1024,
-        ...     "activation": "relu",
-        ...     "n_positions": 1024,
-        ...     "resid_pdrop": 0.1,
-        ...     "attn_pdrop": 0.1,
-        ... }
-        >>> model = OnlineDTActor(state_dim=4, action_dim=2, config=config)
+        >>> model = OnlineDTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=OnlineDTActor.get_default_config())
         >>> observation = torch.randn(32, 10, 4)
         >>> action = torch.randn(32, 10, 2)
         >>> return_to_go = torch.randn(32, 10, 1)
-        >>> (mu, std) = model(observation, action, return_to_go)
+        >>> mu, std = model(observation, action, return_to_go)
         >>> mu.shape
         torch.Size([32, 10, 2])
         >>> std.shape
@@ -1188,7 +1179,7 @@ class OnlineDTActor(nn.Module):
             config=transformer_config,
         )
         self.action_layer = nn.Linear(
-            transformer_config.n_embd, action_dim * 2, device=device
+            transformer_config['n_embd'], action_dim * 2, device=device
         )
 
         self.log_std_min, self.log_std_max = -5.0, 2.0
@@ -1219,7 +1210,21 @@ class OnlineDTActor(nn.Module):
         )
         std = log_std.exp()
 
-        return (mu, std)
+        return mu, std
+
+    @classmethod
+    def get_default_config(cls):
+        """Default configuration for :class:`~.OnlineDTActor`"""
+        return {
+            "n_embd": 256,
+            "n_layer": 4,
+            "n_head": 4,
+            "n_inner": 1024,
+            "activation": "relu",
+            "n_positions": 1024,
+            "resid_pdrop": 0.1,
+            "attn_pdrop": 0.1,
+        }
 
 
 class DTActor(nn.Module):
@@ -1235,17 +1240,8 @@ class DTActor(nn.Module):
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
     Examples:
-        >>> config = {
-        ...     "n_embd": 256,
-        ...     "n_layer": 4,
-        ...     "n_head": 4,
-        ...     "n_inner": 1024,
-        ...     "activation": "relu",
-        ...     "n_positions": 1024,
-        ...     "resid_pdrop": 0.1,
-        ...     "attn_pdrop": 0.1,
-        ... }
-        >>> model = DTActor(state_dim=4, action_dim=2, config=config)
+        >>> model = DTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=DTActor.get_default_config())
         >>> observation = torch.randn(32, 10, 4)
         >>> action = torch.randn(32, 10, 2)
         >>> return_to_go = torch.randn(32, 10, 1)
@@ -1269,7 +1265,7 @@ class DTActor(nn.Module):
             config=transformer_config,
         )
         self.action_layer = nn.Linear(
-            transformer_config.n_embd, action_dim, device=device
+            transformer_config['n_embd'], action_dim, device=device
         )
 
         def weight_init(m):
@@ -1290,3 +1286,17 @@ class DTActor(nn.Module):
         hidden_state = self.transformer(observation, action, return_to_go)
         out = self.action_layer(hidden_state)
         return out
+
+    @classmethod
+    def get_default_config(cls):
+        """Default configuration for :class:`~.DTActor`"""
+        return {
+            "n_embd": 256,
+            "n_layer": 4,
+            "n_head": 4,
+            "n_inner": 1024,
+            "activation": "relu",
+            "n_positions": 1024,
+            "resid_pdrop": 0.1,
+            "attn_pdrop": 0.1,
+        }

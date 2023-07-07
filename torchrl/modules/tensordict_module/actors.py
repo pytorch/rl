@@ -1635,35 +1635,36 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.modules import (
         ...      ProbabilisticActor,
+        ...      TanhDelta,
         ...      DTActor,
-        ...      TanhNormal,
         ...      DecisionTransformerInferenceWrapper,
         ...  )
+        >>> dtactor = DTActor(state_dim=4, action_dim=2,
+        ...             transformer_config=DTActor.get_default_config()
+        ...         )
         >>> actor_module = TensorDictModule(
-        ...         DTActor(state_dim=4, action_dim=2),
-        ...         in_keys=in_keys,
-        ...         out_keys=[
-        ...             "loc",
-        ...             "scale",])
-        >>> dist_class = TanhNormal
+        ...         nn.dtactor,
+        ...         in_keys=["observation", "action", "return_to_go"],
+        ...         out_keys=["param"])
+        >>> dist_class = TanhDelta
         >>> dist_kwargs = {
         ...     "min": -1.0,
         ...     "max": 1.0,
         ...     "tanh_loc": False,
         ... }
         >>> actor = ProbabilisticActor(
-        ...     in_keys=["loc", "scale"],
-        ...     out_keys=["action", "log_prob"],
+        ...     in_keys=["param"],
+        ...     out_keys=["action"],
         ...     module=actor_module,
         ...     distribution_class=dist_class,
         ...     distribution_kwargs=dist_kwargs)
         >>> inference_actor = DecisionTransformerInferenceWrapper(actor)
-        >>> print(inference_actor)
         >>> sequence_length = 20
         >>> td = TensorDict({"observation": torch.randn(1, sequence_length, 4),
         ...                 "action": torch.randn(1, sequence_length, 2),
         ...                 "return_to_go": torch.randn(1, sequence_length, 1)}, [1,])
-        >>> print(inference_actor(td.clone()))
+        >>> result = inference_actor(td)
+        >>> print(result)
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -1703,6 +1704,13 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
                 self._spec[self.action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
+
+    @property
+    def in_keys(self):
+        return [self.observation_key, self.action_key, self.return_to_go_key]
+    @property
+    def out_keys(self):
+        return [self.observation_key, self.action_key, self.return_to_go_key]
 
     def set_tensor_keys(self, **kwargs):
         """Sets the input keys of the module.
