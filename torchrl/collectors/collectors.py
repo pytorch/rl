@@ -775,7 +775,12 @@ class SyncDataCollector(DataCollectorBase):
         truncated = self._tensordict.get(("next", "truncated"), None)
         traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
-        self._tensordict = step_mdp(self._tensordict)
+        self._tensordict = step_mdp(
+            self._tensordict,
+            reward_key=self.env.reward_key,
+            done_key=self.env.done_key,
+            action_key=self.env.action_key,
+        )
 
         if not self.reset_when_done:
             return

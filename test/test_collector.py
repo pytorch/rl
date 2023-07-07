@@ -1454,7 +1454,7 @@ class TestNestedEnvsCollector:
             break
         ccollector.shutdown()
 
-        # assert ("data","reward") not in td.keys(True) # this can be activates once step_mdp is fixed for nested keys
+        assert ("data", "reward") not in _td.keys(True)
         assert _td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
         assert _td["data"].batch_size == (
             *batch_size,
