@@ -954,10 +954,9 @@ class CountingEnvCountPolicy:
 
 
 class CountingEnvCountModule(nn.Module):
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
+    def __init__(self, action_spec: TensorSpec):
         super().__init__()
         self.action_spec = action_spec
-        self.action_key = action_key
 
     def forward(self, t):
         return self.action_spec.zero() + 1
