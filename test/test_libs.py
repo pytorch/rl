@@ -1320,8 +1320,9 @@ class TestVmas:
             device="cpu",
         )
 
-        for _td in ccollector:
-            break
+        for i, _td in enumerate(ccollector):
+            if i == 1:
+                break
         ccollector.shutdown()
 
         td_batch = (n_workers, n_envs, frames_per_batch // (n_workers * n_envs))
@@ -1333,6 +1334,7 @@ class TestVmas:
         assert _td["agents", "info"].shape == agents_td_batch
         assert _td["next", "agents"].shape == agents_td_batch
         assert _td["next", "agents", "info"].shape == agents_td_batch
+        assert _td["collector"].shape == td_batch
 
         assert _td[env.action_key].shape == agents_td_batch + (n_actions_per_agent,)
         assert _td["agents", "observation"].shape == agents_td_batch + (
