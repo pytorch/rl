@@ -231,13 +231,15 @@ def _set_single_key(source, dest, key, clone=False):
             new_val = dest.get(k, None)
             if new_val is None:
                 new_val = _clone_no_keys(val)
-                dest._set(k, new_val)
+                dest.set(k, new_val)
+                # dest._set_tuple(k, new_val, inplace=False, validated=True)
             source = val
             dest = new_val
         else:
             if clone:
                 val = val.clone()
-            dest._set(k, val)
+            dest.set(k, val)
+            # dest._set_tuple(k, val, inplace=False, validated=True)
 
 
 def _set(source, dest, key, total_key, excluded):
@@ -255,11 +257,13 @@ def _set(source, dest, key, total_key, excluded):
                     _set(val, new_val, subkey, total_key, excluded) or non_empty_local
                 )
             if non_empty_local:
-                dest._set(key, new_val)
+                dest.set(key, new_val)
+                # dest._set_tuple(key, new_val, inplace=False, validated=True)
             non_empty = non_empty_local
         else:
             non_empty = True
-            dest._set(key, val)
+            dest.set(key, val)
+            # dest._set_tuple(key, val, inplace=False, validated=True)
     return non_empty
 
 
