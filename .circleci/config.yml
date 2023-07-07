@@ -313,59 +313,6 @@ jobs:
       - store_test_results:
           path: test-results
 
-
-  unittest_linux_examples_gpu:
-    <<: *binary_common
-    machine:
-      image: ubuntu-2004-cuda-11.4:202110-01
-    resource_class: gpu.nvidia.medium
-    environment:
-      image_name: "pytorch/manylinux-cuda117"
-      TAR_OPTIONS: --no-same-owner
-      PYTHON_VERSION: << parameters.python_version >>
-      CU_VERSION: << parameters.cu_version >>
-
-    steps:
-      - checkout
-      - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
-      - restore_cache:
-
-          keys:
-            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_examples/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-      - run:
-          name: Setup
-          command: docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_examples/scripts/setup_env.sh
-      - save_cache:
-
-          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/linux_examples/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-          paths:
-            - conda
-            - env
-      - run:
-          name: Install torchrl
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/linux_examples/scripts/install.sh
-      - run:
-          name: Run tests
-          command: bash .circleci/unittest/linux_examples/scripts/run_test.sh
-#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
-      - run:
-          name: Codecov upload
-          command: |
-            curl -Os https://uploader.codecov.io/latest/linux/codecov
-            chmod +x codecov
-            ./codecov -t ${CODECOV_TOKEN} -s ./ -Z -F linux_examples-gpu
-      - run:
-          name: Post Process
-          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_examples/scripts/post_process.sh
-      - store_test_results:
-          path: test-results
-
   unittest_linux_envpool_gpu:
     <<: *binary_common
     machine:
@@ -534,10 +481,6 @@ workflows:
       - unittest_linux_stable_gpu:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
-          python_version: '3.9'
-      - unittest_linux_examples_gpu:
-          cu_version: cu117
-          name: unittest_linux_examples_gpu_py3.9
           python_version: '3.9'
       - unittest_windows_optdepts_gpu:
           cu_version: cu116
