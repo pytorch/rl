@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import argparse
-import importlib.util
 
 import itertools
 from copy import copy
@@ -6377,6 +6376,7 @@ class TestVC1(TransformBase):
         in_keys = ["pixels"]
         del_keys = False
         out_keys = ["vec"]
+
         def make_env():
             t = VC1Transform(
                 in_keys=in_keys,
@@ -6475,7 +6475,7 @@ class TestVC1(TransformBase):
     @pytest.mark.parametrize("del_keys", [False, True])
     def test_vc1_instantiation(self, del_keys, device):
         in_keys = ["pixels"]
-        out_keys = ["vec"]
+        out_keys = [("nested", "vec")]
         vc1 = VC1Transform(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -6494,7 +6494,7 @@ class TestVC1(TransformBase):
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
             {
-                ("next", "vec"),
+                ("next", "nested", "vec"),
                 ("next", "pixels_orig"),
                 "next",
                 "action",
@@ -6510,7 +6510,7 @@ class TestVC1(TransformBase):
     @pytest.mark.parametrize("del_keys", [True, False])
     def test_transform_env(self, device, del_keys):
         in_keys = ["pixels"]
-        out_keys = ["vec"]
+        out_keys = [("nested", "vec")]
 
         vc1 = VC1Transform(
             in_keys=in_keys,
@@ -6523,7 +6523,7 @@ class TestVC1(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {"vec", "done", "pixels_orig"}
+        exp_keys = {("nested", "vec"), "done", "pixels_orig"}
         if not del_keys:
             exp_keys.add("pixels")
         assert set(td.keys()) == exp_keys
@@ -6531,7 +6531,7 @@ class TestVC1(TransformBase):
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
             {
-                ("next", "vec"),
+                ("next", "nested", "vec"),
                 ("next", "pixels_orig"),
                 "next",
                 "action",
@@ -6548,7 +6548,7 @@ class TestVC1(TransformBase):
     @pytest.mark.parametrize("del_keys", [True, False])
     def test_vc1_spec_against_real(self, del_keys, device):
         in_keys = ["pixels"]
-        out_keys = ["vec"]
+        out_keys = [("nested", "vec")]
         vc1 = VC1Transform(
             in_keys=in_keys,
             out_keys=out_keys,

@@ -1,7 +1,6 @@
 import importlib
 import os
 import subprocess
-import warnings
 from functools import partial
 from typing import Union
 
@@ -44,16 +43,18 @@ class VC1Transform(Transform):
     can ensure that the following code snippet works as expected:
 
     Examples:
-        >>> transform = VC1Transform("resnet50", in_keys=["pixels"])
+        >>> transform = VC1Transform("default", in_keys=["pixels"])
         >>> env.append_transform(transform)
         >>> # the forward method will first call _init which will look at env.observation_spec
         >>> env.reset()
 
     Args:
-        model_name (str): one of resnet50, resnet34 or resnet18
-        in_keys (list of str): list of input keys. If left empty, the
+        model_name (str): One of ``"large"``, ``"base"`` or any other compatible
+            model name (see the `github repo <https://github.com/facebookresearch/eai-vc>`_ for more info). Defaults to ``"default"``
+            which provides a small, untrained model for testing.
+        in_keys (list of NestedKeys): list of input keys. If left empty, the
             "pixels" key is assumed.
-        out_keys (list of str, optional): list of output keys. If left empty,
+        out_keys (list of NestedKeys, optional): list of output keys. If left empty,
              "VC1_vec" is assumed.
         del_keys (bool, optional): If ``True`` (default), the input key will be
             discarded from the returned tensordict.
@@ -66,11 +67,6 @@ class VC1Transform(Transform):
     )
 
     def __init__(self, in_keys, out_keys, model_name, del_keys: bool = True):
-        try:
-            from vc_models.models.vit import model_utils
-        except ModuleNotFoundError as err:
-            raise ModuleNotFoundError(self.IMPORT_ERROR) from err
-
         if model_name == "default":
             self.make_noload_model()
             model_name = "vc1_vitb_noload"
@@ -86,8 +82,15 @@ class VC1Transform(Transform):
         except ModuleNotFoundError as err:
             raise ModuleNotFoundError(self.IMPORT_ERROR) from err
 
+        if self.model_name == "base":
+            model_name = model_utils.VC1_BASE_NAME
+        elif self.model_name == "large":
+            model_name = model_utils.VC1_LARGE_NAME
+        else:
+            model_name = self.model_name
+
         model, embd_size, model_transforms, model_info = model_utils.load_model(
-            self.model_name
+            model_name
         )
         self.model = model
         self.embd_size = embd_size
