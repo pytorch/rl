@@ -963,17 +963,6 @@ class CountingEnvCountModule(nn.Module):
         return self.action_spec.zero() + 1
 
 
-class CountingEnvCountPolicyModule(nn.Module):
-    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
-        self.action_spec = action_spec
-        self.action_key = action_key
-
-    def __call__(self, t):
-        action = self.action_spec.zero() + 1
-        if isinstance(t, TensorDictBase):
-            return t.set(self.action_key, action)
-
-
 class CountingEnv(EnvBase):
     """An env that is done after a given number of steps.
 
