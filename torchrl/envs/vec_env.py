@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, unravel_key
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, VERBOSE
@@ -766,10 +767,12 @@ class ParallelEnv(_BatchedEnv):
                 #     tensordict.get(key),
                 #     inplace=True,
                 # )
+                key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
                     key,
                     tensordict._get_tuple(key, None),
                     inplace=True,
+                    validated=True,
                 )
         else:
             self.shared_tensordict_parent.update_(
@@ -1063,6 +1066,7 @@ def _run_worker_pipe_shared_mem(
             if local_tensordict is not None:
                 for key in env_input_keys:
                     # local_tensordict.set(key, shared_tensordict.get(key))
+                    key = _unravel_key_to_tuple(key)
                     local_tensordict._set_tuple(
                         key,
                         shared_tensordict._get_tuple(key, None),
