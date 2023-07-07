@@ -56,8 +56,8 @@ conda activate "${env_dir}"
 printf "* Installing mujoco and related\n"
 mkdir -p $root_dir/.mujoco
 cd $root_dir/.mujoco/
-wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
+#wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
+#tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
 wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
 tar -xf mujoco210-linux-x86_64.tar.gz
 cd "${root_dir}"
@@ -69,7 +69,7 @@ cat "${this_dir}/environment.yml"
 
 export MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210
 export DISPLAY=unix:0.0
-export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
+#export MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin
 export SDL_VIDEODRIVER=dummy
 export MUJOCO_GL=egl
@@ -77,7 +77,7 @@ export PYOPENGL_PLATFORM=egl
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
-  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
+#  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
@@ -89,6 +89,12 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 conda deactivate
 conda activate "${env_dir}"
+
+# install d4rl
+pip install free-mujoco-py
+pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
+
+python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
 # rename them
@@ -112,9 +118,6 @@ elif [[ $PY_VERSION == *"3.10"* ]]; then
   rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
 fi
 pip install "gymnasium[atari,accept-rom-license]"
-
-# install d4rl
-pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 
 # ============================================================================================ #
 # ================================ PyTorch & TorchRL ========================================= #
