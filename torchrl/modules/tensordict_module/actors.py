@@ -1641,16 +1641,15 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         ...  )
         >>> dtactor = DTActor(state_dim=4, action_dim=2,
         ...             transformer_config=DTActor.get_default_config()
-        ...         )
+        ... )
         >>> actor_module = TensorDictModule(
-        ...         nn.dtactor,
+        ...         dtactor,
         ...         in_keys=["observation", "action", "return_to_go"],
         ...         out_keys=["param"])
         >>> dist_class = TanhDelta
         >>> dist_kwargs = {
         ...     "min": -1.0,
         ...     "max": 1.0,
-        ...     "tanh_loc": False,
         ... }
         >>> actor = ProbabilisticActor(
         ...     in_keys=["param"],
@@ -1668,10 +1667,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         TensorDict(
             fields={
                 action: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
                 observation: Tensor(shape=torch.Size([1, 20, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
-                scale: Tensor(shape=torch.Size([1, 2]), device=cpu, dtype=torch.float32, is_shared=False),
+                param: Tensor(shape=torch.Size([1, 20, 2]), device=cpu, dtype=torch.float32, is_shared=False),
                 return_to_go: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([1]),
             device=None,
