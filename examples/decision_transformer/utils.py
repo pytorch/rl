@@ -456,6 +456,8 @@ def make_dt_optimizer(optim_cfg, actor_network):
 
 
 def make_logger(cfg):
+    if not cfg.logger.backend:
+        return None
     exp_name = generate_exp_name(cfg.logger.model_name, cfg.logger.exp_name)
     cfg.logger.exp_name = exp_name
     logger = get_logger(

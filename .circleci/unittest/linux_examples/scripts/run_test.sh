@@ -32,11 +32,13 @@ python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
-  optim.warmup_steps=10
+  optim.warmup_steps=10 \
+  logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_td.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
-  optim.warmup_steps=10
+  optim.warmup_steps=10 \
+  logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   env.device=cuda:0 \

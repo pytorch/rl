@@ -77,7 +77,6 @@ export PYOPENGL_PLATFORM=egl
 
 conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
   DISPLAY=unix:0.0 \
-#  MJLIB_PATH=$root_dir/.mujoco/mujoco-2.1.1/lib/libmujoco.so.2.1.1 \
   LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$root_dir/.mujoco/mujoco210/bin \
   SDL_VIDEODRIVER=dummy \
   MUJOCO_GL=egl \
@@ -98,7 +97,7 @@ pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 conda install -y -c conda-forge libstdcxx-ng=12
 ## find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
-conda env config vars set LD_PRELOAD=$STDC_LOC
+conda env config vars set LD_PRELOAD=${root_dir}/$STDC_LOC
 
 # compile mujoco-py (bc it's done at runtime for whatever reason someone thought it was a good idea)
 python -c """import gym;import d4rl"""

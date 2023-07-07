@@ -92,10 +92,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if l0 is None:
             l0 = transformer_loss.item()
 
-        for key, value in loss_vals.items():
-            logger.log_scalar(key, value.item(), i)
         eval_reward = eval_td["next", "reward"].sum(1).mean().item() / reward_scaling
-        logger.log_scalar("evaluation reward", eval_reward, i)
+        if logger is not None:
+            for key, value in loss_vals.items():
+                logger.log_scalar(key, value.item(), i)
+            logger.log_scalar("evaluation reward", eval_reward, i)
 
         pbar.set_description(
             f"[Pre-Training] loss: {transformer_loss.item(): 4.4f} (init: {l0: 4.4f}), evaluation reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
