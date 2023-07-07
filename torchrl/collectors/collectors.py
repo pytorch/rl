@@ -790,6 +790,7 @@ class SyncDataCollector(DataCollectorBase):
             _reset = done_or_terminated
             td_reset = self._tensordict.select().set("_reset", _reset)
             td_reset = self.env.reset(td_reset)
+            td_reset.del_("_reset")
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
@@ -814,7 +815,7 @@ class SyncDataCollector(DataCollectorBase):
             )
             self._tensordict.set(
                 ("collector", "traj_ids"), traj_ids
-            )  # no ops if they already match
+            )
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
