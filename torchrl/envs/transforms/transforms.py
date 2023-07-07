@@ -17,7 +17,7 @@ import torch
 from tensordict import unravel_key, unravel_key_list
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right
+from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -143,10 +143,10 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[str],
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Sequence[NestedKey],
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
         if isinstance(in_keys, str):
@@ -789,10 +789,10 @@ class ObservationTransform(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = [
@@ -994,8 +994,8 @@ class ToTensorImage(ObservationTransform):
         from_int: Optional[bool] = None,
         unsqueeze: bool = False,
         dtype: Optional[torch.device] = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1118,8 +1118,8 @@ class TargetReturn(Transform):
         self,
         target_return: float,
         mode: str = "reduce",
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1165,9 +1165,7 @@ class TargetReturn(Transform):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for out_key in self.out_keys:
-            if isinstance(out_key, str):
-                out_key = (out_key,)
-                tensordict.set(("next", *out_key), tensordict.get(out_key))
+            tensordict.set(("next", out_key), tensordict.get(out_key))
         return super()._step(tensordict)
 
     def _apply_transform(
@@ -1201,7 +1199,7 @@ class TargetReturn(Transform):
             dtype=self.parent.reward_spec.dtype,
             device=self.parent.reward_spec.device,
         )
-        observation_spec["target_return"] = target_return_spec
+        observation_spec[self.out_keys[0]] = target_return_spec
 
         return observation_spec
 
@@ -1219,8 +1217,8 @@ class RewardClipping(Transform):
         self,
         clamp_min: float = None,
         clamp_max: float = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1273,8 +1271,8 @@ class BinarizeReward(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = ["reward"]
@@ -1295,7 +1293,7 @@ class BinarizeReward(Transform):
 
 
 class Resize(ObservationTransform):
-    """Resizes an pixel observation.
+    """Resizes a pixel observation.
 
     Args:
         w (int): resulting width
@@ -1308,8 +1306,8 @@ class Resize(ObservationTransform):
         w: int,
         h: int,
         interpolation: str = "bilinear",
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if not _has_tv:
             raise ImportError(
@@ -1371,9 +1369,9 @@ class CenterCrop(ObservationTransform):
     Args:
         w (int): resulting width
         h (int, optional): resulting height. If None, then w is used (square crop).
-        in_keys (sequence of str, optional): the entries to crop. If none is provided,
+        in_keys (sequence of NestedKey, optional): the entries to crop. If none is provided,
             :obj:`["pixels"]` is assumed.
-        out_keys (sequence of str, optional): the cropped images keys. If none is
+        out_keys (sequence of NestedKey, optional): the cropped images keys. If none is
             provided, :obj:`in_keys` is assumed.
 
     """
@@ -1382,8 +1380,8 @@ class CenterCrop(ObservationTransform):
         self,
         w: int,
         h: int = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
@@ -1421,9 +1419,9 @@ class FlattenObservation(ObservationTransform):
     Args:
         first_dim (int): first dimension of the dimensions to flatten.
         last_dim (int): last dimension of the dimensions to flatten.
-        in_keys (sequence of str, optional): the entries to flatten. If none is provided,
+        in_keys (sequence of NestedKey, optional): the entries to flatten. If none is provided,
             :obj:`["pixels"]` is assumed.
-        out_keys (sequence of str, optional): the flatten observation keys. If none is
+        out_keys (sequence of NestedKey, optional): the flatten observation keys. If none is
             provided, :obj:`in_keys` is assumed.
         allow_positive_dim (bool, optional): if ``True``, positive dimensions are accepted.
             :obj:`FlattenObservation` will map these to the n^th feature dimension
@@ -1435,8 +1433,8 @@ class FlattenObservation(ObservationTransform):
         self,
         first_dim: int,
         last_dim: int,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         allow_positive_dim: bool = False,
     ):
         if in_keys is None:
@@ -1520,10 +1518,10 @@ class UnsqueezeTransform(Transform):
         self,
         unsqueeze_dim: int,
         allow_positive_dim: bool = False,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = []  # default
@@ -1556,7 +1554,7 @@ class UnsqueezeTransform(Transform):
         observation = observation.squeeze(self.unsqueeze_dim)
         return observation
 
-    def _transform_spec(self, spec: TensorSpec) -> None:
+    def _transform_spec(self, spec: TensorSpec):
         space = spec.space
         if isinstance(space, ContinuousBox):
             space.minimum = self._apply_transform(space.minimum)
@@ -1582,7 +1580,8 @@ class UnsqueezeTransform(Transform):
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.in_keys:
+        reward_key = self.parent.reward_key if self.parent is not None else "reward"
+        if reward_key in self.in_keys:
             reward_spec = self._transform_spec(reward_spec)
         return reward_spec
 
@@ -1640,8 +1639,8 @@ class GrayScale(ObservationTransform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
@@ -1676,15 +1675,15 @@ class ObservationNorm(ObservationTransform):
     Args:
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
-        in_keys (list of int, optional): entries to be normalized. Defaults to ["observation", "pixels"].
+        in_keys (seuqence of NestedKey, optional): entries to be normalized. Defaults to ["observation", "pixels"].
             All entries will be normalized with the same values: if a different behaviour is desired
             (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`
             objects should be used.
-        out_keys (list of int, optional): output entries. Defaults to the value of `in_keys`.
-        in_keys_inv (list of int, optional): ObservationNorm also supports inverse transforms. This will
+        out_keys (seuqence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
+        in_keys_inv (seuqence of NestedKey, optional): ObservationNorm also supports inverse transforms. This will
             only occur if a list of keys is provided to :obj:`in_keys_inv`. If none is provided,
             only the forward transform will be called.
-        out_keys_inv (list of int, optional): output entries for the inverse transform.
+        out_keys_inv (seuqence of NestedKey, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
         standard_normal (bool, optional): if ``True``, the transform will be
 
@@ -1729,10 +1728,10 @@ class ObservationNorm(ObservationTransform):
         self,
         loc: Optional[float, torch.Tensor] = None,
         scale: Optional[float, torch.Tensor] = None,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
-        out_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
@@ -1780,7 +1779,7 @@ class ObservationNorm(ObservationTransform):
         num_iter: int,
         reduce_dim: Union[int, Tuple[int]] = 0,
         cat_dim: Optional[int] = None,
-        key: Optional[str] = None,
+        key: Optional[NestedKey] = None,
         keep_dims: Optional[Tuple[int]] = None,
     ) -> None:
         """Initializes the loc and scale stats of the parent environment.
@@ -1798,7 +1797,7 @@ class ObservationNorm(ObservationTransform):
             cat_dim (int, optional): dimension along which the batches collected will be concatenated.
                 It must be part equal to reduce_dim (if integer) or part of the reduce_dim tuple.
                 Defaults to the same value as reduce_dim.
-            key (str, optional): if provided, the summary statistics will be
+            key (NestedKey, optional): if provided, the summary statistics will be
                 retrieved from that key in the resulting tensordicts.
                 Otherwise, the first key in :obj:`ObservationNorm.in_keys` will be used.
             keep_dims (tuple of int, optional): the dimensions to keep in the loc and scale.
@@ -1956,9 +1955,9 @@ class CatFrames(ObservationTransform):
         dim (int): dimension along which concatenate the
             observations. Should be negative, to ensure that it is compatible
             with environments of different batch_size.
-        in_keys (list of int, optional): keys pointing to the frames that have
+        in_keys (seuqence of NestedKey, optional): keys pointing to the frames that have
             to be concatenated. Defaults to ["pixels"].
-        out_keys (list of int, optional): keys pointing to where the output
+        out_keys (seuqence of NestedKey, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
@@ -2032,8 +2031,8 @@ class CatFrames(ObservationTransform):
         self,
         N: int,
         dim: int,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         padding="same",
         as_inverse=False,
     ):
@@ -2288,7 +2287,7 @@ class RewardScaling(Transform):
         self,
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
@@ -2354,9 +2353,9 @@ class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
 
     Args:
-        in_keys (list of str, optional): list of double keys to be converted to
+        in_keys (sequence of NestedKey, optional): list of double keys to be converted to
             float before being exposed to external objects and functions.
-        in_keys_inv (list of str, optional): list of float keys to be converted to
+        in_keys_inv (sequence of NestedKey, optional): list of float keys to be converted to
             double before being passed to the contained base_env or storage.
 
     Examples:
@@ -2373,8 +2372,8 @@ class DoubleToFloat(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        in_keys_inv: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
 
@@ -2414,7 +2413,8 @@ class DoubleToFloat(Transform):
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if "reward" in self.in_keys:
+        reward_key = self.parent.reward_key if self.parent is not None else "reward"
+        if unravel_key(reward_key) in self.in_keys:
             if reward_spec.dtype is not torch.double:
                 raise TypeError("reward_spec.dtype is not double")
 
@@ -2442,10 +2442,10 @@ class CatTensors(Transform):
     "observation_velocity")
 
     Args:
-        in_keys (Sequence of str): keys to be concatenated. If `None` (or not provided)
+        in_keys (sequence of NestedKey): keys to be concatenated. If `None` (or not provided)
             the keys will be retrieved from the parent environment the first time
             the transform is used. This behaviour will only work if a parent is set.
-        out_key: key of the resulting tensor.
+        out_key (NestedKey): key of the resulting tensor.
         dim (int, optional): dimension along which the concatenation will occur.
             Default is -1.
         del_keys (bool, optional): if ``True``, the input values will be deleted after
@@ -2475,8 +2475,8 @@ class CatTensors(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_key: str = "observation_vector",
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_key: NestedKey = "observation_vector",
         dim: int = -1,
         del_keys: bool = True,
         unsqueeze_if_oor: bool = False,
@@ -2489,8 +2489,8 @@ class CatTensors(Transform):
                 )
         else:
             in_keys = sorted(in_keys, key=_sort_keys)
-        if type(out_key) != str:
-            raise Exception("CatTensors requires out_key to be of type string")
+        if not isinstance(out_key, (str, tuple)):
+            raise Exception("CatTensors requires out_key to be of type NestedKey")
         # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
@@ -2623,7 +2623,7 @@ class DiscreteActionProjection(Transform):
     Args:
         num_actions_effective (int): max number of action considered.
         max_actions (int): maximum number of actions that this module can read.
-        action_key (str, optional): key name of the action. Defaults to "action".
+        action_key (NestedKey, optional): key name of the action. Defaults to "action".
         include_forward (bool, optional): if ``True``, a call to forward will also
             map the action from one domain to the other when the module is called
             by a replay buffer or an nn.Module chain. Defaults to True.
@@ -2645,7 +2645,7 @@ class DiscreteActionProjection(Transform):
         self,
         num_actions_effective: int,
         max_actions: int,
-        action_key: str = "action",
+        action_key: NestedKey = "action",
         include_forward: bool = True,
     ):
         in_keys_inv = [action_key]
@@ -2693,9 +2693,7 @@ class DiscreteActionProjection(Transform):
     def transform_input_spec(self, input_spec: CompositeSpec):
         input_spec = input_spec.clone()
         for key in input_spec["_action_spec"].keys(True, True):
-            if not isinstance(key, tuple):
-                key = (key,)
-            key = ("_action_spec", *key)
+            key = ("_action_spec", key)
             break
         else:
             raise KeyError("key not found in action_spec.")
@@ -2736,11 +2734,12 @@ class FrameSkipTransform(Transform):
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
-        reward = tensordict.get(("next", "reward"))
+        reward_key = parent.reward_key
+        reward = tensordict.get(("next", reward_key))
         for _ in range(self.frame_skip - 1):
             tensordict = parent._step(tensordict)
-            reward = reward + tensordict.get(("next", "reward"))
-        return tensordict.set(("next", "reward"), reward)
+            reward = reward + tensordict.get(("next", reward_key))
+        return tensordict.set(("next", reward_key), reward)
 
     def forward(self, tensordict):
         raise RuntimeError(
@@ -2990,9 +2989,7 @@ class TensorDictPrimer(Transform):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         for key in self.primers.keys():
-            if isinstance(key, str):
-                key = (key,)
-            tensordict.setdefault(("next", *key), tensordict.get(key, default=None))
+            tensordict.setdefault(("next", key), tensordict.get(key, default=None))
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3083,7 +3080,7 @@ class VecNorm(Transform):
     observations, one should substitute this layer by `vecnorm.to_observation_norm()`.
 
     Args:
-        in_keys (iterable of str, optional): keys to be updated.
+        in_keys (sequence of NestedKey, optional): keys to be updated.
             default: ["observation", "reward"]
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
@@ -3120,7 +3117,7 @@ class VecNorm(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
         shared_td: Optional[TensorDictBase] = None,
         lock: mp.Lock = None,
         decay: float = 0.9999,
@@ -3300,7 +3297,7 @@ class VecNorm(Transform):
         Args:
             env (EnvBase): example environment to be used to create the
                 tensordict
-            keys (iterable of str, optional): keys that
+            keys (sequence of NestedKey, optional): keys that
                 have to be normalized. Default is `["next", "reward"]`
             memmap (bool): if ``True``, the resulting tensordict will be cast into
                 memmory map (using `memmap_()`). Otherwise, the tensordict
@@ -3395,8 +3392,8 @@ class RewardSum(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
@@ -3413,22 +3410,22 @@ class RewardSum(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
         # Non-batched environments
-        _reset = tensordict.get(
-            "_reset",
-            torch.ones(
+        _reset = tensordict.get("_reset", None)
+        if _reset is None:
+            _reset = torch.ones(
                 self.parent.done_spec.shape if self.parent else tensordict.batch_size,
                 dtype=torch.bool,
                 device=tensordict.device,
-            ),
-        )
+            )
         if _reset.any():
+            reward_key = self.parent.reward_key if self.parent else "reward"
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                if out_key in tensordict.keys():
+                if out_key in tensordict.keys(True, True):
                     value = tensordict[out_key]
                     tensordict[out_key] = value.masked_fill(
                         expand_as_right(_reset, value), 0.0
                     )
-                elif in_key in ("reward", ("reward",)):
+                elif unravel_key(in_key) == unravel_key(reward_key):
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict[out_key] = self.parent.reward_spec.zero()
@@ -3526,24 +3523,32 @@ class StepCounter(Transform):
             entry to ``True``.
             However, the step count will still be
             incremented on each call to step() into the `step_count` attribute.
-        truncated_key (str, optional): the key where the truncated key should
+        truncated_key (NestedKey, optional): the key where the truncated key should
             be written. Defaults to ``"truncated"``, which is recognised by
             data collectors as a reset signal.
+        step_count_key (NestedKey, optional): the key where the step_count key should
+            be written. Defaults to ``"step_count"``, which is recognised by
+            data collectors.
     """
 
     invertible = False
 
     def __init__(
-        self, max_steps: Optional[int] = None, truncated_key: str = "truncated"
+        self,
+        max_steps: Optional[int] = None,
+        truncated_key: Optional[NestedKey] = "truncated",
+        step_count_key: Optional[NestedKey] = "step_count",
     ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
         self.max_steps = max_steps
         self.truncated_key = truncated_key
+        self.step_count_key = step_count_key
         super().__init__([])
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = tensordict.get("done", None)
+        done_key = self.parent.done_key if self.parent else "done"
+        done = tensordict.get(done_key, None)
         if done is None:
             done = torch.ones(
                 self.parent.done_spec.shape,
@@ -3558,7 +3563,7 @@ class StepCounter(Transform):
         if _reset is None:
             _reset = torch.ones_like(done)
         step_count = tensordict.get(
-            "step_count",
+            self.step_count_key,
             default=None,
         )
         if step_count is None:
@@ -3566,7 +3571,7 @@ class StepCounter(Transform):
 
         step_count[_reset] = 0
         tensordict.set(
-            "step_count",
+            self.step_count_key,
             step_count,
         )
         if self.max_steps is not None:
@@ -3577,10 +3582,10 @@ class StepCounter(Transform):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         step_count = tensordict.get(
-            "step_count",
+            self.step_count_key,
         )
         next_step_count = step_count + 1
-        tensordict.set(("next", "step_count"), next_step_count)
+        tensordict.set(("next", self.step_count_key), next_step_count)
         if self.max_steps is not None:
             truncated = next_step_count >= self.max_steps
             tensordict.set(("next", self.truncated_key), truncated)
@@ -3593,17 +3598,17 @@ class StepCounter(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        observation_spec["step_count"] = UnboundedDiscreteTensorSpec(
+        observation_spec[self.step_count_key] = UnboundedDiscreteTensorSpec(
             shape=self.parent.done_spec.shape
             if self.parent
             else observation_spec.shape,
             dtype=torch.int64,
             device=observation_spec.device,
         )
-        observation_spec["step_count"].space.minimum = (
-            observation_spec["step_count"].space.minimum * 0
+        observation_spec[self.step_count_key].space.minimum = (
+            observation_spec[self.step_count_key].space.minimum * 0
         )
-        if self.max_steps is not None and self.truncated_key != "done":
+        if self.max_steps is not None and self.truncated_key != self.parent.done_key:
             observation_spec[self.truncated_key] = self.parent.done_spec.clone()
         return observation_spec
 
@@ -3616,14 +3621,14 @@ class StepCounter(Transform):
             input_spec["_state_spec"] = CompositeSpec(
                 shape=input_spec.shape, device=input_spec.device
             )
-        input_spec["_state_spec", "step_count"] = UnboundedDiscreteTensorSpec(
+        step_spec = UnboundedDiscreteTensorSpec(
             shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
             dtype=torch.int64,
             device=input_spec.device,
         )
-        input_spec["_state_spec", "step_count"].space.minimum = (
-            input_spec["_state_spec", "step_count"].space.minimum * 0
-        )
+        step_spec.space.minimum *= 0
+        input_spec["_state_spec", self.step_count_key] = step_spec
+
         return input_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -3641,7 +3646,7 @@ class ExcludeTransform(Transform):
     """Excludes keys from the input tensordict.
 
     Args:
-        *excluded_keys (iterable of str): The name of the keys to exclude. If the key is
+        *excluded_keys (iterable of NestedKey): The name of the keys to exclude. If the key is
             not present, it is simply ignored.
 
     """
@@ -3687,7 +3692,7 @@ class SelectTransform(Transform):
         keys but other may be necessary.
 
     Args:
-        *selected_keys (iterable of str): The name of the keys to select. If the key is
+        *selected_keys (iterable of NestedKey): The name of the keys to select. If the key is
             not present, it is simply ignored.
 
     """
@@ -3707,8 +3712,10 @@ class SelectTransform(Transform):
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
+        reward_key = self.parent.reward_key if self.parent else "reward"
+        done_key = self.parent.done_key if self.parent else "done"
         return tensordict.select(
-            *self.selected_keys, "reward", "done", *input_keys, strict=False
+            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
         )
 
     forward = _call
@@ -3718,8 +3725,10 @@ class SelectTransform(Transform):
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
+        reward_key = self.parent.reward_key if self.parent else "reward"
+        done_key = self.parent.done_key if self.parent else "done"
         return tensordict.select(
-            *self.selected_keys, "reward", "done", *input_keys, strict=False
+            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
         )
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -3739,8 +3748,8 @@ class TimeMaxPool(Transform):
     This transform take the maximum value in each position for all in_keys tensors over the last T time steps.
 
     Args:
-        in_keys (sequence of str, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
-        out_keys (sequence of str, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
+        in_keys (sequence of NestedKey, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
+        out_keys (sequence of NestedKey, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
         T (int, optional): Number of time steps over which to apply max pooling.
     """
 
@@ -3748,8 +3757,8 @@ class TimeMaxPool(Transform):
 
     def __init__(
         self,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         T: int = 1,
     ):
         if in_keys is None:
@@ -3869,7 +3878,7 @@ class RandomCropTensorDict(Transform):
             should occur. Negative dimensions should be preferred to make
             the transform robust to tensordicts of varying batch dimensions.
             Defaults to -1 (the default time dimension in TorchRL).
-        mask_key (str): If provided, this represents the mask key to be looked
+        mask_key (NestedKey): If provided, this represents the mask key to be looked
             for when doing the sampling. If provided, it only valid elements will
             be returned. It is assumed that the mask is a boolean tensor with
             first True values and then False values, not mixed together.
@@ -3879,7 +3888,10 @@ class RandomCropTensorDict(Transform):
     """
 
     def __init__(
-        self, sub_seq_len: int, sample_dim: int = -1, mask_key: Optional[str] = None
+        self,
+        sub_seq_len: int,
+        sample_dim: int = -1,
+        mask_key: Optional[NestedKey] = None,
     ):
         self.sub_seq_len = sub_seq_len
         if sample_dim > 0:
@@ -3953,7 +3965,7 @@ class InitTracker(Transform):
     that is set to ``True`` whenever :meth:`~.reset` is called.
 
     Args:
-         init_key (str, optional): the key to be used for the tracker entry.
+         init_key (NestedKey, optional): the key to be used for the tracker entry.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -3967,11 +3979,11 @@ class InitTracker(Transform):
 
     """
 
-    def __init__(self, init_key: bool = "is_init"):
+    def __init__(self, init_key: NestedKey = "is_init"):
         super().__init__(in_keys=[], out_keys=[init_key])
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.out_keys[0] not in tensordict.keys():
+        if self.out_keys[0] not in tensordict.keys(True, True):
             device = tensordict.device
             if device is None:
                 device = torch.device("cpu")
@@ -3989,12 +4001,16 @@ class InitTracker(Transform):
             device = torch.device("cpu")
         _reset = tensordict.get("_reset", None)
         if _reset is None:
-            _reset = torch.ones(
-                self.parent.done_spec.shape,
-                device=device,
-                dtype=torch.bool,
+            tensordict.set(
+                self.out_keys[0],
+                torch.ones(
+                    self.parent.done_spec.shape,
+                    device=device,
+                    dtype=torch.bool,
+                ),
             )
-        tensordict.set(self.out_keys[0], _reset.clone())
+        else:
+            tensordict.set(self.out_keys[0], _reset.clone())
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -4016,11 +4032,11 @@ class RenameTransform(Transform):
     """A transform to rename entries in the output tensordict.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename
-        out_keys (list of str/tuples of str): the name of the entries after renaming.
-        in_keys_inv (list of str/tuples of str): the entries to rename before
+        in_keys (sequence of NestedKey): the entries to rename
+        out_keys (sequence of NestedKey): the name of the entries after renaming.
+        in_keys_inv (sequence of NestedKey, optional): the entries to rename before
             passing the input tensordict to :meth:`EnvBase._step`.
-        out_keys_inv (list of str/tuples of str): the names of the renamed
+        out_keys_inv (sequence of NestedKey, optional): the names of the renamed
             entries passed to :meth:`EnvBase._step`.
         create_copy (bool, optional): if ``True``, the entries will be copied
             with a different name rather than being renamed. This allows for
@@ -4134,9 +4150,9 @@ class RenameTransform(Transform):
             output_spec["_observation_spec"][out_key] = output_spec[
                 "_done_spec"
             ].clone()
-        if ("reward",) in self.in_keys:
+        if "reward" in self.in_keys:
             for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == ("reward",):
+                if self.in_keys[i] == "reward":
                     break
             else:
                 raise RuntimeError("Expected one key to be 'reward'")
@@ -4178,9 +4194,9 @@ class Reward2GoTransform(Transform):
     and not to the collector.
 
     Args:
-        in_keys (list of str/tuples of str): the entries to rename. Defaults to
+        in_keys (sequence of NestedKey): the entries to rename. Defaults to
             ``("next", "reward")`` if none is provided.
-        out_keys (list of str/tuples of str): the entries to rename. Defaults to
+        out_keys (sequence of NestedKey): the entries to rename. Defaults to
             the values of ``in_keys`` if none is provided.
         gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
 
@@ -4274,8 +4290,8 @@ class Reward2GoTransform(Transform):
     def __init__(
         self,
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
-        in_keys: Optional[Sequence[str]] = None,
-        out_keys: Optional[Sequence[str]] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if in_keys is None:
             in_keys = [("next", "reward")]
@@ -4294,7 +4310,8 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = tensordict.get(("next", "done"))
+        done_key = self.parent.done_key if self.parent else "done"
+        done = tensordict.get(("next", done_key))
         truncated = tensordict.get(("next", "truncated"), None)
         if truncated is not None:
             done_or_truncated = done | truncated
