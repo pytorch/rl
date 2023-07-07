@@ -94,6 +94,12 @@ conda activate "${env_dir}"
 pip install free-mujoco-py
 pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 
+# TODO: move this down -- will break torchrl installation
+conda install -y -c conda-forge libstdcxx-ng=12
+## find libstdc
+STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
+conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+
 python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
