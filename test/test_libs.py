@@ -1290,9 +1290,7 @@ class TestVmas:
 
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
-            scenario="flocking",
-            num_envs=n_envs,
-            n_agents=n_agents,
+            scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
         )
 
         env = ParallelEnv(n_workers, env_fun)
