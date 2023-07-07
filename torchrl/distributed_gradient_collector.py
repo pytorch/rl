@@ -28,6 +28,7 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.objectives import LossModule
+from torchrl.objectives.value.advantages import ValueEstimatorBase
 from torchrl.collectors.utils import split_trajectories
 from torchrl.envs import EnvBase, EnvCreator
 
@@ -62,13 +63,16 @@ def _run_gradient_worker(
         world_size: int,
         model: nn.Module,
         collector: DataCollectorBase,
-        data_buffer: ReplayBuffer,
+        # data_buffer: ReplayBuffer,
         loss_module: LossModule,
+        value_estimator: ValueEstimatorBase,
         rank0_ip: str,
         tcpport: str,
         backend: str = "gloo",
         verbose: bool = True,
 ):
+    data_buffer = None
+
     """Run a gradient worker."""
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
@@ -82,6 +86,7 @@ def _run_gradient_worker(
         print(
             f"node with rank {rank} with world_size {world_size} -- launching distributed"
         )
+
     torch.distributed.init_process_group(
         backend=backend,
         rank=rank,
@@ -97,11 +102,15 @@ def _run_gradient_worker(
 
         data_view = data.reshape(-1)  # TODO: how do we handle this for rnn?
 
-        # Add to replay buffer
-        data_buffer.extend(data_view)
+        with torch.no_grad():
+            data_view = value_estimator(data_view)
 
-        # Sample batch from replay buffer
-        mini_batch = data_buffer.sample().to(device)
+        # # Add to replay buffer
+        # data_buffer.extend(data_view)
+        #
+        # # Sample batch from replay buffer
+        # mini_batch = data_buffer.sample().to(device)
+        mini_batch = data_view.to(device)
 
         # Compute loss
         loss = loss_module(mini_batch)
@@ -127,7 +136,7 @@ class DistributedGradientCollector:
     """
 
     _iterator = None
-    _VERBOSE = VERBOSE  # for debugging
+    _VERBOSE = True  # VERBOSE  # for debugging
 
     def __init__(
         self,
@@ -137,6 +146,7 @@ class DistributedGradientCollector:
         collector: DataCollectorBase = None,
         loss_module: LossModule = None,
         data_buffer: ReplayBuffer = None,
+        value_estimator: ValueEstimatorBase,
         backend="gloo",
         launcher="mp",  # For now, only support multiprocessing
         tcp_port=None,
@@ -145,6 +155,8 @@ class DistributedGradientCollector:
         self.collector = collector
         self.loss_module = loss_module
         self.data_buffer = data_buffer
+        self.value_estimator = value_estimator
+
         self.num_workers = num_workers
         self.backend = backend
         self.model = model
@@ -212,7 +224,8 @@ class DistributedGradientCollector:
                 self.num_workers + 1,
                 self.model,
                 self.collector,
-                self.data_buffer,
+                # self.data_buffer,
+                self.value_estimator,
                 self.loss_module,
                 self.IPAddr,
                 int(TCP_PORT),

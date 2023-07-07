@@ -4,6 +4,7 @@ from tensordict.nn import TensorDictModule
 from torchrl.objectives import PPOLoss
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.collectors import SyncDataCollector
+from torchrl.objectives.value.advantages import GAE
 from torchrl.modules import OneHotCategorical, ProbabilisticActor
 from torchrl.distributed_gradient_collector import DistributedGradientCollector, get_weights_and_grad
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -47,6 +48,12 @@ if __name__ == "__main__":
     )
 
     # 5. Define objective
+    advantage_module = GAE(
+        gamma=0.99,
+        lmbda=0.95,
+        value_network=critic,
+        average_gae=True,
+    )
     loss_module = PPOLoss(actor, critic)
 
     # 6. Define gradient collector
@@ -54,6 +61,7 @@ if __name__ == "__main__":
         model=actor,
         num_workers=2,
         collector=collector,
+        value_estimator=advantage_module,
         loss_module=loss_module,
         data_buffer=buffer,
     )
