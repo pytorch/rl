@@ -61,3 +61,8 @@ def set_warnings() -> None:
         category=UserWarning,
         message=r"Lazy modules are a new feature under heavy development",
     )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Couldn't cast the policy onto the desired device on remote process",
+    )
