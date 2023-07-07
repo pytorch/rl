@@ -313,7 +313,7 @@ jobs:
       - store_test_results:
           path: test-results
 
-unittest_linux_envpool_gpu:
+  unittest_linux_envpool_gpu:
     <<: *binary_common
     machine:
       image: ubuntu-2004-cuda-11.4:202110-01
