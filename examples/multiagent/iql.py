@@ -120,7 +120,8 @@ def train(seed):
             ("agents", "action_value"),
             ("agents", "chosen_action_value"),
         ],
-        action_space=env.unbatched_action_spec[env.action_key],
+        spec=env.unbatched_action_spec,
+        action_space=None,
     )
     qnet = SafeSequential(module, value_module)
 
@@ -153,7 +154,6 @@ def train(seed):
 
     loss_module = DQNLoss(
         qnet,
-        action_space=env.unbatched_action_spec[env.action_key],
     )
     loss_module.set_keys(
         action_value=("agents", "action_value"),
