@@ -49,13 +49,13 @@ class VC1Transform(Transform):
         >>> env.reset()
 
     Args:
-        model_name (str): One of ``"large"``, ``"base"`` or any other compatible
-            model name (see the `github repo <https://github.com/facebookresearch/eai-vc>`_ for more info). Defaults to ``"default"``
-            which provides a small, untrained model for testing.
         in_keys (list of NestedKeys): list of input keys. If left empty, the
             "pixels" key is assumed.
         out_keys (list of NestedKeys, optional): list of output keys. If left empty,
              "VC1_vec" is assumed.
+        model_name (str): One of ``"large"``, ``"base"`` or any other compatible
+            model name (see the `github repo <https://github.com/facebookresearch/eai-vc>`_ for more info). Defaults to ``"default"``
+            which provides a small, untrained model for testing.
         del_keys (bool, optional): If ``True`` (default), the input key will be
             discarded from the returned tensordict.
     """
