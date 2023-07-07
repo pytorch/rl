@@ -398,19 +398,20 @@ class LossModule(TensorDictModuleBase):
         if name in self.__dict__:
             params = getattr(self, name)
             if params is not None:
-                # get targets and update
-                for key in params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(self, self.SEP.join([network_name, *key]))
-                    if isinstance(value_to_set, str):
-                        if value_to_set.endswith("_detached"):
-                            value_to_set = value_to_set[:-9]
-                            value_to_set = getattr(self, value_to_set).detach()
-                        else:
-                            value_to_set = getattr(self, value_to_set)
-                    params.set(key, value_to_set)
-                    # params._set_tuple(key, value_to_set, inplace=False, validated=True)
+                with params.unlock_():
+                    # get targets and update
+                    for key in params.keys(True, True):
+                        if not isinstance(key, tuple):
+                            key = (key,)
+                        value_to_set = getattr(self, self.SEP.join([network_name, *key]))
+                        if isinstance(value_to_set, str):
+                            if value_to_set.endswith("_detached"):
+                                value_to_set = value_to_set[:-9]
+                                value_to_set = getattr(self, value_to_set).detach()
+                            else:
+                                value_to_set = getattr(self, value_to_set)
+                        params.set(key, value_to_set)
+                        # params._set_tuple(key, value_to_set, inplace=False, validated=True)
                 return params
             else:
                 params = getattr(self, param_name)
@@ -437,16 +438,17 @@ class LossModule(TensorDictModuleBase):
                         "by turning the RL_WARNINGS env variable to False.",
                         category=UserWarning,
                     )
-                # get targets and update
-                for key in target_params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(
-                        self, self.SEP.join(["_target_" + network_name, *key])
-                    )
-                    # _set is faster bc is bypasses the checks
-                    target_params.set(key, value_to_set)
-                    # target_params._set_tuple(key, value_to_set, inplace=False, validated=True)
+                with target_params.unlock_():
+                    # get targets and update
+                    for key in target_params.keys(True, True):
+                        if not isinstance(key, tuple):
+                            key = (key,)
+                        value_to_set = getattr(
+                            self, self.SEP.join(["_target_" + network_name, *key])
+                        )
+                        # _set is faster bc is bypasses the checks
+                        target_params.set(key, value_to_set)
+                        # target_params._set_tuple(key, value_to_set, inplace=False, validated=True)
                 return target_params
             else:
                 params = getattr(self, param_name)
