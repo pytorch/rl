@@ -100,6 +100,7 @@ conda install -y -c conda-forge libstdcxx-ng=12
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
 conda env config vars set LD_PRELOAD=$STDC_LOC
 
+# compile mujoco-py (bc it's done at runtime for whatever reason someone thought it was a good idea)
 python -c """import gym;import d4rl"""
 
 # install ale-py: manylinux names are broken for CentOS so we need to manually download and
