@@ -412,8 +412,10 @@ class LossModule(TensorDictModuleBase):
                                 value_to_set = getattr(self, value_to_set).detach()
                             else:
                                 value_to_set = getattr(self, value_to_set)
-                        params.set(key, value_to_set)
-                        # params._set_tuple(key, value_to_set, inplace=False, validated=True)
+                        # params.set(key, value_to_set)
+                        params._set_tuple(
+                            key, value_to_set, inplace=False, validated=True
+                        )
                 return params
             else:
                 params = getattr(self, param_name)
@@ -448,9 +450,10 @@ class LossModule(TensorDictModuleBase):
                         value_to_set = getattr(
                             self, self.SEP.join(["_target_" + network_name, *key])
                         )
-                        # _set is faster bc is bypasses the checks
-                        target_params.set(key, value_to_set)
-                        # target_params._set_tuple(key, value_to_set, inplace=False, validated=True)
+                        # target_params.set(key, value_to_set)
+                        target_params._set_tuple(
+                            key, value_to_set, inplace=False, validated=True
+                        )
                 return target_params
             else:
                 params = getattr(self, param_name)

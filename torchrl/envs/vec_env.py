@@ -761,16 +761,16 @@ class ParallelEnv(_BatchedEnv):
         if self._single_task:
             # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
-                self.shared_tensordict_parent.set(
-                    key,
-                    tensordict.get(key),
-                    inplace=True,
-                )
-                # self.shared_tensordict_parent._set_tuple(
+                # self.shared_tensordict_parent.set(
                 #     key,
-                #     tensordict._get_tuple(key, None),
+                #     tensordict.get(key),
                 #     inplace=True,
                 # )
+                self.shared_tensordict_parent._set_tuple(
+                    key,
+                    tensordict._get_tuple(key, None),
+                    inplace=True,
+                )
         else:
             self.shared_tensordict_parent.update_(
                 tensordict.select(*self.env_input_keys, strict=False)
@@ -1062,8 +1062,13 @@ def _run_worker_pipe_shared_mem(
             i += 1
             if local_tensordict is not None:
                 for key in env_input_keys:
-                    local_tensordict.set(key, shared_tensordict.get(key))
-                    # local_tensordict._set_tuple(key, shared_tensordict._get_tuple(key, None), inplace=False, validated=True)
+                    # local_tensordict.set(key, shared_tensordict.get(key))
+                    local_tensordict._set_tuple(
+                        key,
+                        shared_tensordict._get_tuple(key, None),
+                        inplace=False,
+                        validated=True,
+                    )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
             local_tensordict = env._step(local_tensordict)
