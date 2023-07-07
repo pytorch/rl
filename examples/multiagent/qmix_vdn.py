@@ -14,8 +14,8 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import EGreedyWrapper, QValueActor
-from torchrl.objectives import ValueEstimators
+from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
+from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 from utils.logging import log_evaluation, log_training
@@ -70,6 +70,8 @@ def train(seed):
         "lr": 5e-5,
         "max_grad_norm": 40.0,
         "training_device": training_device,
+        # Target
+        "tau": 0.005,
         # Evaluation
         "evaluation_interval": 20,
         "evaluation_episodes": 200,
@@ -90,6 +92,7 @@ def train(seed):
         # Scenario kwargs
         **env_config,
     )
+
     env_test = VmasEnv(
         scenario=scenario_name,
         num_envs=config["evaluation_episodes"],
@@ -103,8 +106,8 @@ def train(seed):
     env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
-    qnet = MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["observation"].shape[-1],
+    net = MultiAgentMLP(
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
         n_agent_outputs=env.action_spec.space.n,
         n_agents=env.n_agents,
         centralised=False,
@@ -114,27 +117,41 @@ def train(seed):
         num_cells=256,
         activation_class=nn.Tanh,
     )
-    qnet = QValueActor(
-        module=qnet,
-        spec=env.unbatched_input_spec["action"],
-        in_keys=["observation"],
+    module = TensorDictModule(
+        net, in_keys=[("agents", "observation")], out_keys=[("agents", "action_value")]
     )
+    value_module = QValueModule(
+        action_value_key=("agents", "action_value"),
+        out_keys=[
+            env.action_key,
+            ("agents", "action_value"),
+            "chosen_action_value",
+        ],
+        spec=env.unbatched_action_spec,
+        action_space=None,
+    )
+    qnet = SafeSequential(module, value_module)
 
-    qnet = EGreedyWrapper(
-        qnet, eps_init=0.3, eps_end=0, annealing_num_steps=int(total_frames * (1 / 2))
+    qnet_explore = EGreedyWrapper(
+        qnet,
+        eps_init=0.3,
+        eps_end=0,
+        annealing_num_steps=int(total_frames * (1 / 2)),
+        action_key=env.action_key,
+        spec=env.action_spec,
     )
 
     if config["mixer_type"] == "qmix":
         mixer = TensorDictModule(
             module=QMixer(
-                state_shape=env.unbatched_output_spec["observation"][
-                    "observation"
+                state_shape=env.unbatched_observation_spec[
+                    "agents", "observation"
                 ].shape,
                 mixing_embed_dim=32,
                 n_agents=env.n_agents,
                 device=training_device,
             ),
-            in_keys=["chosen_action_value", "observation"],
+            in_keys=["chosen_action_value", ("agents", "observation")],
             out_keys=["chosen_action_value"],
         )
     elif config["mixer_type"] == "vdn":
@@ -150,11 +167,11 @@ def train(seed):
         raise ValueError("Mixer type not in the example")
 
     with set_exploration_type(ExplorationType.RANDOM):
-        qnet(env.reset().to(training_device))
+        qnet_explore(env.reset().to(training_device))
 
     collector = SyncDataCollector(
         env,
-        qnet,
+        qnet_explore,
         device=vmas_device,
         storing_device=training_device,
         frames_per_batch=frames_per_batch,
@@ -167,8 +184,13 @@ def train(seed):
         batch_size=config["minibatch_size"],
     )
 
-    loss_module = QMixLoss(qnet, mixer)
+    loss_module = QMixLoss(qnet, mixer, delay_value=True)
+    loss_module.set_keys(
+        action_value=("agents", "action_value"),
+        action=env.action_key,
+    )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
+    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
 
     optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
 
@@ -196,10 +218,11 @@ def train(seed):
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
-        # Remove agent dimension from done and reward
-        tensordict_data["next", "reward"] = tensordict_data["next", "reward"].mean(-2)
-        tensordict_data["next", "done"] = tensordict_data["next", "done"].any(-2)
-        tensordict_data["done"] = tensordict_data["done"].any(-2)
+        # Remove agent dimension from reward
+        tensordict_data["next", "reward"] = tensordict_data[
+            "next", env.reward_key
+        ].mean(-2)
+        del tensordict_data["next", env.reward_key]
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
@@ -225,8 +248,9 @@ def train(seed):
 
                 optim.step()
                 optim.zero_grad()
+                target_net_updater.step()
 
-        qnet.step(frames=current_frames)  # Update exploration annealing
+        qnet_explore.step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
