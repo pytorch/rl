@@ -6486,7 +6486,7 @@ class TestVC1(TransformBase):
         transformed_env = TransformedEnv(base_env, vc1)
         td = transformed_env.reset()
         assert td.device == device
-        exp_keys = {"vec", "done", "pixels_orig"}
+        exp_keys = {"nested", "done", "pixels_orig"}
         if not del_keys:
             exp_keys.add("pixels")
         assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
@@ -6494,6 +6494,7 @@ class TestVC1(TransformBase):
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
             {
+                ("next", "nested"),
                 ("next", "nested", "vec"),
                 ("next", "pixels_orig"),
                 "next",
@@ -6523,7 +6524,7 @@ class TestVC1(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        exp_keys = {("nested", "vec"), "done", "pixels_orig"}
+        exp_keys = {"nested", "done", "pixels_orig"}
         if not del_keys:
             exp_keys.add("pixels")
         assert set(td.keys()) == exp_keys
@@ -6531,6 +6532,7 @@ class TestVC1(TransformBase):
         td = transformed_env.rand_step(td)
         exp_keys = exp_keys.union(
             {
+                ("next", "nested"),
                 ("next", "nested", "vec"),
                 ("next", "pixels_orig"),
                 "next",
@@ -6560,10 +6562,10 @@ class TestVC1(TransformBase):
         expected_keys = (
             list(transformed_env.state_spec.keys())
             + ["action"]
-            + list(transformed_env.observation_spec.keys(True, True))
+            + list(transformed_env.observation_spec.keys(True))
             + [
                 unravel_key(("next", key))
-                for key in transformed_env.observation_spec.keys(True, True)
+                for key in transformed_env.observation_spec.keys(True)
             ]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
