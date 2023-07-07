@@ -6560,8 +6560,11 @@ class TestVC1(TransformBase):
         expected_keys = (
             list(transformed_env.state_spec.keys())
             + ["action"]
-            + list(transformed_env.observation_spec.keys())
-            + [("next", key) for key in transformed_env.observation_spec.keys()]
+            + list(transformed_env.observation_spec.keys(True, True))
+            + [
+                unravel_key(("next", key))
+                for key in transformed_env.observation_spec.keys(True, True)
+            ]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
