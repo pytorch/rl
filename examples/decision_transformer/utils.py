@@ -25,6 +25,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
 )
 from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.utils import set_exploration_mode
 from torchrl.modules import (
     DTActor,
@@ -127,8 +128,13 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
         num_envs = env_cfg.num_train_envs
     else:
         num_envs = env_cfg.num_eval_envs
+
+    def make_env():
+        with set_gym_backend("gym"):
+            return make_base_env(env_cfg)
+
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_cfg))),
+        ParallelEnv(num_envs, EnvCreator(make_env)),
         env_cfg,
         obs_loc,
         obs_std,
