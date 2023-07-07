@@ -6,14 +6,13 @@ from copy import deepcopy
 
 import torch
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     make_functional,
     ProbabilisticTensorDictModule,
     repopulate_module,
 )
 from tensordict.utils import is_seq_of_nested_key
-from torchrl._utils import unravel_key
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
 
