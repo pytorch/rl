@@ -38,7 +38,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -177,7 +177,9 @@ def train(seed):
         collate_fn=lambda x: x,  # Make it not clone when sampling
     )
 
-    loss_module = DDPGLoss(actor_network=policy, value_network=value_module)
+    loss_module = DDPGLoss(
+        actor_network=policy, value_network=value_module, delay_value=False
+    )
     loss_module.set_keys(
         state_action_value=("agents", "state_action_value"),
         reward=env.reward_key,
