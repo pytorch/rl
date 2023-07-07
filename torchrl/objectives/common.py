@@ -403,7 +403,9 @@ class LossModule(TensorDictModuleBase):
                     for key in params.keys(True, True):
                         if not isinstance(key, tuple):
                             key = (key,)
-                        value_to_set = getattr(self, self.SEP.join([network_name, *key]))
+                        value_to_set = getattr(
+                            self, self.SEP.join([network_name, *key])
+                        )
                         if isinstance(value_to_set, str):
                             if value_to_set.endswith("_detached"):
                                 value_to_set = value_to_set[:-9]
