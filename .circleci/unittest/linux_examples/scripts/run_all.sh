@@ -98,7 +98,7 @@ pip install git+https://github.com/Farama-Foundation/d4rl@master#egg=d4rl
 conda install -y -c conda-forge libstdcxx-ng=12
 ## find libstdc
 STDC_LOC=$(find conda/ -name "libstdc++.so.6" | head -1)
-conda env config vars set LD_PRELOAD=$LD_PRELOAD:$STDC_LOC
+conda env config vars set LD_PRELOAD=$STDC_LOC
 
 python -c """import gym;import d4rl"""
 
