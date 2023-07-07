@@ -245,7 +245,7 @@ def train(seed):
                 optim.step()
                 optim.zero_grad()
 
-        policy.step(frames=current_frames)
+        policy_explore.step(frames=current_frames)
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
