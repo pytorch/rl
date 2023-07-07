@@ -7,6 +7,7 @@ from models.mlp import MultiAgentMLP
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
+from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -176,7 +177,11 @@ def train(seed):
         storage=LazyTensorStorage(memory_size, device=training_device),
         sampler=SamplerWithoutReplacement(),
         batch_size=config["minibatch_size"],
-        collate_fn=lambda x: x,  # Make it not clone when sampling
+    )
+    replay_buffer = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(memory_size, device=training_device),
+        sampler=SamplerWithoutReplacement(),
+        batch_size=config["minibatch_size"],
     )
 
     loss_module = DDPGLoss(
