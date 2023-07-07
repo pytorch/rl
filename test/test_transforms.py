@@ -6499,6 +6499,7 @@ class TestVC1(TransformBase):
                 ("next", "pixels_orig"),
                 "next",
                 "action",
+                ("nested", "vec"),
                 ("next", "reward"),
                 ("next", "done"),
             }
@@ -6537,6 +6538,7 @@ class TestVC1(TransformBase):
                 ("next", "pixels_orig"),
                 "next",
                 "action",
+                ("nested", "vec"),
                 ("next", "reward"),
                 ("next", "done"),
             }
