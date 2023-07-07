@@ -61,15 +61,19 @@ def _run_gradient_worker(
         rank: int,
         world_size: int,
         model: nn.Module,
+        collector: DataCollectorBase,
+        data_buffer: ReplayBuffer,
+        loss_module: LossModule,
         rank0_ip: str,
         tcpport: str,
         backend: str = "gloo",
         verbose: bool = True,
-        collector: DataCollectorBase = None,
 ):
     """Run a gradient worker."""
     os.environ["MASTER_ADDR"] = str(rank0_ip)
     os.environ["MASTER_PORT"] = str(tcpport)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # TODO: how to handle this?
 
     if verbose:
         print(
@@ -87,11 +91,25 @@ def _run_gradient_worker(
     )
 
     weigths, grad = get_weights_and_grad(model)
+    # weigths, grad = get_weights_and_grad(loss_module)  # TODO: Would this work?
 
-    # while True:
-    for i in range(10):
+    for data in collector:
 
-        # TODO: pretend to compute something here, just for testing
+        data_view = data.reshape(-1)  # TODO: how do we handle this for rnn?
+
+        # Add to replay buffer
+        data_buffer.extend(data_view)
+
+        # Sample batch from replay buffer
+        mini_batch = data_buffer.sample().to(device)
+
+        # Compute loss
+        loss = loss_module(mini_batch)
+        loss_sum = sum([item for key, item in loss.items() if key.startswith("loss")])
+
+        # Backprop loss
+        loss_sum.backward()
+
         grad.apply_(lambda x: torch.ones_like(x))
         grad.reduce(0)  # send grads to server, operation is SUM
 
@@ -116,11 +134,17 @@ class DistributedGradientCollector:
         model: nn.Module,
         num_workers: int,
         *,
+        collector: DataCollectorBase = None,
+        loss_module: LossModule = None,
+        data_buffer: ReplayBuffer = None,
         backend="gloo",
         launcher="mp",  # For now, only support multiprocessing
         tcp_port=None,
     ):
 
+        self.collector = collector
+        self.loss_module = loss_module
+        self.data_buffer = data_buffer
         self.num_workers = num_workers
         self.backend = backend
         self.model = model
@@ -130,6 +154,8 @@ class DistributedGradientCollector:
             self.tcp_port = str(tcp_port)
 
         self._init_workers()
+
+        # Local collector and buffer can probably be deleted at this point
 
     def _init_workers(self):
         # Init both the local and remote workers
@@ -185,6 +211,9 @@ class DistributedGradientCollector:
                 i + 1,
                 self.num_workers + 1,
                 self.model,
+                self.collector,
+                self.data_buffer,
+                self.loss_module,
                 self.IPAddr,
                 int(TCP_PORT),
                 self.backend,
@@ -211,16 +240,18 @@ class DistributedGradientCollector:
 
     def iterator(self):
 
-        for _ in range(10):
+        while True:
 
             # collect gradients from workers
             print(f"server received grads from agents")
             self.grad.reduce(0, op=torch.distributed.ReduceOp.SUM)  # see reduce doc to see what ops are supported
-            self.grad.apply_(lambda x: x / 2)  # average grads
+            self.grad.apply_(lambda x: x / self.num_workers)  # average grads
 
             yield self.grad
 
             self.grad.zero_()
+
+            # TODO: when to stop?
 
     def _iterator_dist(self):
         if self._VERBOSE:
@@ -268,5 +299,4 @@ if __name__ == "__main__":
     for grads in grad_collector:
         print(grads["weight"])
         print(weights["weight"])
-        import ipdb; ipdb.set_trace()
         grad_collector.update_policy_weights_(weights)
