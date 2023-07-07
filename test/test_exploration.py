@@ -217,7 +217,7 @@ class TestOrnsteinUhlenbeckProcessWrapper:
 
         net = nn.LazyLinear(d_act).to(device)
         policy = TensorDictModule(
-            CountingEnvCountModule(action_spec=action_spec, action_key=env.action_key),
+            CountingEnvCountModule(action_spec=action_spec),
             in_keys=[("data", "states") if nested_obs_action else "observation"],
             out_keys=[env.action_key],
         )
