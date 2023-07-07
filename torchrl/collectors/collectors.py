@@ -831,7 +831,7 @@ class SyncDataCollector(DataCollectorBase):
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
         tensordicts = []
         with set_exploration_type(self.exploration_type):
-            for _ in range(self.frames_per_batch):
+            for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
@@ -846,20 +846,34 @@ class SyncDataCollector(DataCollectorBase):
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    try:
+                        torch.stack(
+                            tensordicts,
+                            self._tensordict_out.ndim - 1,
+                            out=self._tensordict_out[:t],
+                        )
+                    except RuntimeError:
+                        with self._tensordict_out.unlock_():
+                            torch.stack(
+                                tensordicts,
+                                self._tensordict_out.ndim - 1,
+                                out=self._tensordict_out[:t],
+                            )
                     break
-        try:
-            self._tensordict_out = torch.stack(
-                tensordicts,
-                self._tensordict_out.ndim - 1,
-                out=self._tensordict_out,
-            )
-        except RuntimeError:
-            with self._tensordict_out.unlock_():
-                self._tensordict_out = torch.stack(
-                    tensordicts,
-                    self._tensordict_out.ndim - 1,
-                    out=self._tensordict_out,
-                )
+            else:
+                try:
+                    self._tensordict_out = torch.stack(
+                        tensordicts,
+                        self._tensordict_out.ndim - 1,
+                        out=self._tensordict_out,
+                    )
+                except RuntimeError:
+                    with self._tensordict_out.unlock_():
+                        self._tensordict_out = torch.stack(
+                            tensordicts,
+                            self._tensordict_out.ndim - 1,
+                            out=self._tensordict_out,
+                        )
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
