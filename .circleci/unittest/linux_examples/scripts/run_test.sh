@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-# this code is supposed to run on CPU
-# rendering with the combination of packages we have here in headless mode
-# is hard to nail.
-# IMPORTANT: As a consequence, we can't guarantee TorchRL compatibility with
-# rendering with this version of gym / mujoco-py.
+# Leave blank as code needs to start on line 29 for run_local.sh
+#
+#
+#
+#
+#
+#
+#
 
 set -e
 set -v
-
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
