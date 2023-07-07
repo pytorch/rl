@@ -45,7 +45,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     inference_policy = DecisionTransformerInferenceWrapper(
         policy=policy,
-        loss_module=loss_module,
         inference_context=cfg.env.inference_context,
     ).to(model_device)
 

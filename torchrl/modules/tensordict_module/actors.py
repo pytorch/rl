@@ -1624,7 +1624,6 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             observations and produces an action value
 
     Keyword Args:
-        loss_module (TensorDictModule): The loss module that computes the DT loss to receive the input keys of the model.
         inference_context (int): The number of previous actions that will not be masked in the context.
             For example for an observation input of shape [batch_size, context, obs_dim] with context=20 and inference_context=5, the first 15 entries
             of the context will be masked. Defaults to 5.
@@ -1682,14 +1681,13 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self,
         policy: TensorDictModule,
         *,
-        loss_module: TensorDictModule,
         inference_context: int = 5,
         spec: Optional[TensorSpec] = None,
     ):
         super().__init__(policy)
-        self.observation_key = loss_module.tensor_keys.observation
-        self.action_key = loss_module.tensor_keys.action
-        self.return_to_go_key = loss_module.tensor_keys.return_to_go
+        self.observation_key = "observation"
+        self.action_key = "action"
+        self.return_to_go_key = "return_to_go"
         self.inference_context = inference_context
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
@@ -1705,6 +1703,26 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
                 self._spec[self.action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
+
+    def set_tensor_keys(self, **kwargs):
+        """Sets the input keys of the module.
+
+        Keyword Args:
+            observation (NestedKey, optional): The observation key.
+            action (NestedKey, optional): The action key.
+            return_to_go (NestedKey, optional): The return_to_go key.
+
+        """
+        observation_key = kwargs.pop("observation", None)
+        action_key = kwargs.pop("action", None)
+        return_to_go_key = kwargs.pop("return_to_go", None)
+        if kwargs:
+            raise TypeError(
+                f"Got unknown input(s) {kwargs.keys()}. Accepted keys are 'action', 'return_to_go' and 'observation'."
+            )
+        self.observation_key = observation_key
+        self.action_key = action_key
+        self.return_to_go_key = return_to_go_key
 
     def step(self, frames: int = 1) -> None:
         pass

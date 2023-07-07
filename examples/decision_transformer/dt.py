@@ -41,7 +41,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     transformer_optim, scheduler = make_dt_optimizer(cfg.optim, policy)
     inference_policy = DecisionTransformerInferenceWrapper(
         policy=policy,
-        loss_module=loss_module,
         inference_context=cfg.env.inference_context,
     ).to(model_device)
 
