@@ -5,6 +5,7 @@
 
 import os
 import time
+import warnings
 from collections import defaultdict
 
 import pytest
@@ -54,6 +55,7 @@ def measure_duration(request: pytest.FixtureRequest):
 
 def pytest_addoption(parser):
     parser.addoption("--rank", action="store")
+
 
 @pytest.fixture(autouse=True)
 def set_warnings() -> None:
