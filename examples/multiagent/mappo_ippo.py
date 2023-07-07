@@ -215,7 +215,7 @@ def train(seed):
         tensordict_data["next", "done"] = (
             tensordict_data["next", "done"]
             .unsqueeze(-1)
-            .expand(tensordict_data[env.reward_key].shape)
+            .expand(tensordict_data["next", env.reward_key].shape)
         )  # We need to expand the done to match the reward shape
 
         with torch.no_grad():
