@@ -1286,7 +1286,7 @@ class TestVmas:
     @pytest.mark.parametrize("n_envs", [1, 4])
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
-    def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=100):
+    def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
 
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
