@@ -138,6 +138,21 @@ pip3 install git+https://github.com/pytorch-labs/tensordict.git
 printf "* Installing torchrl\n"
 python setup.py develop
 
+
+if [ "${CU_VERSION:-}" != cpu ] ; then
+  printf "* Installing VC1\n"
+  python3 -c """
+from torchrl.envs.transforms.vc1 import VC1Transform
+VC1Transform.install_vc_models(auto_exit=True)
+"""
+
+  python3 -c """
+import vc_models
+from vc_models.models.vit import model_utils
+print(model_utils)
+"""
+fi
+
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
 
@@ -150,6 +165,7 @@ python -m torch.utils.collect_env
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
+
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'

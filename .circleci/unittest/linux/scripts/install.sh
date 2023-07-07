@@ -6,6 +6,7 @@ unset PYTORCH_VERSION
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 
 set -e
+set -v
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
@@ -34,13 +35,13 @@ else
 fi
 
 # smoke test
-python -c "import functorch"
+python3 -c "import functorch"
 
 # install snapshot
-pip install git+https://github.com/pytorch/torchsnapshot
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python3 setup.py develop

@@ -354,6 +354,7 @@ to be able to create this other composition:
     ToTensorImage
     UnsqueezeTransform
     VecNorm
+    VC1Transform
     VIPRewardTransform
     VIPTransform
 

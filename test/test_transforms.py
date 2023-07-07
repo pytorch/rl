@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import abc
 import argparse
+
 import itertools
 from copy import copy
 from functools import partial
@@ -81,6 +82,7 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     UnsqueezeTransform,
+    VC1Transform,
     VIPTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
@@ -88,6 +90,7 @@ from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
 from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv
+from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import ProbabilisticActor, TanhNormal
@@ -5912,14 +5915,14 @@ class TestVIP(TransformBase):
         in_keys = ["pixels"]
         tensor_pixels_key = None
         out_keys = ["vec"]
-        r3m = VIPTransform(
+        vip = VIPTransform(
             model,
             in_keys=in_keys,
             out_keys=out_keys,
             tensor_pixels_keys=tensor_pixels_key,
         )
         transformed_env = TransformedEnv(
-            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), r3m
+            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vip
         )
         check_env_specs(transformed_env)
 
@@ -6312,6 +6315,260 @@ class TestVIP(TransformBase):
             + ["action"]
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
+            + [("next", "reward"), ("next", "done"), "done", "next"]
+        )
+        assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
+
+
+@pytest.mark.skipif(not _has_vc, reason="vc_models not installed")
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="VC1 should run on cuda")
+@pytest.mark.parametrize("device", [torch.device("cuda:0")])
+class TestVC1(TransformBase):
+    def test_transform_inverse(self, device):
+        raise pytest.skip("no inverse for VC1Transform")
+
+    def test_single_trans_env_check(self, device):
+        del_keys = False
+        in_keys = ["pixels"]
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        transformed_env = TransformedEnv(
+            DiscreteActionConvMockEnvNumpy().to(device), vc1
+        )
+        check_env_specs(transformed_env)
+
+    def test_trans_serial_env_check(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        transformed_env = TransformedEnv(
+            SerialEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vc1
+        )
+        check_env_specs(transformed_env)
+
+    def test_trans_parallel_env_check(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        transformed_env = TransformedEnv(
+            ParallelEnv(2, lambda: DiscreteActionConvMockEnvNumpy().to(device)), vc1
+        )
+        check_env_specs(transformed_env)
+
+    def test_serial_trans_env_check(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+
+        def make_env():
+            t = VC1Transform(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                del_keys=del_keys,
+                model_name="default",
+            )
+
+            return TransformedEnv(
+                DiscreteActionConvMockEnvNumpy().to(device),
+                t,
+            )
+
+        transformed_env = SerialEnv(2, make_env)
+        check_env_specs(transformed_env)
+
+    def test_parallel_trans_env_check(self, device):
+        # let's spare this one
+        return
+
+    def test_transform_model(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
+        module = nn.Sequential(vc1, nn.Identity())
+        sample = module(td)
+        assert "vec" in sample.keys()
+        if del_keys:
+            assert "pixels" not in sample.keys()
+        assert sample["vec"].shape[-1] == 16
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, device, rbclass):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        rb = rbclass(storage=LazyTensorStorage(20))
+        rb.append_transform(vc1)
+        td = TensorDict({"pixels": torch.randint(255, (10, 244, 244, 3))}, [10])
+        rb.extend(td)
+        sample = rb.sample(10)
+        assert "vec" in sample.keys()
+        if del_keys:
+            assert "pixels" not in sample.keys()
+        assert sample["vec"].shape[-1] == 16
+
+    def test_transform_no_env(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        td = TensorDict({"pixels": torch.randint(255, (244, 244, 3))}, [])
+        vc1(td)
+        assert "vec" in td.keys()
+        if del_keys:
+            assert "pixels" not in td.keys()
+        assert td["vec"].shape[-1] == 16
+
+    def test_transform_compose(self, device):
+        in_keys = ["pixels"]
+        del_keys = False
+        out_keys = ["vec"]
+        vip = Compose(
+            VC1Transform(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                del_keys=del_keys,
+                model_name="default",
+            )
+        )
+        td = TensorDict({"pixels": torch.randint(255, (244, 244, 3))}, [])
+        vip(td)
+        assert "vec" in td.keys()
+        if del_keys:
+            assert "pixels" not in td.keys()
+        assert td["vec"].shape[-1] == 16
+
+    @pytest.mark.parametrize("del_keys", [False, True])
+    def test_vc1_instantiation(self, del_keys, device):
+        in_keys = ["pixels"]
+        out_keys = [("nested", "vec")]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, vc1)
+        td = transformed_env.reset()
+        assert td.device == device
+        exp_keys = {"nested", "done", "pixels_orig"}
+        if not del_keys:
+            exp_keys.add("pixels")
+        assert set(td.keys()) == exp_keys, set(td.keys()) - exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union(
+            {
+                ("next", "nested"),
+                ("next", "nested", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("nested", "vec"),
+                ("next", "reward"),
+                ("next", "done"),
+            }
+        )
+        if not del_keys:
+            exp_keys.add(("next", "pixels"))
+        assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
+        transformed_env.close()
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    def test_transform_env(self, device, del_keys):
+        in_keys = ["pixels"]
+        out_keys = [("nested", "vec")]
+
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        base_env = ParallelEnv(4, lambda: DiscreteActionConvMockEnvNumpy().to(device))
+        transformed_env = TransformedEnv(base_env, vc1)
+        td = transformed_env.reset()
+        assert td.device == device
+        assert td.batch_size == torch.Size([4])
+        exp_keys = {"nested", "done", "pixels_orig"}
+        if not del_keys:
+            exp_keys.add("pixels")
+        assert set(td.keys()) == exp_keys
+
+        td = transformed_env.rand_step(td)
+        exp_keys = exp_keys.union(
+            {
+                ("next", "nested"),
+                ("next", "nested", "vec"),
+                ("next", "pixels_orig"),
+                "next",
+                "action",
+                ("nested", "vec"),
+                ("next", "reward"),
+                ("next", "done"),
+            }
+        )
+        if not del_keys:
+            exp_keys.add(("next", "pixels"))
+        assert set(td.keys(True)) == exp_keys, set(td.keys(True)) - exp_keys
+        transformed_env.close()
+        del transformed_env
+
+    @pytest.mark.parametrize("del_keys", [True, False])
+    def test_vc1_spec_against_real(self, del_keys, device):
+        in_keys = ["pixels"]
+        out_keys = [("nested", "vec")]
+        vc1 = VC1Transform(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            del_keys=del_keys,
+            model_name="default",
+        )
+        base_env = DiscreteActionConvMockEnvNumpy().to(device)
+        transformed_env = TransformedEnv(base_env, vc1)
+        expected_keys = (
+            list(transformed_env.state_spec.keys())
+            + ["action"]
+            + list(transformed_env.observation_spec.keys(True))
+            + [
+                unravel_key(("next", key))
+                for key in transformed_env.observation_spec.keys(True)
+            ]
             + [("next", "reward"), ("next", "done"), "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
