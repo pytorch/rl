@@ -216,6 +216,10 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
     MultiThreadedEnv
     EnvCreator
 
+Multi-agent environments
+----------
+
+
 
 Transforms
 ----------
