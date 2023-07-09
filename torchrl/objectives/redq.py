@@ -437,7 +437,7 @@ class REDQLoss(LossModule):
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        tensordict_actor = tensordict_actor.contiguous()
+        # tensordict_actor = tensordict_actor.contiguous()
 
         with set_exploration_type(ExplorationType.RANDOM):
             if self.gSDE:
