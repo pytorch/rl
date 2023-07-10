@@ -8,7 +8,7 @@ In this folder we provide a set of multi-agent example scripts using the [VMAS](
 
 <center><i>The MARL algorithms contained in the scripts of this folder run on three multi-robot tasks in VMAS.</i></center>
 
-For more details on the experiment setup and the environments please refer to the corresponding section of the appendix in the TorchRL paper.
+For more details on the experiment setup and the environments please refer to the corresponding section of the appendix in the [TorchRL paper](https://arxiv.org/abs/2306.00577).
 
 ## Using the scripts
 
