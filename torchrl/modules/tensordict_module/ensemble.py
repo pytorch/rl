@@ -74,7 +74,6 @@ class EnsembleModule(TensorDictModuleBase):
         else:
             self.vmapped_forward = torch.vmap(self.module, 0)
 
-        # module.reset_parameters(params_td)
         self.reset_parameters_recursive(self.params_td)
 
     def forward(self, tensordict: TensorDict) -> TensorDict:
