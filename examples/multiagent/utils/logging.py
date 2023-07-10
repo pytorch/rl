@@ -23,10 +23,11 @@ def log_training(
     total_frames: int,
 ):
     if ("next", "agents", "reward") not in sampling_td.keys(True, True):
-        sampling_td["next", "agents", "reward"] = (
-            sampling_td["next", "reward"]
-            .expand(sampling_td["agents"].shape)
-            .unsqueeze(-1)
+        sampling_td.set(
+            ("next", "agents", "reward"),
+            sampling_td.get(("next", "reward"))
+            .expand(sampling_td.get("agents").shape)
+            .unsqueeze(-1),
         )
 
     logger.experiment.log(
@@ -36,28 +37,21 @@ def log_training(
         },
         commit=False,
     )
-    if "info" in sampling_td["agents"].keys():
+    if "info" in sampling_td.get("agents").keys():
         logger.experiment.log(
             {
                 f"train/info/{key}": value.mean().item()
-                for key, value in sampling_td["agents", "info"].items()
+                for key, value in sampling_td.get(("agents", "info")).items()
             },
             commit=False,
         )
 
+    reward = sampling_td.get(("next", "agents", "reward"))
     logger.experiment.log(
         {
-            "train/reward/reward_min": sampling_td["next", "agents", "reward"]
-            .mean(-2)  # Agents
-            .min()
-            .item(),
-            "train/reward/reward_mean": sampling_td["next", "agents", "reward"]
-            .mean()
-            .item(),
-            "train/reward/reward_max": sampling_td["next", "agents", "reward"]
-            .mean(-2)  # Agents
-            .max()
-            .item(),
+            "train/reward/reward_min": reward.mean(-2).min().item(),  # Mean over agents
+            "train/reward/reward_mean": reward.mean().item(),
+            "train/reward/reward_max": reward.mean(-2).max().item(),  # Mean over agents
             "train/sampling_time": sampling_time,
             "train/training_time": training_time,
             "train/iteration_time": training_time + sampling_time,
@@ -78,8 +72,8 @@ def log_evaluation(
 ):
     rollouts = list(rollouts.unbind(0))
     for k, r in enumerate(rollouts):
-        next_done = r["next"]["done"].sum(
-            tuple(range(r.batch_dims, r["next", "done"].ndim)),
+        next_done = r.get(("next", "done")).sum(
+            tuple(range(r.batch_dims, r.get(("next", "done")).ndim)),
             dtype=torch.bool,
         )
         done_index = next_done.nonzero(as_tuple=True)[0][
@@ -92,20 +86,14 @@ def log_evaluation(
             "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),
         },
         commit=False,
-    ),
+    )
 
+    rewards = [td.get(("next", "agents", "reward")).sum(0).mean() for td in rollouts]
     logger.experiment.log(
         {
-            "eval/episode_reward_min": min(
-                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
-            ),
-            "eval/episode_reward_max": max(
-                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
-            ),
-            "eval/episode_reward_mean": sum(
-                [td["next", "agents", "reward"].sum(0).mean() for td in rollouts]
-            )
-            / len(rollouts),
+            "eval/episode_reward_min": min(rewards),
+            "eval/episode_reward_max": max(rewards),
+            "eval/episode_reward_mean": sum(rewards) / len(rollouts),
             "eval/episode_len_mean": sum([td.batch_size[0] for td in rollouts])
             / len(rollouts),
             "eval/evaluation_time": evaluation_time,
