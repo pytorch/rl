@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from copy import copy
-
 import pkg_resources
 import torch
 
@@ -20,12 +18,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -204,7 +197,7 @@ def step_mdp(
     if exclude_action:
         excluded = excluded.union({action_key})
     next_td = tensordict.get("next")
-    out = _clone_no_keys(next_td)
+    out = next_td.empty()
 
     total_key = ()
     if keep_other:
@@ -230,16 +223,16 @@ def _set_single_key(source, dest, key, clone=False):
         if is_tensor_collection(val):
             new_val = dest.get(k, None)
             if new_val is None:
-                new_val = _clone_no_keys(val)
-                dest.set(k, new_val)
-                # dest._set_tuple(k, new_val, inplace=False, validated=True)
+                new_val = val.empty()
+                # dest.set(k, new_val)
+                dest._set_str(k, new_val, inplace=False, validated=True)
             source = val
             dest = new_val
         else:
             if clone:
                 val = val.clone()
-            dest.set(k, val)
-            # dest._set_tuple(k, val, inplace=False, validated=True)
+            # dest.set(k, val)
+            dest._set_str(k, val, inplace=False, validated=True)
 
 
 def _set(source, dest, key, total_key, excluded):
@@ -250,33 +243,21 @@ def _set(source, dest, key, total_key, excluded):
         if is_tensor_collection(val):
             new_val = dest.get(key, None)
             if new_val is None:
-                new_val = _clone_no_keys(val)
+                new_val = val.empty()
             non_empty_local = False
             for subkey in val.keys():
                 non_empty_local = (
                     _set(val, new_val, subkey, total_key, excluded) or non_empty_local
                 )
             if non_empty_local:
-                dest.set(key, new_val)
-                # dest._set_tuple(key, new_val, inplace=False, validated=True)
+                # dest.set(key, new_val)
+                dest._set_str(key, new_val, inplace=False, validated=True)
             non_empty = non_empty_local
         else:
             non_empty = True
-            dest.set(key, val)
-            # dest._set_tuple(key, val, inplace=False, validated=True)
+            # dest.set(key, val)
+            dest._set_str(key, val, inplace=False, validated=True)
     return non_empty
-
-
-def _clone_no_keys(td):
-    return TensorDict(
-        source={},
-        batch_size=td.batch_size,
-        device=td.device,
-        names=copy(td._td_dim_names),
-        _run_checks=False,
-        _is_shared=td.is_shared(),
-        _is_memmap=td.is_memmap(),
-    )
 
 
 def get_available_libraries():

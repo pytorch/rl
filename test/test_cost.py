@@ -1785,7 +1785,6 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     def test_td3_notensordict(self, observation_key, reward_key, done_key):
-
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(in_keys=[observation_key])
         qvalue = self._create_mock_value(
@@ -1807,12 +1806,15 @@ class TestTD3(LossModuleTestBase):
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
         with pytest.warns(UserWarning, match="No target network updater has been"):
+            torch.manual_seed(0)
             loss_val_td = loss(td)
+            torch.manual_seed(0)
             loss_val = loss(**kwargs)
             for i, key in enumerate(loss_val_td.keys()):
                 torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
             # test select
             loss.select_out_keys("loss_actor", "loss_qvalue")
+            torch.manual_seed(0)
             if torch.__version__ >= "2.0.0":
                 loss_actor, loss_qvalue = loss(**kwargs)
             else:
@@ -3657,6 +3659,7 @@ class TestREDQ(LossModuleTestBase):
     def test_redq_batcher(self, n, delay_qvalue, num_qvalue, device, gamma=0.9):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_redq(device=device)
+        assert td.names == td.get("next").names
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
@@ -3672,7 +3675,9 @@ class TestREDQ(LossModuleTestBase):
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
+        assert td_clone.names == td_clone.get("next").names
         ms_td = ms(td_clone)
+        assert ms_td.names == ms_td.get("next").names
 
         torch.manual_seed(0)
         np.random.seed(0)
