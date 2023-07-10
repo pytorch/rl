@@ -56,7 +56,6 @@ if __name__ == "__main__":
         advantage_key="advantage",
     )
     loss_module = PPOLoss(actor=actor, critic=critic)
-    import ipdb; ipdb.set_trace()
 
     # 6. Define gradient collector
     gradient_collector = DistributedGradientCollector(
