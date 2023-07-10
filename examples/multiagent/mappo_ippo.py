@@ -3,9 +3,7 @@ import time
 import torch
 import wandb
 
-from models.mlp import MultiAgentMLP
-
-from tensordict.nn import TensorDictModule
+from tensordict import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -14,6 +12,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger

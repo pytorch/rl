@@ -3,7 +3,6 @@ import time
 import torch
 
 import wandb
-from models.mlp import MultiAgentMLP
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -13,6 +12,7 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
+from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger

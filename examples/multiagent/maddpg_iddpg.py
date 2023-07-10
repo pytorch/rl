@@ -3,7 +3,6 @@ import time
 import torch
 
 import wandb
-from models.mlp import MultiAgentMLP
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -18,6 +17,7 @@ from torchrl.modules import (
     TanhDelta,
     ValueOperator,
 )
+from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
