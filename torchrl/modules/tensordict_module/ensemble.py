@@ -85,6 +85,9 @@ class EnsembleModule(TensorDictModuleBase):
         Args:
             stacked_params_td: A TensorDict of parameters for self.module. The batch dimension(s) of the tensordict
                 denote the number of module copies to reset.
+
+        Returns:
+            A TensorDict of pointers to the reset parameters.
         """
         if stacked_params_td.ndim:
             params_pointers = []
