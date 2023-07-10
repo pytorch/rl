@@ -216,7 +216,6 @@ def train(seed):
         print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-        print(f"Sampling took {sampling_time}")
 
         tensordict_data["next", "done"] = (
             tensordict_data["next", "done"]
@@ -254,7 +253,6 @@ def train(seed):
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
-        print(f"Training took: {training_time}")
 
         iteration_time = sampling_time + training_time
         total_time += iteration_time
@@ -292,7 +290,6 @@ def train(seed):
                 )
 
                 evaluation_time = time.time() - evaluation_start
-                print(f"Evaluation took: {evaluation_time}")
 
                 log_evaluation(
                     logger,

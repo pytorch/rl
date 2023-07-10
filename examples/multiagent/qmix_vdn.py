@@ -219,7 +219,6 @@ def train(seed):
         print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-        print(f"Sampling took {sampling_time}")
 
         # Remove agent dimension from reward (since it is shared in QMIX/VDN)
         tensordict_data["next", "reward"] = tensordict_data[
@@ -257,7 +256,6 @@ def train(seed):
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
-        print(f"Training took: {training_time}")
 
         iteration_time = sampling_time + training_time
         total_time += iteration_time
@@ -295,7 +293,6 @@ def train(seed):
                 )
 
                 evaluation_time = time.time() - evaluation_start
-                print(f"Evaluation took: {evaluation_time}")
 
                 log_evaluation(
                     logger,
