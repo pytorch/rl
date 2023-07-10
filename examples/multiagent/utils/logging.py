@@ -8,8 +8,26 @@ import torch
 import wandb
 from tensordict import TensorDictBase
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.record.loggers import Logger
+from torchrl.record.loggers import generate_exp_name, get_logger, Logger
 from torchrl.record.loggers.wandb import WandbLogger
+
+
+def init_logging(cfg, model_name: str):
+    logger = get_logger(
+        logger_type=cfg.logger.backend,
+        logger_name=".",
+        experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
+        wandb_kwargs={
+            "group": model_name,
+            "project": f"torchrl_{cfg.env.scenario_name}",
+        },
+    )
+    if cfg.logger.backend == "wandb":
+        import wandb
+
+        wandb.run.log_code(".")
+    logger.log_hparams(cfg)
+    return logger
 
 
 def log_training(

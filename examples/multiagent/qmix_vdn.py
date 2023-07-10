@@ -20,8 +20,7 @@ from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP, QMixer, VDNMixer
 from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.objectives.multiagent.qmixer import QMixerLoss
-from torchrl.record.loggers import generate_exp_name, get_logger
-from utils.logging import log_evaluation, log_training
+from utils.logging import init_logging, log_evaluation, log_training
 
 
 def rendering_callback(env, td):
@@ -158,16 +157,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         model_name = (
             "Het" if not cfg.model.shared_parameters else ""
         ) + cfg.loss.mixer_type.upper()
-        logger = get_logger(
-            logger_type=cfg.logger.backend,
-            logger_name=".",
-            experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
-            wandb_kwargs={
-                "group": model_name,
-                "project": f"torchrl_{cfg.env.scenario_name}",
-            },
-        )
-        logger.log_hparams(cfg)
+        logger = init_logging(cfg, model_name)
 
     total_time = 0
     total_frames = 0
