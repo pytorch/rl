@@ -1750,8 +1750,8 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         action[..., : -self.inference_context, :] = 0
         action = torch.cat(
             [
-                action[:, 1:],
-                torch.zeros(action.shape[0], 1, action.shape[-1], device=action.device),
+                action[..., 1:, :],
+                torch.zeros(*action.shape[:-2], 1, action.shape[-1], device=action.device),
             ],
             dim=-2,
         )
@@ -1764,7 +1764,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Forward pass of the inference wrapper."""
-        unmasked_tensordict = tensordict.clone()
+        unmasked_tensordict = tensordict.clone(False)
         # Mask the context of the input sequences
         tensordict = self.mask_context(tensordict)
         # forward pass
