@@ -9,7 +9,7 @@ class Mixer(nn.Module):
     """A multi-agent value mixer.
 
     It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
-    into a global value with shape (*B, 1)
+    into a global value with shape (*B, 1).
 
     Args:
         n_agents (int): number of agents,
@@ -25,13 +25,13 @@ class Mixer(nn.Module):
         >>> from torchrl.modules.models.multiagent import VDNMixer
         >>> n_agents = 4
         >>> vdn = TensorDictModule(
-        >>>   module=VDNMixer(
-        >>>       n_agents=n_agents,
-        >>>       device="cpu",
-        >>>    ),
-        >>>   in_keys=[("agents","chosen_action_value")],
-        >>>   out_keys=["chosen_action_value"],
-        >>> )
+        ...     module=VDNMixer(
+        ...         n_agents=n_agents,
+        ...         device="cpu",
+        ...     ),
+        ...     in_keys=[("agents","chosen_action_value")],
+        ...     out_keys=["chosen_action_value"],
+        ... )
         >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents])}, [32])
         >>> td
         TensorDict(
@@ -67,15 +67,15 @@ class Mixer(nn.Module):
         >>> from torchrl.modules.models.multiagent import QMixer
         >>> n_agents = 4
         >>> qmix = TensorDictModule(
-        >>>    module=QMixer(
-        >>>        state_shape=(64, 64, 3),
-        >>>        mixing_embed_dim=32,
-        >>>        n_agents=n_agents,
-        >>>        device="cpu",
-        >>>    ),
-        >>>    in_keys=[("agents", "chosen_action_value"), "state"],
-        >>>    out_keys=["chosen_action_value"],
-        >>> )
+        ...     module=QMixer(
+        ...         state_shape=(64, 64, 3),
+        ...         mixing_embed_dim=32,
+        ...         n_agents=n_agents,
+        ...         device="cpu",
+        ...     ),
+        ...     in_keys=[("agents", "chosen_action_value"), "state"],
+        ...     out_keys=["chosen_action_value"],
+        ... )
         >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
         >>> td
         TensorDict(
@@ -188,19 +188,19 @@ class VDNMixer(Mixer):
 
     Examples:
         Creating a VDN mixer
-        >>> import torch
+         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.modules.models.multiagent import VDNMixer
         >>> n_agents = 4
         >>> vdn = TensorDictModule(
-        >>>   module=VDNMixer(
-        >>>       n_agents=n_agents,
-        >>>       device="cpu",
-        >>>    ),
-        >>>   in_keys=[("agents","chosen_action_value")],
-        >>>   out_keys=["chosen_action_value"],
-        >>> )
+        ...     module=VDNMixer(
+        ...         n_agents=n_agents,
+        ...         device="cpu",
+        ...     ),
+        ...     in_keys=[("agents","chosen_action_value")],
+        ...     out_keys=["chosen_action_value"],
+        ... )
         >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents])}, [32])
         >>> td
         TensorDict(
@@ -256,15 +256,15 @@ class QMixer(Mixer):
         >>> from torchrl.modules.models.multiagent import QMixer
         >>> n_agents = 4
         >>> qmix = TensorDictModule(
-        >>>    module=QMixer(
-        >>>        state_shape=(64, 64, 3),
-        >>>        mixing_embed_dim=32,
-        >>>        n_agents=n_agents,
-        >>>        device="cpu",
-        >>>    ),
-        >>>    in_keys=[("agents", "chosen_action_value"), "state"],
-        >>>    out_keys=["chosen_action_value"],
-        >>> )
+        ...     module=QMixer(
+        ...         state_shape=(64, 64, 3),
+        ...         mixing_embed_dim=32,
+        ...         n_agents=n_agents,
+        ...         device="cpu",
+        ...     ),
+        ...     in_keys=[("agents", "chosen_action_value"), "state"],
+        ...     out_keys=["chosen_action_value"],
+        ... )
         >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
         >>> td
         TensorDict(
