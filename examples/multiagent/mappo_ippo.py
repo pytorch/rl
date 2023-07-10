@@ -3,7 +3,7 @@ import time
 import torch
 import wandb
 
-from tensordict import TensorDictModule
+from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 from torchrl.collectors import SyncDataCollector

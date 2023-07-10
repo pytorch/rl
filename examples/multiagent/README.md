@@ -14,10 +14,15 @@ For more details on the experiment setup and the environments please refer to th
 
 ### Install
 
-First you need to install vmas and the dependencies of the scripts:
+First you need to install vmas and the dependencies of the scripts.
+
+Install torchrl and tensordict following repo instructions.
+
+Install vmas and dependencies:
+
 ```bash
 pip install vmas
-pip installl wandb moviepy
+pip install wandb moviepy
 ```
 
 ### Run
@@ -28,6 +33,9 @@ For example:
 ```bash
 pyton multiagent/mappo_ippo.py
 ```
+
+### Computational demand
+The scripts are set up for collecting many frames, if your compute is limited, you can change the "frames_per_batch" and "num_epochs" parameters to reduce compute requirements.
 
 ### Script structure
 
