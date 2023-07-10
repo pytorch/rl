@@ -9,7 +9,6 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     MultiDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.common import _EnvWrapper
@@ -113,13 +112,12 @@ class UnityWrapper(_EnvWrapper):
             env.step()
         self._behavior_names = list(env.behavior_specs.keys())
         self.num_agents = self._compute_num_agents(env)
-        self._agent_id_to_behavior = {}
+        self._agent_ids = torch.tensor(range(self.num_agents), dtype=torch.int)
+        self._agent_id_to_behavior_name = {}
         return env
 
     def _make_specs(self, env: BaseEnv) -> None:
         observation_specs = [None] * self.num_agents
-        behavior_id_specs = [None] * self.num_agents
-        agent_id_specs = [None] * self.num_agents
         action_specs = [None] * self.num_agents
         reward_specs = [None] * self.num_agents
         done_specs = [None] * self.num_agents
@@ -129,7 +127,7 @@ class UnityWrapper(_EnvWrapper):
             decision_steps, terminal_steps = env.get_steps(behavior_name)
             for steps in [decision_steps, terminal_steps]:
                 for agent_id in steps.agent_id:
-                    self._agent_id_to_behavior[agent_id] = behavior_name
+                    self._agent_id_to_behavior_name[agent_id] = behavior_name
 
                     observation_specs[agent_id] = CompositeSpec(
                         {
@@ -140,12 +138,6 @@ class UnityWrapper(_EnvWrapper):
                                 behavior_unity_spec.observation_specs
                             )
                         }
-                    )
-                    behavior_id_specs[agent_id] = UnboundedDiscreteTensorSpec(
-                        shape=1, device=self.device, dtype=torch.int8
-                    )
-                    agent_id_specs[agent_id] = UnboundedDiscreteTensorSpec(
-                        shape=1, device=self.device, dtype=torch.int8
                     )
                     action_specs[agent_id] = _unity_to_torchrl_spec_transform(
                         behavior_unity_spec.action_spec,
@@ -166,22 +158,6 @@ class UnityWrapper(_EnvWrapper):
             {
                 "agents": CompositeSpec(
                     {"observation": torch.stack(observation_specs, dim=0)},
-                    shape=(self.num_agents,),
-                )
-            }
-        )
-        self.behavior_id_spec = CompositeSpec(
-            {
-                "agents": CompositeSpec(
-                    {"behavior_id": torch.stack(behavior_id_specs, dim=0)},
-                    shape=(self.num_agents,),
-                )
-            }
-        )
-        self.agent_id_spec = CompositeSpec(
-            {
-                "agents": CompositeSpec(
-                    {"agent_id": torch.stack(agent_id_specs, dim=0)},
                     shape=(self.num_agents,),
                 )
             }
@@ -235,21 +211,13 @@ class UnityWrapper(_EnvWrapper):
                 "Currently, frame_skip is not supported for Unity environments."
             )
 
-    def behavior_id_to_name(self, behavior_id: int):
-        return self._behavior_names[behavior_id]
+    def agent_id_to_behavior_name(self, agent_id: int):
+        return self._agent_id_to_behavior_name[agent_id]
 
     def read_obs(self, agent_id, obs):
         return self.observation_spec["agents", "observation"][agent_id].encode(
             {f"obs_{i}": observation for i, observation in enumerate(obs)},
         )
-
-    def read_behavior(self, agent_id, behavior_name):
-        return self.behavior_id_spec["agents", "behavior_id"][agent_id].encode(
-            self._behavior_names.index(behavior_name)
-        )
-
-    def read_agent_id(self, agent_id):
-        return self.agent_id_spec["agents", "agent_id"][agent_id].encode(agent_id)
 
     def read_reward(self, agent_id, reward):
         return self.reward_spec[agent_id].encode(reward)
@@ -279,8 +247,9 @@ class UnityWrapper(_EnvWrapper):
         return self.done_spec[agent_id].encode(done)
 
     def _get_next_tensordict(self):
-        agent_tds = []
+        agent_tds = [None] * self.num_agents
         seen_agent_ids = set()
+
         for behavior_name_ in self.behavior_specs.keys():
             decision_steps, terminal_steps = self.get_steps(behavior_name_)
             for i, steps in enumerate([decision_steps, terminal_steps]):
@@ -293,15 +262,13 @@ class UnityWrapper(_EnvWrapper):
                     agent_td = TensorDict(
                         source={
                             "observation": self.read_obs(agent_id, step.obs),
-                            "behavior_id": self.read_behavior(agent_id, behavior_name_),
-                            "agent_id": self.read_agent_id(step.agent_id),
                             "reward": self.read_reward(agent_id, step.reward),
                             "done": self.read_done(agent_id, done),
                             "valid_mask": self.read_valid_mask(agent_id, True),
                         },
                         batch_size=[],
                     )
-                    agent_tds.append(agent_td)
+                    agent_tds[agent_id] = agent_td
 
         missing_agents = set(range(self.num_agents)) - seen_agent_ids
         for missing_agent in missing_agents:
@@ -310,17 +277,13 @@ class UnityWrapper(_EnvWrapper):
                     "observation": self.observation_spec["agents", "observation"][
                         missing_agent
                     ].zero(),
-                    "behavior_id": self.read_behavior(
-                        agent_id, self._agent_id_to_behavior[missing_agent]
-                    ),
-                    "agent_id": self.read_agent_id(missing_agent),
                     "reward": self.reward_spec[missing_agent].zero(),
                     "done": self.done_spec[missing_agent].zero(),
                     "valid_mask": self.read_valid_mask(agent_id, False),
                 },
                 batch_size=[],
             )
-            agent_tds.append(agent_td)
+            agent_tds[missing_agent] = agent_td
 
         agents_td = torch.stack(agent_tds, dim=0)
         tensordict_out = TensorDict(source={"agents": agents_td}, batch_size=[])
@@ -333,13 +296,12 @@ class UnityWrapper(_EnvWrapper):
             torch.squeeze(tensordict["agents", "valid_mask"]),
             torch.logical_not(torch.squeeze(tensordict["agents", "done"])),
         )
-        behavior_ids = tensordict["agents", "behavior_id"][eligible_agent_mask]
-        agent_ids = tensordict["agents", "agent_id"][eligible_agent_mask]
+        agent_ids = self._agent_ids[eligible_agent_mask]
         actions = tensordict["agents", "action"].unsqueeze(-1)[eligible_agent_mask]
-        for action, behavior_id, agent_id in zip(actions, behavior_ids, agent_ids):
+        for action, agent_id in zip(actions, agent_ids):
             unity_action = self.read_action(action)
             self.set_action_for_agent(
-                self.behavior_id_to_name(behavior_id.item()),
+                self.agent_id_to_behavior_name(agent_id.item()),
                 agent_id.item(),
                 unity_action,
             )
