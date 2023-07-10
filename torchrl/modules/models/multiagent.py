@@ -16,6 +16,94 @@ class Mixer(nn.Module):
         device (str or torch.Device): torch device for the network
         needs_state (bool): whether the mixer takes a global state as input
         state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
+
+    Examples:
+        Creating a VDN mixer
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.multiagent import VDNMixer
+        >>> n_agents = 4
+        >>> vdn = TensorDictModule(
+        >>>   module=VDNMixer(
+        >>>       n_agents=n_agents,
+        >>>       device="cpu",
+        >>>    ),
+        >>>   in_keys=[("agents","chosen_action_value")],
+        >>>   out_keys=["chosen_action_value"],
+        >>> )
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents])}, [32])
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+        >>> vdn(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+
+
+        Creating a QMix mixer
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.multiagent import QMixer
+        >>> n_agents = 4
+        >>> qmix = TensorDictModule(
+        >>>    module=QMixer(
+        >>>        state_shape=(64, 64, 3),
+        >>>        mixing_embed_dim=32,
+        >>>        n_agents=n_agents,
+        >>>        device="cpu",
+        >>>    ),
+        >>>    in_keys=[("agents", "chosen_action_value"), "state"],
+        >>>    out_keys=["chosen_action_value"],
+        >>> )
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+        >>> vdn(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False),
+                state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
     """
 
     def __init__(
@@ -97,7 +185,50 @@ class Mixer(nn.Module):
 
 
 class VDNMixer(Mixer):
-    """Mixer from https://arxiv.org/abs/1706.05296 ."""
+    """Mixer from https://arxiv.org/abs/1706.05296 .
+
+    Examples:
+        Creating a VDN mixer
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.multiagent import VDNMixer
+        >>> n_agents = 4
+        >>> vdn = TensorDictModule(
+        >>>   module=VDNMixer(
+        >>>       n_agents=n_agents,
+        >>>       device="cpu",
+        >>>    ),
+        >>>   in_keys=[("agents","chosen_action_value")],
+        >>>   out_keys=["chosen_action_value"],
+        >>> )
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents])}, [32])
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+        >>> vdn(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+    """
 
     def __init__(
         self,
@@ -116,7 +247,54 @@ class VDNMixer(Mixer):
 
 
 class QMixer(Mixer):
-    """Mixer from https://arxiv.org/abs/1803.11485 ."""
+    """Mixer from https://arxiv.org/abs/1803.11485 .
+
+    Examples:
+        Creating a QMix mixer
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.models.multiagent import QMixer
+        >>> n_agents = 4
+        >>> qmix = TensorDictModule(
+        >>>    module=QMixer(
+        >>>        state_shape=(64, 64, 3),
+        >>>        mixing_embed_dim=32,
+        >>>        n_agents=n_agents,
+        >>>        device="cpu",
+        >>>    ),
+        >>>    in_keys=[("agents", "chosen_action_value"), "state"],
+        >>>    out_keys=["chosen_action_value"],
+        >>> )
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+        >>> vdn(td)
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 4]),
+                    device=None,
+                    is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False),
+                state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([32]),
+            device=None,
+            is_shared=False)
+    """
 
     def __init__(
         self,
