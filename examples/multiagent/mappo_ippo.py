@@ -214,10 +214,11 @@ def train(seed):
 
         sampling_time = time.time() - sampling_start
 
-        tensordict_data["next", "done"] = (
-            tensordict_data["next", "done"]
+        tensordict_data.set(
+            ("next", "done"),
+            tensordict_data.get(("next", "done"))
             .unsqueeze(-1)
-            .expand(tensordict_data["next", env.reward_key].shape)
+            .expand(tensordict_data.get(("next", env.reward_key)).shape),
         )  # We need to expand the done to match the reward shape
 
         with torch.no_grad():
@@ -250,7 +251,7 @@ def train(seed):
                 total_norm = torch.nn.utils.clip_grad_norm_(
                     loss_module.parameters(), config["max_grad_norm"]
                 )
-                training_tds[-1]["grad_norm"] = total_norm.mean()
+                training_tds[-1].set("grad_norm", total_norm.mean())
 
                 optim.step()
                 optim.zero_grad()
