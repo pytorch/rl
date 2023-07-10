@@ -1249,7 +1249,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = step_mdp(
                 tensordict,
                 keep_other=True,
-                exclude_action=True,
+                exclude_action=False,
                 exclude_reward=True,
                 reward_key=self.reward_key,
                 action_key=self.action_key,

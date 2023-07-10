@@ -45,6 +45,7 @@ from torchrl.trainers.helpers.envs import LIBS
 # -----------------
 
 
+@set_gym_backend("gym")  # D4RL uses gym so we make sure gymnasium is hidden
 def make_base_env(env_cfg):
     env_library = LIBS[env_cfg.library]
     env_name = env_cfg.name
