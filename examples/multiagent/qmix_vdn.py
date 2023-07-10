@@ -8,7 +8,6 @@ import time
 import hydra
 import torch
 
-import wandb
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -37,9 +36,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     # Seeding
     torch.manual_seed(cfg.seed)
-
-    # Log
-    log = True
 
     # Sampling
     cfg.env.vmas_envs = cfg.collector.frames_per_batch // cfg.env.max_steps
@@ -171,8 +167,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 "project": f"torchrl_{cfg.env.scenario_name}",
             },
         )
-        if cfg.logger.backend == "wandb":
-            wandb.run.log_code(".")
         logger.log_hparams(cfg)
 
     total_time = 0
@@ -225,7 +219,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         training_tds = torch.stack(training_tds)
 
         # More logs
-        if log:
+        if cfg.logger.backend:
             log_training(
                 logger,
                 training_tds,
@@ -236,12 +230,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 i,
                 current_frames,
                 total_frames,
+                step=i,
             )
 
         if (
             cfg.eval.evaluation_episodes > 0
             and i % cfg.eval.evaluation_interval == 0
-            and log
+            and cfg.logger.backend
         ):
             evaluation_start = time.time()
             with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
@@ -257,17 +252,11 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
                 evaluation_time = time.time() - evaluation_start
 
-                log_evaluation(
-                    logger,
-                    rollouts,
-                    env_test,
-                    evaluation_time,
-                )
+                log_evaluation(logger, rollouts, env_test, evaluation_time, step=i)
 
-        if log:
+        if cfg.logger.backend == "wandb":
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
-    wandb.finish()
 
 
 if __name__ == "__main__":

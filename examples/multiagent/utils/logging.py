@@ -8,11 +8,12 @@ import torch
 import wandb
 from tensordict import TensorDictBase
 from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.record.loggers import Logger
 from torchrl.record.loggers.wandb import WandbLogger
 
 
 def log_training(
-    logger: WandbLogger,
+    logger: Logger,
     training_td: TensorDictBase,
     sampling_td: TensorDictBase,
     sampling_time: float,
@@ -21,6 +22,7 @@ def log_training(
     iteration: int,
     current_frames: int,
     total_frames: int,
+    step: int,
 ):
     if ("next", "agents", "reward") not in sampling_td.keys(True, True):
         sampling_td.set(
@@ -30,24 +32,21 @@ def log_training(
             .unsqueeze(-1),
         )
 
-    logger.experiment.log(
-        {
-            f"train/learner/{key}": value.mean().item()
-            for key, value in training_td.items()
-        },
-        commit=False,
-    )
+    to_log = {
+        f"train/learner/{key}": value.mean().item()
+        for key, value in training_td.items()
+    }
+
     if "info" in sampling_td.get("agents").keys():
-        logger.experiment.log(
+        to_log.update(
             {
                 f"train/info/{key}": value.mean().item()
                 for key, value in sampling_td.get(("agents", "info")).items()
-            },
-            commit=False,
+            }
         )
 
     reward = sampling_td.get(("next", "agents", "reward"))
-    logger.experiment.log(
+    to_log.update(
         {
             "train/reward/reward_min": reward.mean(-2).min().item(),  # Mean over agents
             "train/reward/reward_mean": reward.mean().item(),
@@ -59,9 +58,15 @@ def log_training(
             "train/training_iteration": iteration,
             "train/current_frames": current_frames,
             "train/total_frames": total_frames,
-        },
-        commit=False,
+        }
     )
+    if isinstance(logger, WandbLogger):
+        logger.experiment.log(to_log, commit=False)
+    else:
+        for key, value in to_log.keys():
+            logger.log_scalar(key, value, step=step)
+
+    return to_log
 
 
 def log_evaluation(
@@ -69,6 +74,7 @@ def log_evaluation(
     rollouts: TensorDictBase,
     env_test: VmasEnv,
     evaluation_time: float,
+    step: int,
 ):
     rollouts = list(rollouts.unbind(0))
     for k, r in enumerate(rollouts):
@@ -81,22 +87,26 @@ def log_evaluation(
         ]  # First done index for this traj
         rollouts[k] = r[: done_index + 1]
     vid = np.transpose(env_test.frames[: rollouts[0].batch_size[0]], (0, 3, 1, 2))
-    logger.experiment.log(
-        {
-            "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),
-        },
-        commit=False,
-    )
 
     rewards = [td.get(("next", "agents", "reward")).sum(0).mean() for td in rollouts]
-    logger.experiment.log(
-        {
-            "eval/episode_reward_min": min(rewards),
-            "eval/episode_reward_max": max(rewards),
-            "eval/episode_reward_mean": sum(rewards) / len(rollouts),
-            "eval/episode_len_mean": sum([td.batch_size[0] for td in rollouts])
-            / len(rollouts),
-            "eval/evaluation_time": evaluation_time,
-        },
-        commit=False,
-    )
+    to_log = {
+        "eval/episode_reward_min": min(rewards),
+        "eval/episode_reward_max": max(rewards),
+        "eval/episode_reward_mean": sum(rewards) / len(rollouts),
+        "eval/episode_len_mean": sum([td.batch_size[0] for td in rollouts])
+        / len(rollouts),
+        "eval/evaluation_time": evaluation_time,
+    }
+
+    if isinstance(logger, WandbLogger):
+        logger.experiment.log(to_log, commit=False)
+        logger.experiment.log(
+            {
+                "eval/video": wandb.Video(vid, fps=1 / env_test.world.dt, format="mp4"),
+            },
+            commit=False,
+        )
+    else:
+        for key, value in to_log.keys():
+            logger.log_scalar(key, value, step=step)
+        logger.log_video("eval/video", torch.Tensor(vid), step=step)
