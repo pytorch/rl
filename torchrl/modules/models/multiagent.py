@@ -9,7 +9,25 @@ from .models import MLP
 
 
 class MultiAgentMLP(nn.Module):
-    """Mult-agent MLP."""
+    """Mult-agent MLP.
+
+    This is an MLP that can be used in multi-agent contexts.
+    For example as a policy or as a value function.
+    See `examples/multiagent` for examples.
+
+    It expects inputs with shape (*B, n_agents, n_agent_inputs)
+    It returns outputs with shape (*B, n_agents, n_agent_outputs)
+
+    If `share_params` is True, the same MLP will be used to make the forward pass for all agents (homogeneous policies).
+    Otherwise, each agent will use a different MLP to process its input (heterogeneous policies).
+
+    If `centralised` is True, each agent will use the inputs of all agents to compute its output
+    (n_agent_inputs * n_agents will be the nu,ber of inputs for one agent).
+    Otherwise, each agent will only use its data as input.
+
+    **kwargs for :class:`~torchrl.modules.models.MLP` can be passed to customize the MLPs.
+
+    """
 
     def __init__(
         self,
@@ -108,6 +126,8 @@ class Mixer(nn.Module):
 
     It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
     into a global value with shape (*B, 1).
+    Used with the :class:`~torchrl.objectives.QMixerLoss`.
+    See `examples/multiagent/qmix_vdn.py` for examples.
 
     Args:
         n_agents (int): number of agents,
