@@ -37,6 +37,9 @@ class EnsembleModule(TensorDictModuleBase):
             device=None,
             is_shared=False)
 
+    To stack EnsembleModules together, we should be mindful of turning off `expand_input` from the second module and on.
+    
+    Examples:
         >>> import torch
         >>> from tensordict.nn import TensorDictModule, TensorDictSequential
         >>> from torchrl.modules import EnsembleModule
