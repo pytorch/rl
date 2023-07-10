@@ -65,7 +65,6 @@ class EnsembleModule(TensorDictModuleBase):
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys
         params_td = make_functional(module).expand(num_copies).to_tensordict()
-        module.reset_parameters(params_td)
 
         self.module = module
         self.params_td = params_td
@@ -75,5 +74,26 @@ class EnsembleModule(TensorDictModuleBase):
         else:
             self.vmapped_forward = torch.vmap(self.module, 0)
 
+        # module.reset_parameters(params_td)
+        self.reset_parameters_recursive(self.params_td)
+
     def forward(self, tensordict: TensorDict) -> TensorDict:
         return self.vmapped_forward(tensordict, self.params_td)
+
+    def reset_parameters_recursive(self, stacked_params_td: TensorDict) -> None:
+        """Resets the parameters of all the copies of the module.
+
+        Args:
+            stacked_params_td: A TensorDict of parameters for self.module. The batch dimension(s) of the tensordict
+                denote the number of module copies to reset.
+        """
+        if stacked_params_td.ndim:
+            params_pointers = []
+            for params_copy in stacked_params_td.unbind(0):
+                self.reset_parameters_recursive(params_copy)
+                params_pointers.append(params_copy)
+            return torch.stack(params_pointers, -1)
+        else:
+            TensorDictModuleBase.reset_parameters_recursive(
+                self.module, stacked_params_td
+            )

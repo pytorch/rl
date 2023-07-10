@@ -45,6 +45,7 @@ from .tensordict_module import (
     DistributionalQValueHook,
     DistributionalQValueModule,
     EGreedyWrapper,
+    EnsembleModule,
     LMHeadActorValueOperator,
     LSTMModule,
     OrnsteinUhlenbeckProcessWrapper,
@@ -59,6 +60,5 @@ from .tensordict_module import (
     TanhModule,
     ValueOperator,
     WorldModelWrapper,
-    EnsembleModule
 )
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip

@@ -20,6 +20,7 @@ from .actors import (
     ValueOperator,
 )
 from .common import SafeModule, VmapModule
+from .ensemble import EnsembleModule
 from .exploration import (
     AdditiveGaussianWrapper,
     EGreedyWrapper,
@@ -32,4 +33,3 @@ from .probabilistic import (
 from .rnn import LSTMModule
 from .sequence import SafeSequential
 from .world_models import WorldModelWrapper
-from .ensemble import EnsembleModule

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import copy
 
 import pytest
 import torch
@@ -71,41 +72,61 @@ class TestEnsembleModule:
                 p0, p1
             ), f"Ensemble params were not initialized correctly {p0}, {p1}"
 
-    def test_siso_forward(self):
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_siso_forward(self, net):
         """Ensure that forward works for a single input and output"""
         module = TensorDictModule(
-            nn.Sequential(
-                nn.Linear(2, 3),
-                nn.ReLU(),
-            ),
+            net,
             in_keys=["bork"],
             out_keys=["dork"],
         )
         mod = EnsembleModule(module, num_copies=2)
-        td = TensorDict({"bork": torch.randn(5, 2)}, batch_size=[5])
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
         out = mod(td)
         assert "dork" in out.keys(), "Ensemble forward failed to write keys"
         assert out["dork"].shape == torch.Size(
-            [2, 5, 3]
+            [2, 5, 1]
         ), "Ensemble forward failed to expand input"
         outs = out["dork"].unbind(0)
         assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
 
-    def test_chained_ensembles(self):
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_chained_ensembles(self, net):
         """Ensure that the expand_input argument works"""
-        module = TensorDictModule(nn.Linear(2, 3), in_keys=["bork"], out_keys=["dork"])
+        module = TensorDictModule(net, in_keys=["bork"], out_keys=["dork"])
         next_module = TensorDictModule(
-            nn.Linear(3, 1), in_keys=["dork"], out_keys=["spork"]
+            copy.deepcopy(net), in_keys=["dork"], out_keys=["spork"]
         )
         e0 = EnsembleModule(module, num_copies=4, expand_input=True)
         e1 = EnsembleModule(next_module, num_copies=4, expand_input=False)
         seq = TensorDictSequential(e0, e1)
-        td = TensorDict({"bork": torch.randn(5, 2)}, batch_size=[5])
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
         out = seq(td)
         assert "spork" in out.keys(), "Ensemble forward failed to write keys"
         assert out["spork"].shape == torch.Size(
             [4, 5, 1]
         ), "Ensemble forward failed to expand input"
+        same_outputs = torch.isclose(
+            out["spork"].repeat(4, 1, 1), out["spork"].repeat_interleave(4, dim=0)
+        ).reshape(4, 4, 5, 1)
+        mask_out_diags = torch.eye(4).logical_not()
+        assert not torch.any(
+            same_outputs[mask_out_diags]
+        ), "Ensemble outputs should be different"
 
 
 class TestTDModule:
