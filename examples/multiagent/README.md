@@ -23,6 +23,7 @@ Install vmas and dependencies:
 ```bash
 pip install vmas
 pip install wandb moviepy
+pip install hydra-core
 ```
 
 ### Run

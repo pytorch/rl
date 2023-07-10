@@ -5,6 +5,7 @@
 
 import time
 
+import hydra
 import torch
 
 import wandb
@@ -20,8 +21,7 @@ from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP, QMixer, VDNMixer
 from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.objectives.multiagent.qmixer import QMixerLoss
-from torchrl.record.loggers import generate_exp_name
-from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.record.loggers import generate_exp_name, get_logger
 from utils.logging import log_evaluation, log_training
 
 
@@ -29,85 +29,45 @@ def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-def train(seed):
+@hydra.main(version_base="1.1", config_path=".", config_name="qmix_vdn")
+def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    training_device = "cpu" if not torch.has_cuda else "cuda:0"
-    vmas_device = training_device
+    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.env.device = cfg.train.device
 
     # Seeding
-    seed = seed
-    torch.manual_seed(seed)
+    torch.manual_seed(cfg.seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
-    frames_per_batch = 60_000  # Frames sampled each sampling iteration
-    max_steps = 100
-    vmas_envs = frames_per_batch // max_steps
-    n_iters = 500  # Number of sampling/training iterations
-    total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch
-
-    scenario_name = "balance"
-    env_config = {
-        "n_agents": 3,
-    }
-
-    config = {
-        # QMIX
-        "mixer_type": "qmix",  # or "vdn"
-        # RL
-        "gamma": 0.9,
-        "seed": seed,
-        # Sampling,
-        "frames_per_batch": frames_per_batch,
-        "max_steps": max_steps,
-        "vmas_envs": vmas_envs,
-        "n_iters": n_iters,
-        "total_frames": total_frames,
-        "memory_size": memory_size,
-        "vmas_device": vmas_device,
-        # Training
-        "num_epochs": 45,  # optimization steps per batch of data collected
-        "minibatch_size": 4096,  # size of minibatches used in each epoch
-        "lr": 5e-5,
-        "max_grad_norm": 40.0,
-        "training_device": training_device,
-        # Target
-        "tau": 0.005,
-        # Evaluation
-        "evaluation_interval": 20,
-        "evaluation_episodes": 200,
-    }
-
-    model_config = {
-        "shared_parameters": True,
-    }
+    cfg.env.vmas_envs = cfg.collector.frames_per_batch // cfg.env.max_steps
+    cfg.collector.total_frames = cfg.collector.frames_per_batch * cfg.collector.n_iters
+    cfg.buffer.memory_size = cfg.collector.frames_per_batch
 
     # Create env and env_test
     env = VmasEnv(
-        scenario=scenario_name,
-        num_envs=vmas_envs,
+        scenario=cfg.env.scenario_name,
+        num_envs=cfg.env.vmas_envs,
         continuous_actions=False,
-        max_steps=max_steps,
-        device=vmas_device,
-        seed=seed,
+        max_steps=cfg.env.max_steps,
+        device=cfg.env.device,
+        seed=cfg.seed,
         # Scenario kwargs
-        **env_config,
+        **cfg.env.scenario,
     )
 
     env_test = VmasEnv(
-        scenario=scenario_name,
-        num_envs=config["evaluation_episodes"],
+        scenario=cfg.env.scenario_name,
+        num_envs=cfg.eval.evaluation_episodes,
         continuous_actions=False,
-        max_steps=max_steps,
-        device=vmas_device,
-        seed=seed,
+        max_steps=cfg.env.max_steps,
+        device=cfg.env.device,
+        seed=cfg.seed,
         # Scenario kwargs
-        **env_config,
+        **cfg.env.scenario,
     )
-    env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
     net = MultiAgentMLP(
@@ -115,8 +75,8 @@ def train(seed):
         n_agent_outputs=env.action_spec.space.n,
         n_agents=env.n_agents,
         centralised=False,
-        share_params=model_config["shared_parameters"],
-        device=training_device,
+        share_params=cfg.model.shared_parameters,
+        device=cfg.train.device,
         depth=2,
         num_cells=256,
         activation_class=nn.Tanh,
@@ -140,12 +100,12 @@ def train(seed):
         qnet,
         eps_init=0.3,
         eps_end=0,
-        annealing_num_steps=int(total_frames * (1 / 2)),
+        annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
         action_key=env.action_key,
         spec=env.action_spec,
     )
 
-    if config["mixer_type"] == "qmix":
+    if cfg.loss.mixer_type == "qmix":
         mixer = TensorDictModule(
             module=QMixer(
                 state_shape=env.unbatched_observation_spec[
@@ -153,16 +113,16 @@ def train(seed):
                 ].shape,
                 mixing_embed_dim=32,
                 n_agents=env.n_agents,
-                device=training_device,
+                device=cfg.train.device,
             ),
             in_keys=[("agents", "chosen_action_value"), ("agents", "observation")],
             out_keys=["chosen_action_value"],
         )
-    elif config["mixer_type"] == "vdn":
+    elif cfg.loss.mixer_type == "vdn":
         mixer = TensorDictModule(
             module=VDNMixer(
                 n_agents=env.n_agents,
-                device=training_device,
+                device=cfg.train.device,
             ),
             in_keys=[("agents", "chosen_action_value")],
             out_keys=["chosen_action_value"],
@@ -173,16 +133,16 @@ def train(seed):
     collector = SyncDataCollector(
         env,
         qnet_explore,
-        device=vmas_device,
-        storing_device=training_device,
-        frames_per_batch=frames_per_batch,
-        total_frames=total_frames,
+        device=cfg.env.device,
+        storing_device=cfg.train.device,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        total_frames=cfg.collector.total_frames,
     )
 
     replay_buffer = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(memory_size, device=training_device),
+        storage=LazyTensorStorage(cfg.buffer.memory_size, device=cfg.train.device),
         sampler=SamplerWithoutReplacement(),
-        batch_size=config["minibatch_size"],
+        batch_size=cfg.train.minibatch_size,
     )
 
     loss_module = QMixerLoss(qnet, mixer, delay_value=True)
@@ -192,25 +152,28 @@ def train(seed):
         global_value="chosen_action_value",
         action=env.action_key,
     )
-    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
-    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
+    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
+    target_net_updater = SoftUpdate(loss_module, eps=1 - cfg.loss.tau)
 
-    optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
+    optim = torch.optim.Adam(loss_module.parameters(), cfg.train.lr)
 
     # Logging
-    if log:
-        config.update({"model": model_config, "env": env_config})
-        model_name = ("Het" if not model_config["shared_parameters"] else "") + config[
-            "mixer_type"
-        ].upper()
-        logger = WandbLogger(
-            exp_name=generate_exp_name(env_config["scenario_name"], model_name),
-            project=f"torchrl_{env_config['scenario_name']}",
-            group=model_name,
-            save_code=True,
-            config=config,
+    if cfg.logger.backend:
+        model_name = (
+            "Het" if not cfg.model.shared_parameters else ""
+        ) + cfg.loss.mixer_type.upper()
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name=".",
+            experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
+            wandb_kwargs={
+                "group": model_name,
+                "project": f"torchrl_{cfg.env.scenario_name}",
+            },
         )
-        wandb.run.log_code(".")
+        if cfg.logger.backend == "wandb":
+            wandb.run.log_code(".")
+        logger.log_hparams(cfg)
 
     total_time = 0
     total_frames = 0
@@ -233,8 +196,8 @@ def train(seed):
 
         training_tds = []
         training_start = time.time()
-        for _ in range(config["num_epochs"]):
-            for _ in range(frames_per_batch // config["minibatch_size"]):
+        for _ in range(cfg.train.num_epochs):
+            for _ in range(cfg.collector.frames_per_batch // cfg.train.minibatch_size):
                 subdata = replay_buffer.sample()
                 loss_vals = loss_module(subdata)
                 training_tds.append(loss_vals.detach())
@@ -244,7 +207,7 @@ def train(seed):
                 loss_value.backward()
 
                 total_norm = torch.nn.utils.clip_grad_norm_(
-                    loss_module.parameters(), config["max_grad_norm"]
+                    loss_module.parameters(), cfg.train.max_grad_norm
                 )
                 training_tds[-1].set("grad_norm", total_norm.mean())
 
@@ -276,15 +239,15 @@ def train(seed):
             )
 
         if (
-            config["evaluation_episodes"] > 0
-            and i % config["evaluation_interval"] == 0
+            cfg.eval.evaluation_episodes > 0
+            and i % cfg.eval.evaluation_interval == 0
             and log
         ):
             evaluation_start = time.time()
             with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
                 env_test.frames = []
                 rollouts = env_test.rollout(
-                    max_steps=max_steps,
+                    max_steps=cfg.env.max_steps,
                     policy=qnet,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
@@ -308,5 +271,4 @@ def train(seed):
 
 
 if __name__ == "__main__":
-    for seed in [0]:
-        train(seed)
+    train()
