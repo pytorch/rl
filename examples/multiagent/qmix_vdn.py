@@ -35,7 +35,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = False
+    log = True
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
