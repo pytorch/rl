@@ -5,6 +5,7 @@
 
 import argparse
 import copy
+import unittest
 
 import pytest
 import torch
@@ -129,6 +130,20 @@ class TestEnsembleModule:
             assert not torch.any(
                 same_outputs[mask_out_diags]
             ), f"Module ensemble outputs should be different for {out_key}"
+
+    def test_reset_once(self):
+        """Ensure we only call reset_parameters() once per ensemble member"""
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock()
+        module = TensorDictModule(
+            nn.Sequential(lin),
+            in_keys=["a"],
+            out_keys=["b"],
+        )
+        mod = EnsembleModule(module, num_copies=2)
+        assert (
+            lin.reset_parameters.call_count == 2
+        ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
 
 
 class TestTDModule:

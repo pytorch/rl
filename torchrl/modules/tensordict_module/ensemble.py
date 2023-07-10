@@ -94,6 +94,4 @@ class EnsembleModule(TensorDictModuleBase):
                 params_pointers.append(params_copy)
             return torch.stack(params_pointers, -1)
         else:
-            TensorDictModuleBase.reset_parameters_recursive(
-                self.module, stacked_params_td
-            )
+            return self.module.reset_parameters_recursive(stacked_params_td)
