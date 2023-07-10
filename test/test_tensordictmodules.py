@@ -67,7 +67,7 @@ class TestEnsembleModule:
             out_keys=["b"],
         )
         mod = EnsembleModule(module, num_copies=2)
-        for param in mod.params:
+        for param in mod.ensemble_parameters:
             p0, p1 = param.unbind(0)
             assert not torch.allclose(
                 p0, p1
