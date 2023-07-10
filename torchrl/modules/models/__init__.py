@@ -17,4 +17,5 @@ from .models import (
     LSTMNet,
     MLP,
 )
+from .multiagent import QMixer, VDNMixer
 from .utils import Squeeze2dLayer, SqueezeLayer
