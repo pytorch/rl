@@ -1,5 +1,5 @@
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import make_functional, TensorDictModuleBase
 from torch import nn
 
@@ -79,7 +79,7 @@ class EnsembleModule(TensorDictModuleBase):
     def forward(self, tensordict: TensorDict) -> TensorDict:
         return self.vmapped_forward(tensordict, self.params_td)
 
-    def reset_parameters_recursive(self, stacked_params_td: TensorDict) -> None:
+    def reset_parameters_recursive(self, parameters: TensorDictBase) -> TensorDictBase:
         """Resets the parameters of all the copies of the module.
 
         Args:
@@ -89,11 +89,14 @@ class EnsembleModule(TensorDictModuleBase):
         Returns:
             A TensorDict of pointers to the reset parameters.
         """
-        if stacked_params_td.ndim:
+        assert (
+            TensorDictBase is not None
+        ), "Ensembles are functional and require passing a TensorDict of parameters to reset_parameters_recursive"
+        if parameters.ndim:
             params_pointers = []
-            for params_copy in stacked_params_td.unbind(0):
+            for params_copy in parameters.unbind(0):
                 self.reset_parameters_recursive(params_copy)
                 params_pointers.append(params_copy)
             return torch.stack(params_pointers, -1)
         else:
-            return self.module.reset_parameters_recursive(stacked_params_td)
+            return self.module.reset_parameters_recursive(parameters)
