@@ -219,7 +219,7 @@ def train(seed):
         sampling_time = time.time() - sampling_start
         print(f"Sampling took {sampling_time}")
 
-        # Remove agent dimension from reward
+        # Remove agent dimension from reward (since it is shared in QMIX/VDN)
         tensordict_data["next", "reward"] = tensordict_data[
             "next", env.reward_key
         ].mean(-2)
