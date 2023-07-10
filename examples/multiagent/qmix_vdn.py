@@ -3,9 +3,7 @@ import time
 import torch
 
 import wandb
-from models.mixers import QMixer, VDNMixer
 from models.mlp import MultiAgentMLP
-from objectives.qmix import QMixLoss
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
@@ -15,7 +13,9 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
+from torchrl.modules.models.multiagent import QMixer, VDNMixer
 from torchrl.objectives import SoftUpdate, ValueEstimators
+from torchrl.objectives.multiagent.qmixer import QMixerLoss
 from torchrl.record.loggers import generate_exp_name
 from torchrl.record.loggers.wandb import WandbLogger
 from utils.logging import log_evaluation, log_training
@@ -35,7 +35,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = True
+    log = False
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -125,7 +125,7 @@ def train(seed):
         out_keys=[
             env.action_key,
             ("agents", "action_value"),
-            "chosen_action_value",
+            ("agents", "chosen_action_value"),
         ],
         spec=env.unbatched_action_spec,
         action_space=None,
@@ -151,7 +151,7 @@ def train(seed):
                 n_agents=env.n_agents,
                 device=training_device,
             ),
-            in_keys=["chosen_action_value", ("agents", "observation")],
+            in_keys=[("agents", "chosen_action_value"), ("agents", "observation")],
             out_keys=["chosen_action_value"],
         )
     elif config["mixer_type"] == "vdn":
@@ -160,7 +160,7 @@ def train(seed):
                 n_agents=env.n_agents,
                 device=training_device,
             ),
-            in_keys=["chosen_action_value"],
+            in_keys=[("agents", "chosen_action_value")],
             out_keys=["chosen_action_value"],
         )
     else:
@@ -184,9 +184,11 @@ def train(seed):
         batch_size=config["minibatch_size"],
     )
 
-    loss_module = QMixLoss(qnet, mixer, delay_value=True)
+    loss_module = QMixerLoss(qnet, mixer, delay_value=True)
     loss_module.set_keys(
         action_value=("agents", "action_value"),
+        local_value=("agents", "chosen_action_value"),
+        global_value="chosen_action_value",
         action=env.action_key,
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
