@@ -8,8 +8,8 @@ from torch import nn
 class Mixer(nn.Module):
     """A multi-agent value mixer.
 
-    It transforms the local value of each agent's chosen action of shape (*B, self.n_agents),
-    into a global value with shape (*B)
+    It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
+    into a global value with shape (*B, 1)
 
     Args:
         n_agents (int): number of agents,
@@ -32,13 +32,13 @@ class Mixer(nn.Module):
         >>>   in_keys=[("agents","chosen_action_value")],
         >>>   out_keys=["chosen_action_value"],
         >>> )
-        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents])}, [32])
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents])}, [32])
         >>> td
         TensorDict(
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False)},
@@ -50,11 +50,11 @@ class Mixer(nn.Module):
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
-                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False)},
+                chosen_action_value: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
@@ -76,13 +76,13 @@ class Mixer(nn.Module):
         >>>    in_keys=[("agents", "chosen_action_value"), "state"],
         >>>    out_keys=["chosen_action_value"],
         >>> )
-        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
         >>> td
         TensorDict(
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
@@ -95,11 +95,11 @@ class Mixer(nn.Module):
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
-                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([32]),
             device=None,
@@ -124,14 +124,13 @@ class Mixer(nn.Module):
         """Forward pass of the mixer.
 
         Args:
-            *inputs: The first input should be the value of the chosen action of shape (*B, self.n_agents),
+            *inputs: The first input should be the value of the chosen action of shape (*B, self.n_agents, 1),
             representing the local q value of each agent.
             The second input (optional, used only in some mixers)
             is the shared state of all agents of shape (*B, *self.state_shape).
 
-
         Returns:
-            The global value of the chosen actions obtained after mixing, with shape (*B)
+            The global value of the chosen actions obtained after mixing, with shape (*B, 1)
 
         """
         if not self.needs_state:
@@ -152,19 +151,19 @@ class Mixer(nn.Module):
                     f" but got state shape {state.shape}"
                 )
 
-        if chosen_action_value.shape[-1] != self.n_agents:
+        if chosen_action_value.shape[-2:] != (self.n_agents, 1):
             raise ValueError(
-                f"Mixer network expected chosen_action_value with last dimension {self.n_agents},"
+                f"Mixer network expected chosen_action_value with last 2 dimensions {(self.n_agents,1)},"
                 f" but got {chosen_action_value.shape}"
             )
-        batch_dims = chosen_action_value.shape[:-1]
+        batch_dims = chosen_action_value.shape[:-2]
 
         if not self.needs_state:
             output = self.mix(chosen_action_value, None)
         else:
             output = self.mix(chosen_action_value, state)
 
-        if output.shape != batch_dims:
+        if output.shape != (*batch_dims, 1):
             raise ValueError(
                 f"Mixer network expected output with same shape as input minus the multi-agent dimension,"
                 f" but got {output.shape}"
@@ -202,13 +201,13 @@ class VDNMixer(Mixer):
         >>>   in_keys=[("agents","chosen_action_value")],
         >>>   out_keys=["chosen_action_value"],
         >>> )
-        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents])}, [32])
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents])}, [32])
         >>> td
         TensorDict(
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False)},
@@ -220,11 +219,11 @@ class VDNMixer(Mixer):
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
-                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False)},
+                chosen_action_value: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
@@ -243,7 +242,7 @@ class VDNMixer(Mixer):
         )
 
     def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
-        return chosen_action_value.sum(dim=-1)
+        return chosen_action_value.sum(dim=-2)
 
 
 class QMixer(Mixer):
@@ -266,13 +265,13 @@ class QMixer(Mixer):
         >>>    in_keys=[("agents", "chosen_action_value"), "state"],
         >>>    out_keys=["chosen_action_value"],
         >>> )
-        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
+        >>> td = TensorDict({"agents": TensorDict({"chosen_action_value": torch.zeros(32, n_agents, 1)}, [32, n_agents]), "state": torch.zeros(32, 64, 64, 3)}, [32])
         >>> td
         TensorDict(
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
@@ -285,11 +284,11 @@ class QMixer(Mixer):
             fields={
                 agents: TensorDict(
                     fields={
-                        chosen_action_value: Tensor(shape=torch.Size([32, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        chosen_action_value: Tensor(shape=torch.Size([32, 4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([32, 4]),
                     device=None,
                     is_shared=False),
-                chosen_action_value: Tensor(shape=torch.Size([32]), device=cpu, dtype=torch.float32, is_shared=False),
+                chosen_action_value: Tensor(shape=torch.Size([32, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 state: Tensor(shape=torch.Size([32, 64, 64, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([32]),
             device=None,
@@ -328,7 +327,7 @@ class QMixer(Mixer):
         )
 
     def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
-        bs = chosen_action_value.shape[:-1]
+        bs = chosen_action_value.shape[:-2]
         state = state.view(-1, self.state_dim)
         chosen_action_value = chosen_action_value.view(-1, 1, self.n_agents)
         # First layer
@@ -347,5 +346,5 @@ class QMixer(Mixer):
         # Compute final output
         y = torch.bmm(hidden, w_final) + v  # [-1, 1, 1]
         # Reshape and return
-        q_tot = y.view(*bs)
+        q_tot = y.view(*bs, 1)
         return q_tot
