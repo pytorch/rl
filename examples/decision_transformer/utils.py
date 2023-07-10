@@ -182,13 +182,11 @@ def make_collector(cfg, policy):
 
 
 def get_loc_std(env_name):
-    import d4rl  # noqa
-    import gym
-
-    env = gym.make(env_name)
-    data = env.get_dataset()
-    loc = torch.from_numpy(data["observations"].mean(axis=0)).float()
-    std = torch.from_numpy(data["observations"].std(axis=0)).float()
+    data = D4RLExperienceReplay(env_name, 1024)
+    for sample in data:
+        loc = sample.get("observation").mean()
+        std = sample.get("observation").std()
+        break
     return loc, std
 
 

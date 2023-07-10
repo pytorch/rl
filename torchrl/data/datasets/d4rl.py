@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import os
 import urllib
-from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
@@ -12,7 +11,7 @@ import numpy as np
 import torch
 
 from tensordict import PersistentTensorDict
-from tensordict.tensordict import make_tensordict, TensorDict
+from tensordict.tensordict import make_tensordict
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import TensorDictReplayBuffer

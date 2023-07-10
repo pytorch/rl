@@ -1179,7 +1179,7 @@ class OnlineDTActor(nn.Module):
             config=transformer_config,
         )
         self.action_layer = nn.Linear(
-            transformer_config['n_embd'], action_dim * 2, device=device
+            transformer_config["n_embd"], action_dim * 2, device=device
         )
 
         self.log_std_min, self.log_std_max = -5.0, 2.0
@@ -1214,7 +1214,7 @@ class OnlineDTActor(nn.Module):
 
     @classmethod
     def get_default_config(cls):
-        """Default configuration for :class:`~.OnlineDTActor`"""
+        """Default configuration for :class:`~.OnlineDTActor`."""
         return {
             "n_embd": 256,
             "n_layer": 4,
@@ -1265,7 +1265,7 @@ class DTActor(nn.Module):
             config=transformer_config,
         )
         self.action_layer = nn.Linear(
-            transformer_config['n_embd'], action_dim, device=device
+            transformer_config["n_embd"], action_dim, device=device
         )
 
         def weight_init(m):
@@ -1289,7 +1289,7 @@ class DTActor(nn.Module):
 
     @classmethod
     def get_default_config(cls):
-        """Default configuration for :class:`~.DTActor`"""
+        """Default configuration for :class:`~.DTActor`."""
         return {
             "n_embd": 256,
             "n_layer": 4,

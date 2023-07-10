@@ -1705,6 +1705,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
     @property
     def in_keys(self):
         return [self.observation_key, self.action_key, self.return_to_go_key]
+
     @property
     def out_keys(self):
         return [self.observation_key, self.action_key, self.return_to_go_key]
@@ -1751,7 +1752,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         action = torch.cat(
             [
                 action[..., 1:, :],
-                torch.zeros(*action.shape[:-2], 1, action.shape[-1], device=action.device),
+                torch.zeros(
+                    *action.shape[:-2], 1, action.shape[-1], device=action.device
+                ),
             ],
             dim=-2,
         )
