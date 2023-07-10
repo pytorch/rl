@@ -439,7 +439,7 @@ def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     )
 
     loss(td)
-    benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
+    benchmark.pedantic(loss, args=(td,), rounds=100, iterations=100)
 
 
 def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):

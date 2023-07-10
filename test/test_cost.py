@@ -1535,6 +1535,8 @@ class TestTD3(LossModuleTestBase):
         separate_losses,
         n_act=4,
     ):
+        from torchrl.objectives.td3 import TD3Loss_deprecated
+
         torch.manual_seed(self.seed)
         actor, value, common, td = self._create_mock_common_layer_setup(n_act=n_act)
         loss_fn = TD3Loss(
@@ -1544,8 +1546,24 @@ class TestTD3(LossModuleTestBase):
             loss_function="l2",
             separate_losses=separate_losses,
         )
+        loss_fn_deprec = TD3Loss_deprecated(
+            actor,
+            value,
+            action_spec=BoundedTensorSpec(shape=(n_act,), minimum=-1, maximum=1),
+            loss_function="l2",
+            separate_losses=separate_losses,
+        )
+        TensorDict.from_module(loss_fn_deprec).apply(
+            lambda x, y: x.data.copy_(y.data), TensorDict.from_module(loss_fn)
+        )
         with pytest.warns(UserWarning, match="No target network updater has been"):
+            torch.manual_seed(0)
             loss = loss_fn(td)
+            torch.manual_seed(0)
+            loss_deprec = loss_fn_deprec(td)
+            for key in loss.keys():
+                print(key)
+                torch.testing.assert_close(loss.get(key), loss_deprec.get(key))
 
             assert all(
                 (p.grad is None) or (p.grad == 0).all()
@@ -1794,6 +1812,7 @@ class TestTD3(LossModuleTestBase):
         with pytest.warns(UserWarning, match="No target network updater has been"):
             torch.manual_seed(0)
             loss_val_td = loss(td)
+
             torch.manual_seed(0)
             loss_val = loss(**kwargs)
             for i, key in enumerate(loss_val_td.keys()):
