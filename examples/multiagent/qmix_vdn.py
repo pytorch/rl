@@ -51,7 +51,7 @@ def train(seed):
 
     config = {
         # QMIX
-        "mixer_type": "qmix",
+        "mixer_type": "qmix",  # or "vdn"
         # RL
         "gamma": 0.9,
         "seed": seed,
