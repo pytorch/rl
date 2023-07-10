@@ -2,13 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import os
+import urllib
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
 
 import torch
-from tensordict.tensordict import make_tensordict
+
+from tensordict import PersistentTensorDict
+from tensordict.tensordict import make_tensordict, TensorDict
 
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.replay_buffers import TensorDictReplayBuffer
@@ -75,7 +79,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
               differ. In particular, the ``"timeout"`` key (used to determine the
               end of an episode) may be absent when ``from_env=False`` but present
               otherwise, leading to a different slicing when ``traj_splits`` is enabled.
-
+        direct_download (bool): if ``True`` (default), the data will be downloaded without
+            requiring D4RL. This is not compatible with ``from_env=True``.
         use_timeout_as_done (bool, optional): if ``True``, ``done = terminal | timeout``.
             Otherwise, only the ``terminal`` key is used. Defaults to ``True``.
         **env_kwargs (key-value pairs): additional kwargs for
@@ -86,7 +91,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
     Examples:
         >>> from torchrl.data.datasets.d4rl import D4RLExperienceReplay
         >>> from torchrl.envs import ObservationNorm
-        >>> data = D4RLExperienceReplay("maze2d-umaze-v1")
+        >>> data = D4RLExperienceReplay("maze2d-umaze-v1", 128)
         >>> # we can append transforms to the dataset
         >>> data.append_transform(ObservationNorm(loc=-1, scale=1.0))
         >>> data.sample(128)
@@ -300,13 +305,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         split_trajs: bool = False,
         from_env: bool = True,
         use_timeout_as_done: bool = True,
-        direct_download: bool = False,
+        direct_download: bool = True,
         **env_kwargs,
     ):
         self.from_env = from_env
         self.use_timeout_as_done = use_timeout_as_done
         if not direct_download:
-            type(self)._import_d4rl()
+            self._import_d4rl()
 
             if not self._has_d4rl:
                 raise ImportError("Could not import d4rl") from self.D4RL_ERR
@@ -337,6 +342,18 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def _get_dataset_direct_download(self, name, env_kwargs):
         """Directly download and use a D4RL dataset."""
+        if env_kwargs:
+            raise RuntimeError("Cannot pass env_kwargs when `direct_download=True`.")
+        url = self.D4RL_DATASETS.get(name, None)
+        if url is None:
+            raise KeyError(f"Env {name} not found.")
+        h5path = _download_dataset_from_url(url)
+        # h5path_parent = Path(h5path).parent
+        dataset = PersistentTensorDict.from_h5(h5path)
+        dataset = dataset.to_tensordict()
+        with dataset.unlock_():
+            dataset = self._process_data_from_env(dataset)
+        return dataset
 
     def _get_dataset_direct(self, name, env_kwargs):
         from torchrl.envs.libs.gym import GymWrapper
@@ -428,6 +445,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             }
         )
         dataset = dataset.unflatten_keys("/")
+        dataset = self._process_data_from_env(dataset, env)
+        return dataset
+
+    def _process_data_from_env(self, dataset, env=None):
         if "metadata" in dataset.keys():
             metadata = dataset.get("metadata")
             dataset = dataset.exclude("metadata")
@@ -458,10 +479,11 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             pass
 
         # let's make sure that the dtypes match what's expected
-        for key, spec in env.observation_spec.items(True, True):
-            dataset[key] = dataset[key].to(spec.dtype)
-        dataset["action"] = dataset["action"].to(env.action_spec.dtype)
-        dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
+        if env is not None:
+            for key, spec in env.observation_spec.items(True, True):
+                dataset[key] = dataset[key].to(spec.dtype)
+            dataset["action"] = dataset["action"].to(env.action_spec.dtype)
+            dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
         dataset["done"] = dataset["done"].bool()
 
         dataset["done"] = dataset["done"].unsqueeze(-1)
@@ -478,7 +500,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset.clone()
         )  # make sure that all tensors have a different data_ptr
         self._shift_reward_done(dataset)
-        self.specs = env.specs.clone()
+        if env is not None:
+            self.specs = env.specs.clone()
+        else:
+            self.specs = None
         return dataset
 
     def _shift_reward_done(self, dataset):
@@ -488,3 +513,39 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["done"][1:] = dataset["done"][:-1].clone()
         dataset["reward"][0] = 0
         dataset["done"][0] = 0
+
+
+def _download_dataset_from_url(dataset_url):
+    dataset_filepath = _filepath_from_url(dataset_url)
+    if not os.path.exists(dataset_filepath):
+        print("Downloading dataset:", dataset_url, "to", dataset_filepath)
+        urllib.request.urlretrieve(dataset_url, dataset_filepath)
+    if not os.path.exists(dataset_filepath):
+        raise IOError("Failed to download dataset from %s" % dataset_url)
+    return dataset_filepath
+
+
+def _filepath_from_url(dataset_url):
+    _, dataset_name = os.path.split(dataset_url)
+    dataset_filepath = os.path.join(DATASET_PATH, dataset_name)
+    return dataset_filepath
+
+
+def _set_dataset_path(path):
+    global DATASET_PATH
+    DATASET_PATH = path
+    os.makedirs(path, exist_ok=True)
+
+
+_set_dataset_path(
+    os.environ.get(
+        "D4RL_DATASET_DIR", os.path.expanduser("~/.cache/torchrl/data/d4rl/datasets")
+    )
+)
+
+if __name__ == "__main__":
+    data = D4RLExperienceReplay("kitchen-partial-v0", batch_size=128)
+    print(data)
+    for sample in data:
+        print(sample)
+        break
