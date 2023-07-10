@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 import torch
@@ -6,12 +6,24 @@ from torch import nn
 
 
 class Mixer(nn.Module):
+    """A multi-agent value mixer.
+
+    It transforms the local value of each agent's chosen action of shape (*B, self.n_agents),
+    into a global value with shape (*B)
+
+    Args:
+        n_agents (int): number of agents,
+        device (str or torch.Device): torch device for the network
+        needs_state (bool): whether the mixer takes a global state as input
+        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
+    """
+
     def __init__(
         self,
         n_agents: int,
         device,
         needs_state: bool,
-        state_shape: torch.Size,
+        state_shape: Union[Tuple[int, ...], torch.Size],
     ):
         super().__init__()
 
@@ -21,6 +33,19 @@ class Mixer(nn.Module):
         self.state_shape = state_shape
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
+        """Forward pass of the mixer.
+
+        Args:
+            *inputs: The first input should be the value of the chosen action of shape (*B, self.n_agents),
+            representing the local q value of each agent.
+            The second input (optional, used only in some mixers)
+            is the shared state of all agents of shape (*B, *self.state_shape).
+
+
+        Returns:
+            The global value of the chosen actions obtained after mixing, with shape (*B)
+
+        """
         if not self.needs_state:
             if len(inputs) > 1:
                 raise ValueError(
@@ -39,30 +64,41 @@ class Mixer(nn.Module):
                     f" but got state shape {state.shape}"
                 )
 
-        if chosen_action_value.shape[-2:] != (self.n_agents, 1):
+        if chosen_action_value.shape[-1] != self.n_agents:
             raise ValueError(
-                f"Mixer network expected chosen_action_value with last 2 dimensions {[self.n_agents, 1]},"
+                f"Mixer network expected chosen_action_value with last dimension {self.n_agents},"
                 f" but got {chosen_action_value.shape}"
             )
+        batch_dims = chosen_action_value.shape[:-1]
 
         if not self.needs_state:
             output = self.mix(chosen_action_value, None)
         else:
             output = self.mix(chosen_action_value, state)
 
-        if output.shape[-1] != 1:
+        if output.shape != batch_dims:
             raise ValueError(
-                f"Mixer network expected output with last dimension 1,"
+                f"Mixer network expected output with same shape as input minus the multi-agent dimension,"
                 f" but got {output.shape}"
             )
 
         return output
 
     def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
+        """Forward pass for the mixer.
+
+        Args:
+            chosen_action_value: Tensor of shape [*B, n_agents]
+
+        Returns:
+            chosen_action_value: Tensor of shape [*B]
+        """
         raise NotImplementedError
 
 
 class VDNMixer(Mixer):
+    """Mixer from https://arxiv.org/abs/1706.05296 ."""
+
     def __init__(
         self,
         n_agents: int,
@@ -76,15 +112,12 @@ class VDNMixer(Mixer):
         )
 
     def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
-        """Forward pass for the mixer.
-
-        Args:
-            chosen_action_value: Tensor of shape [*B, n_agents, 1]
-        """
-        return chosen_action_value.sum(dim=-2)
+        return chosen_action_value.sum(dim=-1)
 
 
 class QMixer(Mixer):
+    """Mixer from https://arxiv.org/abs/1803.11485 ."""
+
     def __init__(
         self,
         state_shape,
@@ -117,13 +150,7 @@ class QMixer(Mixer):
         )
 
     def mix(self, chosen_action_value: torch.Tensor, state: torch.Tensor):
-        """Forward pass for the mixer.
-
-        Args:
-            chosen_action_value: Tensor of shape [*B, n_agents, 1]
-            state: Tensor of shape [*B, *state_shape]
-        """
-        bs = chosen_action_value.shape[:-2]
+        bs = chosen_action_value.shape[:-1]
         state = state.view(-1, self.state_dim)
         chosen_action_value = chosen_action_value.view(-1, 1, self.n_agents)
         # First layer
@@ -142,5 +169,5 @@ class QMixer(Mixer):
         # Compute final output
         y = torch.bmm(hidden, w_final) + v  # [-1, 1, 1]
         # Reshape and return
-        q_tot = y.view(*bs, 1)
+        q_tot = y.view(*bs)
         return q_tot
