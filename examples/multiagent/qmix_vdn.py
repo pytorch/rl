@@ -39,7 +39,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = True
+    log = False
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -169,9 +169,6 @@ def train(seed):
         )
     else:
         raise ValueError("Mixer type not in the example")
-
-    with set_exploration_type(ExplorationType.RANDOM):
-        qnet_explore(env.reset().to(training_device))
 
     collector = SyncDataCollector(
         env,

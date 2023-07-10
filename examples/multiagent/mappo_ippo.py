@@ -39,7 +39,7 @@ def train(seed):
     torch.manual_seed(seed)
 
     # Log
-    log = True
+    log = False
 
     # Sampling
     frames_per_batch = 60_000  # Frames sampled each sampling iteration
@@ -159,8 +159,6 @@ def train(seed):
         module=module,
         in_keys=[("agents", "observation")],
     )
-
-    value_module(policy(env.reset().to(training_device)))
 
     collector = SyncDataCollector(
         env,
