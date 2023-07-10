@@ -116,17 +116,19 @@ class TestEnsembleModule:
         seq = TensorDictSequential(e0, e1)
         td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
         out = seq(td)
-        assert "spork" in out.keys(), "Ensemble forward failed to write keys"
-        assert out["spork"].shape == torch.Size(
-            [4, 5, 1]
-        ), "Ensemble forward failed to expand input"
-        same_outputs = torch.isclose(
-            out["spork"].repeat(4, 1, 1), out["spork"].repeat_interleave(4, dim=0)
-        ).reshape(4, 4, 5, 1)
-        mask_out_diags = torch.eye(4).logical_not()
-        assert not torch.any(
-            same_outputs[mask_out_diags]
-        ), "Ensemble outputs should be different"
+
+        for out_key in ["dork", "spork"]:
+            assert out_key in out.keys(), f"Ensemble forward failed to write {out_key}"
+            assert out[out_key].shape == torch.Size(
+                [4, 5, 1]
+            ), f"Ensemble forward failed to expand input for {out_key}"
+            same_outputs = torch.isclose(
+                out[out_key].repeat(4, 1, 1), out[out_key].repeat_interleave(4, dim=0)
+            ).reshape(4, 4, 5, 1)
+            mask_out_diags = torch.eye(4).logical_not()
+            assert not torch.any(
+                same_outputs[mask_out_diags]
+            ), f"Module ensemble outputs should be different for {out_key}"
 
 
 class TestTDModule:
