@@ -155,7 +155,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=2 \
   collector_device=cuda:0 \
   device=cuda:0 \
-  mode=offline
+  mode=offline \
+  logger=
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \

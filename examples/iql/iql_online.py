@@ -76,12 +76,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.device)
 
     exp_name = generate_exp_name("Online_IQL", cfg.exp_name)
-    logger = get_logger(
-        logger_type=cfg.logger,
-        logger_name="iql_logging",
-        experiment_name=exp_name,
-        wandb_kwargs={"mode": cfg.mode},
-    )
+    logger = None
+    if cfg.logger is not None:
+        logger = get_logger(
+            logger_type=cfg.logger,
+            logger_name="iql_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.mode},
+        )
 
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -300,8 +302,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     "value_loss": np.mean(value_losses),
                 }
             )
-        for key, value in train_log.items():
-            logger.log_scalar(key, value, step=collected_frames)
+        if logger is not None:
+            for key, value in train_log.items():
+                logger.log_scalar(key, value, step=collected_frames)
 
         with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
             eval_rollout = test_env.rollout(
@@ -312,7 +315,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
             rewards_eval.append((i, eval_reward))
             eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
-            logger.log_scalar("test_reward", rewards_eval[-1][1], step=collected_frames)
+            if logger is not None:
+                logger.log_scalar(
+                    "test_reward", rewards_eval[-1][1], step=collected_frames
+                )
         if len(rewards_eval):
             pbar.set_description(
                 f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
