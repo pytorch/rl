@@ -58,6 +58,7 @@ from .tensordict_module import (
     SafeSequential,
     TanhModule,
     ValueOperator,
+    VmapModule,
     WorldModelWrapper,
 )
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
