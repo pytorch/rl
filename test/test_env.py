@@ -1568,8 +1568,8 @@ class TestConcurrentEnvs:
             policy,
             frames_per_batch=n_workers * 100,
             total_frames=N * n_workers * 100,
-            # storing_device=device,
-            # device=device,
+            storing_device=device,
+            device=device,
         )
         single_collectors = [
             SyncDataCollector(
@@ -1577,24 +1577,26 @@ class TestConcurrentEnvs:
                 policy,
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
-                # storing_device=device,
-                # device=device,
+                storing_device=device,
+                device=device,
             )
             for i in range(n_workers)
         ]
-        print(collector.storing_device, collector.device)
-        print(single_collectors[0].storing_device, single_collectors[0].device, single_collectors[0].env.device)
-        raise RuntimeError
-        collector = iter(collector)
-        single_collectors = [iter(sc) for sc in single_collectors]
+        iter_collector = iter(collector)
+        iter_single_collectors = [iter(sc) for sc in single_collectors]
 
         r_p = []
         r_s = []
         for _ in range(N):
             with torch.no_grad():
-                r_p.append(next(collector).clone())
-                r_s.append(torch.cat([next(sc) for sc in single_collectors]))
+                r_p.append(next(iter_collector).clone())
+                r_s.append(torch.cat([next(sc) for sc in iter_single_collectors]))
 
+        collector.shutdown()
+        for sc in single_collectors:
+            sc.shutdown()
+        del collector
+        del single_collectors
         r_p = torch.stack(r_p).contiguous()
         r_s = torch.stack(r_s).contiguous()
         td_equals = r_p == r_s

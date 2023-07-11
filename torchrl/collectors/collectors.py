@@ -750,14 +750,18 @@ class SyncDataCollector(DataCollectorBase):
                     self.env.close()
 
                 if self.split_trajs:
-                    tensordict_out = split_trajectories(tensordict_out, prefix="collector")
+                    tensordict_out = split_trajectories(
+                        tensordict_out, prefix="collector"
+                    )
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
                     excluded_keys = [
                         key for key in tensordict_out.keys() if key.startswith("_")
                     ]
-                    tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
+                    tensordict_out = tensordict_out.exclude(
+                        *excluded_keys, inplace=True
+                    )
                 if self.return_same_td:
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
