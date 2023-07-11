@@ -602,6 +602,10 @@ class SyncDataCollector(DataCollectorBase):
             exploration_type if exploration_type else DEFAULT_EXPLORATION_TYPE
         )
         self.return_same_td = return_same_td
+        if return_same_td and self.storing_device.type == "cuda":
+            self.event = torch.cuda.Event()
+        else:
+            self.event = None
 
         self._tensordict = env.reset()
         traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
@@ -753,6 +757,9 @@ class SyncDataCollector(DataCollectorBase):
             if self.return_same_td:
                 # This is used with multiprocessed collectors to use the buffers
                 # stored in the tensordict.
+                if self.event is not None:
+                    self.event.record()
+                    self.event.synchronize()
                 yield tensordict_out
             else:
                 # we must clone the values, as the tensordict is updated in-place.
