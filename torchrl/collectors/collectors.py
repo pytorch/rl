@@ -524,12 +524,6 @@ class SyncDataCollector(DataCollectorBase):
                     )
                 env.update_kwargs(create_env_kwargs)
 
-        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
-            policy=policy,
-            device=device,
-            observation_spec=self.env.observation_spec,
-        )
-
         if storing_device is None:
             if device is not None:
                 storing_device = device
@@ -547,6 +541,12 @@ class SyncDataCollector(DataCollectorBase):
         self.closed = False
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
+
+        (self.policy, self.device, self.get_weights_fn,) = self._get_policy_and_device(
+            policy=policy,
+            device=device,
+            observation_spec=self.env.observation_spec,
+        )
 
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
