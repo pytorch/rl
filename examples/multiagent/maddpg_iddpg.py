@@ -5,15 +5,16 @@
 
 import time
 
+import hydra
 import torch
 
-import wandb
 from tensordict.nn import TensorDictModule
 from torch import nn
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -24,93 +25,53 @@ from torchrl.modules import (
 )
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
-from torchrl.record.loggers import generate_exp_name
-from torchrl.record.loggers.wandb import WandbLogger
-from utils.logging import log_evaluation, log_training
+from utils.logging import init_logging, log_evaluation, log_training
 
 
 def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
-def train(seed):
+@hydra.main(version_base="1.1", config_path=".", config_name="maddpg_iddpg")
+def train(cfg: "DictConfig"):  # noqa: F821
     # Device
-    training_device = "cpu" if not torch.has_cuda else "cuda:0"
-    vmas_device = training_device
+    cfg.train.device = "cpu" if not torch.has_cuda else "cuda:0"
+    cfg.env.device = cfg.train.device
 
     # Seeding
-    seed = seed
-    torch.manual_seed(seed)
-
-    # Log
-    log = False
+    torch.manual_seed(cfg.seed)
 
     # Sampling
-    frames_per_batch = 60_000  # Frames sampled each sampling iteration
-    max_steps = 100
-    vmas_envs = frames_per_batch // max_steps
-    n_iters = 500  # Number of sampling/training iterations
-    total_frames = frames_per_batch * n_iters
-    memory_size = frames_per_batch
-
-    scenario_name = "balance"
-    env_config = {
-        "n_agents": 3,
-    }
-
-    config = {
-        # RL
-        "gamma": 0.9,
-        "seed": seed,
-        # Sampling,
-        "frames_per_batch": frames_per_batch,
-        "max_steps": max_steps,
-        "vmas_envs": vmas_envs,
-        "n_iters": n_iters,
-        "total_frames": total_frames,
-        "memory_size": memory_size,
-        "vmas_device": vmas_device,
-        # Training
-        "num_epochs": 45,  # optimization steps per batch of data collected
-        "minibatch_size": 4096,  # size of minibatches used in each epoch
-        "lr": 5e-5,
-        "max_grad_norm": 40.0,
-        "training_device": training_device,
-        # Target
-        "tau": 0.005,
-        # Evaluation
-        "evaluation_interval": 20,
-        "evaluation_episodes": 200,
-    }
-
-    model_config = {
-        "shared_parameters": False,  # MADDPG paper does not use shared params because reward function can be different
-        "centralised_critic": True,  # MADDPG if True, IDDPG if False
-    }
+    cfg.env.vmas_envs = cfg.collector.frames_per_batch // cfg.env.max_steps
+    cfg.collector.total_frames = cfg.collector.frames_per_batch * cfg.collector.n_iters
+    cfg.buffer.memory_size = cfg.collector.frames_per_batch
 
     # Create env and env_test
     env = VmasEnv(
-        scenario=scenario_name,
-        num_envs=vmas_envs,
+        scenario=cfg.env.scenario_name,
+        num_envs=cfg.env.vmas_envs,
         continuous_actions=True,
-        max_steps=max_steps,
-        device=vmas_device,
-        seed=seed,
+        max_steps=cfg.env.max_steps,
+        device=cfg.env.device,
+        seed=cfg.seed,
         # Scenario kwargs
-        **env_config,
+        **cfg.env.scenario,
+    )
+    env = TransformedEnv(
+        env,
+        RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
     )
 
     env_test = VmasEnv(
-        scenario=scenario_name,
-        num_envs=config["evaluation_episodes"],
+        scenario=cfg.env.scenario_name,
+        num_envs=cfg.eval.evaluation_episodes,
         continuous_actions=True,
-        max_steps=max_steps,
-        device=vmas_device,
-        seed=seed,
+        max_steps=cfg.env.max_steps,
+        device=cfg.env.device,
+        seed=cfg.seed,
         # Scenario kwargs
-        **env_config,
+        **cfg.env.scenario,
     )
-    env_config.update({"n_agents": env.n_agents, "scenario_name": scenario_name})
 
     # Policy
     actor_net = MultiAgentMLP(
@@ -118,8 +79,8 @@ def train(seed):
         n_agent_outputs=env.action_spec.shape[-1],
         n_agents=env.n_agents,
         centralised=False,
-        share_params=model_config["shared_parameters"],
-        device=training_device,
+        share_params=cfg.model.shared_parameters,
+        device=cfg.train.device,
         depth=2,
         num_cells=256,
         activation_class=nn.Tanh,
@@ -142,7 +103,7 @@ def train(seed):
 
     policy_explore = AdditiveGaussianWrapper(
         policy,
-        annealing_num_steps=int(total_frames * (1 / 2)),
+        annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
         action_key=env.action_key,
     )
 
@@ -152,9 +113,9 @@ def train(seed):
         + env.action_spec.shape[-1],  # Q critic takes action and value
         n_agent_outputs=1,
         n_agents=env.n_agents,
-        centralised=model_config["centralised_critic"],
-        share_params=model_config["shared_parameters"],
-        device=training_device,
+        centralised=cfg.model.centralised_critic,
+        share_params=cfg.model.shared_parameters,
+        device=cfg.train.device,
         depth=2,
         num_cells=256,
         activation_class=nn.Tanh,
@@ -168,16 +129,16 @@ def train(seed):
     collector = SyncDataCollector(
         env,
         policy_explore,
-        device=vmas_device,
-        storing_device=training_device,
-        frames_per_batch=frames_per_batch,
-        total_frames=total_frames,
+        device=cfg.env.device,
+        storing_device=cfg.train.device,
+        frames_per_batch=cfg.collector.frames_per_batch,
+        total_frames=cfg.collector.total_frames,
     )
 
     replay_buffer = TensorDictReplayBuffer(
-        storage=LazyTensorStorage(memory_size, device=training_device),
+        storage=LazyTensorStorage(cfg.buffer.memory_size, device=cfg.train.device),
         sampler=SamplerWithoutReplacement(),
-        batch_size=config["minibatch_size"],
+        batch_size=cfg.train.minibatch_size,
     )
 
     loss_module = DDPGLoss(
@@ -187,27 +148,19 @@ def train(seed):
         state_action_value=("agents", "state_action_value"),
         reward=env.reward_key,
     )
-    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=config["gamma"])
-    target_net_updater = SoftUpdate(loss_module, eps=1 - config["tau"])
+    loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
+    target_net_updater = SoftUpdate(loss_module, eps=1 - cfg.loss.tau)
 
-    optim = torch.optim.Adam(loss_module.parameters(), config["lr"])
+    optim = torch.optim.Adam(loss_module.parameters(), cfg.train.lr)
 
     # Logging
-    if log:
-        config.update({"model": model_config, "env": env_config})
+    if cfg.logger.backend:
         model_name = (
-            ("Het" if not model_config["shared_parameters"] else "")
-            + ("MA" if model_config["centralised_critic"] else "I")
+            ("Het" if not cfg.model.shared_parameters else "")
+            + ("MA" if cfg.model.centralised_critic else "I")
             + "DDPG"
         )
-        logger = WandbLogger(
-            exp_name=generate_exp_name(env_config["scenario_name"], model_name),
-            project=f"torchrl_{env_config['scenario_name']}",
-            group=model_name,
-            save_code=True,
-            config=config,
-        )
-        wandb.run.log_code(".")
+        logger = init_logging(cfg, model_name)
 
     total_time = 0
     total_frames = 0
@@ -231,8 +184,8 @@ def train(seed):
 
         training_tds = []
         training_start = time.time()
-        for _ in range(config["num_epochs"]):
-            for _ in range(frames_per_batch // config["minibatch_size"]):
+        for _ in range(cfg.train.num_epochs):
+            for _ in range(cfg.collector.frames_per_batch // cfg.train.minibatch_size):
                 subdata = replay_buffer.sample()
                 loss_vals = loss_module(subdata)
                 training_tds.append(loss_vals.detach())
@@ -242,7 +195,7 @@ def train(seed):
                 loss_value.backward()
 
                 total_norm = torch.nn.utils.clip_grad_norm_(
-                    loss_module.parameters(), config["max_grad_norm"]
+                    loss_module.parameters(), cfg.train.max_grad_norm
                 )
                 training_tds[-1].set("grad_norm", total_norm.mean())
 
@@ -250,7 +203,7 @@ def train(seed):
                 optim.zero_grad()
                 target_net_updater.step()
 
-        policy_explore.step(frames=current_frames)
+        policy_explore.step(frames=current_frames)  # Update exploration annealing
         collector.update_policy_weights_()
 
         training_time = time.time() - training_start
@@ -260,7 +213,7 @@ def train(seed):
         training_tds = torch.stack(training_tds)
 
         # More logs
-        if log:
+        if cfg.logger.backend:
             log_training(
                 logger,
                 training_tds,
@@ -271,18 +224,19 @@ def train(seed):
                 i,
                 current_frames,
                 total_frames,
+                step=i,
             )
 
         if (
-            config["evaluation_episodes"] > 0
-            and i % config["evaluation_interval"] == 0
-            and log
+            cfg.eval.evaluation_episodes > 0
+            and i % cfg.eval.evaluation_interval == 0
+            and cfg.logger.backend
         ):
             evaluation_start = time.time()
             with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
                 env_test.frames = []
                 rollouts = env_test.rollout(
-                    max_steps=max_steps,
+                    max_steps=cfg.env.max_steps,
                     policy=policy,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
@@ -292,19 +246,12 @@ def train(seed):
 
                 evaluation_time = time.time() - evaluation_start
 
-                log_evaluation(
-                    logger,
-                    rollouts,
-                    env_test,
-                    evaluation_time,
-                )
+                log_evaluation(logger, rollouts, env_test, evaluation_time, step=i)
 
-        if log:
+        if cfg.logger.backend == "wandb":
             logger.experiment.log({}, commit=True)
         sampling_start = time.time()
-    wandb.finish()
 
 
 if __name__ == "__main__":
-    for seed in [0]:
-        train(seed)
+    train()
