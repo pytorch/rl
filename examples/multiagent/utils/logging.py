@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import os
 
 import numpy as np
 import torch
@@ -15,17 +16,13 @@ from torchrl.record.loggers.wandb import WandbLogger
 def init_logging(cfg, model_name: str):
     logger = get_logger(
         logger_type=cfg.logger.backend,
-        logger_name=".",
+        logger_name=os.getcwd(),
         experiment_name=generate_exp_name(cfg.env.scenario_name, model_name),
         wandb_kwargs={
             "group": model_name,
             "project": f"torchrl_{cfg.env.scenario_name}",
         },
     )
-    if cfg.logger.backend == "wandb":
-        import wandb
-
-        wandb.run.log_code(".")
     logger.log_hparams(cfg)
     return logger
 
@@ -97,8 +94,8 @@ def log_training(
     if isinstance(logger, WandbLogger):
         logger.experiment.log(to_log, commit=False)
     else:
-        for key, value in to_log.keys():
-            logger.log_scalar(key, value, step=step)
+        for key, value in to_log.items():
+            logger.log_scalar(key.replace("/", "_"), value, step=step)
 
     return to_log
 
@@ -120,7 +117,6 @@ def log_evaluation(
             0
         ]  # First done index for this traj
         rollouts[k] = r[: done_index + 1]
-    vid = np.transpose(env_test.frames[: rollouts[0].batch_size[0]], (0, 3, 1, 2))
 
     rewards = [td.get(("next", "agents", "reward")).sum(0).mean() for td in rollouts]
     to_log = {
@@ -132,6 +128,11 @@ def log_evaluation(
         "eval/evaluation_time": evaluation_time,
     }
 
+    vid = torch.tensor(
+        np.transpose(env_test.frames[: rollouts[0].batch_size[0]], (0, 3, 1, 2)),
+        dtype=torch.uint8,
+    ).unsqueeze(0)
+
     if isinstance(logger, WandbLogger):
         logger.experiment.log(to_log, commit=False)
         logger.experiment.log(
@@ -141,6 +142,6 @@ def log_evaluation(
             commit=False,
         )
     else:
-        for key, value in to_log.keys():
-            logger.log_scalar(key, value, step=step)
-        logger.log_video("eval/video", torch.Tensor(vid), step=step)
+        for key, value in to_log.items():
+            logger.log_scalar(key.replace("/", "_"), value, step=step)
+        logger.log_video("eval_video", vid, step=step)
