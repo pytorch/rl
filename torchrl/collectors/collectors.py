@@ -733,7 +733,7 @@ class SyncDataCollector(DataCollectorBase):
         """
         if self.storing_device.type == "cuda":
             stream = torch.cuda.Stream(self.storing_device, priority=-1)
-            event = torch.cuda.Event(stream)
+            event = stream.record_event()
         else:
             event = None
             stream = None
