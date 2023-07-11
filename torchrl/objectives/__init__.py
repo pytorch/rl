@@ -10,6 +10,7 @@ from .ddpg import DDPGLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from .iql import IQLLoss
+from .multiagent import *
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from .redq import REDQLoss
 from .reinforce import ReinforceLoss

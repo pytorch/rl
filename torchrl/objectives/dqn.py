@@ -51,7 +51,7 @@ class DQNLoss(LossModule):
             :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
             If not provided, an attempt to retrieve it from the value network
             will be made.
-        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+        priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             The key at which priority is assumed to be stored within TensorDicts added
             to this ReplayBuffer.  This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
@@ -123,10 +123,10 @@ class DQNLoss(LossModule):
                 Will be used for the underlying value estimator. Defaults to ``"advantage"``.
             value_target (NestedKey): The input tensordict key where the target state value is expected.
                 Will be used for the underlying value estimator Defaults to ``"value_target"``.
-            value (NestedKey): The input tensordict key where the state value is expected.
-                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            state_action_value (NestedKey): The input tensordict key where the state action value is expected.
-                Defaults to ``"state_action_value"``.
+            value (NestedKey): The input tensordict key where the chosen action value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"chosen_action_value"``.
+            action_value (NestedKey): The input tensordict key where the action value is expected.
+                Defaults to ``"action_value"``.
             action (NestedKey): The input tensordict key where the action is expected.
                 Defaults to ``"action"``.
             priority (NestedKey): The input tensordict key where the target priority is written to.
