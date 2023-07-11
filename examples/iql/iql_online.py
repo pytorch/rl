@@ -77,7 +77,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     exp_name = generate_exp_name("Online_IQL", cfg.exp_name)
     logger = None
-    if cfg.logger is not None:
+    if cfg.logger:
         logger = get_logger(
             logger_type=cfg.logger,
             logger_name="iql_logging",

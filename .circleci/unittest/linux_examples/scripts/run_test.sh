@@ -254,7 +254,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=1 \
   mode=offline \
   device=cuda:0 \
-  collector_device=cuda:0
+  collector_device=cuda:0 \
+  logger=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
