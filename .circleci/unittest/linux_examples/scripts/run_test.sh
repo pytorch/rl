@@ -38,7 +38,7 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_tra
   optim.warmup_steps=10 \
   optim.device=cuda:0 \
   logger.backend=
-python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_td.py \
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
   optim.pretrain_gradient_steps=55 \
   optim.updates_per_episode=3 \
   optim.warmup_steps=10 \

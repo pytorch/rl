@@ -322,18 +322,21 @@ algorithms, such as DQN, DDPG or Dreamer.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    DuelingCnnDQNet
-    DistributionalDQNnet
+    DTActor
     DdpgCnnActor
     DdpgCnnQNet
     DdpgMlpActor
     DdpgMlpQNet
+    DecisionTransformer
+    DistributionalDQNnet
     DreamerActor
+    DuelingCnnDQNet
     LSTMModule
-    ObsEncoder
     ObsDecoder
-    RSSMPrior
+    ObsEncoder
+    OnlineDTActor
     RSSMPosterior
+    RSSMPrior
 
 
 Exploration

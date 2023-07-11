@@ -7,7 +7,7 @@ from typing import Optional, Sequence, Tuple, Union
 
 import torch
 
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     dispatch,
     TensorDictModule,
@@ -1619,6 +1619,18 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
     The output will be a TensorDict with the same keys as the input, but with only the last
     action of the predicted action sequence and the last return to go.
 
+    This module creates returns a modified copy of the tensordict, ie. it does
+    **not** modify the tensordict in-place.
+
+    .. note:: If the action, observation or reward-to-go key is not standard,
+        the method :meth:`~.set_tensor_keys` should be used, e.g.
+
+            >>> dt_inference_wrapper.set_tensor_keys(action="foo", observation="bar", return_to_go="baz")
+
+    The in_keys are the observation, action and return-to-go keys. The out-keys
+    match the in-keys, with the addition of any other out-key from the policy
+    (eg., parameters of the distribution or hidden values).
+
     Args:
         policy (TensorDictModule): The policy module that takes in
             observations and produces an action value
@@ -1640,7 +1652,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         ...      DecisionTransformerInferenceWrapper,
         ...  )
         >>> dtactor = DTActor(state_dim=4, action_dim=2,
-        ...             transformer_config=DTActor.get_default_config()
+        ...             transformer_config=DTActor.default_config()
         ... )
         >>> actor_module = TensorDictModule(
         ...         dtactor,
@@ -1701,6 +1713,7 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
                 self._spec[self.action_key] = None
         else:
             self._spec = CompositeSpec({key: None for key in policy.out_keys})
+        self.checked = False
 
     @property
     def in_keys(self):
@@ -1708,7 +1721,12 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
 
     @property
     def out_keys(self):
-        return [self.observation_key, self.action_key, self.return_to_go_key]
+        return sorted(
+            set(self.td_module.out_keys).union(
+                {self.observation_key, self.action_key, self.return_to_go_key}
+            ),
+            key=str,
+        )
 
     def set_tensor_keys(self, **kwargs):
         """Sets the input keys of the module.
@@ -1719,12 +1737,18 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
             return_to_go (NestedKey, optional): The return_to_go key.
 
         """
-        observation_key = kwargs.pop("observation", None)
-        action_key = kwargs.pop("action", None)
-        return_to_go_key = kwargs.pop("return_to_go", None)
+        observation_key = unravel_key(kwargs.pop("observation", self.observation_key))
+        action_key = unravel_key(kwargs.pop("action", self.action_key))
+        return_to_go_key = unravel_key(
+            kwargs.pop("return_to_go", self.return_to_go_key)
+        )
         if kwargs:
             raise TypeError(
                 f"Got unknown input(s) {kwargs.keys()}. Accepted keys are 'action', 'return_to_go' and 'observation'."
+            )
+        if action_key not in self.td_module.out_keys:
+            raise ValueError(
+                f"The action key {action_key} was not found in the policy out_keys {self.td_module.out_keys}."
             )
         self.observation_key = observation_key
         self.action_key = action_key
@@ -1742,9 +1766,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
 
     def mask_context(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Mask the context of the input sequences."""
-        observation = tensordict.get(self.observation_key)
-        action = tensordict.get(self.action_key)
-        return_to_go = tensordict.get(self.return_to_go_key)
+        observation = tensordict.get(self.observation_key).clone()
+        action = tensordict.get(self.action_key).clone()
+        return_to_go = tensordict.get(self.return_to_go_key).clone()
         self._check_tensor_dims(return_to_go, observation, action)
 
         observation[..., : -self.inference_context, :] = 0
@@ -1765,27 +1789,35 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         tensordict.set(self.return_to_go_key, return_to_go)
         return tensordict
 
+    def check_keys(self):
+        # an exception will be raised if the action key mismatch
+        self.set_tensor_keys()
+        self.checked = True
+
+    @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if not self.checked:
+            self.check_keys()
         """Forward pass of the inference wrapper."""
-        unmasked_tensordict = tensordict.clone(False)
+        tensordict = tensordict.clone(False)
+        obs = tensordict.get(self.observation_key)
         # Mask the context of the input sequences
         tensordict = self.mask_context(tensordict)
         # forward pass
         tensordict = self.td_module.forward(tensordict)
-        # get last action prediciton
+        # get last action predicton
         out_action = tensordict.get(self.action_key)
-        idx = (slice(None),) * tensordict.ndim + (-1,)
-        out_action = out_action[idx]
+        if tensordict.ndim == out_action.ndim - 1:
+            # then time dimension is in the TD's dimensions, and we must get rid of it
+            tensordict.batch_size = tensordict.batch_size[:-1]
+        out_action = out_action[..., -1, :]
         tensordict.set(self.action_key, out_action)
         # out_rtg = tensordict.get(self.return_to_go_key)[:, -1]
         out_rtg = tensordict.get(self.return_to_go_key)
-        idx = (slice(None),) * tensordict.ndim + (-1,)
-        out_rtg = out_rtg[idx]
+        out_rtg = out_rtg[..., -1, :]
         tensordict.set(self.return_to_go_key, out_rtg)
         # set unmasked observation
-        tensordict.set(
-            self.observation_key, unmasked_tensordict.get(self.observation_key)
-        )
+        tensordict.set(self.observation_key, obs)
         return tensordict
 
 

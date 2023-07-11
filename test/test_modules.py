@@ -14,9 +14,21 @@ from packaging import version
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
-from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, TanhModule, ValueOperator
+from torchrl.modules import (
+    CEMPlanner,
+    DTActor,
+    LSTMNet,
+    OnlineDTActor,
+    SafeModule,
+    TanhModule,
+    ValueOperator,
+)
 from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models.decision_transformer import (
+    _has_transformers,
+    DecisionTransformer,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -735,6 +747,74 @@ def test_tanh_atanh(use_vmap, scale):
 
     xp.sum().backward()
     torch.testing.assert_close(x.grad, torch.ones_like(x))
+
+
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed for TestDecisionTransformer"
+)
+class TestDecisionTransformer:
+    def test_init(self):
+        DecisionTransformer(
+            3,
+            4,
+        )
+        with pytest.raises(TypeError):
+            DecisionTransformer(3, 4, config="some_str")
+        DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_exec(self, batch_dims, T=5):
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        model = DecisionTransformer(
+            3,
+            4,
+            config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        out = model(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 16])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_dtactor(self, batch_dims, T=5):
+        dtactor = DTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        out = dtactor(observations, actions, r2go)
+        assert out.shape == torch.Size([*batch_dims, T, 4])
+
+    @pytest.mark.parametrize("batch_dims", [[], [3], [3, 4]])
+    def test_onlinedtactor(self, batch_dims, T=5):
+        dtactor = OnlineDTActor(
+            3,
+            4,
+            transformer_config=DecisionTransformer.DTConfig(
+                n_layer=2, n_embd=16, n_positions=16, n_inner=16, n_head=2
+            ),
+        )
+        observations = torch.randn(*batch_dims, T, 3)
+        actions = torch.randn(*batch_dims, T, 4)
+        r2go = torch.randn(*batch_dims, T, 1)
+        mu, sig = dtactor(observations, actions, r2go)
+        assert mu.shape == torch.Size([*batch_dims, T, 4])
+        assert sig.shape == torch.Size([*batch_dims, T, 4])
+        assert (dtactor.log_std_min < sig.log()).all()
+        assert (dtactor.log_std_max > sig.log()).all()
 
 
 if __name__ == "__main__":

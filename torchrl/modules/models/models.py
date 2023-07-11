@@ -2,6 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import dataclasses
+
 import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -1149,12 +1153,14 @@ class OnlineDTActor(nn.Module):
     Args:
         state_dim (int): state dimension.
         action_dim (int): action dimension.
-        transformer_config (Dict): config for the GPT2 transformer.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
     Examples:
         >>> model = OnlineDTActor(state_dim=4, action_dim=2,
-        ...     transformer_config=OnlineDTActor.get_default_config())
+        ...     transformer_config=OnlineDTActor.default_config())
         >>> observation = torch.randn(32, 10, 4)
         >>> action = torch.randn(32, 10, 2)
         >>> return_to_go = torch.randn(32, 10, 1)
@@ -1169,10 +1175,14 @@ class OnlineDTActor(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        transformer_config: Dict,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
         device: Optional[DEVICE_TYPING] = None,
     ):
         super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
         self.transformer = DecisionTransformer(
             state_dim=state_dim,
             action_dim=action_dim,
@@ -1198,7 +1208,7 @@ class OnlineDTActor(nn.Module):
         observation: torch.Tensor,
         action: torch.Tensor,
         return_to_go: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden_state = self.transformer(observation, action, return_to_go)
         out = self.action_layer(hidden_state)
         mu, log_std = torch.chunk(out, 2, -1)
@@ -1213,18 +1223,18 @@ class OnlineDTActor(nn.Module):
         return mu, std
 
     @classmethod
-    def get_default_config(cls):
+    def default_config(cls):
         """Default configuration for :class:`~.OnlineDTActor`."""
-        return {
-            "n_embd": 256,
-            "n_layer": 4,
-            "n_head": 4,
-            "n_inner": 1024,
-            "activation": "relu",
-            "n_positions": 1024,
-            "resid_pdrop": 0.1,
-            "attn_pdrop": 0.1,
-        }
+        return DecisionTransformer.DTConfig(
+            n_embd=256,
+            n_layer=4,
+            n_head=4,
+            n_inner=1024,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )
 
 
 class DTActor(nn.Module):
@@ -1236,12 +1246,14 @@ class DTActor(nn.Module):
     Args:
         state_dim (int): state dimension.
         action_dim (int): action dimension.
-        transformer_config (Dict): config for the GPT2 transformer.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`, optional):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
         device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
 
     Examples:
         >>> model = DTActor(state_dim=4, action_dim=2,
-        ...     transformer_config=DTActor.get_default_config())
+        ...     transformer_config=DTActor.default_config())
         >>> observation = torch.randn(32, 10, 4)
         >>> action = torch.randn(32, 10, 2)
         >>> return_to_go = torch.randn(32, 10, 1)
@@ -1255,10 +1267,14 @@ class DTActor(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        transformer_config: Dict,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
         device: Optional[DEVICE_TYPING] = None,
     ):
         super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
         self.transformer = DecisionTransformer(
             state_dim=state_dim,
             action_dim=action_dim,
@@ -1288,15 +1304,15 @@ class DTActor(nn.Module):
         return out
 
     @classmethod
-    def get_default_config(cls):
+    def default_config(cls):
         """Default configuration for :class:`~.DTActor`."""
-        return {
-            "n_embd": 256,
-            "n_layer": 4,
-            "n_head": 4,
-            "n_inner": 1024,
-            "activation": "relu",
-            "n_positions": 1024,
-            "resid_pdrop": 0.1,
-            "attn_pdrop": 0.1,
-        }
+        return DecisionTransformer.DTConfig(
+            n_embd=256,
+            n_layer=4,
+            n_head=4,
+            n_inner=1024,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )

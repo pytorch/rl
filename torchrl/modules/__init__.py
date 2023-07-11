@@ -20,6 +20,7 @@ from .models import (
     DdpgCnnQNet,
     DdpgMlpActor,
     DdpgMlpQNet,
+    DecisionTransformer,
     DistributionalDQNnet,
     DreamerActor,
     DTActor,
