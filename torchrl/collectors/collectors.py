@@ -2035,172 +2035,176 @@ def _main_async_collector(
     interruptor=None,
 ) -> None:
     if storing_device.type == "cuda":
-        event = torch.cuda.Event()
+        stream = torch.cuda.default_stream(storing_device)
+        event = torch.cuda.Event(stream)
     else:
+        stream = None
         event = None
-    pipe_parent.close()
-    # init variables that will be cleared when closing
-    tensordict = data = d = data_in = inner_collector = dc_iter = None
+    with torch.cuda.StreamContext(stream):
+        pipe_parent.close()
+        # init variables that will be cleared when closing
+        tensordict = data = d = data_in = inner_collector = dc_iter = None
 
-    # send the policy to device
-    try:
-        policy = policy.to(device)
-    except Exception:
-        if RL_WARNINGS:
-            warnings.warn(
-                "Couldn't cast the policy onto the desired device on remote process. "
-                "If your policy is not a nn.Module instance you can probably ignore this warning."
-            )
-    inner_collector = SyncDataCollector(
-        create_env_fn,
-        create_env_kwargs=create_env_kwargs,
-        policy=policy,
-        total_frames=-1,
-        max_frames_per_traj=max_frames_per_traj,
-        frames_per_batch=frames_per_batch,
-        reset_at_each_iter=reset_at_each_iter,
-        postproc=None,
-        split_trajs=False,
-        device=device,
-        storing_device=storing_device,
-        exploration_type=exploration_type,
-        reset_when_done=reset_when_done,
-        return_same_td=True,
-        interruptor=interruptor,
-    )
-    if verbose:
-        print("Sync data collector created")
-    dc_iter = iter(inner_collector)
-    j = 0
-    pipe_child.send("instantiated")
+        # send the policy to device
+        try:
+            policy = policy.to(device)
+        except Exception:
+            if RL_WARNINGS:
+                warnings.warn(
+                    "Couldn't cast the policy onto the desired device on remote process. "
+                    "If your policy is not a nn.Module instance you can probably ignore this warning."
+                )
+        inner_collector = SyncDataCollector(
+            create_env_fn,
+            create_env_kwargs=create_env_kwargs,
+            policy=policy,
+            total_frames=-1,
+            max_frames_per_traj=max_frames_per_traj,
+            frames_per_batch=frames_per_batch,
+            reset_at_each_iter=reset_at_each_iter,
+            postproc=None,
+            split_trajs=False,
+            device=device,
+            storing_device=storing_device,
+            exploration_type=exploration_type,
+            reset_when_done=reset_when_done,
+            return_same_td=True,
+            interruptor=interruptor,
+        )
+        if verbose:
+            print("Sync data collector created")
+        dc_iter = iter(inner_collector)
+        j = 0
+        pipe_child.send("instantiated")
 
-    has_timed_out = False
-    counter = 0
-    while True:
-        _timeout = _TIMEOUT if not has_timed_out else 1e-3
-        if pipe_child.poll(_timeout):
-            counter = 0
-            data_in, msg = pipe_child.recv()
-            if verbose:
-                print(f"worker {idx} received {msg}")
-        else:
-            if verbose:
-                print(f"poll failed, j={j}, worker={idx}")
-            # default is "continue" (after first iteration)
-            # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
-            # in that case, the main process probably expects the worker to continue collect data
-            if has_timed_out:
+        has_timed_out = False
+        counter = 0
+        while True:
+            _timeout = _TIMEOUT if not has_timed_out else 1e-3
+            if pipe_child.poll(_timeout):
                 counter = 0
-                # has_timed_out is True if the process failed to send data, which will
-                # typically occur if main has taken another batch (i.e. the queue is Full).
-                # In this case, msg is the previous msg sent by main, which will typically be "continue"
-                # If it's not the case, it is not expected that has_timed_out is True.
-                if msg not in ("continue", "continue_random"):
-                    raise RuntimeError(f"Unexpected message after time out: msg={msg}")
-            else:
-                # if has_timed_out is False, then the time out does not come from the fact that the queue is Full.
-                # this means that our process has been waiting for a command from main in vain, while main was not
-                # receiving data.
-                # This will occur if main is busy doing something else (e.g. computing loss etc).
-
-                counter += _timeout
+                data_in, msg = pipe_child.recv()
                 if verbose:
-                    print(f"worker {idx} has counter {counter}")
-                if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
-                    raise RuntimeError(
-                        f"This process waited for {counter} seconds "
-                        f"without receiving a command from main. Consider increasing the maximum idle count "
-                        f"if this is expected via the environment variable MAX_IDLE_COUNT "
-                        f"(current value is {_MAX_IDLE_COUNT})."
-                        f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
-                        f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
-                    )
-                continue
-        if msg in ("continue", "continue_random"):
-            if msg == "continue_random":
-                inner_collector.init_random_frames = float("inf")
+                    print(f"worker {idx} received {msg}")
             else:
-                inner_collector.init_random_frames = -1
-
-            d = next(dc_iter)
-            if pipe_child.poll(_MIN_TIMEOUT):
-                # in this case, main send a message to the worker while it was busy collecting trajectories.
-                # In that case, we skip the collected trajectory and get the message from main. This is faster than
-                # sending the trajectory in the queue until timeout when it's never going to be received.
-                continue
-            if j == 0:
-                tensordict = d
-                if storing_device is not None and tensordict.device != storing_device:
-                    raise RuntimeError(
-                        f"expected device to be {storing_device} but got {tensordict.device}"
-                    )
-                tensordict.share_memory_()
-                data = (tensordict, idx)
-            else:
-                if d is not tensordict:
-                    raise RuntimeError(
-                        "SyncDataCollector should return the same tensordict modified in-place."
-                    )
-                data = idx  # flag the worker that has sent its data
-            if event is not None:
-                event.record()
-                event.synchronize()
-            try:
-                queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
-                    print(f"worker {idx} successfully sent data")
-                j += 1
+                    print(f"poll failed, j={j}, worker={idx}")
+                # default is "continue" (after first iteration)
+                # this is expected to happen if queue_out reached the timeout, but no new msg was waiting in the pipe
+                # in that case, the main process probably expects the worker to continue collect data
+                if has_timed_out:
+                    counter = 0
+                    # has_timed_out is True if the process failed to send data, which will
+                    # typically occur if main has taken another batch (i.e. the queue is Full).
+                    # In this case, msg is the previous msg sent by main, which will typically be "continue"
+                    # If it's not the case, it is not expected that has_timed_out is True.
+                    if msg not in ("continue", "continue_random"):
+                        raise RuntimeError(f"Unexpected message after time out: msg={msg}")
+                else:
+                    # if has_timed_out is False, then the time out does not come from the fact that the queue is Full.
+                    # this means that our process has been waiting for a command from main in vain, while main was not
+                    # receiving data.
+                    # This will occur if main is busy doing something else (e.g. computing loss etc).
+
+                    counter += _timeout
+                    if verbose:
+                        print(f"worker {idx} has counter {counter}")
+                    if counter >= (_MAX_IDLE_COUNT * _TIMEOUT):
+                        raise RuntimeError(
+                            f"This process waited for {counter} seconds "
+                            f"without receiving a command from main. Consider increasing the maximum idle count "
+                            f"if this is expected via the environment variable MAX_IDLE_COUNT "
+                            f"(current value is {_MAX_IDLE_COUNT})."
+                            f"\nIf this occurs at the end of a function or program, it means that your collector has not been "
+                            f"collected, consider calling `collector.shutdown()` or `del collector` before ending the program."
+                        )
+                    continue
+            if msg in ("continue", "continue_random"):
+                if msg == "continue_random":
+                    inner_collector.init_random_frames = float("inf")
+                else:
+                    inner_collector.init_random_frames = -1
+
+                d = next(dc_iter)
+                if pipe_child.poll(_MIN_TIMEOUT):
+                    # in this case, main send a message to the worker while it was busy collecting trajectories.
+                    # In that case, we skip the collected trajectory and get the message from main. This is faster than
+                    # sending the trajectory in the queue until timeout when it's never going to be received.
+                    continue
+                if j == 0:
+                    tensordict = d
+                    if storing_device is not None and tensordict.device != storing_device:
+                        raise RuntimeError(
+                            f"expected device to be {storing_device} but got {tensordict.device}"
+                        )
+                    tensordict.share_memory_()
+                    data = (tensordict, idx)
+                else:
+                    if d is not tensordict:
+                        raise RuntimeError(
+                            "SyncDataCollector should return the same tensordict modified in-place."
+                        )
+                    data = idx  # flag the worker that has sent its data
+                if event is not None:
+                    event.wait()
+                    event.record()
+                    event.synchronize()
+                try:
+                    queue_out.put((data, j), timeout=_TIMEOUT)
+                    if verbose:
+                        print(f"worker {idx} successfully sent data")
+                    j += 1
+                    has_timed_out = False
+                    continue
+                except queue.Full:
+                    if verbose:
+                        print(f"worker {idx} has timed out")
+                    has_timed_out = True
+                    continue
+
+            elif msg == "update":
+                inner_collector.update_policy_weights_()
+                pipe_child.send((j, "updated"))
                 has_timed_out = False
                 continue
-            except queue.Full:
-                if verbose:
-                    print(f"worker {idx} has timed out")
-                has_timed_out = True
+
+            elif msg == "seed":
+                data_in, static_seed = data_in
+                new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
+                torch.manual_seed(data_in)
+                np.random.seed(data_in)
+                pipe_child.send((new_seed, "seeded"))
+                has_timed_out = False
                 continue
 
-        elif msg == "update":
-            inner_collector.update_policy_weights_()
-            pipe_child.send((j, "updated"))
-            has_timed_out = False
-            continue
+            elif msg == "reset":
+                inner_collector.reset()
+                pipe_child.send((j, "reset"))
+                continue
 
-        elif msg == "seed":
-            data_in, static_seed = data_in
-            new_seed = inner_collector.set_seed(data_in, static_seed=static_seed)
-            torch.manual_seed(data_in)
-            np.random.seed(data_in)
-            pipe_child.send((new_seed, "seeded"))
-            has_timed_out = False
-            continue
+            elif msg == "state_dict":
+                state_dict = inner_collector.state_dict()
+                # send state_dict to cpu first
+                state_dict = recursive_map_to_cpu(state_dict)
+                pipe_child.send((state_dict, "state_dict"))
+                has_timed_out = False
+                continue
 
-        elif msg == "reset":
-            inner_collector.reset()
-            pipe_child.send((j, "reset"))
-            continue
+            elif msg == "load_state_dict":
+                state_dict = data_in
+                inner_collector.load_state_dict(state_dict)
+                pipe_child.send((j, "loaded"))
+                has_timed_out = False
+                continue
 
-        elif msg == "state_dict":
-            state_dict = inner_collector.state_dict()
-            # send state_dict to cpu first
-            state_dict = recursive_map_to_cpu(state_dict)
-            pipe_child.send((state_dict, "state_dict"))
-            has_timed_out = False
-            continue
+            elif msg == "close":
+                del tensordict, data, d, data_in
+                inner_collector.shutdown()
+                del inner_collector, dc_iter
+                pipe_child.send("closed")
+                if verbose:
+                    print(f"collector {idx} closed")
+                break
 
-        elif msg == "load_state_dict":
-            state_dict = data_in
-            inner_collector.load_state_dict(state_dict)
-            pipe_child.send((j, "loaded"))
-            has_timed_out = False
-            continue
-
-        elif msg == "close":
-            del tensordict, data, d, data_in
-            inner_collector.shutdown()
-            del inner_collector, dc_iter
-            pipe_child.send("closed")
-            if verbose:
-                print(f"collector {idx} closed")
-            break
-
-        else:
-            raise Exception(f"Unrecognized message {msg}")
+            else:
+                raise Exception(f"Unrecognized message {msg}")
