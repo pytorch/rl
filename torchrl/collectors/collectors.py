@@ -762,7 +762,6 @@ class SyncDataCollector(DataCollectorBase):
                     # This is used with multiprocessed collectors to use the buffers
                     # stored in the tensordict.
                     if event is not None:
-                        event.wait()
                         event.record()
                         event.synchronize()
                     yield tensordict_out
