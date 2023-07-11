@@ -103,7 +103,12 @@ class DecisionTransformer(nn.Module):
         if isinstance(config, self.DTConfig):
             config = dataclasses.asdict(config)
         if not isinstance(config, dict):
-            raise TypeError(f"Config of type {type(config)} is not supported.")
+            try:
+                config = dict(config)
+            except Exception as err:
+                raise TypeError(
+                    f"Config of type {type(config)} is not supported."
+                ) from err
 
         super(DecisionTransformer, self).__init__()
 

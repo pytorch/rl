@@ -29,6 +29,7 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
+from torchrl.modules.models.decision_transformer import _has_transformers
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
@@ -1791,6 +1792,9 @@ def test_vmapmodule():
     assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
 
 
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed to test DT classes"
+)
 class TestDecisionTransformerInferenceWrapper:
     @pytest.mark.parametrize("online", [True, False])
     def test_dt_inference_wrapper(self, online):
