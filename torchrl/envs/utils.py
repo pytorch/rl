@@ -4,7 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import pkg_resources
+import importlib.util
+
 import torch
 
 from tensordict import is_tensor_collection, unravel_key
@@ -33,8 +34,6 @@ __all__ = [
 
 
 from torchrl.data import CompositeSpec
-
-AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
 
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
@@ -267,29 +266,29 @@ def get_available_libraries():
 
 def _check_gym():
     """Returns True if the gym library is installed."""
-    return "gym" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("gym") is not None
 
 
 def _check_gym_atari():
     """Returns True if the gym library is installed and atari envs can be found."""
     if not _check_gym():
         return False
-    return "atari-py" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("atari-py") is not None
 
 
 def _check_mario():
     """Returns True if the "gym-super-mario-bros" library is installed."""
-    return "gym-super-mario-bros" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("gym-super-mario-bros") is not None
 
 
 def _check_dmcontrol():
     """Returns True if the "dm-control" library is installed."""
-    return "dm-control" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("dm_control") is not None
 
 
 def _check_dmlab():
     """Returns True if the "deepmind-lab" library is installed."""
-    return "deepmind-lab" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("deepmind_lab") is not None
 
 
 SUPPORTED_LIBRARIES = {
