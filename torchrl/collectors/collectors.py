@@ -1567,6 +1567,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
+        if hasattr(self, 'out_buffer'):
+            del self.out_buffer
+        if hasattr(self, 'buffers'):
+            del self.buffers
         return super().shutdown()
 
     # for RPC
@@ -1607,11 +1611,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        buffers = {}
+        self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
-        out_buffer = None
+        self.out_buffer = None
 
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
@@ -1643,16 +1647,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
-                    buffers[idx] = data
+                    self.buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
+                workers_frames[idx] = workers_frames[idx] + self.buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = buffers[idx].get(("collector", "traj_ids"))
+                traj_ids = self.buffers[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1661,26 +1665,26 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in buffers.values():
+                for item in self.buffers.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                out_buffer = torch.cat(list(buffers.values()), 0, out=out_buffer)
+                self.out_buffer = torch.cat(list(self.buffers.values()), 0, out=self.out_buffer)
             else:
-                out_buffer = torch.cat(
-                    [item.cpu() for item in buffers.values()],
+                self.out_buffer = torch.cat(
+                    [item.cpu() for item in self.buffers.values()],
                     0,
-                    out=out_buffer,
+                    out=self.out_buffer,
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out_buffer, prefix="collector")
+                out = split_trajectories(self.out_buffer, prefix="collector")
                 frames += out.get(("collector", "mask")).sum().item()
             else:
-                out = out_buffer.clone()
+                out = self.out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
@@ -1692,7 +1696,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del buffers
+        del self.buffers
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
@@ -1804,6 +1808,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
+        if hasattr(self, 'out_tensordicts'):
+            del self.out_tensordicts
         return super().shutdown()
 
     # for RPC
