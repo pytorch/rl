@@ -1568,6 +1568,8 @@ class TestConcurrentEnvs:
             policy,
             frames_per_batch=n_workers * 100,
             total_frames=N * n_workers * 100,
+            storing_device=device,
+            device=device,
         )
         single_collectors = [
             SyncDataCollector(
@@ -1575,6 +1577,8 @@ class TestConcurrentEnvs:
                 policy,
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
+                storing_device=device,
+                device=device,
             )
             for i in range(n_workers)
         ]
