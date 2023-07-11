@@ -2035,12 +2035,12 @@ def _main_async_collector(
     interruptor=None,
 ) -> None:
     if storing_device.type == "cuda":
-        stream = torch.cuda.default_stream(storing_device)
+        stream = torch.cuda.Stream(storing_device, priority=-1)
         event = torch.cuda.Event(stream)
     else:
-        stream = None
         event = None
-    with torch.cuda.StreamContext(stream):
+        stream = None
+    with torch.cuda.stream(stream):
         pipe_parent.close()
         # init variables that will be cleared when closing
         tensordict = data = d = data_in = inner_collector = dc_iter = None
