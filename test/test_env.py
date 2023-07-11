@@ -1568,8 +1568,8 @@ class TestConcurrentEnvs:
             policy,
             frames_per_batch=n_workers * 100,
             total_frames=N * n_workers * 100,
-            storing_device=device,
-            device=device,
+            # storing_device=device,
+            # device=device,
         )
         single_collectors = [
             SyncDataCollector(
@@ -1577,11 +1577,14 @@ class TestConcurrentEnvs:
                 policy,
                 frames_per_batch=n_workers * 100,
                 total_frames=N * n_workers * 100,
-                storing_device=device,
-                device=device,
+                # storing_device=device,
+                # device=device,
             )
             for i in range(n_workers)
         ]
+        print(collector.storing_device, collector.device)
+        print(single_collectors[0].storing_device, single_collectors[0].device, single_collectors[0].env.device)
+        raise RuntimeError
         collector = iter(collector)
         single_collectors = [iter(sc) for sc in single_collectors]
 
