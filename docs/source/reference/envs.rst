@@ -219,6 +219,23 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 Multi-agent environments
 ----------
 
+TorchRL supports multi-agent learning out-of-the-box.
+*The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
+without any modification or dedicated multi-agent infrastructure.*
+
+In this view, environments play a core role for multi-agent. In multi-agent environments,
+many decision-making agents act in a shared world.
+Agents can observe different things, act in different ways and also be rewarded differently.
+Therefore, many paradigms exist to model multi-agent environments (DecPODPs, Markov Games).
+Some of the main differences between these paradigms include:
+
+- **observation** can be per-agent and also have some shared components
+- **reward** can be per-agent or shared
+- **done** can be per-agent or shared
+
+TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
+In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
+This TensorDict will have the additional agent dimension and thus keep
 
 
 Transforms
