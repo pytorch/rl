@@ -123,6 +123,7 @@ class QMixerLoss(LossModule):
         ...        ),
         ...    },
         ...    [32],
+        ... )
         >>> loss(qnet(td))
         TensorDict(
             fields={
