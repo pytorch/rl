@@ -557,7 +557,6 @@ advantage_module = GAE(
 loss_module = ClipPPOLoss(
     actor=policy_module,
     critic=value_module,
-    advantage_key="advantage",
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
     entropy_coef=entropy_eps,

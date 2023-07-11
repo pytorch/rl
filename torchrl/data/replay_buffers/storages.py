@@ -670,11 +670,21 @@ def _collate_contiguous(x):
     return x
 
 
+def _collate_as_tensor(x):
+    return x.as_tensor()
+
+
 def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
             return torch.utils.data._utils.collate.default_collate
-    elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
+    elif isinstance(storage, LazyMemmapStorage):
+        return _collate_as_tensor
+    elif isinstance(storage, (LazyTensorStorage,)):
         return _collate_contiguous
+    else:
+        raise NotImplementedError(
+            f"Could not find a default collate_fn for storage {type(storage)}."
+        )
