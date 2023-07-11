@@ -7329,6 +7329,72 @@ class TestIQL(LossModuleTestBase):
             assert loss_value == loss_val_td["loss_value"]
 
 
+@pytest.mark.parametrize("create_target_params", [True, False])
+def test_param_buffer_types(create_target_params):
+    class MyLoss(LossModule):
+        def __init__(self, actor_network):
+            super().__init__()
+            self.convert_to_functional(
+                actor_network,
+                "actor_network",
+                create_target_params=create_target_params,
+            )
+
+        def _forward_value_estimator_keys(self, **kwargs) -> None:
+            pass
+
+    actor_module = TensorDictModule(
+        nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4)),
+        in_keys=["obs"],
+        out_keys=["action"],
+    )
+    loss = MyLoss(actor_module)
+    assert isinstance(loss.actor_network_params["module", "0", "weight"], nn.Parameter)
+    assert isinstance(
+        loss.target_actor_network_params["module", "0", "weight"], nn.Parameter
+    )
+    assert loss.actor_network_params["module", "0", "weight"].requires_grad
+    assert not loss.target_actor_network_params["module", "0", "weight"].requires_grad
+    assert isinstance(loss.actor_network_params["module", "0", "bias"], nn.Parameter)
+    assert isinstance(
+        loss.target_actor_network_params["module", "0", "bias"], nn.Parameter
+    )
+
+    if create_target_params:
+        assert (
+            loss.actor_network_params["module", "0", "weight"].data.data_ptr()
+            != loss.target_actor_network_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert (
+            loss.actor_network_params["module", "0", "bias"].data.data_ptr()
+            != loss.target_actor_network_params["module", "0", "bias"].data.data_ptr()
+        )
+    else:
+        assert (
+            loss.actor_network_params["module", "0", "weight"].data.data_ptr()
+            == loss.target_actor_network_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert (
+            loss.actor_network_params["module", "0", "bias"].data.data_ptr()
+            == loss.target_actor_network_params["module", "0", "bias"].data.data_ptr()
+        )
+
+    assert loss.actor_network_params["module", "0", "bias"].requires_grad
+    assert not loss.target_actor_network_params["module", "0", "bias"].requires_grad
+    assert not isinstance(
+        loss.actor_network_params["module", "1", "running_mean"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.target_actor_network_params["module", "1", "running_mean"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.actor_network_params["module", "1", "running_var"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.target_actor_network_params["module", "1", "running_var"], nn.Parameter
+    )
+
+
 def test_hold_out():
     net = torch.nn.Linear(3, 4)
     x = torch.randn(1, 3)
