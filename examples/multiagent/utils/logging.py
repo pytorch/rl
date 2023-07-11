@@ -73,7 +73,7 @@ def log_training(
     reward = sampling_td.get(("next", "agents", "reward")).mean(-2)  # Mean over agents
     done = sampling_td.get(("next", "done"))
     if done.ndim > reward.ndim:
-        done = done.mean(-2)  # Mean over agents
+        done = done[..., 0, :]  # Remove expanded agent dim
     episode_reward = sampling_td.get(("next", "agents", "episode_reward")).mean(-2)[
         done
     ]
