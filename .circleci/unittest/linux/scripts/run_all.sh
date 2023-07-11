@@ -170,8 +170,14 @@ export CKPT_BACKEND=torch
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
-  --instafail --durations 200 --ignore test/test_rlhf.py
+if [ "${CU_VERSION:-}" != cpu ] ; then
+  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+    --instafail --durations 200 --ignore test/test_rlhf.py
+else
+  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+    --instafail --durations 200 --ignore test/test_rlhf.py --ignore test/test_distributed.py
+fi
+
 coverage combine
 coverage xml -i
 
