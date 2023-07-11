@@ -49,6 +49,13 @@ def log_training(
             .expand(sampling_td.get("agents").shape)
             .unsqueeze(-1),
         )
+    if ("next", "agents", "episode_reward") not in sampling_td.keys(True, True):
+        sampling_td.set(
+            ("next", "agents", "episode_reward"),
+            sampling_td.get(("next", "episode_reward"))
+            .expand(sampling_td.get("agents").shape)
+            .unsqueeze(-1),
+        )
 
     to_log = {
         f"train/learner/{key}": value.mean().item()
@@ -63,12 +70,18 @@ def log_training(
             }
         )
 
-    reward = sampling_td.get(("next", "agents", "reward"))
+    reward = sampling_td.get(("next", "agents", "reward")).mean(-2)  # Mean over agents
+    episode_reward = sampling_td.get(("next", "agents", "episode_reward")).mean(-2)[
+        sampling_td.get(("next", "done"))
+    ]
     to_log.update(
         {
-            "train/reward/reward_min": reward.mean(-2).min().item(),  # Mean over agents
+            "train/reward/reward_min": reward.min().item(),
             "train/reward/reward_mean": reward.mean().item(),
-            "train/reward/reward_max": reward.mean(-2).max().item(),  # Mean over agents
+            "train/reward/reward_max": reward.max().item(),  # Mean over agents
+            "train/reward/episode_reward_min": episode_reward.min().item(),  # Mean over agents
+            "train/reward/episode_reward_mean": episode_reward.mean().item(),
+            "train/reward/episode_reward_max": episode_reward.max().item(),  # Mean over agents
             "train/sampling_time": sampling_time,
             "train/training_time": training_time,
             "train/iteration_time": training_time + sampling_time,

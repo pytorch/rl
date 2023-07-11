@@ -14,6 +14,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
@@ -51,6 +52,10 @@ def train(cfg: "DictConfig"):  # noqa: F821
         seed=cfg.seed,
         # Scenario kwargs
         **cfg.env.scenario,
+    )
+    env = TransformedEnv(
+        env,
+        RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
     )
 
     env_test = VmasEnv(
@@ -172,6 +177,11 @@ def train(cfg: "DictConfig"):  # noqa: F821
             ("next", "reward"), tensordict_data.get(("next", env.reward_key)).mean(-2)
         )
         del tensordict_data["next", env.reward_key]
+        tensordict_data.set(
+            ("next", "episode_reward"),
+            tensordict_data.get(("next", "agents", "episode_reward")).mean(-2),
+        )
+        del tensordict_data["next", "agents", "episode_reward"]
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
