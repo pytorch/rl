@@ -16,6 +16,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
@@ -206,11 +207,11 @@ def train(cfg: "DictConfig"):  # noqa: F821
             and cfg.logger.backend
         ):
             evaluation_start = time.time()
-            with torch.no_grad():
+            with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
                 env_test.frames = []
                 rollouts = env_test.rollout(
                     max_steps=cfg.env.max_steps,
-                    policy=qnet_explore,
+                    policy=qnet,
                     callback=rendering_callback,
                     auto_cast_to_device=True,
                     break_when_any_done=False,
