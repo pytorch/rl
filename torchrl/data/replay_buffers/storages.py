@@ -671,7 +671,7 @@ def _collate_contiguous(x):
 
 
 def _collate_as_tensor(x):
-    return x.as_tensor()
+    return x.contiguous()
 
 
 def _get_default_collate(storage, _is_tensordict=False):
