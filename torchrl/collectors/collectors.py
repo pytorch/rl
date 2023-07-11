@@ -1567,9 +1567,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
-        if hasattr(self, 'out_buffer'):
+        if hasattr(self, "out_buffer"):
             del self.out_buffer
-        if hasattr(self, 'buffers'):
+        if hasattr(self, "buffers"):
             del self.buffers
         return super().shutdown()
 
@@ -1672,7 +1672,9 @@ class MultiSyncDataCollector(_MultiDataCollector):
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                self.out_buffer = torch.cat(list(self.buffers.values()), 0, out=self.out_buffer)
+                self.out_buffer = torch.cat(
+                    list(self.buffers.values()), 0, out=self.out_buffer
+                )
             else:
                 self.out_buffer = torch.cat(
                     [item.cpu() for item in self.buffers.values()],
@@ -1808,7 +1810,7 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
-        if hasattr(self, 'out_tensordicts'):
+        if hasattr(self, "out_tensordicts"):
             del self.out_tensordicts
         return super().shutdown()
 
@@ -2196,6 +2198,7 @@ def _main_async_collector(
         elif msg == "load_state_dict":
             state_dict = data_in
             inner_collector.load_state_dict(state_dict)
+            del state_dict
             pipe_child.send((j, "loaded"))
             has_timed_out = False
             continue
