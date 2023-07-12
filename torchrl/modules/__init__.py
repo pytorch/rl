@@ -25,15 +25,18 @@ from .models import (
     DuelingCnnDQNet,
     LSTMNet,
     MLP,
+    MultiAgentMLP,
     NoisyLazyLinear,
     NoisyLinear,
     ObsDecoder,
     ObsEncoder,
+    QMixer,
     reset_noise,
     RSSMPosterior,
     RSSMPrior,
     Squeeze2dLayer,
     SqueezeLayer,
+    VDNMixer,
 )
 from .tensordict_module import (
     Actor,
@@ -58,6 +61,7 @@ from .tensordict_module import (
     SafeSequential,
     TanhModule,
     ValueOperator,
+    VmapModule,
     WorldModelWrapper,
 )
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip

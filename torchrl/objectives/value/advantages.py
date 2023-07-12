@@ -192,6 +192,30 @@ class ValueEstimatorBase(TensorDictModuleBase):
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
 
+    @property
+    def advantage_key(self):
+        return self.tensor_keys.advantage
+
+    @property
+    def value_key(self):
+        return self.tensor_keys.value
+
+    @property
+    def value_target_key(self):
+        return self.tensor_keys.value_target
+
+    @property
+    def reward_key(self):
+        return self.tensor_keys.reward
+
+    @property
+    def done_key(self):
+        return self.tensor_keys.done
+
+    @property
+    def steps_to_next_obs_key(self):
+        return self.tensor_keys.steps_to_next_obs
+
     @abc.abstractmethod
     def forward(
         self,
