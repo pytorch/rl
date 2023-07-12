@@ -235,6 +235,7 @@ def _main(argv):
             "checkpointing": [
                 "torchsnapshot",
             ],
+            "marl": ["vmas"],
         },
         zip_safe=False,
         classifiers=[
