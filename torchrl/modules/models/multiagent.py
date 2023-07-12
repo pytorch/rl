@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from ...data import DEVICE_TYPING
+
 from .models import MLP
 
 
@@ -145,7 +147,7 @@ class MultiAgentMLP(nn.Module):
         n_agents: int,
         centralised: bool,
         share_params: bool,
-        device: Optional[Union[torch.device, str]] = None,
+        device: Optional[DEVICE_TYPING] = None,
         depth: Optional[int] = None,
         num_cells: Optional[Union[Sequence, int]] = None,
         activation_class: Optional[Type[nn.Module]] = nn.Tanh,
@@ -241,9 +243,9 @@ class Mixer(nn.Module):
 
     Args:
         n_agents (int): number of agents,
-        device (str or torch.Device): torch device for the network
         needs_state (bool): whether the mixer takes a global state as input
         state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
+        device (str or torch.Device): torch device for the network
 
     Examples:
         Creating a VDN mixer
@@ -337,9 +339,9 @@ class Mixer(nn.Module):
     def __init__(
         self,
         n_agents: int,
-        device,
         needs_state: bool,
         state_shape: Union[Tuple[int, ...], torch.Size],
+        device: DEVICE_TYPING,
     ):
         super().__init__()
 
@@ -353,9 +355,9 @@ class Mixer(nn.Module):
 
         Args:
             *inputs: The first input should be the value of the chosen action of shape (*B, self.n_agents, 1),
-            representing the local q value of each agent.
-            The second input (optional, used only in some mixers)
-            is the shared state of all agents of shape (*B, *self.state_shape).
+                representing the local q value of each agent.
+                The second input (optional, used only in some mixers)
+                is the shared state of all agents of shape (*B, *self.state_shape).
 
         Returns:
             The global value of the chosen actions obtained after mixing, with shape (*B, 1)
@@ -412,11 +414,18 @@ class Mixer(nn.Module):
 
 
 class VDNMixer(Mixer):
-    """Mixer from https://arxiv.org/abs/1706.05296 .
+    """Value-Decomposition Network mixer.
+
+    Mixes the local Q values of the agents into a global Q value by summing them together.
+    From the paper https://arxiv.org/abs/1706.05296 .
+
+    Args:
+        n_agents (int): number of agents,
+        device (str or torch.Device): torch device for the network
 
     Examples:
         Creating a VDN mixer
-         >>> import torch
+        >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.modules.models.multiagent import VDNMixer
@@ -460,7 +469,7 @@ class VDNMixer(Mixer):
     def __init__(
         self,
         n_agents: int,
-        device,
+        device: DEVICE_TYPING,
     ):
         super().__init__(
             needs_state=False,
@@ -474,7 +483,17 @@ class VDNMixer(Mixer):
 
 
 class QMixer(Mixer):
-    """Mixer from https://arxiv.org/abs/1803.11485 .
+    """QMix mixer.
+
+    Mixes the local Q values of the agents into a global Q value through a monotonic
+    hyper-network whose parameters are obtained from a global state.
+    From the paper https://arxiv.org/abs/1803.11485 .
+
+    Args
+        n_agents (int): number of agents
+        mixing_embed_dim (int): the size of the mixing embedded dimension
+        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
+        device (str or torch.Device): torch device for the network
 
     Examples:
         Creating a QMix mixer
@@ -525,10 +544,10 @@ class QMixer(Mixer):
 
     def __init__(
         self,
-        state_shape,
-        mixing_embed_dim,
+        state_shape: Union[Tuple[int, ...], torch.Size],
+        mixing_embed_dim: int,
         n_agents: int,
-        device,
+        device: DEVICE_TYPING,
     ):
         super().__init__(
             needs_state=True, state_shape=state_shape, n_agents=n_agents, device=device
