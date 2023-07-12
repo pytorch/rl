@@ -155,7 +155,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=2 \
   collector_device=cuda:0 \
   device=cuda:0 \
-  mode=offline
+  mode=offline \
+  logger=
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -253,7 +254,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=1 \
   mode=offline \
   device=cuda:0 \
-  collector_device=cuda:0
+  collector_device=cuda:0 \
+  logger=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
