@@ -746,7 +746,7 @@ class TestMultiAgent:
                 10,
                 3,
             ),
-            tuple,
+            (),
         ],
     )
     def test_mlp(
