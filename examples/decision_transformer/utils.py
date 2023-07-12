@@ -66,10 +66,15 @@ def make_base_env(env_cfg):
 
 def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env = TransformedEnv(base_env)
+    transformed_env.append_transform(
+        RewardScaling(
+            loc=0, scale=env_cfg.reward_scaling, in_keys="reward", standard_normal=False
+        )
+    )
     if train:
         transformed_env.append_transform(
             TargetReturn(
-                env_cfg.collect_target_return,
+                env_cfg.collect_target_return * env_cfg.reward_scaling,
                 out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
@@ -77,24 +82,12 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     else:
         transformed_env.append_transform(
             TargetReturn(
-                env_cfg.eval_target_return,
+                env_cfg.eval_target_return * env_cfg.reward_scaling,
                 out_keys=["return_to_go"],
                 mode=env_cfg.target_return_mode,
             )
         )
-    transformed_env.append_transform(
-        RewardScaling(
-            loc=0,
-            scale=env_cfg.reward_scaling,
-            in_keys="return_to_go",
-            standard_normal=False,
-        )
-    )
-    transformed_env.append_transform(
-        RewardScaling(
-            loc=0, scale=env_cfg.reward_scaling, in_keys="reward", standard_normal=False
-        )
-    )
+
     transformed_env.append_transform(TensorDictPrimer(action=base_env.action_spec))
 
     transformed_env.append_transform(
