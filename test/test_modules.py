@@ -18,9 +18,11 @@ from torchrl.modules import (
     CEMPlanner,
     LSTMNet,
     MultiAgentMLP,
+    QMixer,
     SafeModule,
     TanhModule,
     ValueOperator,
+    VDNMixer,
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
@@ -800,6 +802,125 @@ class TestMultiAgent:
                 for j in range(i + 1, n_agents):
                     # same input different output
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            (),
+        ],
+    )
+    def test_vdn(self, n_agents, batch):
+        torch.manual_seed(0)
+        mixer = VDNMixer(n_agents=n_agents, device="cpu")
+
+        td = self._get_mock_input_td(n_agents, batch=batch, n_agents_inputs=1)
+        obs = td.get(("agents", "observation"))
+        assert obs.shape == (*batch, n_agents, 1)
+        out = mixer(obs)
+        assert out.shape == (*batch, 1)
+        assert torch.equal(obs.sum(-2), out)
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            (),
+        ],
+    )
+    @pytest.mark.parametrize("state_shape", [(64, 64, 3), (10,)])
+    def test_qmix(self, n_agents, batch, state_shape):
+        torch.manual_seed(0)
+        mixer = QMixer(
+            n_agents=n_agents,
+            state_shape=state_shape,
+            mixing_embed_dim=32,
+            device="cpu",
+        )
+
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=1, state_shape=state_shape
+        )
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        assert obs.shape == (*batch, n_agents, 1)
+        assert state.shape == (*batch, *state_shape)
+        out = mixer(obs, state)
+        assert out.shape == (*batch, 1)
+
+    @pytest.mark.parametrize("mixer", ["qmix", "vdn"])
+    def test_mixer_malformed_input(
+        self, mixer, n_agents=3, batch=(32,), state_shape=(64, 64, 3)
+    ):
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=3, state_shape=state_shape
+        )
+        if mixer == "qmix":
+            mixer = QMixer(
+                n_agents=n_agents,
+                state_shape=state_shape,
+                mixing_embed_dim=32,
+                device="cpu",
+            )
+        else:
+            mixer = VDNMixer(n_agents=n_agents, device="cpu")
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+
+        if mixer.needs_state:
+            with pytest.raises(
+                ValueError,
+                match="Mixer that needs state was passed more than 2 inputs",
+            ):
+                mixer(obs)
+        else:
+            with pytest.raises(
+                ValueError,
+                match="Mixer that doesn't need state was passed more than 1 input",
+            ):
+                mixer(obs, state)
+
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        with pytest.raises(
+            ValueError,
+            match="Mixer network expected chosen_action_value with last 2 dimensions",
+        ):
+            mixer(*in_put)
+        if mixer.needs_state:
+            state_diff = state.unsqueeze(-1)
+            with pytest.raises(
+                ValueError,
+                match="Mixer network expected state with ending shape",
+            ):
+                mixer(obs, state_diff)
+
+        td = self._get_mock_input_td(
+            n_agents, batch=batch, n_agents_inputs=1, state_shape=state_shape
+        )
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        obs = obs.sum(-2)
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        with pytest.raises(
+            ValueError,
+            match="Mixer network expected chosen_action_value with last 2 dimensions",
+        ):
+            mixer(*in_put)
+
+        obs = td.get(("agents", "observation"))
+        state = td.get("state")
+        in_put = [obs, state] if mixer.needs_state else [obs]
+        mixer(*in_put)
 
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")

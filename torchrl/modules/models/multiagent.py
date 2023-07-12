@@ -370,7 +370,7 @@ class Mixer(nn.Module):
                 )
             chosen_action_value = inputs[0]
         else:
-            if len(inputs) > 2:
+            if len(inputs) != 2:
                 raise ValueError("Mixer that needs state was passed more than 2 inputs")
 
             chosen_action_value, state = inputs
