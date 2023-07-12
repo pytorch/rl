@@ -14,7 +14,14 @@ from packaging import version
 from tensordict import TensorDict
 from torch import nn
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
-from torchrl.modules import CEMPlanner, LSTMNet, SafeModule, TanhModule, ValueOperator
+from torchrl.modules import (
+    CEMPlanner,
+    LSTMNet,
+    MultiAgentMLP,
+    SafeModule,
+    TanhModule,
+    ValueOperator,
+)
 from torchrl.modules.distributions.utils import safeatanh, safetanh
 from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
@@ -200,7 +207,6 @@ def test_lstm_net(
     has_precond_hidden,
     double_prec_fixture,
 ):
-
     torch.manual_seed(0)
     batch = 5
     time_steps = 6
@@ -706,6 +712,94 @@ class TestTanh:
             assert torch.isclose(data[out_key], min).any()
             assert (data[out_key] <= max + eps).all()
             assert (data[out_key] >= min - eps).all()
+
+
+class TestMultiAgent:
+    def _get_mock_input_td(
+        self, n_agents, n_agents_inputs, state_shape=(64, 64, 3), T=None, batch=(2,)
+    ):
+        if T is not None:
+            batch = batch + (T,)
+        obs = torch.randn(*batch, n_agents, n_agents_inputs)
+        state = torch.randn(*batch, *state_shape)
+
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": obs},
+                    [*batch, n_agents],
+                ),
+                "state": state,
+            },
+            batch_size=batch,
+        )
+        return td
+
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("share_params", [True, False])
+    @pytest.mark.parametrize("centralised", [True, False])
+    @pytest.mark.parametrize(
+        "batch",
+        [
+            (10,),
+            (
+                10,
+                3,
+            ),
+            tuple,
+        ],
+    )
+    def test_mlp(
+        self,
+        n_agents,
+        centralised,
+        share_params,
+        batch,
+        n_agent_inputs=6,
+        n_agent_outputs=2,
+    ):
+        torch.manual_seed(0)
+        mlp = MultiAgentMLP(
+            n_agent_inputs=n_agent_inputs,
+            n_agent_outputs=n_agent_outputs,
+            n_agents=n_agents,
+            centralised=centralised,
+            share_params=share_params,
+            depth=2,
+        )
+        td = self._get_mock_input_td(n_agents, n_agent_inputs, batch=batch)
+        obs = td.get(("agents", "observation"))
+
+        out = mlp(obs)
+        assert out.shape == (*batch, n_agents, n_agent_outputs)
+        for i in range(n_agents):
+            if centralised and share_params:
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
+
+        obs[..., 0, 0] += 1
+        out2 = mlp(obs)
+        for i in range(n_agents):
+            if centralised:
+                # a modification to the input of agent 0 will impact all agents
+                assert not torch.allclose(out[..., i, :], out2[..., i, :])
+            elif i > 0:
+                assert torch.allclose(out[..., i, :], out2[..., i, :])
+
+        obs = torch.randn(*batch, 1, n_agent_inputs).expand(
+            *batch, n_agents, n_agent_inputs
+        )
+        out = mlp(obs)
+        for i in range(n_agents):
+            if share_params:
+                # same input same output
+                assert torch.allclose(out[..., i, :], out[..., 0, :])
+            else:
+                for j in range(i + 1, n_agents):
+                    # same input different output
+                    assert not torch.allclose(out[..., i, :], out[..., j, :])
 
 
 @pytest.mark.skipif(torch.__version__ < "2.0", reason="torch 2.0 is required")

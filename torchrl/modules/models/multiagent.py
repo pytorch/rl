@@ -192,7 +192,7 @@ class MultiAgentMLP(nn.Module):
 
         # If the model is centralized, agents have full observability
         if self.centralised:
-            inputs = inputs.view(
+            inputs = inputs.reshape(
                 *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
             )
 
