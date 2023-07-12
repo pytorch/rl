@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -49,27 +49,28 @@ class QMixerLoss(LossModule):
     dimension to be the penultimate one.
 
     Args:
-          local_value_network (QValueActor or nn.Module): a local Q value operator.
-          mixer_network (TensorDictModule or nn.Module): a mixer network mapping the agents' local Q values
-          and an optional state to the global Q value.
-          It is suggested to provide a TensorDictModule wrapping a mixer from `torchrl.modules.models.multiagent.Mixer`.
+        local_value_network (QValueActor or nn.Module): a local Q value operator.
+        mixer_network (TensorDictModule or nn.Module): a mixer network mapping the agents' local Q values
+            and an optional state to the global Q value. It is suggested to provide a TensorDictModule
+            wrapping a mixer from `torchrl.modules.models.multiagent.Mixer`.
 
     Keyword Args:
-          loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
-          delay_value (bool, optional): whether to duplicate the value network
-              into a new target value network to
-              create a double DQN. Default is ``False``.
-          action_space (str or TensorSpec, optional): Action space. Must be one of
-              ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
-              or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
-              :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
-              :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
-              If not provided, an attempt to retrieve it from the value network
-              will be made.
-          priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
-              The key at which priority is assumed to be stored within TensorDicts added
-              to this ReplayBuffer.  This is to be used when the sampler is of type
-              :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
+        loss_function (str, optional): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+            Defaults to "l2".
+        delay_value (bool, optional): whether to duplicate the value network
+            into a new target value network to
+            create a double DQN. Default is ``False``.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            If not provided, an attempt to retrieve it from the value network
+            will be made.
+        priority_key (NestedKey, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            The key at which priority is assumed to be stored within TensorDicts added
+            to this ReplayBuffer.  This is to be used when the sampler is of type
+            :class:`~torchrl.data.PrioritizedSampler`.  Defaults to ``"td_error"``.
 
     Examples:
         >>> import torch
@@ -181,7 +182,7 @@ class QMixerLoss(LossModule):
         local_value_network: Union[QValueActor, nn.Module],
         mixer_network: Union[TensorDictModule, nn.Module],
         *,
-        loss_function: str = "l2",
+        loss_function: Optional[str] = "l2",
         delay_value: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
@@ -319,16 +320,13 @@ class QMixerLoss(LossModule):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
-        device = self.device if self.device is not None else tensordict.device
-        tddevice = tensordict.to(device)
-
-        td_copy = tddevice.clone(False)
+        td_copy = tensordict.clone(False)
         self.local_value_network(
             td_copy,
             params=self.local_value_network_params,
         )
 
-        action = tddevice.get(self.tensor_keys.action)
+        action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(
             self.tensor_keys.action_value
         )  # [*B, n_agents, n_actions]
@@ -348,16 +346,15 @@ class QMixerLoss(LossModule):
         # [*B] this is global and shared among the agents as will be the target
 
         target_value = self.value_estimator.value_estimate(
-            tddevice.clone(False),
+            td_copy,
             target_params=self._cached_target_params,
-        ).squeeze(
-            -1
-        )  # [*B]
+        ).squeeze(-1)
 
-        priority_tensor = (pred_val_index - target_value).pow(2)
-        priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if tddevice.device is not None:
-            priority_tensor = priority_tensor.to(tddevice.device)
+        with torch.no_grad():
+            priority_tensor = (pred_val_index - target_value).pow(2)
+            priority_tensor = priority_tensor.unsqueeze(-1)
+        if tensordict.device is not None:
+            priority_tensor = priority_tensor.to(tensordict.device)
 
         tensordict.set(
             self.tensor_keys.priority,

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import warnings
 from dataclasses import dataclass
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -40,7 +40,8 @@ class DQNLoss(LossModule):
         value_network (QValueActor or nn.Module): a Q value operator.
 
     Keyword Args:
-        loss_function (str): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+        loss_function (str, optional): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
+            Defaults to "l2".
         delay_value (bool, optional): whether to duplicate the value network
             into a new target value network to
             create a double DQN. Default is ``False``.
@@ -155,13 +156,12 @@ class DQNLoss(LossModule):
         self,
         value_network: Union[QValueActor, nn.Module],
         *,
-        loss_function: str = "l2",
+        loss_function: Optional[str] = "l2",
         delay_value: bool = False,
         gamma: float = None,
         action_space: Union[str, TensorSpec] = None,
         priority_key: str = None,
     ) -> None:
-
         super().__init__()
         self._in_keys = None
         self._set_deprecated_ctor_keys(priority=priority_key)
@@ -282,16 +282,13 @@ class DQNLoss(LossModule):
             a tensor containing the DQN loss.
 
         """
-        device = self.device if self.device is not None else tensordict.device
-        tddevice = tensordict.to(device)
-
-        td_copy = tddevice.clone(False)
+        td_copy = tensordict.clone(False)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
 
-        action = tddevice.get(self.tensor_keys.action)
+        action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
@@ -304,13 +301,14 @@ class DQNLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1)
 
         target_value = self.value_estimator.value_estimate(
-            tddevice.clone(False), target_params=self.target_value_network_params
+            td_copy, target_params=self.target_value_network_params
         ).squeeze(-1)
 
-        priority_tensor = (pred_val_index - target_value).pow(2)
-        priority_tensor = priority_tensor.detach().unsqueeze(-1)
-        if tddevice.device is not None:
-            priority_tensor = priority_tensor.to(tddevice.device)
+        with torch.no_grad():
+            priority_tensor = (pred_val_index - target_value).pow(2)
+            priority_tensor = priority_tensor.unsqueeze(-1)
+        if tensordict.device is not None:
+            priority_tensor = priority_tensor.to(tensordict.device)
 
         tensordict.set(
             self.tensor_keys.priority,
