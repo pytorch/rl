@@ -111,6 +111,10 @@ Key learnings:
 #
 # Torch
 import torch
+
+# Tensordict modules (key-mapped nns)
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 
 # Data collection
@@ -134,12 +138,7 @@ from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
 
 # Multi-agent network
-from torchrl.modules import MultiAgentMLP
-
-# Tensordict modules (key-mapped nns)
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
-from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 # Loss
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
@@ -630,9 +629,10 @@ for i, tensordict_data in enumerate(collector):
 
 
 def rendering_callback(env, td):
-    env.render(mode="human")
+    env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
 
+env.frames = []
 env.rollout(
     max_steps=100,
     policy=policy,
