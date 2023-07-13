@@ -119,30 +119,20 @@ from torch import nn
 
 # Data collection
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import (
-    Compose,
-    DoubleToFloat,
-    ObservationNorm,
-    RewardSum,
-    StepCounter,
-    TransformedEnv,
-)
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs import RewardSum, TransformedEnv
 
 # Env
 from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
+from torchrl.envs.utils import check_env_specs
 
 # Multi-agent network
 from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 # Loss
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
-from torchrl.objectives.value import GAE
 
 # Utils
 from tqdm import tqdm
@@ -166,7 +156,7 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
-n_iters = 1  # Number of sampling and training iterations
+n_iters = 10  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
@@ -196,9 +186,10 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 max_steps = 100
 num_vmas_envs = frames_per_batch // max_steps
+scenario_name = "navigation"
 
 env = VmasEnv(
-    scenario="navigation",
+    scenario=scenario_name,
     num_envs=num_vmas_envs,
     continuous_actions=True,
     max_steps=max_steps,
@@ -313,9 +304,8 @@ check_env_specs(env)
 # number of steps, we will retrieve a :class:`tensordict.TensorDict` instance with a shape
 # that matches this trajectory length:
 #
-rollout = env.rollout(3)
-print("rollout of three steps:", rollout)
-print("Shape of the rollout TensorDict:", rollout.batch_size)
+rollout = env.rollout(max_steps, break_when_any_done=False)
+rollout["agents", "info", "final_rew"].mean().item()
 
 ######################################################################
 # Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
@@ -574,7 +564,7 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 pbar = tqdm(total=n_iters)
 
 total_frames = 0
-for i, tensordict_data in enumerate(collector):
+for tensordict_data in collector:
     tensordict_data.set(
         ("next", "done"),
         tensordict_data.get(("next", "done"))
@@ -624,23 +614,47 @@ for i, tensordict_data in enumerate(collector):
     )
 
     training_tds = torch.stack(training_tds)
+
+    pbar.set_description(f"episode_reward_mean = {episode_reward_mean}", refresh=False)
     pbar.update()
-    pbar.set_description(f"episode_reward_mean =  {episode_reward_mean}")
 
+rollout = env.rollout(max_steps, policy=policy, break_when_any_done=False)
+rollout["agents", "info", "final_rew"].mean().item()
 
-def rendering_callback(env, td):
-    env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
-
-
-env.frames = []
-env.rollout(
-    max_steps=100,
-    policy=policy,
-    callback=rendering_callback,
-    auto_cast_to_device=True,
-    break_when_any_done=True,
-    # We are running vectorized evaluation we do not want it to stop when just one env is done
-)
+######################################################################
+# Render
+# -------
+# If you are running this in Google Colab,you can render the trained policy by running:
+#
+# .. code-block:: python
+#
+#    !apt-get update
+#    !apt-get install -y x11-utils
+#    !apt-get install -y xvfb
+#    !pip install pyvirtualdisplay
+#    import pyvirtualdisplay
+#    display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
+#    display.start()
+#    from PIL import Image
+#    def rendering_callback(env, td):
+#        env.frames.append(Image.fromarray(env.render(mode="rgb_array")))
+#    env.frames = []
+#    env.rollout(
+#         max_steps=max_steps,
+#         policy=policy,
+#         callback=rendering_callback,
+#         auto_cast_to_device=True,
+#         break_when_any_done=False,
+#     )
+#     env.frames[0].save(
+#        scenario_name,
+#        save_all=True,
+#        append_images=env.frames[1:],
+#       duration=3,
+#       loop=0,
+#     )
+#     from IPython.display import Image
+#     Image(open(f"{scenario_name}"}.gif", "rb").read())
 
 ######################################################################
 # Results
