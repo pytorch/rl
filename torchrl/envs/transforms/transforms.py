@@ -2212,7 +2212,6 @@ class CatFrames(ObservationTransform):
             # If so, we must add an offset
             data = tensordict.get(in_key)
             if isinstance(in_key, tuple) and in_key[0] == "next":
-
                 # let's get the out_key we have already processed
                 prev_out_key = dict(zip(self.in_keys, self.out_keys))[in_key[1]]
                 prev_val = tensordict.get(prev_out_key)
@@ -3490,7 +3489,7 @@ class RewardSum(Transform):
                 dtype=reward_spec.dtype,
                 shape=reward_spec.shape,
             )
-            episode_specs.update({"episode_reward": episode_spec})
+            episode_specs.update({self.out_keys[0]: episode_spec})
 
         # Update observation_spec with episode_specs
         if not isinstance(observation_spec, CompositeSpec):

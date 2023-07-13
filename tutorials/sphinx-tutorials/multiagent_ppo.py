@@ -69,21 +69,36 @@ Key learnings:
 #    On-policy learning
 #
 #
-# In the
+# In the training phase of the PPO algorithm, a *critic* is used to estimate the goodness of the actions
+# taken by the policy. The critic learns to approximate the value (mean discounted return) of a specific state.
+# The PPO loss then compares the actual return obtained by the policy to the one estimated by the critic to determine
+# the advantage of the taken action and guide the policy optimization.
 #
+# In multi-agent settings things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
+# one for each agent. Policies are typically local and decentralised. This means that
+# the policy for a single agent will output an action for that agent based only on its observation.
+# On the other hand, different formulations exist for the critic, mainly:
+#
+# - In MAPPO https://arxiv.org/abs/2103.01955 the critic is centralised and takes as input the global state
+#   of the systems. This can be a global observation or simply the concatenation of the agents' observation. MAPPO
+#   can be used in contexts where centralised training is performed and as it needs access to global information.
+# - In IPPO https://arxiv.org/abs/2011.09533 the critic takes as input just the observation of the respective agent,
+#   exactly like the policy. This allows decentralised training as both the critic and the policy will only need local
+#   information to compute their outputs.
+#
+# In this tutorial, we will be able to train both formulations, and we will also discuss how
+# parameter-sharing (the practice of sharing the network parameters across the agents) impacts each.
 #
 # This tutorial is structured as follows:
 #
 # 1. First, we will define a set of hyperparameters we will be using for training.
 #
 # 2. Next, we will focus on creating our environment, or simulator, using TorchRL's
-#    wrappers and transforms.
+#    VMAS wrapper.
 #
-# 3. Next, we will design the policy network and the value model,
-#    which is indispensable to the loss function. These modules will be used
-#    to configure our loss module.
+# 3. Next, we will design the policy and the critic networks.
 #
-# 4. Next, we will create the replay buffer and data loader.
+# 4. Next, we will create the sampling collector and the replay buffer.
 #
 # 5. Finally, we will run our training loop and analyze the results.
 #
@@ -92,16 +107,15 @@ Key learnings:
 # what a module reads and writes and care less about the specific data
 # description and more about the algorithm itself.
 #
-
-from collections import defaultdict
-
-import matplotlib.pyplot as plt
+# Let's import our dependencies
+#
+# Torch
 import torch
-from tensordict.nn import TensorDictModule
-from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 
+# Data collection
 from torchrl.collectors import SyncDataCollector
+from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -109,81 +123,64 @@ from torchrl.envs import (
     Compose,
     DoubleToFloat,
     ObservationNorm,
+    RewardSum,
     StepCounter,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
+
+# Env
+from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
+
+# Multi-agent network
+from torchrl.modules import MultiAgentMLP
+
+# Tensordict modules (key-mapped nns)
+from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import ClipPPOLoss
+
+# Loss
+from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from torchrl.objectives.value import GAE
+
+# Utils
 from tqdm import tqdm
+
+torch.manual_seed(0)
 
 ######################################################################
 # Define Hyperparameters
 # ----------------------
 #
-# We set the hyperparameters for our algorithm. Depending on the resources
-# available, one may choose to execute the policy on GPU or on another
+# We set the hyperparameters for our tutorial.
+# Depending on the resources
+# available, one may choose to execute the policy and the simulator on GPU or on another
 # device.
-# The ``frame_skip`` will control how for how many frames is a single
-# action being executed. The rest of the arguments that count frames
-# must be corrected for this value (since one environment step will
-# actually return ``frame_skip`` frames).
+# You can tune some of these values to adjust the computational requirements.
 #
 
-device = "cpu" if not torch.has_cuda else "cuda:0"
-num_cells = 256  # number of cells in each layer i.e. output dim.
-lr = 3e-4
-max_grad_norm = 1.0
+# Devices
+device = "cpu" if not torch.has_cuda else "cuda:0"  # The divice where learning is run
+vmas_device = device  # The device where the simulator is run (VMAS can run on GPU)
 
-######################################################################
-# Data collection parameters
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# When collecting data, we will be able to choose how big each batch will be
-# by defining a ``frames_per_batch`` parameter. We will also define how many
-# frames (such as the number of interactions with the simulator) we will allow ourselves to
-# use. In general, the goal of an RL algorithm is to learn to solve the task
-# as fast as it can in terms of environment interactions: the lower the ``total_frames``
-# the better.
-# We also define a ``frame_skip``: in some contexts, repeating the same action
-# multiple times over the course of a trajectory may be beneficial as it makes
-# the behavior more consistent and less erratic. However, "skipping"
-# too many frames will hamper training by reducing the reactivity of the actor
-# to observation changes.
-#
-# When using ``frame_skip`` it is good practice to
-# correct the other frame counts by the number of frames we are grouping
-# together. If we configure a total count of X frames for training but
-# use a ``frame_skip`` of Y, we will be actually collecting XY frames in total
-# which exceeds our predefined budget.
-#
-frame_skip = 1
-frames_per_batch = 1000 // frame_skip
-# For a complete training, bring the number of frames up to 1M
-total_frames = 10_000 // frame_skip
+# Sampling
+frames_per_batch = 6_000  # Number of team frames collected per training iteration
+n_iters = 1  # Number of sampling and training iterations
+total_frames = frames_per_batch * n_iters
 
-######################################################################
-# PPO parameters
-# ~~~~~~~~~~~~~~
-#
-# At each data collection (or batch collection) we will run the optimization
-# over a certain number of *epochs*, each time consuming the entire data we just
-# acquired in a nested training loop. Here, the ``sub_batch_size`` is different from the
-# ``frames_per_batch`` here above: recall that we are working with a "batch of data"
-# coming from our collector, which size is defined by ``frames_per_batch``, and that
-# we will further split in smaller sub-batches during the inner training loop.
-# The size of these sub-batches is controlled by ``sub_batch_size``.
-#
-sub_batch_size = 64  # cardinality of the sub-samples gathered from the current data in the inner loop
-num_epochs = 10  # optimisation steps per batch of data collected
-clip_epsilon = (
-    0.2  # clip value for PPO loss: see the equation in the intro for more context.
-)
-gamma = 0.99
-lmbda = 0.95
-entropy_eps = 1e-4
+# Training
+num_epochs = 30  # Number of optimization steps per training iteration
+minibatch_size = 400  # Size of the mini-batches in each optimization step
+lr = 3e-4  # Learning rate
+max_grad_norm = 1.0  # Maximum norm for the gradients
+
+# PPO
+clip_epsilon = 0.2  # clip value for PPO loss
+gamma = 0.9  # discount factor
+lmbda = 0.9  # lambda for generalized advantage estimation
+entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 ######################################################################
 # Define an environment
@@ -198,7 +195,18 @@ entropy_eps = 1e-4
 # with another. For example, creating a wrapped gym environment can be achieved with few characters:
 #
 
-base_env = GymEnv("InvertedDoublePendulum-v4", device=device, frame_skip=frame_skip)
+max_steps = 100
+num_vmas_envs = frames_per_batch // max_steps
+
+env = VmasEnv(
+    scenario="navigation",
+    num_envs=num_vmas_envs,
+    continuous_actions=True,
+    max_steps=max_steps,
+    device=vmas_device,
+    # Scenario kwargs
+    n_agents=3,
+)
 
 ######################################################################
 # There are a few things to notice in this code: first, we created
@@ -253,31 +261,10 @@ base_env = GymEnv("InvertedDoublePendulum-v4", device=device, frame_skip=frame_s
 #
 
 env = TransformedEnv(
-    base_env,
-    Compose(
-        # normalize observations
-        ObservationNorm(in_keys=["observation"]),
-        DoubleToFloat(
-            in_keys=["observation"],
-        ),
-        StepCounter(),
-    ),
+    env,
+    RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
 )
 
-######################################################################
-# As you may have noticed, we have created a normalization layer but we did not
-# set its normalization parameters. To do this, :class:`ObservationNorm` can
-# automatically gather the summary statistics of our environment:
-#
-env.transform[0].init_stats(num_iter=1000, reduce_dim=0, cat_dim=0)
-
-######################################################################
-# The :class:`ObservationNorm` transform has now been populated with a
-# location and a scale that will be used to normalize the data.
-#
-# Let us do a little sanity check for the shape of our summary stats:
-#
-print("normalization constant shape:", env.transform[0].loc.shape)
 
 ######################################################################
 # An environment is not only defined by its simulator and transforms, but also
@@ -362,22 +349,27 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # 1. Define a neural network ``D_obs`` -> ``2 * D_action``. Indeed, our ``loc`` (mu) and ``scale`` (sigma) both have dimension ``D_action``.
 #
 # 2. Append a :class:`NormalParamExtractor` to extract a location and a scale (ie splits the input in two equal parts
-#   and applies a positive transformation to the scale parameter).
+#    and applies a positive transformation to the scale parameter).
 #
 # 3. Create a probabilistic :class:`TensorDictModule` that can generate this distribution and sample from it.
 #
+#
+shared_parameters_policy = True
 
-actor_net = nn.Sequential(
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(2 * env.action_spec.shape[-1], device=device),
+policy_net = nn.Sequential(
+    MultiAgentMLP(
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
+        n_agent_outputs=2 * env.action_spec.shape[-1],
+        n_agents=env.n_agents,
+        centralised=False,
+        share_params=shared_parameters_policy,
+        device=device,
+        depth=2,
+        num_cells=256,
+        activation_class=nn.Tanh,
+    ),
     NormalParamExtractor(),
 )
-
 ######################################################################
 # To enable the policy to "talk" with the environment through the tensordict
 # data carrier, we wrap the ``nn.Module`` in a :class:`TensorDictModule`. This
@@ -385,7 +377,9 @@ actor_net = nn.Sequential(
 # outputs in-place at the registered ``out_keys``.
 #
 policy_module = TensorDictModule(
-    actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+    policy_net,
+    in_keys=[("agents", "observation")],
+    out_keys=[("agents", "loc"), ("agents", "scale")],
 )
 
 ######################################################################
@@ -403,18 +397,20 @@ policy_module = TensorDictModule(
 # where the key-value pair indicates what ``in_key`` string should be used for
 # every keyword argument that is to be used.
 #
-policy_module = ProbabilisticActor(
+
+policy = ProbabilisticActor(
     module=policy_module,
-    spec=env.action_spec,
-    in_keys=["loc", "scale"],
+    spec=env.unbatched_action_spec,
+    in_keys=[("agents", "loc"), ("agents", "scale")],
+    out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "min": env.action_spec.space.minimum,
-        "max": env.action_spec.space.maximum,
+        "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
+        "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
     },
     return_log_prob=True,
-    # we'll need the log-prob for the numerator of the importance weights
-)
+)  # we'll need the log-prob for the numerator of the importance weights
+
 
 ######################################################################
 # Value network
@@ -428,19 +424,24 @@ policy_module = ProbabilisticActor(
 # structure as the policy, but for simplicity we assign it its own set of
 # parameters.
 #
-value_net = nn.Sequential(
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(num_cells, device=device),
-    nn.Tanh(),
-    nn.LazyLinear(1, device=device),
+
+shared_parameters_critic = True
+mappo = True
+critic_net = MultiAgentMLP(
+    n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
+    n_agent_outputs=1,
+    n_agents=env.n_agents,
+    centralised=mappo,
+    share_params=shared_parameters_critic,
+    device=device,
+    depth=2,
+    num_cells=256,
+    activation_class=nn.Tanh,
 )
 
-value_module = ValueOperator(
-    module=value_net,
-    in_keys=["observation"],
+critic_module = ValueOperator(
+    module=critic_net,
+    in_keys=[("agents", "observation")],
 )
 
 ######################################################################
@@ -450,7 +451,7 @@ value_module = ValueOperator(
 # and where to write it:
 #
 print("Running policy:", policy_module(env.reset()))
-print("Running value:", value_module(env.reset()))
+print("Running value:", critic_module(env.reset()))
 
 ######################################################################
 # Data collector
@@ -484,11 +485,11 @@ print("Running value:", value_module(env.reset()))
 #
 collector = SyncDataCollector(
     env,
-    policy_module,
+    policy,
+    device=vmas_device,
+    storing_device=device,
     frames_per_batch=frames_per_batch,
     total_frames=total_frames,
-    split_trajs=False,
-    device=device,
 )
 
 ######################################################################
@@ -512,8 +513,9 @@ collector = SyncDataCollector(
 #
 
 replay_buffer = ReplayBuffer(
-    storage=LazyTensorStorage(frames_per_batch),
+    storage=LazyTensorStorage(frames_per_batch, device=device),
     sampler=SamplerWithoutReplacement(),
+    batch_size=minibatch_size,
 )
 
 ######################################################################
@@ -539,27 +541,16 @@ replay_buffer = ReplayBuffer(
 # return the policy and value losses.
 #
 
-advantage_module = GAE(
-    gamma=gamma, lmbda=lmbda, value_network=value_module, average_gae=True
-)
-
 loss_module = ClipPPOLoss(
-    actor=policy_module,
-    critic=value_module,
+    actor=policy,
+    critic=critic_module,
     clip_epsilon=clip_epsilon,
-    entropy_bonus=bool(entropy_eps),
     entropy_coef=entropy_eps,
-    # these keys match by default but we set this for completeness
-    value_target_key=advantage_module.value_target_key,
-    critic_coef=1.0,
-    gamma=0.99,
-    loss_critic_type="smooth_l1",
+    normalize_advantage=False,
 )
-
+loss_module.set_keys(reward=env.reward_key, action=env.action_key)
+loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
 optim = torch.optim.Adam(loss_module.parameters(), lr)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optim, total_frames // frames_per_batch, 0.0
-)
 
 ######################################################################
 # Training loop
@@ -581,75 +572,75 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 # * Repeat
 #
 
+pbar = tqdm(total=n_iters)
 
-logs = defaultdict(list)
-pbar = tqdm(total=total_frames * frame_skip)
-eval_str = ""
-
-# We iterate over the collector until it reaches the total number of frames it was
-# designed to collect:
+total_frames = 0
 for i, tensordict_data in enumerate(collector):
-    # we now have a batch of data to work with. Let's learn something from it.
+    tensordict_data.set(
+        ("next", "done"),
+        tensordict_data.get(("next", "done"))
+        .unsqueeze(-1)
+        .expand(tensordict_data.get(("next", env.reward_key)).shape),
+    )  # We need to expand the done to match the reward shape
+
+    with torch.no_grad():
+        loss_module.value_estimator(
+            tensordict_data,
+            params=loss_module.critic_params.detach(),
+            target_params=loss_module.target_critic_params,
+        )
+
+    current_frames = tensordict_data.numel()
+    total_frames += current_frames
+    data_view = tensordict_data.reshape(-1)
+    replay_buffer.extend(data_view)
+
+    training_tds = []
     for _ in range(num_epochs):
-        # We'll need an "advantage" signal to make PPO work.
-        # We re-compute it at each epoch as its value depends on the value
-        # network which is updated in the inner loop.
-        with torch.no_grad():
-            advantage_module(tensordict_data)
-        data_view = tensordict_data.reshape(-1)
-        replay_buffer.extend(data_view.cpu())
-        for _ in range(frames_per_batch // sub_batch_size):
-            subdata = replay_buffer.sample(sub_batch_size)
-            loss_vals = loss_module(subdata.to(device))
+        for _ in range(frames_per_batch // minibatch_size):
+            subdata = replay_buffer.sample()
+            loss_vals = loss_module(subdata)
+            training_tds.append(loss_vals.detach())
+
             loss_value = (
                 loss_vals["loss_objective"]
                 + loss_vals["loss_critic"]
                 + loss_vals["loss_entropy"]
             )
 
-            # Optimization: backward, grad clipping and optim step
             loss_value.backward()
-            # this is not strictly mandatory but it's good practice to keep
-            # your gradient norm bounded
-            torch.nn.utils.clip_grad_norm_(loss_module.parameters(), max_grad_norm)
+
+            total_norm = torch.nn.utils.clip_grad_norm_(
+                loss_module.parameters(), max_grad_norm
+            )
+
             optim.step()
             optim.zero_grad()
 
-    logs["reward"].append(tensordict_data["next", "reward"].mean().item())
-    pbar.update(tensordict_data.numel() * frame_skip)
-    cum_reward_str = (
-        f"average reward={logs['reward'][-1]: 4.4f} (init={logs['reward'][0]: 4.4f})"
-    )
-    logs["step_count"].append(tensordict_data["step_count"].max().item())
-    stepcount_str = f"step count (max): {logs['step_count'][-1]}"
-    logs["lr"].append(optim.param_groups[0]["lr"])
-    lr_str = f"lr policy: {logs['lr'][-1]: 4.4f}"
-    if i % 10 == 0:
-        # We evaluate the policy once every 10 batches of data.
-        # Evaluation is rather simple: execute the policy without exploration
-        # (take the expected value of the action distribution) for a given
-        # number of steps (1000, which is our env horizon).
-        # The ``rollout`` method of the env can take a policy as argument:
-        # it will then execute this policy at each step.
-        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
-            # execute a rollout with the trained policy
-            eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-            logs["eval reward (sum)"].append(
-                eval_rollout["next", "reward"].sum().item()
-            )
-            logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-            eval_str = (
-                f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
-                f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
-                f"eval step-count: {logs['eval step_count'][-1]}"
-            )
-            del eval_rollout
-    pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
+    collector.update_policy_weights_()
 
-    # We're also using a learning rate scheduler. Like the gradient clipping,
-    # this is a nice-to-have but nothing necessary for PPO to work.
-    scheduler.step()
+    done = tensordict_data.get(("next", "done"))
+    episode_reward_mean = (
+        tensordict_data.get(("next", "agents", "episode_reward"))[done].mean().item()
+    )
+
+    training_tds = torch.stack(training_tds)
+    pbar.update()
+    pbar.set_description(f"episode_reward_mean =  {episode_reward_mean}")
+
+
+def rendering_callback(env, td):
+    env.render(mode="human")
+
+
+env.rollout(
+    max_steps=100,
+    policy=policy,
+    callback=rendering_callback,
+    auto_cast_to_device=True,
+    break_when_any_done=True,
+    # We are running vectorized evaluation we do not want it to stop when just one env is done
+)
 
 ######################################################################
 # Results
@@ -659,20 +650,7 @@ for i, tensordict_data in enumerate(collector):
 # step count of 1000 steps, which is the maximum number of steps before the
 # trajectory is truncated.
 #
-plt.figure(figsize=(10, 10))
-plt.subplot(2, 2, 1)
-plt.plot(logs["reward"])
-plt.title("training rewards (average)")
-plt.subplot(2, 2, 2)
-plt.plot(logs["step_count"])
-plt.title("Max step count (training)")
-plt.subplot(2, 2, 3)
-plt.plot(logs["eval reward (sum)"])
-plt.title("Return (test)")
-plt.subplot(2, 2, 4)
-plt.plot(logs["eval step_count"])
-plt.title("Max step count (test)")
-plt.show()
+
 
 ######################################################################
 # Conclusion and next steps
