@@ -4,20 +4,26 @@ Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
 ==================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
-
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
-In this tutorial we will use the Navigation environment from the
+A code-only version of this tutorial is available in the
+`torchrl examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
+alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
+
+For ease of use, this tutorial will follow the general structure of the already available
+`single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
+It is suggested but not mandatory to get familiar with it prior to starting this tutorial.
+
+In this tutorial, we will use the *Navigation* environment from the
 `VMAS simulator <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__,
-a multi-robot simulator also
+a multi-robot simulator, also
 based on PyTorch, which runs parallel batched simulation on device.
 
-In the Navigation environment,
+In the *Navigation* environment,
 we need to train multiple robots (spawned at random positions)
 to navigate to their goals (also at random positions), while
- using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__, to avoid collisions
- among each other.
+using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__, to avoid among each other.
 
 .. figure:: /_static/img/navigation.gif
    :alt: Navigation
@@ -26,22 +32,11 @@ to navigate to their goals (also at random positions), while
 
 Key learnings:
 
-- How to create an environment in TorchRL, transform its outputs, and collect data from this env;
-- How to make your classes talk to each other using :class:`tensordict.TensorDict`;
-- The basics of building your training loop with TorchRL:
-
-  - How to compute the advantage signal for policy gradient methods;
-  - How to create a stochastic policy using a probabilistic neural network;
-  - How to create a dynamic replay buffer and sample from it without repetition.
-
-We will cover six crucial components of TorchRL:
-
-* `environments <https://pytorch.org/rl/reference/envs.html>`__
-* `transforms <https://pytorch.org/rl/reference/envs.html#transforms>`__
-* `models (policy and value function) <https://pytorch.org/rl/reference/modules.html>`__
-* `loss modules <https://pytorch.org/rl/reference/objectives.html>`__
-* `data collectors <https://pytorch.org/rl/reference/collectors.html>`__
-* `replay buffers <https://pytorch.org/rl/reference/data.html#replay-buffers>`__
+- How to create a multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;
+- How you use GPU vectorized environments in TorchRL;
+- How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
+- How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
+- How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 
 """
 
@@ -51,7 +46,7 @@ We will cover six crucial components of TorchRL:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install gym[mujoco]
+#    !pip3 install vmas
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
@@ -61,38 +56,21 @@ We will cover six crucial components of TorchRL:
 # the foundational policy-optimization algorithm. For more information, see the
 # `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
 #
-# PPO is usually regarded as a fast and efficient method for online, on-policy
-# reinforcement algorithm. TorchRL provides a loss-module that does all the work
-# for you, so that you can rely on this implementation and focus on solving your
-# problem rather than re-inventing the wheel every time you want to train a policy.
+# This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
+# **sampling** and a **training** phase. In the **sampling** phase of iteration  :math:`t`, rollouts are collected
+# form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
+# In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
+# backpropagation. This leads to updated policies which are then used again for sampling.
+# The execution of this process in a loop constitutes *on-policy learning*.
 #
-# For completeness, here is a brief overview of what the loss computes, even though
-# this is taken care of by our :class:`ClipPPOLoss` module—the algorithm works as follows:
-# 1. we will sample a batch of data by playing the
-# policy in the environment for a given number of steps.
-# 2. Then, we will perform a given number of optimization steps with random sub-samples of this batch using
-# a clipped version of the REINFORCE loss.
-# 3. The clipping will put a pessimistic bound on our loss: lower return estimates will
-# be favored compared to higher ones.
-# The precise formula of the loss is:
+# .. figure:: /_static/img/on_policy_vmas.png
+#    :alt: On-policy learning
 #
-# .. math::
+#    On-policy learning
 #
-#     L(s,a,\theta_k,\theta) = \min\left(
-#     \frac{\pi_{\theta}(a|s)}{\pi_{\theta_k}(a|s)}  A^{\pi_{\theta_k}}(s,a), \;\;
-#     g(\epsilon, A^{\pi_{\theta_k}}(s,a))
-#     \right),
 #
-# There are two components in that loss: in the first part of the minimum operator,
-# we simply compute an importance-weighted version of the REINFORCE loss (for example, a
-# REINFORCE loss that we have corrected for the fact that the current policy
-# configuration lags the one that was used for the data collection).
-# The second part of that minimum operator is a similar loss where we have clipped
-# the ratios when they exceeded or were below a given pair of thresholds.
+# In the
 #
-# This loss ensures that whether the advantage is positive or negative, policy
-# updates that would produce significant shifts from the previous configuration
-# are being discouraged.
 #
 # This tutorial is structured as follows:
 #
