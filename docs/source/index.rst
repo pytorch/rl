@@ -40,6 +40,7 @@ Basics
    :maxdepth: 1
 
    tutorials/coding_ppo
+   tutorials/multiagent_ppo
    tutorials/pendulum
    tutorials/torchrl_demo
 
