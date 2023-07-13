@@ -335,6 +335,20 @@ algorithms, such as DQN, DDPG or Dreamer.
     RSSMPrior
     RSSMPosterior
 
+Multi-agent-specific modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These networks implement models that can be used in
+multi-agent contexts.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    MultiAgentMLP
+    QMixer
+    VDNMixer
+
 
 Exploration
 -----------

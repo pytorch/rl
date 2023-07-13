@@ -389,7 +389,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         return self.value_network._is_stateless
 
     def _next_value(self, tensordict, target_params, kwargs):
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params

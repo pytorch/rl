@@ -23,6 +23,8 @@ from tensordict.nn import (
     TensorDictSequential as Seq,
 )
 
+from torchrl.modules.models import QMixer
+
 _has_functorch = True
 try:
     import functorch as ft  # noqa
@@ -46,6 +48,7 @@ from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.utils import unravel_key
 from torch import autograd, nn
 from torchrl.data import (
     BoundedTensorSpec,
@@ -80,6 +83,7 @@ from torchrl.modules.tensordict_module.actors import (
     ActorCriticOperator,
     ActorValueOperator,
     ProbabilisticActor,
+    QValueModule,
     ValueOperator,
 )
 from torchrl.modules.utils import Buffer
@@ -97,6 +101,7 @@ from torchrl.objectives import (
     IQLLoss,
     KLPENPPOLoss,
     PPOLoss,
+    QMixerLoss,
     SACLoss,
     TD3Loss,
 )
@@ -717,6 +722,420 @@ class TestDQN(LossModuleTestBase):
         with _check_td_steady(td):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
+
+
+class TestQMixer(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(
+        self,
+        action_spec_type,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        is_nn_module=False,
+        observation_key=("agents", "observation"),
+        action_key=("agents", "action"),
+        action_value_key=("agents", "action_value"),
+        chosen_action_value_key=("agents", "chosen_action_value"),
+    ):
+        # Actor
+        if action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
+
+        module = nn.Linear(obs_dim, action_dim)
+        if is_nn_module:
+            return module.to(device)
+        module = TensorDictModule(
+            module,
+            in_keys=[observation_key],
+            out_keys=[action_value_key],
+        )
+        value_module = QValueModule(
+            action_value_key=action_value_key,
+            out_keys=[
+                action_key,
+                action_value_key,
+                chosen_action_value_key,
+            ],
+            spec=action_spec,
+            action_space=None,
+        )
+        actor = SafeSequential(module, value_module)
+
+        return actor
+
+    def _create_mock_mixer(
+        self,
+        state_shape=(64, 64, 3),
+        n_agents=4,
+        device="cpu",
+        chosen_action_value_key=("agents", "chosen_action_value"),
+        state_key="state",
+        global_chosen_action_value_key="chosen_action_value",
+    ):
+        qmixer = TensorDictModule(
+            module=QMixer(
+                state_shape=state_shape,
+                mixing_embed_dim=32,
+                n_agents=n_agents,
+                device=device,
+            ),
+            in_keys=[chosen_action_value_key, state_key],
+            out_keys=[global_chosen_action_value_key],
+        )
+
+        return qmixer
+
+    def _create_mock_data_dqn(
+        self,
+        action_spec_type,
+        batch=(2,),
+        T=None,
+        n_agents=4,
+        obs_dim=3,
+        state_shape=(64, 64, 3),
+        action_dim=4,
+        device="cpu",
+        action_key=("agents", "action"),
+        action_value_key=("agents", "action_value"),
+    ):
+        if T is not None:
+            batch = batch + (T,)
+        # create a tensordict
+        obs = torch.randn(*batch, n_agents, obs_dim, device=device)
+        state = torch.randn(*batch, *state_shape, device=device)
+        next_obs = torch.randn(*batch, n_agents, obs_dim, device=device)
+        next_state = torch.randn(*batch, *state_shape, device=device)
+
+        action_value = torch.randn(*batch, n_agents, action_dim, device=device)
+        if action_spec_type == "one_hot":
+            action = (action_value == action_value.max(dim=-1, keepdim=True)[0]).to(
+                torch.long
+            )
+        elif action_spec_type == "categorical":
+            action = torch.argmax(action_value, dim=-1).to(torch.long)
+
+        reward = torch.randn(*batch, 1, device=device)
+        done = torch.zeros(*batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": obs},
+                    [*batch, n_agents],
+                    device=device,
+                ),
+                "state": state,
+                "collector": {
+                    "mask": torch.zeros(*batch, dtype=torch.bool, device=device)
+                },
+                "next": TensorDict(
+                    {
+                        "agents": TensorDict(
+                            {"observation": next_obs},
+                            [*batch, n_agents],
+                            device=device,
+                        ),
+                        "state": next_state,
+                        "reward": reward,
+                        "done": done,
+                    },
+                    batch_size=batch,
+                    device=device,
+                ),
+            },
+            batch_size=batch,
+            device=device,
+        )
+        td.set(action_key, action)
+        td.set(action_value_key, action_value)
+        if T is not None:
+            td.refine_names(None, "time")
+        return td
+
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    def test_qmixer(self, delay_value, device, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        mixer = self._create_mock_mixer(device=device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+        if td_est is ValueEstimators.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_local_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_local_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_mixer_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_mixer_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    def test_qmix_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        mixer = self._create_mock_mixer(device=device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, T=4, device=device
+        )
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
+        ms_td = ms(td.clone())
+
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
+
+        with torch.no_grad():
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_local_value_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_local_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_mixer_network_params.clone()
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        target_value2 = loss_fn.target_mixer_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_qmix_tensordict_keys(self, td_est):
+        torch.manual_seed(self.seed)
+        action_spec_type = "one_hot"
+        actor = self._create_mock_actor(action_spec_type=action_spec_type)
+        mixer = self._create_mock_mixer()
+        loss_fn = QMixerLoss(actor, mixer)
+
+        default_keys = {
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "local_value": ("agents", "chosen_action_value"),
+            "global_value": "chosen_action_value",
+            "priority": "td_error",
+            "action_value": ("agents", "action_value"),
+            "action": ("agents", "action"),
+            "reward": "reward",
+            "done": "done",
+        }
+
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+        loss_fn = QMixerLoss(actor, mixer)
+        key_mapping = {
+            "advantage": ("advantage", "advantage_2"),
+            "value_target": ("value_target", ("value_target", "nested")),
+            "reward": ("reward", "reward_test"),
+            "done": ("done", ("done", "test")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type,
+        )
+        mixer = self._create_mock_mixer(
+            global_chosen_action_value_key=("some", "nested")
+        )
+        loss_fn = QMixerLoss(actor, mixer)
+        key_mapping = {
+            "global_value": ("value", ("some", "nested")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("action_spec_type", ("categorical", "one_hot"))
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_qmix_tensordict_run(self, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        tensor_keys = {
+            "action_value": ("other", "action_value_test"),
+            "action": ("other", "action"),
+            "local_value": ("some", "local_v"),
+            "global_value": "global_v",
+            "priority": "priority_test",
+        }
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type,
+            action_value_key=tensor_keys["action_value"],
+            action_key=tensor_keys["action"],
+            chosen_action_value_key=tensor_keys["local_value"],
+        )
+        mixer = self._create_mock_mixer(
+            chosen_action_value_key=tensor_keys["local_value"],
+            global_chosen_action_value_key=tensor_keys["global_value"],
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type,
+            action_key=tensor_keys["action"],
+            action_value_key=tensor_keys["action_value"],
+        )
+
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2")
+        loss_fn.set_keys(**tensor_keys)
+
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with _check_td_steady(td):
+            _ = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+    @pytest.mark.parametrize(
+        "mixer_local_chosen_action_value_key",
+        [("agents", "chosen_action_value"), ("other")],
+    )
+    @pytest.mark.parametrize(
+        "mixer_global_chosen_action_value_key",
+        ["chosen_action_value", ("nested", "other")],
+    )
+    def test_mixer_keys(
+        self,
+        mixer_local_chosen_action_value_key,
+        mixer_global_chosen_action_value_key,
+        n_agents=4,
+        obs_dim=3,
+    ):
+        torch.manual_seed(0)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+        )
+        mixer = self._create_mock_mixer(
+            chosen_action_value_key=mixer_local_chosen_action_value_key,
+            global_chosen_action_value_key=mixer_global_chosen_action_value_key,
+            n_agents=n_agents,
+        )
+
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": torch.zeros(32, n_agents, obs_dim)}, [32, n_agents]
+                ),
+                "state": torch.zeros(32, 64, 64, 3),
+                "next": TensorDict(
+                    {
+                        "agents": TensorDict(
+                            {"observation": torch.zeros(32, n_agents, obs_dim)},
+                            [32, n_agents],
+                        ),
+                        "state": torch.zeros(32, 64, 64, 3),
+                        "reward": torch.zeros(32, 1),
+                        "done": torch.zeros(32, 1, dtype=torch.bool),
+                    },
+                    [32],
+                ),
+            },
+            [32],
+        )
+        td = actor(td)
+
+        loss = QMixerLoss(actor, mixer)
+
+        # Wthout etting the keys
+        if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
+            with pytest.raises(RuntimeError):
+                loss(td)
+        elif unravel_key(mixer_global_chosen_action_value_key) != "chosen_action_value":
+            with pytest.raises(
+                KeyError, match='key "chosen_action_value" not found in TensorDict'
+            ):
+                loss(td)
+        else:
+            loss(td)
+
+        loss = QMixerLoss(actor, mixer)
+        # When setting the key
+        loss.set_keys(global_value=mixer_global_chosen_action_value_key)
+        if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
+            with pytest.raises(
+                RuntimeError
+            ):  # The mixer in key still does not match the actor out_key
+                loss(td)
+        else:
+            loss(td)
 
 
 @pytest.mark.skipif(
@@ -2699,7 +3118,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         target_entropy,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
 
@@ -3247,7 +3665,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3342,7 +3759,6 @@ class TestREDQ(LossModuleTestBase):
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
-
         torch.manual_seed(self.seed)
 
         actor, qvalue, common, td = self._create_mock_common_layer_setup()
@@ -3431,7 +3847,6 @@ class TestREDQ(LossModuleTestBase):
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_deprecated_separate_losses(self, separate_losses):
-
         torch.manual_seed(self.seed)
 
         actor, qvalue, common, td = self._create_mock_common_layer_setup()
@@ -3520,7 +3935,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_redq_shared(self, delay_qvalue, num_qvalue, device):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3585,7 +3999,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq_batched(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -4111,7 +4524,6 @@ class TestCQL(LossModuleTestBase):
         with_lagrange,
         device,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_cql(device=device)
 
@@ -6454,7 +6866,6 @@ class TestIQL(LossModuleTestBase):
         expectile,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(device=device)
 
@@ -7114,7 +7525,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     # total dist
     d0 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
@@ -7130,7 +7541,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for i in range(value_network_update_interval + 1):
             # test that no update is occuring until value_network_update_interval
             d1 = 0.0
-            for (key, source_val) in upd._sources.items(True, True):
+            for key, source_val in upd._sources.items(True, True):
                 if not isinstance(key, tuple):
                     key = (key,)
                 key = ("target_" + key[0], *key[1:])
@@ -7145,7 +7556,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert upd.counter == 0
         # test that a new update has occured
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -7158,7 +7569,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     elif mode == "soft":
         upd.step()
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -7171,7 +7582,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         upd.init_()
     upd.step()
     d2 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
