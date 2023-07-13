@@ -156,7 +156,7 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
-n_iters = 10  # Number of sampling and training iterations
+n_iters = 20  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
@@ -305,7 +305,7 @@ check_env_specs(env)
 # that matches this trajectory length:
 #
 rollout = env.rollout(max_steps, break_when_any_done=False)
-rollout["agents", "info", "final_rew"].mean().item()
+rollout["agents", "info", "final_rew"].max().item()
 
 ######################################################################
 # Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
@@ -619,7 +619,7 @@ for tensordict_data in collector:
     pbar.update()
 
 rollout = env.rollout(max_steps, policy=policy, break_when_any_done=False)
-rollout["agents", "info", "final_rew"].mean().item()
+print(rollout["agents", "info", "final_rew"].max().item())
 
 ######################################################################
 # Render
