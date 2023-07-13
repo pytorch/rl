@@ -156,7 +156,7 @@ vmas_device = device  # The device where the simulator is run (VMAS can run on G
 
 # Sampling
 frames_per_batch = 6_000  # Number of team frames collected per training iteration
-n_iters = 20  # Number of sampling and training iterations
+n_iters = 10  # Number of sampling and training iterations
 total_frames = frames_per_batch * n_iters
 
 # Training
@@ -304,8 +304,9 @@ check_env_specs(env)
 # number of steps, we will retrieve a :class:`tensordict.TensorDict` instance with a shape
 # that matches this trajectory length:
 #
-rollout = env.rollout(max_steps, break_when_any_done=False)
-rollout["agents", "info", "final_rew"].max().item()
+rollout = env.rollout(3)
+print("rollout of three steps:", rollout)
+print("Shape of the rollout TensorDict:", rollout.batch_size)
 
 ######################################################################
 # Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
@@ -561,7 +562,7 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 # * Repeat
 #
 
-pbar = tqdm(total=n_iters)
+pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
 total_frames = 0
 for tensordict_data in collector:
@@ -618,16 +619,34 @@ for tensordict_data in collector:
     pbar.set_description(f"episode_reward_mean = {episode_reward_mean}", refresh=False)
     pbar.update()
 
-rollout = env.rollout(max_steps, policy=policy, break_when_any_done=False)
-print(rollout["agents", "info", "final_rew"].max().item())
+######################################################################
+# Results
+# -------
+#
+# Before the 1M step cap is reached, the algorithm should have reached a max
+# step count of 1000 steps, which is the maximum number of steps before the
+# trajectory is truncated.
+#
+
 
 ######################################################################
 # Render
 # -------
-# If you are running this in Google Colab,you can render the trained policy by running:
+# If you are running this in a machine with GUI, you can render the trained policy by running:
 #
 # .. code-block:: python
+#    env.rollout(
+#        max_steps=max_steps,
+#        policy=policy,
+#        callback=lambda env, _: env.render(),
+#        auto_cast_to_device=True,
+#        break_when_any_done=False,
+#    )
 #
+#
+# If you are running this in Google Colab, you can render the trained policy by running:
+#
+# .. code-block:: python
 #    !apt-get update
 #    !apt-get install -y x11-utils
 #    !apt-get install -y xvfb
@@ -636,6 +655,7 @@ print(rollout["agents", "info", "final_rew"].max().item())
 #    display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
 #    display.start()
 #    from PIL import Image
+#
 #    def rendering_callback(env, td):
 #        env.frames.append(Image.fromarray(env.render(mode="rgb_array")))
 #    env.frames = []
@@ -653,16 +673,9 @@ print(rollout["agents", "info", "final_rew"].max().item())
 #       duration=3,
 #       loop=0,
 #     )
+#
 #     from IPython.display import Image
 #     Image(open(f"{scenario_name}"}.gif", "rb").read())
-
-######################################################################
-# Results
-# -------
-#
-# Before the 1M step cap is reached, the algorithm should have reached a max
-# step count of 1000 steps, which is the maximum number of steps before the
-# trajectory is truncated.
 #
 
 
