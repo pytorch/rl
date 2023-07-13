@@ -3415,7 +3415,11 @@ class RewardSum(Transform):
                 dtype=torch.bool,
                 device=tensordict.device,
             )
+
         if _reset.any():
+            _reset = _reset.sum(
+                tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
+            )
             reward_key = self.parent.reward_key if self.parent else "reward"
             for in_key, out_key in zip(self.in_keys, self.out_keys):
                 if out_key in tensordict.keys(True, True):
