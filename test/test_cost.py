@@ -733,7 +733,6 @@ class TestQMixer(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
-        is_nn_module=False,
         observation_key=("agents", "observation"),
         action_key=("agents", "action"),
         action_value_key=("agents", "action_value"),
@@ -747,9 +746,8 @@ class TestQMixer(LossModuleTestBase):
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
-        module = nn.Linear(obs_dim, action_dim)
-        if is_nn_module:
-            return module.to(device)
+        module = nn.Linear(obs_dim, action_dim).to(device)
+
         module = TensorDictModule(
             module,
             in_keys=[observation_key],
