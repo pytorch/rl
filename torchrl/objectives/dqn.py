@@ -231,10 +231,6 @@ class DQNLoss(LossModule):
             self._set_in_keys()
         return self._in_keys
 
-    @in_keys.setter
-    def in_keys(self, values):
-        self._in_keys = values
-
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
