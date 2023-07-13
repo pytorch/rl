@@ -1684,15 +1684,15 @@ class ObservationNorm(ObservationTransform):
     Args:
         loc (number or tensor): location of the affine transform
         scale (number or tensor): scale of the affine transform
-        in_keys (seuqence of NestedKey, optional): entries to be normalized. Defaults to ["observation", "pixels"].
+        in_keys (sequence of NestedKey, optional): entries to be normalized. Defaults to ["observation", "pixels"].
             All entries will be normalized with the same values: if a different behaviour is desired
             (e.g. a different normalization for pixels and states) different :obj:`ObservationNorm`
             objects should be used.
-        out_keys (seuqence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
-        in_keys_inv (seuqence of NestedKey, optional): ObservationNorm also supports inverse transforms. This will
+        out_keys (sequence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
+        in_keys_inv (sequence of NestedKey, optional): ObservationNorm also supports inverse transforms. This will
             only occur if a list of keys is provided to :obj:`in_keys_inv`. If none is provided,
             only the forward transform will be called.
-        out_keys_inv (seuqence of NestedKey, optional): output entries for the inverse transform.
+        out_keys_inv (sequence of NestedKey, optional): output entries for the inverse transform.
             Defaults to the value of `in_keys_inv`.
         standard_normal (bool, optional): if ``True``, the transform will be
 
@@ -1964,9 +1964,9 @@ class CatFrames(ObservationTransform):
         dim (int): dimension along which concatenate the
             observations. Should be negative, to ensure that it is compatible
             with environments of different batch_size.
-        in_keys (seuqence of NestedKey, optional): keys pointing to the frames that have
+        in_keys (sequence of NestedKey, optional): keys pointing to the frames that have
             to be concatenated. Defaults to ["pixels"].
-        out_keys (seuqence of NestedKey, optional): keys pointing to where the output
+        out_keys (sequence of NestedKey, optional): keys pointing to where the output
             has to be written. Defaults to the value of `in_keys`.
         padding (str, optional): the padding method. One of ``"same"`` or ``"zeros"``.
             Defaults to ``"same"``, ie. the first value is uesd for padding.
