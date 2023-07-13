@@ -4,7 +4,7 @@ sphinx-copybutton==0.5.2
 sphinx-gallery==0.13.0
 sphinx==6.2.1
 Jinja2==3.1.2
-sphinx-autodoc-typehints
+sphinx-autodoc-typehints==1.23.0
 sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-htmlhelp
@@ -14,7 +14,6 @@ docutils==0.19
 
 torchvision
 dm_control
-atari-py
 ale-py
 gym[classic_control,accept-rom-license]
 pygame
