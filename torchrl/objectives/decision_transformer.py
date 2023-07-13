@@ -203,7 +203,7 @@ class OnlineDTLoss(LossModule):
 
         out = {
             "loss_log_likelihood": -loss_log_likelihood,
-            "loss_entropy": loss_entropy,
+            "loss_entropy": -loss_entropy,
             "loss_alpha": loss_alpha,
             "entropy": entropy.detach(),
             "alpha": self.alpha.detach(),

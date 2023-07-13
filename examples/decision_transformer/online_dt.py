@@ -39,7 +39,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor = make_odt_model(cfg)
     policy = actor.to(model_device)
 
-    loss_module = make_odt_loss(cfg.loss, actor)
+    loss_module = make_odt_loss(cfg.loss, policy)
     transformer_optim, temperature_optim, scheduler = make_odt_optimizer(
         cfg.optim, policy, loss_module
     )
