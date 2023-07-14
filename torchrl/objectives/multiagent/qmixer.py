@@ -46,14 +46,14 @@ class QMixerLoss(LossModule):
     Therefore, it expects the 'local_value', 'action_value' and 'action' keys
     to have an agent dimension (this is visible in the dafault AcceptedKeys).
     This dimension will be mixed by the mixer which will compute a 'global_value' key, used for a DQN objective.
-    The premade mixers of type :class:`~torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
+    The premade mixers of type :class:`torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
     dimension to be the penultimate one.
 
     Args:
         local_value_network (QValueActor or nn.Module): a local Q value operator.
         mixer_network (TensorDictModule or nn.Module): a mixer network mapping the agents' local Q values
             and an optional state to the global Q value. It is suggested to provide a TensorDictModule
-            wrapping a mixer from :class:`~torchrl.modules.models.multiagent.Mixer`.
+            wrapping a mixer from :class:`torchrl.modules.models.multiagent.Mixer`.
 
     Keyword Args:
         loss_function (str, optional): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
