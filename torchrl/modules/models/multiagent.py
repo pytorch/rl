@@ -493,10 +493,10 @@ class QMixer(Mixer):
     Used with the :class:`torchrl.objectives.QMixerLoss`.
     See `examples/multiagent/qmix_vdn.py` for examples.
 
-    Args
-        n_agents (int): number of agents.
-        mixing_embed_dim (int): the size of the mixing embedded dimension.
+    Args:
         state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions).
+        mixing_embed_dim (int): the size of the mixing embedded dimension.
+        n_agents (int): number of agents.
         device (str or torch.Device): torch device for the network.
 
     Examples:
