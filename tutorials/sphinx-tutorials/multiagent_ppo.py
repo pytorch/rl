@@ -137,9 +137,9 @@ from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal, Value
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
 
 # Utils
+torch.manual_seed(0)
 from tqdm import tqdm
 
-torch.manual_seed(0)
 
 ######################################################################
 # Define Hyperparameters
