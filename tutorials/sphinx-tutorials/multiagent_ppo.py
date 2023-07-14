@@ -174,21 +174,31 @@ lmbda = 0.9  # lambda for generalized advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 ######################################################################
-# Define an environment
+# Environment
 # ---------------------
 #
-# In RL, an *environment* is usually the way we refer to a simulator or a
-# control system. Various libraries provide simulation environments for reinforcement
-# learning, including Gymnasium (previously OpenAI Gym), DeepMind control suite, and
-# many others.
-# As a generalistic library, TorchRL's goal is to provide an interchangeable interface
-# to a large panel of RL simulators, allowing you to easily swap one environment
-# with another. For example, creating a wrapped gym environment can be achieved with few characters:
+# Multi-agent environments simulate multiple agents interacting with the world.
+# TorchRL API allows integrating various types of multi-agent environment flavours.
+# Some examples include environments with shared or individual agent rewards, done flags, and observations.
+# For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
+# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+#
+# The VMAS simulator, in particular, models agents with individual rewards, info, observations, and actions, but
+# with a collective done flag.
+# Furthermore, it uses *vectorization* to perform simulation in a batch.
+# This means that all its state and physics
+# are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
+# This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
+# speed up parallel computation by leveraging parallelization in GPU warps.
+#
+#
+#
 #
 
 max_steps = 100
 num_vmas_envs = frames_per_batch // max_steps
 scenario_name = "navigation"
+n_agents = 3
 
 env = VmasEnv(
     scenario=scenario_name,
@@ -197,7 +207,7 @@ env = VmasEnv(
     max_steps=max_steps,
     device=vmas_device,
     # Scenario kwargs
-    n_agents=3,
+    n_agents=n_agents,
 )
 
 ######################################################################
