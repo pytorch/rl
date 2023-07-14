@@ -889,7 +889,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += 3
+            p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
