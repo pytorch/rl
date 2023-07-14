@@ -131,7 +131,7 @@ from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs
 
 # Multi-agent network
-from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal, ValueOperator
+from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal
 
 # Loss
 from torchrl.objectives import ClipPPOLoss, ValueEstimators
@@ -383,47 +383,55 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # As the data is continuous, we use a Tanh-Normal distribution to respect the
 # action space boundaries. TorchRL provides such distribution, and the only
 # thing we need to care about is to build a neural network that outputs the
-# right number of parameters for the policy to work with (a location, or mean,
-# and a scale):
+# right number of parameters.
 #
-# .. math::
+# In this case, each agent's action will be represented by a 2-dimensional independent normal distribution.
+# For this, our neural network will have to output a mean and a standard deviation.
+# Each agent will thus have ``2 * n_actions_per_agents`` outputs.
 #
-#     f_{\theta}(\text{observation}) = \mu_{\theta}(\text{observation}), \sigma^{+}_{\theta}(\text{observation})
+# Another important decision is whether we want our agents to **share the policy parameters**.
+# Sharing parameters means that they will all share the same policy, which will allow them to benefit from
+# each other's experiences. This will also result in faster training.
+# On the other hand, it will make them *homogenous*, as they will in fact share the same brain.
+# For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
+# speed, but it is important to always think about this decision in your own problems!
 #
-# The only extra-difficulty that is brought up here is to split our output in two
-# equal parts and map the second to a scrictly positive space.
+# We design the policy in three steps.
 #
-# We design the policy in three steps:
+# Define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
+# ~~~~~~~~~~
 #
-# 1. Define a neural network ``D_obs`` -> ``2 * D_action``. Indeed, our ``loc`` (mu) and ``scale`` (sigma) both have dimension ``D_action``.
+# For this we use the ``MultiAgentMLP``, a torchrl module made exactly for training
+# multiple agents, with much customization available.
 #
-# 2. Append a :class:`NormalParamExtractor` to extract a location and a scale (ie splits the input in two equal parts
-#    and applies a positive transformation to the scale parameter).
-#
-# 3. Create a probabilistic :class:`TensorDictModule` that can generate this distribution and sample from it.
-#
-#
-shared_parameters_policy = True
+
+share_parameters_policy = True
 
 policy_net = torch.nn.Sequential(
     MultiAgentMLP(
-        n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-        n_agent_outputs=2 * env.action_spec.shape[-1],
+        n_agent_inputs=env.observation_spec["agents", "observation"].shape[
+            -1
+        ],  # n_obs_per_agent
+        n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
-        centralised=False,
-        share_params=shared_parameters_policy,
+        centralised=False,  # the policies are decentralized (ie each agent will act from its observation)
+        share_params=share_parameters_policy,
         device=device,
         depth=2,
         num_cells=256,
         activation_class=torch.nn.Tanh,
     ),
-    NormalParamExtractor(),
+    NormalParamExtractor(),  # this will just separate the last dimension into two outputs: a loc and a non-negative scale
 )
+
 ######################################################################
-# To enable the policy to "talk" with the environment through the tensordict
-# data carrier, we wrap the ``nn.Module`` in a :class:`TensorDictModule`. This
-# class will simply ready the ``in_keys`` it is provided with and write the
-# outputs in-place at the registered ``out_keys``.
+# Wrap the neural network in a :class:`TensorDictModule`
+# ~~~~~~~~~~
+#
+# This is simply a module that will read the ``in_keys`` it is provided with and write the
+# outputs of the neural network in-place at the ``out_keys``.
+#
+# Note that we use ``("agents", ...)`` keys as these keys are all per-agent.
 #
 policy_module = TensorDictModule(
     policy_net,
@@ -432,6 +440,9 @@ policy_module = TensorDictModule(
 )
 
 ######################################################################
+# Wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
+# ~~~~~~~~~~
+#
 # We now need to build a distribution out of the location and scale of our
 # normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
 # class to build a :class:`TanhNormal` out of the location and scale
@@ -439,12 +450,8 @@ policy_module = TensorDictModule(
 # distribution, which we gather from the environment specs.
 #
 # The name of the ``in_keys`` (and hence the name of the ``out_keys`` from
-# the :class:`TensorDictModule` above) cannot be set to any value one may
-# like, as the :class:`TanhNormal` distribution constructor will expect the
-# ``loc`` and ``scale`` keyword arguments. That being said,
-# :class:`ProbabilisticActor` also accepts ``Dict[str, str]`` typed ``in_keys``
-# where the key-value pair indicates what ``in_key`` string should be used for
-# every keyword argument that is to be used.
+# the :class:`TensorDictModule` above) has to end with the
+# :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
 #
 
 policy = ProbabilisticActor(
@@ -458,49 +465,61 @@ policy = ProbabilisticActor(
         "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
     },
     return_log_prob=True,
-)  # we'll need the log-prob for the numerator of the importance weights
-
+    log_prob_key=("agents", "sample_log_prob"),
+)  # we'll need the log-prob for the PPO loss
 
 ######################################################################
-# Value network
+# Critic network
 # -------------
 #
-# The value network is a crucial component of the PPO algorithm, even though it
-# won't be used at inference time. This module will read the observations and
-# return an estimation of the discounted return for the following trajectory.
-# This allows us to amortize learning by relying on the some utility estimation
-# that is learnt on-the-fly during training. Our value network share the same
-# structure as the policy, but for simplicity we assign it its own set of
-# parameters.
+# The critic network is a crucial component of the PPO algorithm, even though it
+# isn't used at sampling time. This module will read the observations and
+# return the corresponding value.
 #
+# As before, you have to think carefully about the decision of **sharing the critic parameters**.
+# Sharing is definitely not recommended when agents have different reward functions. In cases
+# where the reward function (note: the reward function, NOT the reward) is the same for all agents (like here),
+# sharing might help performance.
+#
+# Here is also where we have to choose between **MAPPO and IPPO**.
+# With MAPPO and shared parameters, we will essentially obtain a central critic with full-observability
+# (i.e., it will have all the concatenated agent observations as input). We can do this because we are in a simulator
+# and training is centralised. With IPPO we will have a local decentralized critic, just like the policy.
+# In any case, the critic output will have shape ``(..., n_agents, 1)``. If the critic is centralised and shared
+# all the values along the ``n_agents`` dimension will be identical.
 
-shared_parameters_critic = True
-mappo = True
+share_parameters_critic = True
+mappo = True  # IPPO if False
+
 critic_net = MultiAgentMLP(
     n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
-    n_agent_outputs=1,
+    n_agent_outputs=1,  # 1 value per agent
     n_agents=env.n_agents,
     centralised=mappo,
-    share_params=shared_parameters_critic,
+    share_params=share_parameters_critic,
     device=device,
     depth=2,
     num_cells=256,
     activation_class=torch.nn.Tanh,
 )
 
-critic_module = ValueOperator(
+critic = TensorDictModule(
     module=critic_net,
     in_keys=[("agents", "observation")],
+    out_keys=[("agents", "state_value")],
 )
 
 ######################################################################
-# let's try our policy and value modules. As we said earlier, the usage of
+# let's try our policy and critic modules. As we said earlier, the usage of
 # :class:`TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
 # and where to write it:
 #
-print("Running policy:", policy_module(env.reset()))
-print("Running value:", critic_module(env.reset()))
+# **From this point on, the multi-agent-specific components are instantiated,cand we will simply use the same
+# components as in single-agent learning. Isn't this fantastic?**
+#
+print("Running policy:", policy(env.reset()))
+print("Running value:", critic(env.reset()))
 
 ######################################################################
 # Data collector
@@ -508,29 +527,12 @@ print("Running value:", critic_module(env.reset()))
 #
 # TorchRL provides a set of :class:`DataCollector` classes. Briefly, these
 # classes execute three operations: reset an environment, compute an action
-# given the latest observation, execute a step in the environment, and repeat
+# using the policy and the latest observation, execute a step in the environment, and repeat
 # the last two steps until the environment signals a stop (or reaches a done
 # state).
 #
-# They allow you to control how many frames to collect at each iteration
-# (through the ``frames_per_batch`` parameter),
-# when to reset the environment (through the ``max_frames_per_traj`` argument),
-# on which ``device`` the policy should be executed, etc. They are also
-# designed to work efficiently with batched and multiprocessed environments.
-#
-# The simplest data collector is the :class:`SyncDataCollector`: it is an
-# iterator that you can use to get batches of data of a given length, and
-# that will stop once a total number of frames (``total_frames``) have been
-# collected.
-# Other data collectors (``MultiSyncDataCollector`` and
-# ``MultiaSyncDataCollector``) will execute the same operations in synchronous
-# and asynchronous manner over a set of multiprocessed workers.
-#
-# As for the policy and environment before, the data collector will return
-# :class:`tensordict.TensorDict` instances with a total number of elements that will
-# match ``frames_per_batch``. Using :class:`tensordict.TensorDict` to pass data to the
-# training loop allows you to write dataloading pipelines
-# that are 100% oblivious to the actual specificities of the rollout content.
+# We will use the simplest possible data collector, which has the same output as an environment rollout,
+# with the only difference that it will auto reset until the desired frames are collected.
 #
 collector = SyncDataCollector(
     env,
@@ -550,21 +552,17 @@ collector = SyncDataCollector(
 # data is collected, and its data is repeatedly consumed for a certain number
 # of epochs.
 #
-# TorchRL's replay buffers are built using a common container
-# :class:`ReplayBuffer` which takes as argument the components of the buffer:
-# a storage, a writer, a sampler and possibly some transforms. Only the
-# storage (which indicates the replay buffer capacity) is mandatory. We
-# also specify a sampler without repetition to avoid sampling multiple times
-# the same item in one epoch.
 # Using a replay buffer for PPO is not mandatory and we could simply
-# sample the sub-batches from the collected batch, but using these classes
-# make it easy for us to build the inner training loop in a reproducible way.
+# use the collected data online, but using these classes
+# makes it easy for us to build the inner training loop in a reproducible way.
 #
 
 replay_buffer = ReplayBuffer(
-    storage=LazyTensorStorage(frames_per_batch, device=device),
+    storage=LazyTensorStorage(
+        frames_per_batch, device=device
+    ),  # We store the frames_per_batch collected at each iteration
     sampler=SamplerWithoutReplacement(),
-    batch_size=minibatch_size,
+    batch_size=minibatch_size,  # We will sample minibatches of this size
 )
 
 ######################################################################
@@ -592,13 +590,22 @@ replay_buffer = ReplayBuffer(
 
 loss_module = ClipPPOLoss(
     actor=policy,
-    critic=critic_module,
+    critic=critic,
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
     normalize_advantage=False,
 )
-loss_module.set_keys(reward=env.reward_key, action=env.action_key)
+loss_module.set_keys(
+    reward=env.reward_key,
+    action=env.action_key,
+    sample_log_prob=("agents", "sample_log_prob"),
+    value=("agents", "state_value"),
+)
+
+
 loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
+GAE = loss_module.value_estimator
+
 optim = torch.optim.Adam(loss_module.parameters(), lr)
 
 ######################################################################
@@ -633,9 +640,9 @@ for tensordict_data in collector:
     )  # We need to expand the done to match the reward shape
 
     with torch.no_grad():
-        loss_module.value_estimator(
+        GAE(
             tensordict_data,
-            params=loss_module.critic_params.detach(),
+            params=loss_module.critic_params,
             target_params=loss_module.target_critic_params,
         )
 
