@@ -231,10 +231,6 @@ class DQNLoss(LossModule):
             self._set_in_keys()
         return self._in_keys
 
-    @in_keys.setter
-    def in_keys(self, values):
-        self._in_keys = values
-
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
@@ -282,13 +278,23 @@ class DQNLoss(LossModule):
             a tensor containing the DQN loss.
 
         """
-        td_copy = tensordict.clone(False)
+        if self.device is not None:
+            warnings.warn(
+                "The use of a device for the objective function will soon be deprecated",
+                category=DeprecationWarning,
+            )
+            device = self.device
+        else:
+            device = tensordict.device
+        tddevice = tensordict.to(device)
+
+        td_copy = tddevice.clone(False)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
 
-        action = tensordict.get(self.tensor_keys.action)
+        action = tddevice.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":

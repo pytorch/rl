@@ -19,7 +19,7 @@ class MultiAgentMLP(nn.Module):
     """Mult-agent MLP.
 
     This is an MLP that can be used in multi-agent contexts.
-    For example as a policy or as a value function.
+    For example, as a policy or as a value function.
     See `examples/multiagent` for examples.
 
     It expects inputs with shape (*B, n_agents, n_agent_inputs)
@@ -29,7 +29,7 @@ class MultiAgentMLP(nn.Module):
     Otherwise, each agent will use a different MLP to process its input (heterogeneous policies).
 
     If `centralised` is True, each agent will use the inputs of all agents to compute its output
-    (n_agent_inputs * n_agents will be the nu,ber of inputs for one agent).
+    (n_agent_inputs * n_agents will be the number of inputs for one agent).
     Otherwise, each agent will only use its data as input.
 
     Args:
@@ -37,7 +37,7 @@ class MultiAgentMLP(nn.Module):
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
         centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
-            (n_agent_inputs * n_agents will be the nu,ber of inputs for one agent).
+            (n_agent_inputs * n_agents will be the number of inputs for one agent).
             Otherwise, each agent will only use its data as input.
         share_params (bool): If `share_params` is True, the same MLP will be used to make the forward pass
             for all agents (homogeneous policies). Otherwise, each agent will use a different MLP to process
@@ -54,7 +54,7 @@ class MultiAgentMLP(nn.Module):
             default: 32.
         activation_class (Type[nn.Module]): activation class to be used.
             default: nn.Tanh.
-        **kwargs: for :class:`~torchrl.modules.models.MLP` can be passed to customize the MLPs.
+        **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     Examples:
         >>> from torchrl.modules import MultiAgentMLP
@@ -63,8 +63,7 @@ class MultiAgentMLP(nn.Module):
         >>> n_agent_inputs=3
         >>> n_agent_outputs=2
         >>> batch = 64
-        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
-
+        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs
         First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
@@ -87,7 +86,6 @@ class MultiAgentMLP(nn.Module):
           )
         )
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-
         Now let's instantiate a centralised network shared by all agents (e.g. a centalised value function)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
@@ -112,8 +110,7 @@ class MultiAgentMLP(nn.Module):
         We can see that the input to the first layer is n_agents * n_agent_inputs,
         this is because in the case the net acts as a centralised mlp (like a single huge agent)
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-        Outputs will be identical for all agents
-
+        Outputs will be identical for all agents.
         Now we can do both examples just shown but with an independent set of parameters for each agent
         Let's show the centralised=False case.
         >>> mlp = MultiAgentMLP(
@@ -192,7 +189,7 @@ class MultiAgentMLP(nn.Module):
 
         # If the model is centralized, agents have full observability
         if self.centralised:
-            inputs = inputs.view(
+            inputs = inputs.reshape(
                 *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
             )
 
@@ -238,14 +235,14 @@ class Mixer(nn.Module):
 
     It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
     into a global value with shape (*B, 1).
-    Used with the :class:`~torchrl.objectives.QMixerLoss`.
+    Used with the :class:`torchrl.objectives.QMixerLoss`.
     See `examples/multiagent/qmix_vdn.py` for examples.
 
     Args:
-        n_agents (int): number of agents,
-        needs_state (bool): whether the mixer takes a global state as input
-        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
-        device (str or torch.Device): torch device for the network
+        n_agents (int): number of agents.
+        needs_state (bool): whether the mixer takes a global state as input.
+        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions).
+        device (str or torch.Device): torch device for the network.
 
     Examples:
         Creating a VDN mixer
@@ -288,8 +285,6 @@ class Mixer(nn.Module):
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
-
-
         Creating a QMix mixer
         >>> import torch
         >>> from tensordict import TensorDict
@@ -370,7 +365,7 @@ class Mixer(nn.Module):
                 )
             chosen_action_value = inputs[0]
         else:
-            if len(inputs) > 2:
+            if len(inputs) != 2:
                 raise ValueError("Mixer that needs state was passed more than 2 inputs")
 
             chosen_action_value, state = inputs
@@ -419,12 +414,16 @@ class VDNMixer(Mixer):
     Mixes the local Q values of the agents into a global Q value by summing them together.
     From the paper https://arxiv.org/abs/1706.05296 .
 
+    It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
+    into a global value with shape (*B, 1).
+    Used with the :class:`torchrl.objectives.QMixerLoss`.
+    See `examples/multiagent/qmix_vdn.py` for examples.
+
     Args:
-        n_agents (int): number of agents,
-        device (str or torch.Device): torch device for the network
+        n_agents (int): number of agents.
+        device (str or torch.Device): torch device for the network.
 
     Examples:
-        Creating a VDN mixer
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
@@ -489,14 +488,18 @@ class QMixer(Mixer):
     hyper-network whose parameters are obtained from a global state.
     From the paper https://arxiv.org/abs/1803.11485 .
 
-    Args
-        n_agents (int): number of agents
-        mixing_embed_dim (int): the size of the mixing embedded dimension
-        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions)
-        device (str or torch.Device): torch device for the network
+    It transforms the local value of each agent's chosen action of shape (*B, self.n_agents, 1),
+    into a global value with shape (*B, 1).
+    Used with the :class:`torchrl.objectives.QMixerLoss`.
+    See `examples/multiagent/qmix_vdn.py` for examples.
+
+    Args:
+        state_shape (tuple or torch.Size): the shape of the state (excluding eventual leading batch dimensions).
+        mixing_embed_dim (int): the size of the mixing embedded dimension.
+        n_agents (int): number of agents.
+        device (str or torch.Device): torch device for the network.
 
     Examples:
-        Creating a QMix mixer
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule

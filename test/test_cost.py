@@ -733,7 +733,6 @@ class TestQMixer(LossModuleTestBase):
         obs_dim=3,
         action_dim=4,
         device="cpu",
-        is_nn_module=False,
         observation_key=("agents", "observation"),
         action_key=("agents", "action"),
         action_value_key=("agents", "action_value"),
@@ -747,14 +746,13 @@ class TestQMixer(LossModuleTestBase):
         else:
             raise ValueError(f"Wrong {action_spec_type}")
 
-        module = nn.Linear(obs_dim, action_dim)
-        if is_nn_module:
-            return module.to(device)
+        module = nn.Linear(obs_dim, action_dim).to(device)
+
         module = TensorDictModule(
             module,
             in_keys=[observation_key],
             out_keys=[action_value_key],
-        )
+        ).to(device)
         value_module = QValueModule(
             action_value_key=action_value_key,
             out_keys=[
@@ -764,7 +762,7 @@ class TestQMixer(LossModuleTestBase):
             ],
             spec=action_spec,
             action_space=None,
-        )
+        ).to(device)
         actor = SafeSequential(module, value_module)
 
         return actor
@@ -787,7 +785,7 @@ class TestQMixer(LossModuleTestBase):
             ),
             in_keys=[chosen_action_value_key, state_key],
             out_keys=[global_chosen_action_value_key],
-        )
+        ).to(device)
 
         return qmixer
 
@@ -891,7 +889,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -901,7 +899,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_mixer_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_mixer_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -958,7 +956,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -968,7 +966,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_mixer_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_mixer_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)

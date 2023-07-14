@@ -40,19 +40,20 @@ from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
 class QMixerLoss(LossModule):
     """The QMixer loss class.
 
-    Mixes local agent q values into a global q value accroding to a mixing network and then
+    Mixes local agent q values into a global q value according to a mixing network and then
     uses DQN updates on the global value.
-    This loss is for multi-agent applications, therefore it expects the 'local_value', 'action_value' and 'action' keys
+    This loss is for multi-agent applications.
+    Therefore, it expects the 'local_value', 'action_value' and 'action' keys
     to have an agent dimension (this is visible in the dafault AcceptedKeys).
     This dimension will be mixed by the mixer which will compute a 'global_value' key, used for a DQN objective.
-    The premade mixers of type :class:`~torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
+    The premade mixers of type :class:`torchrl.modules.models.multiagent.Mixer` will expect the multi-agent
     dimension to be the penultimate one.
 
     Args:
         local_value_network (QValueActor or nn.Module): a local Q value operator.
         mixer_network (TensorDictModule or nn.Module): a mixer network mapping the agents' local Q values
             and an optional state to the global Q value. It is suggested to provide a TensorDictModule
-            wrapping a mixer from `torchrl.modules.models.multiagent.Mixer`.
+            wrapping a mixer from :class:`torchrl.modules.models.multiagent.Mixer`.
 
     Keyword Args:
         loss_function (str, optional): loss function for the value discrepancy. Can be one of "l1", "l2" or "smooth_l1".
@@ -239,9 +240,9 @@ class QMixerLoss(LossModule):
                     raise ValueError(self.ACTION_SPEC_ERROR)
         if action_space is None:
             warnings.warn(
-                "action_space was not specified. DQNLoss will default to 'one-hot'."
+                "action_space was not specified. QMixerLoss will default to 'one-hot'."
                 "This behaviour will be deprecated soon and a space will have to be passed."
-                "Check the DQNLoss documentation to see how to pass the action space. "
+                "Check the QMixerLoss documentation to see how to pass the action space. "
             )
             action_space = "one-hot"
 
@@ -277,10 +278,6 @@ class QMixerLoss(LossModule):
         if self._in_keys is None:
             self._set_in_keys()
         return self._in_keys
-
-    @in_keys.setter
-    def in_keys(self, values):
-        self._in_keys = values
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
