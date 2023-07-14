@@ -255,34 +255,25 @@ We can create a VMAS environment and look at what the output from a random step 
             fields={
                 agents: TensorDict(
                     fields={
-                        action: Tensor(shape=torch.Size([3, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([3, 5]),
-                    device=cpu,
-                    is_shared=False),
+                        action: Tensor(shape=torch.Size([3, 5, 2]))},
+                    batch_size=torch.Size([3, 5])),
                 next: TensorDict(
                     fields={
                         agents: TensorDict(
                             fields={
                                 info: TensorDict(
                                     fields={
-                                        ground_rew: Tensor(shape=torch.Size([3, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                                        pos_rew: Tensor(shape=torch.Size([3, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                        ground_rew: Tensor(shape=torch.Size([3, 5, 1])),
+                                        pos_rew: Tensor(shape=torch.Size([3, 5, 1]))},
                                     batch_size=torch.Size([3, 5]),
                                     device=cpu,
                                     is_shared=False),
-                                observation: Tensor(shape=torch.Size([3, 5, 16]), device=cpu, dtype=torch.float32, is_shared=False),
-                                reward: Tensor(shape=torch.Size([3, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-                            batch_size=torch.Size([3, 5]),
-                            device=cpu,
-                            is_shared=False),
-                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
-                    batch_size=torch.Size([3]),
-                    device=cpu,
-                    is_shared=False)},
-            batch_size=torch.Size([3]),
-            device=cpu,
-            is_shared=False)
-        )
+                                observation: Tensor(shape=torch.Size([3, 5, 16])),
+                                reward: Tensor(shape=torch.Size([3, 5, 1]))},
+                            batch_size=torch.Size([3, 5])),
+                        done: Tensor(shape=torch.Size([3, 1]))},
+                    batch_size=torch.Size([3]))},
+            batch_size=torch.Size([3]))
 
 We can observe that *keys that are shared by all agents*, such as **done** are present in the root tensordict with
 batch size `(num_envs,)`, which represents the number of environments simulated.
