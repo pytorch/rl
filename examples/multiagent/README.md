@@ -28,21 +28,29 @@ pip install hydra-core
 
 ### Run
 
-To run the scripts just execute the corresponding python file after having modified the corresponding config according to your needs.
+To run the scripts just execute the corresponding python file after having modified the corresponding config 
+according to your needs.
+The config can be found in the .yaml file with the same name.
 
 For example:
 ```bash
-pyton multiagent/mappo_ippo.py
+python mappo_ippo.py
+```
+
+You can even change the config frim the command line like:
+
+```bash
+python mappo_ippo.py --m env.scenario_name=navigation
 ```
 
 ### Computational demand
-The scripts are set up for collecting many frames, if your compute is limited, you can change the "frames_per_batch" and "num_epochs" parameters to reduce compute requirements.
+The scripts are set up for collecting many frames, if your compute is limited, you can change the "frames_per_batch" 
+and "num_epochs" parameters to reduce compute requirements.
 
 ### Script structure
 
 The scripts are self-contained.
-This means that all the code you will need to look at is contained in the script file.
-This includes configuration dictionaries. 
+This means that all the code you will need to look at is contained in the script file. 
 No helper functions are used.
 
 The structure of scripts follows this order:
@@ -55,6 +63,7 @@ The structure of scripts follows this order:
 - Training loop (with inner minibatch loops)
 - Evaluation run (at the desired frequency)
 
-Logging is done to wandb.
+Logging is done by default to wandb.
+The logging backend can be changed in the config files to one of "wandb", "tensorboard", "csv", "mlflow".
 
 All the scripts follow the same on-policy training structure so that results can be compared across different algorithms.
