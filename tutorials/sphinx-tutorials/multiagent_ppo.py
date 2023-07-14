@@ -13,22 +13,22 @@ alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
 
 For ease of use, this tutorial will follow the general structure of the already available
 `single agent PPO tutorial <https://pytorch.org/rl/tutorials/coding_ppo.html>`__.
-It is suggested but not mandatory to get familiar with it prior to starting this tutorial.
+It is suggested but not mandatory to get familiar with that prior to starting this tutorial.
 
-In this tutorial, we will use the *Navigation* environment from the
-`VMAS simulator <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__,
+In this tutorial, we will use the *Navigation* environment from
+`VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__,
 a multi-robot simulator, also
-based on PyTorch, which runs parallel batched simulation on device.
+based on PyTorch, that runs parallel batched simulation on device.
 
 In the *Navigation* environment,
 we need to train multiple robots (spawned at random positions)
 to navigate to their goals (also at random positions), while
-using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__, to avoid among each other.
+using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__ to avoid collisions among each other.
 
 .. figure:: /_static/img/navigation.gif
    :alt: Navigation
 
-   Multi-agent navigation
+   Multi-agent *Navigation* scenario
 
 Key learnings:
 
@@ -189,111 +189,129 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # This means that all its state and physics
 # are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
 # This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
-# speed up parallel computation by leveraging parallelization in GPU warps.
+# speed up parallel computation by leveraging parallelization in GPU warps. I also means
+# that, when using it in TorchRL, both simulation and training can be run on-device, without ever passing
+# data to the CPU.
 #
+# The multi-agent task we will solve today is *Navigation* (see animated figure above).
+# In *Navigation*, randomly spawned agents
+# (circles with surrounding dots) need to navigate
+# to randomly spawned goals (smaller circles).
+# Agents need to use LIDARs (dots around them) to
+# avoid colliding into each other.
+# Agents act in a 2D continuous world with drag and elastic collisions.
+# Their actions are 2D continuous forces which determine their acceleration.
+# The reward is composed of three terms: a collision penalization, a reward based on the distance to the goal, and a
+# final shared reward given when all agents reach their goal.
+# The distance-based term is computed as the difference in the relative distance
+# between an agent and its goal over two consecutive timesteps.
+# Each agent observes its position,
+# velocity, lidar readings, and relative position to its goal.
 #
+# We will now instantiate the environment.
+# For this tutorial, we will limit the episodes to ``max_steps``, after which the done flag is set. This is
+# functionality is already provided in the VMAS simulator but the TorchRL ``StepCount``
+# transform could alternatively be used.
+# We will also use ``num_vmas_envs`` vectorized environments, to leverage batch simulation.
 #
 #
 
-max_steps = 100
-num_vmas_envs = frames_per_batch // max_steps
+max_steps = 100  # Episode steps before done
+num_vmas_envs = (
+    frames_per_batch // max_steps
+)  # Number of vectorized envs. frames_per_batch should be divisible by this number
 scenario_name = "navigation"
 n_agents = 3
 
 env = VmasEnv(
     scenario=scenario_name,
     num_envs=num_vmas_envs,
-    continuous_actions=True,
+    continuous_actions=True,  # VMAS supports both continuous and discrete actions
     max_steps=max_steps,
     device=vmas_device,
     # Scenario kwargs
-    n_agents=n_agents,
+    n_agents=n_agents,  # These are custom kwargs that change for each VMAS scenario, see the VMAS repo to know more.
 )
 
 ######################################################################
-# There are a few things to notice in this code: first, we created
-# the environment by calling the ``GymEnv`` wrapper. If extra keyword arguments
-# are passed, they will be transmitted to the ``gym.make`` method, hence covering
-# the most common env construction commands.
-# Alternatively, one could also directly create a gym environment using ``gym.make(env_name, **kwargs)``
-# and wrap it in a `GymWrapper` class.
+# The environment is not only defined by its simulator and transforms, but also
+# by a series of metadata that describe what can be expected during its
+# execution.
+# For efficiency purposes, TorchRL is quite stringent when it comes to
+# environment specs, but you can easily check that your environment specs are
+# adequate.
+# In our example, the :class:`VmasEnv` takes care of setting the proper specs for your env so
+# you should not have to care about this.
 #
-# Also the ``device`` argument: for gym, this only controls the device where
-# input action and observered states will be stored, but the execution will always
-# be done on CPU. The reason for this is simply that gym does not support on-device
-# execution, unless specified otherwise. For other libraries, we have control over
-# the execution device and, as much as we can, we try to stay consistent in terms of
-# storing and execution backends.
+# There are four specs to look at:
 #
+# - ``action_spec`` defines the action space;
+# - ``reward_spec`` defines the reward domain;
+# - ``done_spec`` defines the done domain;
+# - ``observation_spec`` which defines the domain of all other outputs from environmnet steps;
+#
+#
+
+print("action_spec:", env.action_spec)
+print("reward_spec:", env.reward_spec)
+print("done_spec:", env.done_spec)
+print("observation_spec:", env.observation_spec)
+
+
+######################################################################
+# Using the commands just shown we can access the domain of each value.
+# Doing this we can see that all specs apart from done have a leading shape ``(num_vmas_envs, n_agents)``.
+# This represents the fact that those values will be present for each agent in each individual environment.
+# The done spec, on the other hand, has leading shape ``(num_vmas_envs)``, representing that done is shared among
+# agents.
+#
+# TorchRL has a way to keep track of which MARL specs are shared and which are not.
+# In fact, specs that have the additional agent dimension
+# (i.e., they vary for each agent) will be contained in a inner "agents" key.
+#
+# To access the full structure of the specs we can use
+#
+
+print("full_action_spec:", env.input_spec["_action_spec"])
+print("full_reward_spec:", env.output_spec["_reward_spec"])
+print("full_done_spec:", env.output_spec["_done_spec"])
+
+######################################################################
+# As you can see the reward and action spec present the "agent" key,
+# meaning that entries in tensordicts belonging to those specs will be nested in an "agents" tensordict,
+# grouping all per-agent values.
+#
+# To quickly access the key for each of these values in tensordicts, we can simply ask the environment for the
+# respective key, and
+# we will immediately understand which are per-agent and which shared.
+# This info will be useful in order to tell all other TorchRL components where to find each value
+#
+
+print("action_key:", env.action_key)
+print("reward_key:", env.reward_key)
+print("done_key:", env.done_key)
+
+######################################################################
 # Transforms
 # ~~~~~~~~~~
 #
-# We will append some transforms to our environments to prepare the data for
-# the policy. In Gym, this is usually achieved via wrappers. TorchRL takes a different
-# approach, more similar to other pytorch domain libraries, through the use of transforms.
-# To add transforms to an environment, one should simply wrap it in a :class:`TransformedEnv`
-# instance and append the sequence of transforms to it. The transformed env will inherit
+# We can append any torchrl transform we need to our enviornment.
+# These will modify its input output in some desired way.
+# Remember that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
+#
+# For example, in this case we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
+# We will tell this transform where to find the reward key and where to write the summed episode reward.
+# The transformed env will inherit
 # the device and meta-data of the wrapped env, and transform these depending on the sequence
 # of transforms it contains.
 #
-# Normalization
-# ~~~~~~~~~~~~~
-#
-# The first to encode is a normalization transform.
-# As a rule of thumbs, it is preferable to have data that loosely
-# match a unit Gaussian distribution: to obtain this, we will
-# run a certain number of random steps in the environment and compute
-# the summary statistics of these observations.
-#
-# We'll append two other transforms: the :class:`DoubleToFloat` transform will
-# convert double entries to single-precision numbers, ready to be read by the
-# policy. The :class:`StepCounter` transform will be used to count the steps before
-# the environment is terminated. We will use this measure as a supplementary measure
-# of performance.
-#
-# As we will see later, many of the TorchRL's classes rely on :class:`tensordict.TensorDict`
-# to communicate. You could think of it as a python dictionary with some extra
-# tensor features. In practice, this means that many modules we will be working
-# with need to be told what key to read (``in_keys``) and what key to write
-# (``out_keys``) in the tensordict they will receive. Usually, if ``out_keys``
-# is omitted, it is assumed that the ``in_keys`` entries will be updated
-# in-place. For our transforms, the only entry we are interested in is referred
-# to as ``"observation"`` and our transform layers will be told to modify this
-# entry and this entry only:
-#
+
 
 env = TransformedEnv(
     env,
     RewardSum(in_keys=[env.reward_key], out_keys=[("agents", "episode_reward")]),
 )
 
-
-######################################################################
-# An environment is not only defined by its simulator and transforms, but also
-# by a series of metadata that describe what can be expected during its
-# execution.
-# For efficiency purposes, TorchRL is quite stringent when it comes to
-# environment specs, but you can easily check that your environment specs are
-# adequate.
-# In our example, the :class:`GymWrapper` and :class:`GymEnv` that inherits
-# from it already take care of setting the proper specs for your env so
-# you should not have to care about this.
-#
-# Nevertheless, let's see a concrete example using our transformed
-# environment by looking at its specs.
-# There are five specs to look at: ``observation_spec`` which defines what
-# is to be expected when executing an action in the environment,
-# ``reward_spec`` which indicates the reward domain,
-# ``done_spec`` which indicates the done state of an environment,
-# the ``action_spec`` which defines the action space, dtype and device and
-# the ``state_spec`` which groups together the specs of all the other inputs
-# (if any) to the environment.
-#
-print("observation_spec:", env.observation_spec)
-print("reward_spec:", env.reward_spec)
-print("done_spec:", env.done_spec)
-print("action_spec:", env.action_spec)
-print("state_spec:", env.state_spec)
 
 ######################################################################
 # the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
@@ -647,6 +665,7 @@ for tensordict_data in collector:
 # If you are running this in a machine with GUI, you can render the trained policy by running:
 #
 # .. code-block:: python
+#
 #    env.rollout(
 #        max_steps=max_steps,
 #        policy=policy,
@@ -655,10 +674,10 @@ for tensordict_data in collector:
 #        break_when_any_done=False,
 #    )
 #
-#
 # If you are running this in Google Colab, you can render the trained policy by running:
 #
 # .. code-block:: python
+#
 #    !apt-get update
 #    !apt-get install -y x11-utils
 #    !apt-get install -y xvfb
