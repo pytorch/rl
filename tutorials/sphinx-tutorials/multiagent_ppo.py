@@ -57,7 +57,7 @@ Key learnings:
 # `Proximal Policy Optimization Algorithms <https://arxiv.org/abs/1707.06347>`_ paper.
 #
 # This type of algorithms is usually trained *on-policy*. This means that, at every learning iteration, we have a
-# **sampling** and a **training** phase. In the **sampling** phase of iteration  :math:`t`, rollouts are collected
+# **sampling** and a **training** phase. In the **sampling** phase of iteration :math:`t`, rollouts are collected
 # form agents' interactions in the environment using the current policies :math:`\mathbf{\pi}_t`.
 # In the **training** phase, all the collected rollouts are immediately fed to the training process to perform
 # backpropagation. This leads to updated policies which are then used again for sampling.
@@ -72,59 +72,61 @@ Key learnings:
 # In the training phase of the PPO algorithm, a *critic* is used to estimate the goodness of the actions
 # taken by the policy. The critic learns to approximate the value (mean discounted return) of a specific state.
 # The PPO loss then compares the actual return obtained by the policy to the one estimated by the critic to determine
-# the advantage of the taken action and guide the policy optimization.
+# the advantage of the action taken and guide the policy optimization.
 #
-# In multi-agent settings things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
+# In multi-agent settings, things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
 # one for each agent. Policies are typically local and decentralised. This means that
 # the policy for a single agent will output an action for that agent based only on its observation.
+# In the MARL literature, this is referred to as **decentralized execution**.
 # On the other hand, different formulations exist for the critic, mainly:
 #
-# - In MAPPO https://arxiv.org/abs/2103.01955 the critic is centralised and takes as input the global state
-#   of the systems. This can be a global observation or simply the concatenation of the agents' observation. MAPPO
-#   can be used in contexts where centralised training is performed and as it needs access to global information.
-# - In IPPO https://arxiv.org/abs/2011.09533 the critic takes as input just the observation of the respective agent,
-#   exactly like the policy. This allows decentralised training as both the critic and the policy will only need local
+# - In `MAPPO <https://arxiv.org/abs/2103.01955>`_ the critic is centralised and takes as input the global state
+#   of the system. This can be a global observation or simply the concatenation of the agents' observation. MAPPO
+#   can be used in contexts where **centralised training** is performed as it needs access to global information.
+# - In `IPPO <https://arxiv.org/abs/2011.09533>`_ the critic takes as input just the observation of the respective agent,
+#   exactly like the policy. This allows **decentralised training** as both the critic and the policy will only need local
 #   information to compute their outputs.
 #
+# Centralised critics help overcome the non-stationary of multiple agents learning concurrently, but,
+# on the other hand, they may be impacted by their large input space.
 # In this tutorial, we will be able to train both formulations, and we will also discuss how
 # parameter-sharing (the practice of sharing the network parameters across the agents) impacts each.
 #
 # This tutorial is structured as follows:
 #
-# 1. First, we will define a set of hyperparameters we will be using for training.
+# 1. First, we will define a set of hyperparameters we will be using.
 #
-# 2. Next, we will focus on creating our environment, or simulator, using TorchRL's
-#    VMAS wrapper.
+# 2. Next, we will create a vectorized multi-agent environment, using TorchRL's
+#    wrapper for the VMAS simulator.
 #
-# 3. Next, we will design the policy and the critic networks.
+# 3. Next, we will design the policy and the critic networks, discussing the impact of the various choices on
+#    parameter sharing and critic centralisation.
 #
 # 4. Next, we will create the sampling collector and the replay buffer.
 #
 # 5. Finally, we will run our training loop and analyze the results.
 #
-# Throughout this tutorial, we'll be using the :mod:`tensordict` library.
-# :class:`tensordict.TensorDict` is the lingua franca of TorchRL: it helps us abstract
-# what a module reads and writes and care less about the specific data
-# description and more about the algorithm itself.
+# If you are running this in Colab or in a machine with a GUI, you will also have the option
+# to render and visualize your own trained policy prior and after training.
 #
 # Let's import our dependencies
 #
+
 # Torch
 import torch
 
-# Tensordict modules (key-mapped nns)
+# Tensordict modules
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
 
 # Data collection
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import RewardSum, TransformedEnv
 
 # Env
+from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import check_env_specs
 
@@ -346,7 +348,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #
 shared_parameters_policy = True
 
-policy_net = nn.Sequential(
+policy_net = torch.nn.Sequential(
     MultiAgentMLP(
         n_agent_inputs=env.observation_spec["agents", "observation"].shape[-1],
         n_agent_outputs=2 * env.action_spec.shape[-1],
@@ -356,7 +358,7 @@ policy_net = nn.Sequential(
         device=device,
         depth=2,
         num_cells=256,
-        activation_class=nn.Tanh,
+        activation_class=torch.nn.Tanh,
     ),
     NormalParamExtractor(),
 )
@@ -426,7 +428,7 @@ critic_net = MultiAgentMLP(
     device=device,
     depth=2,
     num_cells=256,
-    activation_class=nn.Tanh,
+    activation_class=torch.nn.Tanh,
 )
 
 critic_module = ValueOperator(
@@ -667,7 +669,7 @@ for tensordict_data in collector:
 #         break_when_any_done=False,
 #     )
 #     env.frames[0].save(
-#        scenario_name,
+#        f"{scenario_name}.gif",
 #        save_all=True,
 #        append_images=env.frames[1:],
 #       duration=3,
@@ -675,7 +677,7 @@ for tensordict_data in collector:
 #     )
 #
 #     from IPython.display import Image
-#     Image(open(f"{scenario_name}"}.gif", "rb").read())
+#     Image(open(f"{scenario_name}.gif", "rb").read())
 #
 
 
