@@ -246,6 +246,7 @@ We can create a VMAS environment and look at what the output from a random step 
 
 .. code-block::
    :caption: Example of multi-agent step tensordict
+
         >>> from torchrl.envs.libs.vmas import VmasEnv
         >>> env = VmasEnv("balance", num_envs=3, n_agents=5)
         >>> td = env.rand_step()
@@ -281,6 +282,7 @@ We can create a VMAS environment and look at what the output from a random step 
             batch_size=torch.Size([3]),
             device=cpu,
             is_shared=False)
+        )
 
 We can observe that *keys that are shared by all agents*, such as **done** are present in the root tensordict with
 batch size `(num_envs,)`, which represents the number of environments simulated.
@@ -297,6 +299,7 @@ only the done flag is shared across agents (as in VMAS):
 
 .. code-block::
    :caption: Example of multi-agent spec creation
+
         >>> action_specs = []
         >>> observation_specs = []
         >>> reward_specs = []
