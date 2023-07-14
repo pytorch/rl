@@ -889,7 +889,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -899,7 +899,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_mixer_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_mixer_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -956,7 +956,7 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -971,7 +971,6 @@ class TestQMixer(LossModuleTestBase):
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
         else:
-            print(target_value, "\n\n", target_value2)
             assert not (target_value == target_value2).any()
 
         # check that policy is updated after parameter update
