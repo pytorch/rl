@@ -265,9 +265,7 @@ We can create a VMAS environment and look at what the output from a random step 
                                     fields={
                                         ground_rew: Tensor(shape=torch.Size([3, 5, 1])),
                                         pos_rew: Tensor(shape=torch.Size([3, 5, 1]))},
-                                    batch_size=torch.Size([3, 5]),
-                                    device=cpu,
-                                    is_shared=False),
+                                    batch_size=torch.Size([3, 5])),
                                 observation: Tensor(shape=torch.Size([3, 5, 16])),
                                 reward: Tensor(shape=torch.Size([3, 5, 1]))},
                             batch_size=torch.Size([3, 5])),
