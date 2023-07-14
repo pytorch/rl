@@ -624,15 +624,12 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 #     * Loop over epochs
 #
 #       * Loop over minibatches to compute loss values
-#
+
 #           * Back propagate
 #           * Optimize
 #           * Repeat
-#
 #       * Repeat
-#
 #   * Repeat
-#
 # * Repeat
 #
 #
