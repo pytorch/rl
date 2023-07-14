@@ -138,6 +138,7 @@ from torchrl.objectives import ClipPPOLoss, ValueEstimators
 
 # Utils
 torch.manual_seed(0)
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 
@@ -593,9 +594,9 @@ loss_module = ClipPPOLoss(
     critic=critic,
     clip_epsilon=clip_epsilon,
     entropy_coef=entropy_eps,
-    normalize_advantage=False,
+    normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
 )
-loss_module.set_keys(
+loss_module.set_keys(  # We have to tell the loss where to find the keys
     reward=env.reward_key,
     action=env.action_key,
     sample_log_prob=("agents", "sample_log_prob"),
@@ -603,7 +604,9 @@ loss_module.set_keys(
 )
 
 
-loss_module.make_value_estimator(ValueEstimators.GAE, gamma=gamma, lmbda=lmbda)
+loss_module.make_value_estimator(
+    ValueEstimators.GAE, gamma=gamma, lmbda=lmbda
+)  # We build GAE
 GAE = loss_module.value_estimator
 
 optim = torch.optim.Adam(loss_module.parameters(), lr)
@@ -618,19 +621,26 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 #
 #   * Compute advantage
 #
-#     * Loop over the collected to compute loss values
-#     * Back propagate
-#     * Optimize
-#     * Repeat
+#     * Loop over epochs
+#
+#       * Loop over minibatches to compute loss values
+#
+#           * Back propagate
+#           * Optimize
+#           * Repeat
+#
+#       * Repeat
 #
 #   * Repeat
 #
 # * Repeat
 #
+#
 
 pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
 total_frames = 0
+episode_reward_mean_list = []
 for tensordict_data in collector:
     tensordict_data.set(
         ("next", "done"),
@@ -644,19 +654,17 @@ for tensordict_data in collector:
             tensordict_data,
             params=loss_module.critic_params,
             target_params=loss_module.target_critic_params,
-        )
+        )  # Compute GAE
 
     current_frames = tensordict_data.numel()
     total_frames += current_frames
-    data_view = tensordict_data.reshape(-1)
+    data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data
     replay_buffer.extend(data_view)
 
-    training_tds = []
     for _ in range(num_epochs):
         for _ in range(frames_per_batch // minibatch_size):
             subdata = replay_buffer.sample()
             loss_vals = loss_module(subdata)
-            training_tds.append(loss_vals.detach())
 
             loss_value = (
                 loss_vals["loss_objective"]
@@ -668,20 +676,19 @@ for tensordict_data in collector:
 
             total_norm = torch.nn.utils.clip_grad_norm_(
                 loss_module.parameters(), max_grad_norm
-            )
+            )  # Optional
 
             optim.step()
             optim.zero_grad()
 
     collector.update_policy_weights_()
 
+    # Logging
     done = tensordict_data.get(("next", "done"))
     episode_reward_mean = (
         tensordict_data.get(("next", "agents", "episode_reward"))[done].mean().item()
     )
-
-    training_tds = torch.stack(training_tds)
-
+    episode_reward_mean_list.append(episode_reward_mean)
     pbar.set_description(f"episode_reward_mean = {episode_reward_mean}", refresh=False)
     pbar.update()
 
@@ -689,11 +696,11 @@ for tensordict_data in collector:
 # Results
 # -------
 #
-# Before the 1M step cap is reached, the algorithm should have reached a max
-# step count of 1000 steps, which is the maximum number of steps before the
-# trajectory is truncated.
+# Let's plot the mean reward obtained per episode
 #
-
+plt.plot(episode_reward_mean_list)
+plt.title("Episode reward mean")
+plt.show()
 
 ######################################################################
 # Render
@@ -749,21 +756,4 @@ for tensordict_data in collector:
 ######################################################################
 # Conclusion and next steps
 # -------------------------
-#
-# In this tutorial, we have learned:
-#
-# 1. How to create and customize an environment with :py:mod:`torchrl`;
-# 2. How to write a model and a loss function;
-# 3. How to set up a typical training loop.
-#
-# If you want to experiment with this tutorial a bit more, you can apply the following modifications:
-#
-# * From an efficiency perspective,
-#   we could run several simulations in parallel to speed up data collection.
-#   Check :class:`~torchrl.envs.ParallelEnv` for further information.
-#
-# * From a logging perspective, one could add a :class:`~torchrl.record.VideoRecorder` transform to
-#   the environment after asking for rendering to get a visual rendering of the
-#   inverted pendulum in action. Check :py:mod:`torchrl.record` to
-#   know more.
 #
