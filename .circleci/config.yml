@@ -1,19 +1,5 @@
 version: 2.1
 
-executors:
-  windows-cpu:
-    machine:
-      resource_class: windows.xlarge
-      image: windows-server-2019-vs2019:stable
-      shell: bash.exe
-
-  windows-gpu:
-    machine:
-      resource_class: windows.gpu.nvidia.medium
-      image: windows-server-2019-nvidia:stable
-      shell: bash.exe
-
-
 commands:
   checkout_merge:
     description: "checkout merge branch"
@@ -248,52 +234,6 @@ jobs:
       - store_test_results:
           path: test-results
 
-  unittest_windows_optdepts_gpu:
-    <<: *binary_common
-    executor:
-      name: windows-gpu
-    environment:
-      CUDA_VERSION: "11.6"
-      PYTHON_VERSION: << parameters.python_version >>
-    steps:
-      - checkout
-      - designate_upload_channel
-      - run:
-          name: Generate cache key
-          # This will refresh cache on Sundays, nightly build should generate new cache.
-          command: echo "$(date +"%Y-%U")" > .circleci-weekly
-#      - restore_cache:
-#          keys:
-#            - env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-
-      - run:
-          name: Setup
-          command: .circleci/unittest/windows_optdepts/scripts/setup_env.sh
-#      - save_cache:
-#          key: env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows_optdepts/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-#
-#          paths:
-#            - conda
-#            - env
-      - run:
-          name: Install CUDA
-          command: packaging/windows/internal/cuda_install.bat
-      - run:
-          name: Update CUDA driver
-          command: packaging/windows/internal/driver_update.bat
-      - run:
-          name: Install torchrl
-          command: .circleci/unittest/windows_optdepts/scripts/install.sh
-      - run:
-          name: Run tests
-          command: .circleci/unittest/windows_optdepts/scripts/run_test.sh
-      - run:
-          name: Post process
-          command: .circleci/unittest/windows_optdepts/scripts/post_process.sh
-      - store_test_results:
-          path: test-results
-
-
 workflows:
   unittest:
     jobs:
@@ -304,8 +244,4 @@ workflows:
       - unittest_linux_stable_gpu:
           cu_version: cu116
           name: unittest_linux_stable_gpu_py3.9
-          python_version: '3.9'
-      - unittest_windows_optdepts_gpu:
-          cu_version: cu116
-          name: unittest_windows_optdepts_gpu_py3.9
           python_version: '3.9'
