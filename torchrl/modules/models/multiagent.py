@@ -63,8 +63,7 @@ class MultiAgentMLP(nn.Module):
         >>> n_agent_inputs=3
         >>> n_agent_outputs=2
         >>> batch = 64
-        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
-
+        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs
         First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
@@ -87,7 +86,6 @@ class MultiAgentMLP(nn.Module):
           )
         )
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-
         Now let's instantiate a centralised network shared by all agents (e.g. a centalised value function)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
@@ -112,8 +110,7 @@ class MultiAgentMLP(nn.Module):
         We can see that the input to the first layer is n_agents * n_agent_inputs,
         this is because in the case the net acts as a centralised mlp (like a single huge agent)
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-        Outputs will be identical for all agents
-
+        Outputs will be identical for all agents.
         Now we can do both examples just shown but with an independent set of parameters for each agent
         Let's show the centralised=False case.
         >>> mlp = MultiAgentMLP(
@@ -288,8 +285,6 @@ class Mixer(nn.Module):
             batch_size=torch.Size([32]),
             device=None,
             is_shared=False)
-
-
         Creating a QMix mixer
         >>> import torch
         >>> from tensordict import TensorDict
@@ -424,7 +419,6 @@ class VDNMixer(Mixer):
         device (str or torch.Device): torch device for the network
 
     Examples:
-        Creating a VDN mixer
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
@@ -496,7 +490,6 @@ class QMixer(Mixer):
         device (str or torch.Device): torch device for the network
 
     Examples:
-        Creating a QMix mixer
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
