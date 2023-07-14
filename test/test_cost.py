@@ -904,8 +904,8 @@ class TestQMixer(LossModuleTestBase):
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
         else:
-            for key, value in target_value.items():
-                print(value == target_value2[key])
+            for key in target_value.keys(True, True):
+                print(target_value[key] == target_value2[key])
             assert not (target_value == target_value2).any()
 
         # check that policy is updated after parameter update
