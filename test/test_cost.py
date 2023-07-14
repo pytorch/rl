@@ -752,7 +752,7 @@ class TestQMixer(LossModuleTestBase):
             module,
             in_keys=[observation_key],
             out_keys=[action_value_key],
-        )
+        ).to(device)
         value_module = QValueModule(
             action_value_key=action_value_key,
             out_keys=[
@@ -762,7 +762,7 @@ class TestQMixer(LossModuleTestBase):
             ],
             spec=action_spec,
             action_space=None,
-        )
+        ).to(device)
         actor = SafeSequential(module, value_module)
 
         return actor
@@ -785,7 +785,7 @@ class TestQMixer(LossModuleTestBase):
             ),
             in_keys=[chosen_action_value_key, state_key],
             out_keys=[global_chosen_action_value_key],
-        )
+        ).to(device)
 
         return qmixer
 
