@@ -81,8 +81,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
 else
   pip install "gym[atari,accept-rom-license]"
 fi
-pip install treevalue
+pip install envpool treevalue
 
-wget https://files.pythonhosted.org/packages/a1/ee/b35ab21e71d34cdcedf05c0d32abca3a3e87d669bdc772660165ee2f55b8/envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
-pip install envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
-rm envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
+# wget https://files.pythonhosted.org/packages/a1/ee/b35ab21e71d34cdcedf05c0d32abca3a3e87d669bdc772660165ee2f55b8/envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
+# pip install envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
+# rm envpool-0.8.2-cp39-cp39-manylinux_2_24_x86_64.whl
