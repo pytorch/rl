@@ -14,6 +14,7 @@ docutils
 
 torchvision
 dm_control
+atari-py
 ale-py
 gym[classic_control,accept-rom-license]
 pygame
