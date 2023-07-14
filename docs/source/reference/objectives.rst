@@ -185,6 +185,21 @@ Dreamer
     DreamerModelLoss
     DreamerValueLoss
 
+Multi-agent objectives
+----------------------
+.. currentmodule:: torchrl.objectives.multiagent
+
+These objectives are specific to multi-agent algorithms.
+
+QMixer
+~~~~~~
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    QMixerLoss
+
 
 Returns
 -------

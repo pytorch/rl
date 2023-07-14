@@ -9,7 +9,7 @@ import importlib.util
 import inspect
 import re
 import warnings
-from typing import Iterable, Optional, Type, Union
+from typing import Iterable, List, Optional, Type, Union
 
 import torch
 
@@ -17,6 +17,7 @@ from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 
 from torch import nn
 
@@ -364,12 +365,16 @@ def ensure_tensordict_compatible(
     module: Union[
         FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
     ],
-    in_keys: Optional[Iterable[str]] = None,
-    out_keys: Optional[Iterable[str]] = None,
+    in_keys: Optional[List[NestedKey]] = None,
+    out_keys: Optional[List[NestedKey]] = None,
     safe: bool = False,
     wrapper_type: Optional[Type] = TensorDictModule,
     **kwargs,
 ):
+    """Ensures module is compatible with TensorDictModule and, if not, it wraps it."""
+    in_keys = unravel_key_list(in_keys) if in_keys else in_keys
+    out_keys = unravel_key_list(out_keys) if out_keys else out_keys
+
     """Checks and ensures an object with forward method is TensorDict compatible."""
     if is_tensordict_compatible(module):
         if in_keys is not None and set(in_keys) != set(module.in_keys):
