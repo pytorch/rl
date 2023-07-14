@@ -35,6 +35,12 @@ jobs:
         ## setup_env.sh
         ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
 
+        ## Install CUDA
+        packaging/windows/internal/cuda_install.bat
+
+        ## Update CUDA Driver
+        packaging/windows/internal/driver_update.bat
+
         ## install.sh
         ./.circleci/unittest/windows_optdepts/scripts/install.sh
 
