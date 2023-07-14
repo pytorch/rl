@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
-==================================================
+===============================================================
 **Author**: `Matteo Bettini <https://github.com/matteobettini>`_
 
 This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
@@ -176,7 +176,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 ######################################################################
 # Environment
-# ---------------------
+# -----------
 #
 # Multi-agent environments simulate multiple agents interacting with the world.
 # TorchRL API allows integrating various types of multi-agent environment flavours.
@@ -330,7 +330,7 @@ check_env_specs(env)
 
 ######################################################################
 # Rollout
-# ~~~~~~~~~~
+# ~~~~~~~
 #
 # For fun, let's see what a simple random rollout looks like. You can
 # call `env.rollout(n_steps)` and get an overview of what the environment inputs
@@ -364,7 +364,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #
 #
 # Render a random rollout
-# ~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~
 #
 # If you are on Google Colab, or on a machine with OpenGL and a GUI, you can actually render a random rollout.
 # This will give you an idea of what a random policy will achieve in this task, in order to compare it
@@ -400,7 +400,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # We design the policy in three steps.
 #
 # Define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
-# ~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # For this we use the ``MultiAgentMLP``, a torchrl module made exactly for training
 # multiple agents, with much customization available.
@@ -427,7 +427,7 @@ policy_net = torch.nn.Sequential(
 
 ######################################################################
 # Wrap the neural network in a :class:`TensorDictModule`
-# ~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # This is simply a module that will read the ``in_keys`` it is provided with and write the
 # outputs of the neural network in-place at the ``out_keys``.
@@ -442,7 +442,7 @@ policy_module = TensorDictModule(
 
 ######################################################################
 # Wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
-# ~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # We now need to build a distribution out of the location and scale of our
 # normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
@@ -471,7 +471,7 @@ policy = ProbabilisticActor(
 
 ######################################################################
 # Critic network
-# -------------
+# --------------
 #
 # The critic network is a crucial component of the PPO algorithm, even though it
 # isn't used at sampling time. This module will read the observations and
@@ -620,11 +620,8 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 # * Collect data
 #
 #   * Compute advantage
-#
 #     * Loop over epochs
-#
 #       * Loop over minibatches to compute loss values
-#
 #           * Back propagate
 #           * Optimize
 #           * Repeat
@@ -701,7 +698,8 @@ plt.show()
 
 ######################################################################
 # Render
-# -------
+# ------
+#
 # If you are running this in a machine with GUI, you can render the trained policy by running:
 #
 # .. code-block:: python
