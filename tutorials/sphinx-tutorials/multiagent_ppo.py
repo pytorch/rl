@@ -46,7 +46,7 @@ Key learnings:
 # .. code-block:: bash
 #
 #    !pip3 install torchrl
-#    !pip3 install vmas
+#    !pip3 install vmas==1.2.11
 #    !pip3 install tqdm
 #
 # Proximal Policy Optimization (PPO) is a policy-gradient algorithm where a
@@ -292,14 +292,22 @@ print("reward_key:", env.reward_key)
 print("done_key:", env.done_key)
 
 ######################################################################
+# To tie it all together, we can see that passing these keys to the full specs gives us the leaf domains
+#
+
+assert env.action_spec == env.input_spec["_action_spec"][env.action_key]
+assert env.reward_spec == env.output_spec["_reward_spec"][env.reward_key]
+assert env.done_spec == env.output_spec["_done_spec"][env.done_key]
+
+######################################################################
 # Transforms
 # ~~~~~~~~~~
 #
 # We can append any torchrl transform we need to our enviornment.
-# These will modify its input output in some desired way.
+# These will modify its input/output in some desired way.
 # Remember that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
-# For example, in this case we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
+# For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
 # We will tell this transform where to find the reward key and where to write the summed episode reward.
 # The transformed env will inherit
 # the device and meta-data of the wrapped env, and transform these depending on the sequence
@@ -320,29 +328,50 @@ env = TransformedEnv(
 check_env_specs(env)
 
 ######################################################################
+# Rollout
+# ~~~~~~~~~~
+#
 # For fun, let's see what a simple random rollout looks like. You can
 # call `env.rollout(n_steps)` and get an overview of what the environment inputs
-# and outputs look like. Actions will automatically be drawn from the action spec
-# domain, so you don't need to care about designing a random sampler.
+# and outputs look like. Actions will automatically be drawn at random from the action spec
+# domain.
 #
-# Typically, at each step, an RL environment receives an
-# action as input, and outputs an observation, a reward and a done state. The
-# observation may be composite, meaning that it could be composed of more than one
-# tensor. This is not a problem for TorchRL, since the whole set of observations
-# is automatically packed in the output :class:`tensordict.TensorDict`. After executing a rollout
-# (ie a sequence of environment steps and random action generations) over a given
-# number of steps, we will retrieve a :class:`tensordict.TensorDict` instance with a shape
-# that matches this trajectory length:
-#
-rollout = env.rollout(3)
+n_rollout_steps = 5
+rollout = env.rollout(n_rollout_steps)
 print("rollout of three steps:", rollout)
 print("Shape of the rollout TensorDict:", rollout.batch_size)
-
 ######################################################################
-# Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
-# we ran it for. The ``"next"`` entry points to the data coming after the current step.
-# In most cases, the ``"next""`` data at time `t` matches the data at ``t+1``, but this
-# may not be the case if we are using some specific transformations (e.g. multi-step).
+# We can see that our rollout has ``batch_size`` of ``(num_vmas_envs, n_rollout_steps)``.
+# This means that all the tensors in it will have those leading dimensions.
+#
+# Looking more in depth, we can see that the output tensordict can be divided in the following way:
+#
+# - *In the root* (accessible by running ``rollout.exclude("next")`` ) we will find all the keys that are available
+#   after a reset is called at the first timestep. We can see their evolution through the rollout steps by indexing
+#   the ``n_rollout_steps`` dimension. Among these keys, we will find the ones that are different for each agent
+#   in the ``rollout["agents"]`` tensordict, which will have batch size ``(num_vmas_envs, n_rollout_steps, n_agents)``
+#   signifying that it is storing the additional agent dimension. The ones outside this agent tensordict
+#   will be the shared ones (in this case only done).
+# - *In the next* (accessible by running ``rollout.get("next")`` ). We will find the same structure as the root,
+#   but for keys that are available only after a step.
+#
+# In torchrl the convention is that done and observations will be present in both root and next (as these are
+# available both at reset time and after a step). Action will only be available in root (as there is no action
+# resulting from a step) and reward will only be available in next (as there is no reward at reset time).
+# This structure follows the one in the Sutton and Barto book where root represents data at time :math:`t` and
+# next represents data at time :math:`t+1` of a world step.
+#
+#
+# Render a random rollout
+# ~~~~~~~~~~
+#
+# If you are on Google Colab, or on a machine with OpenGL and a GUI, you can actually render a random rollout.
+# This will give you an idea of what a random policy will achieve in this task, in order to compare it
+# with the policy you will train yourself!
+#
+# To render a rollout, follow the instructions in the *Render* section at the end of this tutorial
+# and just remove the line ``policy=policy`` from ``env.rollout()`` .
+#
 #
 # Policy
 # ------
