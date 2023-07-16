@@ -6,6 +6,8 @@
 from .r3m import R3MTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
+    ActionNorm,
+    ActionScaling,
     BinarizeReward,
     CatFrames,
     CatTensors,

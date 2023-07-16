@@ -807,6 +807,24 @@ class ObservationTransform(Transform):
         )
 
 
+class ActionTransform(Transform):
+    """Abstract class for transformations of the actions."""
+
+    def __init__(
+        self,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+    ):
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+
+
 class Compose(Transform):
     """Composes a chain of transforms.
 
@@ -1935,6 +1953,232 @@ class ObservationNorm(ObservationTransform):
             )
         else:
             return super().__repr__()
+
+
+class ActionScaling(ActionTransform):
+    """Action affine transformation layer.
+
+    transforms an action
+
+    .. math::
+        action = action * scale + loc
+
+    Args:
+        loc (number or tensor, optional): location of the affine transform
+        scale (number or tensor, optional): scale of the affine transform
+        in_keys (seuqence of NestedKey, optional): entries to be normalized. Defaults to ["action"].
+        out_keys (seuqence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
+        standard_normal (bool, optional): if ``True``, the transform will be
+
+            .. math::
+                action = (action-loc)/scale
+
+            as it is done for standardization. Default is `False`.
+
+    Examples:
+        >>> torch.set_default_tensor_type(torch.DoubleTensor)
+        >>> r = torch.ones((5, 3))
+        >>> td = TensorDict({'action': r}, [5])
+        >>> transform = ActionScaling(
+        ...     loc = 0,
+        ...     scale = 2,
+        ...     in_keys=["action"],
+        ... )
+        >>> _ = transform(td)
+        >>> print(td.get('action'))
+        tensor([[2., 2., 2.],
+                [2., 2., 2.],
+                [2., 2., 2.],
+                [2., 2., 2.],
+                [2., 2., 2.]])
+    """
+
+    _ERR_INIT_MSG = "Cannot have an mixed initialized and uninitialized loc and scale"
+
+    def __init__(
+        self,
+        loc: Optional[float, torch.Tensor] = None,
+        scale: Optional[float, torch.Tensor] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+        standard_normal: bool = False,
+    ):
+        if in_keys is None:
+            in_keys = [
+                "action",
+            ]
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+
+        if not isinstance(standard_normal, torch.Tensor):
+            standard_normal = torch.tensor(standard_normal)
+        self.register_buffer("standard_normal", standard_normal)
+        self.eps = 1e-6
+
+        if loc is not None and not isinstance(loc, torch.Tensor):
+            loc = torch.tensor(loc, dtype=torch.get_default_dtype())
+
+        if scale is not None and not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale, dtype=torch.get_default_dtype())
+            scale = scale.clamp_min(self.eps)
+
+        elif scale is None and loc is not None:
+            raise ValueError(self._ERR_INIT_MSG)
+        elif loc is None and scale is not None:
+            raise ValueError(self._ERR_INIT_MSG)
+
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale)
+
+    def init_stats(self, loc: [float, torch.Tensor], scale: [float, torch.Tensor]):
+        """Initialize the loc and scale stats of the parent environment.
+
+        Args:
+            loc (number or tensor): location of the affine transform
+            scale (number or tensor): scale of the affine transform
+
+        """
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale)
+
+    @property
+    def initialized(self):
+        return self.loc is not None and self.scale is not None
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        if not self.initialized:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
+        if self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            return (action - loc) / scale
+        else:
+            scale = self.scale
+            loc = self.loc
+            return action * scale + loc
+
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        if not self.initialized:
+            raise RuntimeError(
+                "Loc/Scale have not been initialized. Either pass in values in the constructor "
+                "or call the init_stats method"
+            )
+        if not self.standard_normal:
+            loc = self.loc
+            scale = self.scale
+            return (action - loc) / scale
+        else:
+            scale = self.scale
+            loc = self.loc
+            return action * scale + loc
+
+    @_apply_to_composite
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        space = action_spec.space
+        if isinstance(space, ContinuousBox):
+            space.minimum = self._apply_transform(space.minimum)
+            space.maximum = self._apply_transform(space.maximum)
+        return action_spec
+
+
+class ActionNorm(ActionScaling):
+    """Action affine transformation layer.
+
+    normalizes an action
+
+    .. math::
+        action = action * scale + loc
+
+    Args:
+        in_keys (seuqence of NestedKey, optional): entries to be normalized. Defaults to ["action"].
+        out_keys (seuqence of NestedKey, optional): output entries. Defaults to the value of `in_keys`.
+        standard_normal (bool, optional): if ``True``, the transform will be
+
+            .. math::
+                action = (action-loc)/scale
+
+            as it is done for standardization. Default is `False`.
+
+    Examples:
+        >>> torch.manual_seed(0)
+        >>> lower_bound = torch.rand(3)*10
+        >>> upper_bound = torch.rand(3)*10 + lower_bound
+        >>> action_spec = BoundedTensorSpec(
+        ...     lower_bound,
+        ...     upper_bound
+        ... )
+        >>> transform = ActionNorm(
+        ...     action_spec=action_spec,
+        ...     in_keys=["action"],
+        ... )
+        >>> r = lower_bound + (upper_bound - lower_bound) * torch.rand((5, 3))
+        >>> td = TensorDict({'action': r}, [5])
+        >>> print(td.get('action'))
+        tensor([[ 5.6096, 10.4381,  3.7738],
+                [ 5.7974,  8.7548,  3.4320],
+                [ 4.9920,  8.2013,  2.7483],
+                [ 5.6472,  9.8270,  5.9575],
+                [ 5.1752,  8.5500,  5.2067]])
+        >>> _ = transform(td)
+        >>> print(td.get('action'))
+        tensor([[-0.0198,  0.7929, -0.0887],
+                [ 0.2646, -0.3022, -0.1966],
+                [-0.9553, -0.6623, -0.4122],
+                [ 0.0370,  0.3953,  0.6000],
+                [-0.6779, -0.4355,  0.3632]])
+    """
+
+    def __init__(
+        self,
+        action_spec: Optional[TensorSpec] = None,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
+    ):
+        super().__init__(
+            loc=None,
+            scale=None,
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+            standard_normal=True,
+        )
+        if action_spec is not None:
+            self.init_stats(action_spec)
+
+    def init_stats(self, action_spec: TensorSpec):
+        """Automatically initialize the loc and scale stats of the parent environment.
+
+        Args:
+            action_spec (TensorSpec): action spec of the environment
+
+        """
+        if not isinstance(action_spec, BoundedTensorSpec):
+            raise RuntimeError(
+                "The action space must be continous and bounded for it to "
+                "accept automatic normalization"
+            )
+        loc, scale = self._get_stats(action_spec)
+        super().init_stats(loc, scale)
+
+    @staticmethod
+    def _get_stats(action_spec: TensorSpec) -> Tuple[float, float]:
+        mx = action_spec.space.maximum
+        mn = action_spec.space.minimum
+        loc = (mx + mn) / 2
+        scale = (mx - mn) / 2
+        return loc, scale
 
 
 class CatFrames(ObservationTransform):
