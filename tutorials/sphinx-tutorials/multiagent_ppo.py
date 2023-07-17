@@ -624,7 +624,6 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 # The steps include:
 #
 # * Collect data
-#
 #   * Compute advantage
 #     * Loop over epochs
 #       * Loop over minibatches to compute loss values
