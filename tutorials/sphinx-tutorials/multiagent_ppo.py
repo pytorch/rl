@@ -764,7 +764,7 @@ plt.show()
 # - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
 # - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 #
-#  Now that you are proficient with multi-agent PPO, you can check out all
+# Now that you are proficient with multi-agent PPO, you can check out all
 # `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
 # These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
 # QMIX, MADDPG, IQL, and many more!
