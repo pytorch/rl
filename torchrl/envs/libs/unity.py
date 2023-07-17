@@ -37,14 +37,14 @@ def _unity_to_torchrl_spec_transform(spec, dtype=None, device="cpu"):
         dtype = numpy_to_torch_dtype_dict[dtype]
         return UnboundedContinuousTensorSpec(shape=shape, device=device, dtype=dtype)
     elif isinstance(spec, ActionSpec):
-        if spec.continuous_size == len(spec.discrete_branches) == 0:
+        if spec.continuous_size == spec.discrete_size == 0:
             raise ValueError("No available actions")
         d_spec = c_spec = None
         if spec.discrete_size == 1:
             d_spec = DiscreteTensorSpec(
                 spec.discrete_branches[0], shape=[spec.discrete_size], device=device
             )
-        else:
+        elif spec.discrete_size > 1:
             d_spec = MultiDiscreteTensorSpec(
                 spec.discrete_branches, shape=[spec.discrete_size], device=device
             )
@@ -141,7 +141,7 @@ class UnityWrapper(_EnvWrapper):
                     )
                     action_specs[agent_id] = _unity_to_torchrl_spec_transform(
                         behavior_unity_spec.action_spec,
-                        dtype=np.int32,
+                        dtype=np.dtype("int32"),
                         device=self.device,
                     )
                     reward_specs[agent_id] = UnboundedContinuousTensorSpec(
@@ -231,9 +231,11 @@ class UnityWrapper(_EnvWrapper):
         # used for the number of agents in the game and the second
         # dimension used for the action.
         if isinstance(action, dict):
-            action = {k: np.reshape(v, (1, 1)) for k, v in action.items()}
+            action = {
+                k: np.reshape(v, (1, np.prod(v.shape))) for k, v in action.items()
+            }
         else:
-            action = np.reshape(action, (1, 1))
+            action = np.reshape(action, (1, np.prod(action.shape)))
 
         if isinstance(self.action_spec, CompositeSpec):
             action = ActionTuple(action["continuous"], action["discrete"])
