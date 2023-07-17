@@ -336,7 +336,7 @@ algorithms, such as DQN, DDPG or Dreamer.
     RSSMPosterior
 
 Multi-agent-specific modules
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 These networks implement models that can be used in
 multi-agent contexts.
