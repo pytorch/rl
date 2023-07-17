@@ -638,7 +638,6 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 
 pbar = tqdm(total=n_iters, desc="episode_reward_mean = 0")
 
-total_frames = 0
 episode_reward_mean_list = []
 for tensordict_data in collector:
     tensordict_data.set(
