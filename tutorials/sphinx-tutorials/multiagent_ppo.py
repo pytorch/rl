@@ -387,22 +387,21 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # right number of parameters.
 #
 # In this case, each agent's action will be represented by a 2-dimensional independent normal distribution.
-# For this, our neural network will have to output a mean and a standard deviation.
+# For this, our neural network will have to output a mean and a standard deviation for each action.
 # Each agent will thus have ``2 * n_actions_per_agents`` outputs.
 #
 # Another important decision is whether we want our agents to **share the policy parameters**.
 # Sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them *homogenous*, as they will in fact share the same brain.
+# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same brain.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
 # We design the policy in three steps.
 #
-# Define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# **First**: define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
 #
-# For this we use the ``MultiAgentMLP``, a torchrl module made exactly for training
+# For this we use the ``MultiAgentMLP``, a torchrl module made exactly for
 # multiple agents, with much customization available.
 #
 
@@ -426,13 +425,14 @@ policy_net = torch.nn.Sequential(
 )
 
 ######################################################################
-# Wrap the neural network in a :class:`TensorDictModule`
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# **Second**: wrap the neural network in a :class:`TensorDictModule`
 #
-# This is simply a module that will read the ``in_keys`` it is provided with and write the
-# outputs of the neural network in-place at the ``out_keys``.
+# This is simply a module that will read the ``in_keys`` from a tensordict, feed them to the
+# neural networks, and write the
+# outputs in-place at the ``out_keys``.
 #
-# Note that we use ``("agents", ...)`` keys as these keys are all per-agent.
+# Note that we use ``("agents", ...)`` keys as these keys are denoting data with the
+# additional ``n_agents`` dimension.
 #
 policy_module = TensorDictModule(
     policy_net,
@@ -441,8 +441,7 @@ policy_module = TensorDictModule(
 )
 
 ######################################################################
-# Wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
 #
 # We now need to build a distribution out of the location and scale of our
 # normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
@@ -462,8 +461,8 @@ policy = ProbabilisticActor(
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
-        "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
+        "min": env.unbatched_action_spec[env.action_key].space.minimum,
+        "max": env.unbatched_action_spec[env.action_key].space.maximum,
     },
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),
@@ -480,14 +479,21 @@ policy = ProbabilisticActor(
 # As before, you have to think carefully about the decision of **sharing the critic parameters**.
 # Sharing is definitely not recommended when agents have different reward functions. In cases
 # where the reward function (note: the reward function, NOT the reward) is the same for all agents (like here),
-# sharing might help performance.
+# sharing might help performance. In general, even with the same reward function, this choice might have important
+# impacts you need to consider when designing your networks.
 #
-# Here is also where we have to choose between **MAPPO and IPPO**.
-# With MAPPO and shared parameters, we will essentially obtain a central critic with full-observability
-# (i.e., it will have all the concatenated agent observations as input). We can do this because we are in a simulator
-# and training is centralised. With IPPO we will have a local decentralized critic, just like the policy.
-# In any case, the critic output will have shape ``(..., n_agents, 1)``. If the critic is centralised and shared
+# Here is also where we have to choose between **MAPPO and IPPO**:
+
+# - With MAPPO, we will obtain a central critic with full-observability
+#   (i.e., it will take all the concatenated agent observations as input).
+#   We can do this because we are in a simulator
+#   and training is centralised.
+# - With IPPO, we will have a local decentralized critic, just like the policy.
+#
+# In any case, the critic output will have shape ``(..., n_agents, 1)``.
+# If the critic is centralised and shared,
 # all the values along the ``n_agents`` dimension will be identical.
+#
 
 share_parameters_critic = True
 mappo = True  # IPPO if False
@@ -516,7 +522,7 @@ critic = TensorDictModule(
 # of the environment to run these modules, as they know what information to read
 # and where to write it:
 #
-# **From this point on, the multi-agent-specific components are instantiated,cand we will simply use the same
+# **From this point on, the multi-agent-specific components have been instantiated, and we will simply use the same
 # components as in single-agent learning. Isn't this fantastic?**
 #
 print("Running policy:", policy(env.reset()))
@@ -533,7 +539,7 @@ print("Running value:", critic(env.reset()))
 # state).
 #
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
-# with the only difference that it will auto reset until the desired frames are collected.
+# with the only difference that it will auto reset done states until the desired frames are collected.
 #
 collector = SyncDataCollector(
     env,
