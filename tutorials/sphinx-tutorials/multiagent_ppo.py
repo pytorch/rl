@@ -646,7 +646,7 @@ for tensordict_data in collector:
         tensordict_data.get(("next", "done"))
         .unsqueeze(-1)
         .expand(tensordict_data.get(("next", env.reward_key)).shape),
-    )  # We need to expand the done to match the reward shape
+    )  # We need to expand the done to match the reward shape (this is expected by the value estimator)
 
     with torch.no_grad():
         GAE(
