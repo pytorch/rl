@@ -146,13 +146,13 @@ class LossModule(TensorDictModuleBase):
 
         try:
             self._forward_value_estimator_keys(**kwargs)
-        except AttributeError:
+        except AttributeError as err:
             raise AttributeError(
                 "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
                 "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
                 "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
                 "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
-            )
+            ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -373,14 +373,14 @@ class LossModule(TensorDictModuleBase):
 
         name_params_target = "_target_" + module_name
         if create_target_params:
-            target_params = params_and_buffers.detach().clone()
+            target_params = params_and_buffers.apply(_make_target_param(clone=True))
             target_params_items = target_params.items(True, True)
             target_params_list = []
             for (key, val) in target_params_items:
                 if not isinstance(key, tuple):
                     key = (key,)
                 name = sep.join([name_params_target, *key])
-                self.register_buffer(name, Buffer(val))
+                self.register_buffer(name, val)
                 target_params_list.append((name, key))
             setattr(self, name_params_target + "_params", target_params)
         else:
@@ -398,22 +398,39 @@ class LossModule(TensorDictModuleBase):
         if name in self.__dict__:
             params = getattr(self, name)
             if params is not None:
-                # get targets and update
-                for key in params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(self, self.SEP.join([network_name, *key]))
-                    if isinstance(value_to_set, str):
-                        if value_to_set.endswith("_detached"):
-                            value_to_set = value_to_set[:-9]
-                            value_to_set = getattr(self, value_to_set).detach()
-                        else:
-                            value_to_set = getattr(self, value_to_set)
-                    params._set(key, value_to_set)
+                with params.unlock_():
+                    # get targets and update
+                    for key in params.keys(True, True):
+                        if not isinstance(key, tuple):
+                            key = (key,)
+                        value_to_set = getattr(
+                            self, self.SEP.join([network_name, *key])
+                        )
+                        if isinstance(value_to_set, str):
+                            if value_to_set.endswith("_detached"):
+                                value_to_set = value_to_set[:-9]
+                                value_to_set = getattr(self, value_to_set)
+                                is_param = isinstance(value_to_set, nn.Parameter)
+                                is_buffer = isinstance(value_to_set, Buffer)
+                                value_to_set = value_to_set.detach()
+                                if is_param:
+                                    value_to_set = nn.Parameter(
+                                        value_to_set, requires_grad=False
+                                    )
+                                elif is_buffer:
+                                    value_to_set = Buffer(
+                                        value_to_set, requires_grad=False
+                                    )
+                            else:
+                                value_to_set = getattr(self, value_to_set)
+                        # params.set(key, value_to_set)
+                        params._set_tuple(
+                            key, value_to_set, inplace=False, validated=True
+                        )
                 return params
             else:
                 params = getattr(self, param_name)
-                return params.detach()
+                return params.apply(_make_target_param(clone=False))
 
         else:
             raise RuntimeError(
@@ -436,20 +453,24 @@ class LossModule(TensorDictModuleBase):
                         "by turning the RL_WARNINGS env variable to False.",
                         category=UserWarning,
                     )
-                # get targets and update
-                for key in target_params.keys(True, True):
-                    if not isinstance(key, tuple):
-                        key = (key,)
-                    value_to_set = getattr(
-                        self, self.SEP.join(["_target_" + network_name, *key])
-                    )
-                    # _set is faster bc is bypasses the checks
-                    target_params._set(key, value_to_set)
-                return target_params
+                with target_params.unlock_():
+                    # get targets and update
+                    for key in target_params.keys(True, True):
+                        if not isinstance(key, tuple):
+                            key = (key,)
+                        value_to_set = getattr(
+                            self, self.SEP.join(["_target_" + network_name, *key])
+                        )
+                        # target_params.set(key, value_to_set)
+                        target_params._set_tuple(
+                            key, value_to_set, inplace=False, validated=True
+                        )
             else:
                 params = getattr(self, param_name)
                 # should we clone here?
-                return params.detach()  # .clone()
+                target_params = params.apply(_make_target_param(clone=False))
+
+            return target_params
 
         else:
             raise RuntimeError(
@@ -602,3 +623,15 @@ class LossModule(TensorDictModuleBase):
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+
+class _make_target_param:
+    def __init__(self, clone):
+        self.clone = clone
+
+    def __call__(self, x):
+        if isinstance(x, nn.Parameter):
+            return nn.Parameter(
+                x.data.clone() if self.clone else x.data, requires_grad=False
+            )
+        return Buffer(x.data.clone() if self.clone else x.data)

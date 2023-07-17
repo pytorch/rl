@@ -42,6 +42,7 @@ We also give users the ability to compose a replay buffer using the following co
     TensorStorage
     Writer
     RoundRobinWriter
+    TensorDictRoundRobinWriter
 
 Storage choice is very influential on replay buffer sampling latency, especially in distributed reinforcement learning settings with larger data volumes.
 :class:`LazyMemmapStorage` is highly advised in distributed settings with shared storage due to the lower serialisation cost of MemmapTensors as well as the ability to specify file storage locations for improved node failure recovery.

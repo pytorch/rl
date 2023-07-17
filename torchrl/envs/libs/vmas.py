@@ -208,29 +208,51 @@ class VmasWrapper(_EnvWrapper):
 
         done_spec = DiscreteTensorSpec(
             n=2,
-            shape=torch.Size((self.n_agents, 1)),
+            shape=torch.Size((1,)),
             dtype=torch.bool,
             device=self.device,
-        )  # shape = (n_agents, 1)
+        )  # shape = (1,)
 
-        self.action_spec = multi_agent_action_spec.expand(
-            *self.batch_size, *multi_agent_action_spec.shape
+        self.unbatched_action_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"action": multi_agent_action_spec}, shape=(self.n_agents,)
+                )
+            }
+        )
+        self.unbatched_observation_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"observation": multi_agent_observation_spec},
+                    shape=(self.n_agents,),
+                )
+            }
         )
         if len(info_specs):
             multi_agent_info_spec = torch.stack(info_specs, dim=0)
-            observation_spec = CompositeSpec(
-                observation=multi_agent_observation_spec, info=multi_agent_info_spec
-            )
-        else:
-            observation_spec = CompositeSpec(observation=multi_agent_observation_spec)
+            self.unbatched_observation_spec[("agents", "info")] = multi_agent_info_spec
 
-        self.observation_spec = observation_spec.expand(
-            *self.batch_size, *observation_spec.shape
+        self.unbatched_reward_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"reward": multi_agent_reward_spec}, shape=(self.n_agents,)
+                )
+            }
         )
-        self.reward_spec = multi_agent_reward_spec.expand(
-            *self.batch_size, *multi_agent_reward_spec.shape
+        self.unbatched_done_spec = done_spec
+
+        self.action_spec = self.unbatched_action_spec.expand(
+            *self.batch_size, *self.unbatched_action_spec.shape
         )
-        self.done_spec = done_spec.expand(*self.batch_size, *done_spec.shape)
+        self.observation_spec = self.unbatched_observation_spec.expand(
+            *self.batch_size, *self.unbatched_observation_spec.shape
+        )
+        self.reward_spec = self.unbatched_reward_spec.expand(
+            *self.batch_size, *self.unbatched_reward_spec.shape
+        )
+        self.done_spec = self.unbatched_done_spec.expand(
+            *self.batch_size, *self.unbatched_done_spec.shape
+        )
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -252,7 +274,7 @@ class VmasWrapper(_EnvWrapper):
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset")
-            envs_to_reset = _reset.squeeze(-1).any(-1)
+            envs_to_reset = _reset.squeeze(-1)
             if envs_to_reset.all():
                 self._env.reset(return_observations=False)
             else:
@@ -277,13 +299,15 @@ class VmasWrapper(_EnvWrapper):
 
             agent_td = TensorDict(
                 source={
-                    "observation": agent_obs,
+                    "agents": {
+                        "observation": agent_obs,
+                    },
                 },
                 batch_size=(self.num_envs,),
                 device=self.device,
             )
             if agent_info is not None:
-                agent_td.set("info", agent_info)
+                agent_td.set(("agents", "info"), agent_info)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
@@ -295,7 +319,7 @@ class VmasWrapper(_EnvWrapper):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(("agents", "action"))
         action = self.read_action(action)
 
         obs, rews, dones, infos = self._env.step(action)
@@ -310,14 +334,16 @@ class VmasWrapper(_EnvWrapper):
 
             agent_td = TensorDict(
                 source={
-                    "observation": agent_obs,
-                    "reward": agent_rew,
+                    "agents": {
+                        "observation": agent_obs,
+                        "reward": agent_rew,
+                    },
                 },
                 batch_size=(self.num_envs,),
                 device=self.device,
             )
             if agent_info is not None:
-                agent_td.set("info", agent_info)
+                agent_td.set(("agents", "info"), agent_info)
             agent_tds.append(agent_td)
 
         tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
@@ -350,7 +376,6 @@ class VmasWrapper(_EnvWrapper):
 
     def read_done(self, done):
         done = _selective_unsqueeze(done, batch_size=torch.Size((self.num_envs,)))
-        done = done.unsqueeze(-1).expand(*self.batch_size, self.n_agents, 1)
         return done
 
     def read_reward(self, rewards):

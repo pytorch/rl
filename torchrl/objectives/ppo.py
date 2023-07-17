@@ -147,7 +147,7 @@ class PPOLoss(LossModule):
         >>> data = TensorDict({
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
-        ...         "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
+        ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
@@ -266,12 +266,6 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self._set_deprecated_ctor_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-        )
-
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
@@ -296,6 +290,11 @@ class PPOLoss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._set_deprecated_ctor_keys(
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
+        )
 
     def _set_in_keys(self):
         keys = [
@@ -335,7 +334,7 @@ class PPOLoss(LossModule):
         self._out_keys = values
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
+        if hasattr(self, "_value_estimator") and self._value_estimator is not None:
             self._value_estimator.set_keys(
                 advantage=self.tensor_keys.advantage,
                 value_target=self.tensor_keys.value_target,

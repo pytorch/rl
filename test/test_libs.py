@@ -24,6 +24,7 @@ from _utils_internal import (
 )
 from packaging import version
 from tensordict.tensordict import assert_allclose_td, TensorDict
+from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
@@ -1029,9 +1030,11 @@ class TestBrax:
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 class TestVmas:
     @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
-    def test_all_vmas_scenarios(self, scenario_name):
+    @pytest.mark.parametrize("continuous_actions", [True, False])
+    def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
         env = VmasEnv(
             scenario=scenario_name,
+            continuous_actions=continuous_actions,
             num_envs=4,
         )
         env.set_seed(0)
@@ -1115,14 +1118,14 @@ class TestVmas:
         env.close()
 
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["observation"].shape[1] == env.n_agents
-        assert tdreset["done"].shape[1] == env.n_agents
+        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdrollout["observation"].shape[2] == env.n_agents
-        assert tdrollout["next", "reward"].shape[2] == env.n_agents
-        assert tdrollout["action"].shape[2] == env.n_agents
-        assert tdrollout["done"].shape[2] == env.n_agents
+        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
+        assert tdrollout["agents", "action"].shape[2] == env.n_agents
+        assert tdrollout["done"].shape[2] == 1
         del env
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1279,6 +1282,71 @@ class TestVmas:
         env.to(devices[1 - first])
 
         assert env.rollout(max_steps=3).device == devices[1 - first]
+
+    @pytest.mark.parametrize("n_envs", [1, 4])
+    @pytest.mark.parametrize("n_workers", [1, 2])
+    @pytest.mark.parametrize("n_agents", [1, 3])
+    def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
+
+        torch.manual_seed(1)
+        env_fun = lambda: VmasEnv(
+            scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
+        )
+
+        env = ParallelEnv(n_workers, env_fun)
+
+        n_actions_per_agent = env.action_spec.shape[-1]
+        n_observations_per_agent = env.observation_spec["agents", "observation"].shape[
+            -1
+        ]
+
+        policy = SafeModule(
+            nn.Linear(
+                n_observations_per_agent,
+                n_actions_per_agent,
+            ),
+            in_keys=[("agents", "observation")],
+            out_keys=[env.action_key],
+            spec=env.action_spec,
+            safe=True,
+        )
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=1000,
+            device="cpu",
+        )
+
+        for i, _td in enumerate(ccollector):
+            if i == 1:
+                break
+        ccollector.shutdown()
+
+        td_batch = (n_workers, n_envs, frames_per_batch // (n_workers * n_envs))
+        agents_td_batch = td_batch + (n_agents,)
+
+        assert _td.shape == td_batch
+        assert _td["next"].shape == td_batch
+        assert _td["agents"].shape == agents_td_batch
+        assert _td["agents", "info"].shape == agents_td_batch
+        assert _td["next", "agents"].shape == agents_td_batch
+        assert _td["next", "agents", "info"].shape == agents_td_batch
+        assert _td["collector"].shape == td_batch
+
+        assert _td[env.action_key].shape == agents_td_batch + (n_actions_per_agent,)
+        assert _td["agents", "observation"].shape == agents_td_batch + (
+            n_observations_per_agent,
+        )
+        assert _td["next", "agents", "observation"].shape == agents_td_batch + (
+            n_observations_per_agent,
+        )
+        assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
+        assert _td[env.done_key].shape == td_batch + (1,)
+        assert _td["next", env.done_key].shape == td_batch + (1,)
+
+        assert env.reward_key not in _td.keys(True, True)
+        assert env.action_key not in _td["next"].keys(True, True)
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
