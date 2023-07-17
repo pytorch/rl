@@ -697,6 +697,8 @@ for tensordict_data in collector:
 # To make training last longer, increase the ``n_iters`` hyperparameter.
 #
 plt.plot(episode_reward_mean_list)
+plt.xlabel("Training iterations")
+plt.ylabel("Reward")
 plt.title("Episode reward mean")
 plt.show()
 
@@ -718,12 +720,15 @@ plt.show()
 #
 # If you are running this in Google Colab, you can render the trained policy by running:
 #
-# .. code-block:: python
+# .. code-block:: bash
 #
 #    !apt-get update
 #    !apt-get install -y x11-utils
 #    !apt-get install -y xvfb
 #    !pip install pyvirtualdisplay
+#
+# .. code-block:: python
+#
 #    import pyvirtualdisplay
 #    display = pyvirtualdisplay.Display(visible=False, size=(1400, 900))
 #    display.start()
