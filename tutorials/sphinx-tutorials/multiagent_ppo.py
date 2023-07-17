@@ -696,6 +696,8 @@ for tensordict_data in collector:
 #
 # Let's plot the mean reward obtained per episode
 #
+# To make training last longer, increase the ``n_iters`` hyperparameter.
+#
 plt.plot(episode_reward_mean_list)
 plt.title("Episode reward mean")
 plt.show()
