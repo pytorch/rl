@@ -653,7 +653,7 @@ for tensordict_data in collector:
             tensordict_data,
             params=loss_module.critic_params,
             target_params=loss_module.target_critic_params,
-        )  # Compute GAE
+        )  # Compute GAE and add it to the data
 
     current_frames = tensordict_data.numel()
     total_frames += current_frames
