@@ -483,7 +483,7 @@ policy = ProbabilisticActor(
 # impacts you need to consider when designing your networks.
 #
 # Here is also where we have to choose between **MAPPO and IPPO**:
-
+#
 # - With MAPPO, we will obtain a central critic with full-observability
 #   (i.e., it will take all the concatenated agent observations as input).
 #   We can do this because we are in a simulator
@@ -624,14 +624,14 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 # The steps include:
 #
 # * Collect data
-#   * Compute advantage
-#     * Loop over epochs
-#       * Loop over minibatches to compute loss values
-#           * Back propagate
-#           * Optimize
-#           * Repeat
-#       * Repeat
-#   * Repeat
+#     * Compute advantage
+#         * Loop over epochs
+#             * Loop over minibatches to compute loss values
+#                 * Back propagate
+#                 * Optimize
+#             * Repeat
+#         * Repeat
+#     * Repeat
 # * Repeat
 #
 #
@@ -764,14 +764,21 @@ plt.show()
 # - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
 # - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
 #
-#  A code-only version of this tutorial is available in the
-# `torchrl examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
-# alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
+#  Now that you are proficient with multi-agent PPO, you can check out all
+# `TorchRL multi-agent examples <https://github.com/pytorch/rl/tree/main/examples/multiagent>`__.
+# These are code-only scripts of many popular MARL algorithms such as the ones seen in this tutorial,
+# QMIX, MADDPG, IQL, and many more!
 #
-# For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
+# If you are interested in creating or wrapping your own multi-agent environments in TorchRL,
+# you can check out the dedicated
 # `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
 #
+# Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
+# to become a MARL master.
+# Here are a few videos of all the possible scenarios you can try in VMAS,
 #
-# recap intro and link examples
-# try other vmas tasks and parameters, show what tasks are available
-# linking gif
+# .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/VMAS_scenarios.gif?raw=true
+#    :alt: VMAS scenarios
+#
+#    Scenarios available in `VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`__
+#

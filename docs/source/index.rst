@@ -40,7 +40,6 @@ Basics
    :maxdepth: 1
 
    tutorials/coding_ppo
-   tutorials/multiagent_ppo
    tutorials/pendulum
    tutorials/torchrl_demo
 
@@ -50,6 +49,7 @@ Intermediate
 .. toctree::
    :maxdepth: 1
 
+   tutorials/multiagent_ppo
    tutorials/torchrl_envs
    tutorials/pretrained_models
    tutorials/dqn_with_rnn
