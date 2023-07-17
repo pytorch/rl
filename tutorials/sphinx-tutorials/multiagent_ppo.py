@@ -775,7 +775,7 @@ plt.show()
 #
 # Finally, you can modify the parameters of this tutorial to try many other configurations and scenarios
 # to become a MARL master.
-# Here are a few videos of all the possible scenarios you can try in VMAS,
+# Here are a few videos of some possible scenarios you can try in VMAS.
 #
 # .. figure:: https://github.com/matteobettini/vmas-media/blob/main/media/VMAS_scenarios.gif?raw=true
 #    :alt: VMAS scenarios
