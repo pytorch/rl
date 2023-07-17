@@ -743,17 +743,17 @@ plt.show()
 #         callback=rendering_callback,
 #         auto_cast_to_device=True,
 #         break_when_any_done=False,
-#     )
-#     env.frames[0].save(
+#    )
+#    env.frames[0].save(
 #        f"{scenario_name}.gif",
 #        save_all=True,
 #        append_images=env.frames[1:],
 #       duration=3,
 #       loop=0,
-#     )
+#    )
 #
-#     from IPython.display import Image
-#     Image(open(f"{scenario_name}.gif", "rb").read())
+#    from IPython.display import Image
+#    Image(open(f"{scenario_name}.gif", "rb").read())
 #
 
 
