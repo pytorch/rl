@@ -654,8 +654,6 @@ for tensordict_data in collector:
             target_params=loss_module.target_critic_params,
         )  # Compute GAE and add it to the data
 
-    current_frames = tensordict_data.numel()
-    total_frames += current_frames
     data_view = tensordict_data.reshape(-1)  # Flatten the batch size to shuffle data
     replay_buffer.extend(data_view)
 
@@ -672,7 +670,7 @@ for tensordict_data in collector:
 
             loss_value.backward()
 
-            total_norm = torch.nn.utils.clip_grad_norm_(
+            torch.nn.utils.clip_grad_norm_(
                 loss_module.parameters(), max_grad_norm
             )  # Optional
 
@@ -758,3 +756,22 @@ plt.show()
 # Conclusion and next steps
 # -------------------------
 #
+# In this tutorial, we have seen:
+#
+# - How to create a multi-agent environment in TorchRL, how its specs work, and how it integrates with the library;
+# - How you use GPU vectorized environments in TorchRL;
+# - How to create different multi-agent network architectures in TorchRL (e.g., using parameter sharing, centralised critic)
+# - How we can use :class:`tensordict.TensorDict` to carry multi-agent data;
+# - How we can tie all the library components (collectors, modules, replay buffers, and losses) in a multi-agent MAPPO/IPPO training loop.
+#
+#  A code-only version of this tutorial is available in the
+# `torchrl examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
+# alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
+#
+# For more information on how the multi-agent environments API works in TorchRL, you can check out the dedicated
+# `doc section <https://pytorch.org/rl/reference/envs.html#multi-agent-environments>`_.
+#
+#
+# recap intro and link examples
+# try other vmas tasks and parameters, show what tasks are available
+# linking gif
