@@ -1375,7 +1375,7 @@ class HeteroCountingEnv(EnvBase):
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
         lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
-        sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
+        sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(10,))
 
         agent_0_obs = UnboundedContinuousTensorSpec(shape=(1,))
         agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
