@@ -131,7 +131,7 @@ class UnityWrapper(_EnvWrapper):
 
                     observation_specs[agent_id] = CompositeSpec(
                         {
-                            f"obs_{i}": _unity_to_torchrl_spec_transform(
+                            f"obs_{agent_id}_{i}": _unity_to_torchrl_spec_transform(
                                 spec, dtype=np.dtype("float32"), device=self.device
                             )
                             for i, spec in enumerate(
@@ -216,7 +216,7 @@ class UnityWrapper(_EnvWrapper):
 
     def read_obs(self, agent_id, obs):
         return self.observation_spec["agents", "observation"][agent_id].encode(
-            {f"obs_{i}": observation for i, observation in enumerate(obs)},
+            {f"obs_{agent_id}_{i}": observation for i, observation in enumerate(obs)},
         )
 
     def read_reward(self, agent_id, reward):
