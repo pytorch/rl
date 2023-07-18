@@ -1377,20 +1377,40 @@ class HeteroCountingEnv(EnvBase):
         lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
         sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
 
+        agent_0_obs = UnboundedContinuousTensorSpec(shape=(1,))
+        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        agent_2_obs = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
+
         # Agents all have the same camera
         # All have vector entry but different shapes
         # First 2 have lidar and last sonar
+        # All have a different keys with different n_dims
         if i == 0:
             return CompositeSpec(
-                {"camera": camera, "lidar": lidar, "vector": vector_3d}
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_3d,
+                    "agent_0_obs": agent_0_obs,
+                }
             )
         elif i == 1:
             return CompositeSpec(
-                {"camera": camera, "lidar": lidar, "vector": vector_2d}
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_2d,
+                    "agent_1_obs": agent_1_obs,
+                }
             )
         elif i == 2:
             return CompositeSpec(
-                {"camera": camera, "sonar": sonar, "vector": vector_2d}
+                {
+                    "camera": camera,
+                    "sonar": sonar,
+                    "vector": vector_2d,
+                    "agent_2_obs": agent_2_obs,
+                }
             )
         else:
             raise ValueError(f"Index {i} undefined for 3 agents")
