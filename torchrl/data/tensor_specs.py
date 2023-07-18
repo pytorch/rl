@@ -957,7 +957,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         sub_string = ", ".join(
             [shape_str, space_str, device_str, dtype_str, domain_str]
         )
-        string = f"{self.__class__.__name__}(\n     {sub_string})"
+        string = f"LazyStacked{self._specs[0].__class__.__name__}(\n     {sub_string})"
         return string
 
     def __iter__(self):
@@ -3156,7 +3156,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
-        raise NotImplementedError
+        return len(self.keys())
 
     def values(
         self,
@@ -3257,7 +3257,6 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             new_dim = dim
         if new_dim > len(self.shape) or new_dim < 0:
             raise ValueError(f"Cannot unsqueeze along dim {dim}.")
-        new_stack_dim = self.dim if self.dim < new_dim else self.dim + 1
         if new_dim > self.dim:
             # unsqueeze 2, stack is on 1 => unsqueeze 1, stack along 1
             new_stack_dim = self.dim
@@ -3321,14 +3320,19 @@ def _stack_specs(list_of_spec, dim, out=None):
     spec0 = list_of_spec[0]
     if isinstance(spec0, TensorSpec):
         device = spec0.device
+
         all_equal = True
         for spec in list_of_spec[1:]:
-            if not isinstance(spec, TensorSpec):
+            if not isinstance(spec, spec0.__class__):
                 raise RuntimeError(
                     "Stacking specs cannot occur: Found more than one type of specs in the list."
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            if spec.dtype != spec0.dtype:
+                raise RuntimeError(f"Dtypes differ, got {spec0.dtype} and {spec.dtype}")
+            if spec.ndim != spec0.ndim:
+                raise RuntimeError(f"Ndims differ, got {spec0.ndim} and {spec.ndim}")
             all_equal = all_equal and spec == spec0
         if all_equal:
             shape = list(spec0.shape)
