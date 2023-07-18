@@ -2530,6 +2530,10 @@ class TestLazyStackedCompositeSpecs:
         cus = cu.squeeze(0)
         assert cus == c
 
+    def test_len(self):
+        c = self._get_het_specs()
+        assert len(c) == 2
+
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(

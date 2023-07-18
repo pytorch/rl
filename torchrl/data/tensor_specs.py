@@ -3156,6 +3156,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
+        """Returns the number of keys present in all the members of the LazyStack."""
         return len(self.keys())
 
     def values(
