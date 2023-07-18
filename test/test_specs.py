@@ -2147,8 +2147,10 @@ class TestStack:
 
     def test_to_numpy(self, shape, stack_dim):
         c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
-        c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
+
         c = torch.stack([c1, c2], stack_dim)
+
         torch.manual_seed(0)
 
         shape = list(shape)
@@ -2163,6 +2165,27 @@ class TestStack:
 
         with pytest.raises(AssertionError):
             c.to_numpy(val + 1, safe=True)
+
+    def test_malformed_stack(self, shape, stack_dim):
+        c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float64)
+        c2 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        with pytest.raises(RuntimeError, match="Dtypes differ"):
+            torch.stack([c1, c2], stack_dim)
+
+        c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        c2 = UnboundedContinuousTensorSpec(shape=shape, dtype=torch.float32)
+        c3 = UnboundedDiscreteTensorSpec(shape=shape, dtype=torch.float32)
+        with pytest.raises(
+            RuntimeError,
+            match="Stacking specs cannot occur: Found more than one type of specs in the list.",
+        ):
+            torch.stack([c1, c2], stack_dim)
+            torch.stack([c3, c2], stack_dim)
+
+        c1 = BoundedTensorSpec(-1, 1, shape=shape, dtype=torch.float32)
+        c2 = BoundedTensorSpec(-1, 1, shape=shape + (3,), dtype=torch.float32)
+        with pytest.raises(RuntimeError, match="Ndims differ"):
+            torch.stack([c1, c2], stack_dim)
 
 
 class TestDenseStackedCompositeSpecs:
