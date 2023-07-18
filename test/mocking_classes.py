@@ -1290,3 +1290,155 @@ class CountingBatchedEnv(EnvBase):
             device=self.device,
         )
         return tensordict.select().set("next", tensordict)
+
+
+class HeteroCountingEnv(EnvBase):
+    """A heterogeneous, counting Env."""
+
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+        super().__init__(**kwargs)
+        self.n_agents = 3
+        self.max_steps = max_steps
+        self.start_val = start_val
+
+        count = torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int)
+        count[:] = self.start_val
+
+        self.register_buffer("count", count)
+
+        agent_obs_specs = []
+        agent_action_specs = []
+        for angent_id in range(self.n_agents):
+            agent_obs_specs.append(self.get_agent_obs_spec(angent_id))
+            agent_action_specs.append(self.get_agent_action_spec(angent_id))
+        agent_obs_specs = torch.stack(agent_obs_specs, dim=0)
+        agent_action_specs = torch.stack(agent_action_specs, dim=0)
+
+        self.unbatched_observation_spec = CompositeSpec(
+            agents=agent_obs_specs,
+            state=UnboundedContinuousTensorSpec(
+                shape=(
+                    64,
+                    64,
+                    3,
+                )
+            ),
+            shape=(),
+        )
+
+        self.unbatched_action_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"action": agent_action_specs},
+                    shape=(self.n_agents,),
+                )
+            }
+        )
+        self.unbatched_reward_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {"reward": UnboundedContinuousTensorSpec(shape=(self.n_agents, 1))},
+                    shape=(self.n_agents,),
+                )
+            }
+        )
+        self.unbatched_done_spec = CompositeSpec(
+            {
+                "agents": CompositeSpec(
+                    {
+                        "done": DiscreteTensorSpec(
+                            n=2,
+                            shape=(self.n_agents, 1),
+                            dtype=torch.bool,
+                        ),
+                    },
+                    shape=(self.n_agents,),
+                )
+            }
+        )
+
+        self.action_spec = self.unbatched_action_spec.expand(
+            *self.batch_size, *self.unbatched_action_spec.shape
+        )
+        self.observation_spec = self.unbatched_observation_spec.expand(
+            *self.batch_size, *self.unbatched_observation_spec.shape
+        )
+        self.reward_spec = self.unbatched_reward_spec.expand(
+            *self.batch_size, *self.unbatched_reward_spec.shape
+        )
+        self.done_spec = self.unbatched_done_spec.expand(
+            *self.batch_size, *self.unbatched_done_spec.shape
+        )
+
+    def get_agent_obs_spec(self, i):
+        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(32, 32, 3))
+        vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
+        vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
+        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
+        sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
+
+        # Agents all have the same camera
+        # All have vector entry but different shapes
+        # First 2 have lidar and last sonar
+        if i == 0:
+            return CompositeSpec(
+                {"camera": camera, "lidar": lidar, "vector": vector_3d}
+            )
+        elif i == 1:
+            return CompositeSpec(
+                {"camera": camera, "lidar": lidar, "vector": vector_2d}
+            )
+        elif i == 2:
+            return CompositeSpec(
+                {"camera": camera, "sonar": sonar, "vector": vector_2d}
+            )
+        else:
+            raise ValueError(f"Index {i} undefined for 3 agents")
+
+    def get_agent_action_spec(self, i):
+        force_3d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(3,))
+        force_2d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(2,))
+
+        # Some have 2d action and some 3d
+        # TODO Introduce composite heterogeneous actions
+        if i == 0:
+            return force_3d
+        elif i == 1:
+            return force_2d
+        elif i == 2:
+            return force_2d
+        else:
+            raise ValueError(f"Index {i} undefined for 3 agents")
+
+    def _reset(
+        self,
+        tensordict: TensorDictBase = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        if tensordict is not None and "_reset" in tensordict.keys():
+            _reset = tensordict.get("_reset")
+            self.count[_reset] = self.start_val
+        else:
+            self.count[:] = self.start_val
+
+        reset_td = self.observation_spec.zero()
+        reset_td.apply_(lambda x: x + self.count)
+        reset_td.update(self.output_spec["_done_spec"].zero())
+
+        assert reset_td.batch_size == self.batch_size
+        reset_td.device = self.device
+
+        return reset_td
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        td = self.observation_spec.zero()
+        td.apply_(lambda x: x + self.counter)
+        td.update(self.output_spec["_done_spec"].zero())
+        td.update(self.output_spec["_reward_spec"].zero())
+        return td.select().set("next", td)
+
+    def _set_seed(self, seed: Optional[int]):
+        torch.manual_seed(seed)

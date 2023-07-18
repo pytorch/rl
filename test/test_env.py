@@ -33,6 +33,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    HeteroCountingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -1669,7 +1670,6 @@ class TestConcurrentEnvs:
 class TestNestedSpecs:
     @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
     def test_nested_env(self, envclass):
-
         if envclass == "CountingEnv":
             env = CountingEnv()
         elif envclass == "NestedCountingEnv":
@@ -1700,7 +1700,6 @@ class TestNestedSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
         td_reset = env.reset()
@@ -1750,6 +1749,12 @@ class TestNestedSpecs:
         )
 
 
+class TestHeteroEnvs:
+    def test_reset(self):
+        env = HeteroCountingEnv()
+        env.reset()
+
+
 @pytest.mark.parametrize(
     "envclass",
     [
@@ -1768,6 +1773,7 @@ class TestNestedSpecs:
         MockBatchedUnLockedEnv,
         MockSerialEnv,
         NestedCountingEnv,
+        HeteroCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):
