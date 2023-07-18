@@ -943,7 +943,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         return val.detach().cpu().numpy()
 
     def __len__(self):
-        raise NotImplementedError
+        raise len(self._specs)
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError
@@ -989,10 +989,10 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         self._specs[name] = spec
 
     def is_in(self, val) -> bool:
-        isin = True
         for spec, subval in zip(self._specs, val.unbind(self.dim)):
-            isin = isin and spec.is_in(subval)
-        return isin
+            if not spec.is_in(subval):
+                return False
+        return True
 
 
 @dataclass(repr=False)
