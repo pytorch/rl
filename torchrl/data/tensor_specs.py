@@ -32,8 +32,8 @@ from typing import (
 import numpy as np
 import torch
 from tensordict import unravel_key
-from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _getitem_batch_size
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
 
@@ -839,24 +839,6 @@ class _LazyStackedMixin(Generic[T]):
                 return out
             return torch.stack(list(out), 0)
 
-    @property
-    def shape(self):
-        first_shape = self._specs[0].shape
-        shape = []
-        for i in range(len(first_shape)):
-            homo_dim = True
-            for spec in self._specs:
-                if spec.shape[i] != first_shape[i]:
-                    homo_dim = False
-                    break
-            shape.append(first_shape[i] if homo_dim else -1)
-
-        dim = self.dim
-        if dim < 0:
-            dim = len(shape) + dim + 1
-        shape.insert(dim, len(self._specs))
-        return torch.Size(shape)
-
     def clone(self) -> T:
         return torch.stack([spec.clone() for spec in self._specs], 0)
 
@@ -942,9 +924,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                 spec.assert_is_in(v)
         return val.detach().cpu().numpy()
 
-    def __len__(self):
-        raise len(self._specs)
-
     def project(self, val: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError
 
@@ -993,6 +972,24 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             if not spec.is_in(subval):
                 return False
         return True
+
+    @property
+    def shape(self):
+        first_shape = self._specs[0].shape
+        shape = []
+        for i in range(len(first_shape)):
+            homo_dim = True
+            for spec in self._specs:
+                if spec.shape[i] != first_shape[i]:
+                    homo_dim = False
+                    break
+            shape.append(first_shape[i] if homo_dim else -1)
+
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self._specs))
+        return torch.Size(shape)
 
 
 @dataclass(repr=False)
@@ -3130,7 +3127,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     """
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
-        pass
+        raise NotImplementedError
 
     def __eq__(self, other):
         if not isinstance(other, LazyStackedCompositeSpec):
@@ -3156,8 +3153,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
-        """Returns the number of keys present in all the members of the LazyStack."""
-        return len(self.keys())
+        return self.shape[0]
 
     def values(
         self,
@@ -3189,14 +3185,27 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return sorted(keys, key=str)
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError
+        vals = []
+        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+            if not spec.is_in(subval):
+                vals.append(spec.project(subval))
+            else:
+                vals.append(val)
+        res = torch.stack(vals, dim=self.dim)
+        if not isinstance(val, LazyStackedTensorDict):
+            res = res.to_tensordict()
+        return res
 
     def type_check(
         self,
         value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+        selected_keys: Union[NestedKey, Optional[Sequence[NestedKey]]] = None,
     ):
-        raise NotImplementedError
+        if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
+            value = {selected_keys: value}
+            selected_keys = [selected_keys]
+        for spec in self._specs:
+            spec.type_check(value, selected_keys)
 
     def __repr__(self) -> str:
         sub_str = ",\n".join(
@@ -3210,18 +3219,19 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         )
 
     def is_in(self, val) -> bool:
-        isin = True
         for spec, subval in zip(self._specs, val.unbind(self.dim)):
-            isin = isin and spec.is_in(subval)
-        return isin
+            if not spec.is_in(subval):
+                return False
+        return True
 
     def encode(
         self, vals: Dict[str, Any], ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
         raise NotImplementedError
 
-    def __delitem__(self, key):
-        raise NotImplementedError
+    def __delitem__(self, key: NestedKey):
+        for spec in self._specs:
+            del spec[key]
 
     def __iter__(self):
         raise NotImplementedError
@@ -3307,6 +3317,15 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             *[spec.squeeze(new_dim) for spec in self._specs], dim=new_stack_dim
         )
 
+    @property
+    def shape(self):
+        shape = list(self._specs[0].shape)
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self._specs))
+        return torch.Size(shape)
+
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
 @TensorSpec.implements_for_spec(torch.stack)
@@ -3367,6 +3386,8 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            if spec.shape != spec0.shape:
+                raise RuntimeError(f"Shapes differ, got {spec.shape} and {spec0.shape}")
             all_equal = all_equal and spec == spec0
         if all_equal:
             shape = list(spec0.shape)

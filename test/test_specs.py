@@ -2197,22 +2197,43 @@ class TestDenseStackedCompositeSpecs:
 
 
 class TestLazyStackedCompositeSpecs:
-    def _get_het_specs(self, dim: int = 0):
+    def _get_het_specs(self, stack_dim: int = 0, batch_size=()):
         specs = []
         for i in range(3):
-            specs.append(self._get_sinlge_spec(i))
-        return torch.stack(specs, dim=dim)
+            specs.append(self._get_sinlge_spec(i, batch_size=batch_size))
+        return torch.stack(specs, dim=stack_dim)
 
-    def _get_sinlge_spec(self, i):
-        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(32, 32, 3))
-        vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
-        vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
-        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
-        sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(10,))
+    def _get_sinlge_spec(self, i, batch_size=()):
+        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
+        vector_3d = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                3,
+            )
+        )
+        vector_2d = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                2,
+            )
+        )
+        lidar = BoundedTensorSpec(
+            minimum=0,
+            maximum=5,
+            shape=(
+                *batch_size,
+                20,
+            ),
+        )
 
-        agent_0_obs = UnboundedContinuousTensorSpec(shape=(1,))
-        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
-        agent_2_obs = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
+        agent_0_obs = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                1,
+            )
+        )
+        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(*batch_size, 1, 2))
+        agent_2_obs = UnboundedContinuousTensorSpec(shape=(*batch_size, 1, 2, 3))
 
         # Agents all have the same camera
         # All have vector entry but different shapes
@@ -2225,7 +2246,8 @@ class TestLazyStackedCompositeSpecs:
                     "lidar": lidar,
                     "vector": vector_3d,
                     "agent_0_obs": agent_0_obs,
-                }
+                },
+                shape=batch_size,
             )
         elif i == 1:
             return CompositeSpec(
@@ -2234,16 +2256,17 @@ class TestLazyStackedCompositeSpecs:
                     "lidar": lidar,
                     "vector": vector_2d,
                     "agent_1_obs": agent_1_obs,
-                }
+                },
+                shape=batch_size,
             )
         elif i == 2:
             return CompositeSpec(
                 {
                     "camera": camera,
-                    "sonar": sonar,
                     "vector": vector_2d,
                     "agent_2_obs": agent_2_obs,
-                }
+                },
+                shape=batch_size,
             )
         else:
             raise AssertionError()
@@ -2530,9 +2553,11 @@ class TestLazyStackedCompositeSpecs:
         cus = cu.squeeze(0)
         assert cus == c
 
-    def test_len(self):
-        c = self._get_het_specs()
-        assert len(c) == 2
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    def test_len(self, batch_size):
+        c = self._get_het_specs(batch_size=batch_size)
+        assert len(c) == c.shape[0]
+        assert len(c) == len(c.rand())
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
