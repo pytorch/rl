@@ -69,8 +69,8 @@ class RandomPolicy:
         >>> from tensordict import TensorDict
         >>> from torchrl.data.tensor_specs import BoundedTensorSpec
         >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
-        >>> actor = RandomPolicy(spec=action_spec)
-        >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+        >>> actor = RandomPolicy(action_spec=action_spec)
+        >>> td = actor(TensorDict({}, batch_size=[])) # selects a random action in the cube [-1; 1]
     """
 
     def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
@@ -446,25 +446,28 @@ class SyncDataCollector(DataCollectorBase):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        "traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> del collector
@@ -717,9 +720,11 @@ class SyncDataCollector(DataCollectorBase):
         Examples:
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from tensordict.nn import TensorDictModule
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
-            >>> collector = SyncDataCollector(env_fn_parallel)
+            >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+            >>> collector = SyncDataCollector(env_fn_parallel, policy, total_frames=300, frames_per_batch=100)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -1393,9 +1398,13 @@ also that the state dict is synchronised across processes if needed."""
             environment.
 
         Examples:
-            >>> env_fn = lambda: GymEnv("Pendulum-v0")
+            >>> from torchrl.envs import ParallelEnv
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from tensordict.nn import TensorDictModule
+            >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
-            >>> collector = SyncDataCollector(env_fn_parallel)
+            >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+            >>> collector = SyncDataCollector(env_fn_parallel, policy, frames_per_batch=100, total_frames=300)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -1533,25 +1542,28 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> collector.shutdown()
@@ -1764,25 +1776,28 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> collector.shutdown()
