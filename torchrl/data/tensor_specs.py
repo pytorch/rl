@@ -841,7 +841,16 @@ class _LazyStackedMixin(Generic[T]):
 
     @property
     def shape(self):
-        shape = list(self._specs[0].shape)
+        first_shape = self._specs[0].shape
+        shape = []
+        for i in range(len(first_shape)):
+            homo_dim = True
+            for spec in self._specs:
+                if spec.shape[i] != first_shape[i]:
+                    homo_dim = False
+                    break
+            shape.append(first_shape[i] if homo_dim else -1)
+
         dim = self.dim
         if dim < 0:
             dim = len(shape) + dim + 1
@@ -1037,7 +1046,6 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
         use_register: bool = False,
     ):
-
         dtype, device = _default_dtype_and_device(dtype, device)
         self.use_register = use_register
         space = DiscreteBox(n)
@@ -2769,7 +2777,7 @@ class CompositeSpec(TensorSpec):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        for (key, item) in self._specs.items():
+        for key, item in self._specs.items():
             if item is None:
                 continue
             if not item.is_in(val.get(key)):
@@ -3261,7 +3269,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             *[spec.unsqueeze(new_dim) for spec in self._specs], dim=new_stack_dim
         )
 
-    def squeeze(self, dim: int=None):
+    def squeeze(self, dim: int = None):
         if dim is None:
             size = self.shape
             if len(size) == 1 or size.count(1) == 0:
