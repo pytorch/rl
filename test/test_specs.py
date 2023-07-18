@@ -2165,12 +2165,65 @@ class TestStack:
             c.to_numpy(val + 1, safe=True)
 
 
-class TestStackComposite:
+class TestDenseStackedCompositeSpecs:
     def test_stack(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
         c2 = c1.clone()
         c = torch.stack([c1, c2], 0)
         assert isinstance(c, CompositeSpec)
+
+
+class TestLazyStackedCompositeSpecs:
+    def _get_het_specs(self, dim: int = 0):
+        specs = []
+        for i in range(3):
+            specs.append(self._get_sinlge_spec(i))
+        return torch.stack(specs, dim=dim)
+
+    def _get_sinlge_spec(self, i):
+        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(32, 32, 3))
+        vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
+        vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
+        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
+        sonar = BoundedTensorSpec(minimum=0, maximum=5, shape=(10,))
+
+        agent_0_obs = UnboundedContinuousTensorSpec(shape=(1,))
+        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        agent_2_obs = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
+
+        # Agents all have the same camera
+        # All have vector entry but different shapes
+        # First 2 have lidar and last sonar
+        # All have a different key agent_i_obs with different n_dims
+        if i == 0:
+            return CompositeSpec(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_3d,
+                    "agent_0_obs": agent_0_obs,
+                }
+            )
+        elif i == 1:
+            return CompositeSpec(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_2d,
+                    "agent_1_obs": agent_1_obs,
+                }
+            )
+        elif i == 2:
+            return CompositeSpec(
+                {
+                    "camera": camera,
+                    "sonar": sonar,
+                    "vector": vector_2d,
+                    "agent_2_obs": agent_2_obs,
+                }
+            )
+        else:
+            raise AssertionError()
 
     def test_stack_index(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
@@ -2448,46 +2501,9 @@ class TestStackComposite:
 
         assert c.squeeze().shape == torch.Size([2, 3])
 
-        specs = [
-            CompositeSpec(
-                {
-                    "observation_0": UnboundedContinuousTensorSpec(
-                        shape=torch.Size([128, 128, 3]),
-                        device="cpu",
-                        dtype=torch.float32,
-                    )
-                }
-            ),
-            CompositeSpec(
-                {
-                    "observation_1": UnboundedContinuousTensorSpec(
-                        shape=torch.Size([128, 128, 3]),
-                        device="cpu",
-                        dtype=torch.float32,
-                    )
-                }
-            ),
-            CompositeSpec(
-                {
-                    "observation_2": UnboundedContinuousTensorSpec(
-                        shape=torch.Size([128, 128, 3]),
-                        device="cpu",
-                        dtype=torch.float32,
-                    )
-                }
-            ),
-            CompositeSpec(
-                {
-                    "observation_3": UnboundedContinuousTensorSpec(
-                        shape=torch.Size([4]), device="cpu", dtype=torch.float32
-                    )
-                }
-            ),
-        ]
-
-        c = torch.stack(specs, dim=0)
+        c = self._get_het_specs()
         cu = c.unsqueeze(0)
-        assert cu.shape == torch.Size([1, 4])
+        assert cu.shape == torch.Size([1, 3])
         cus = cu.squeeze(0)
         assert cus == c
 
