@@ -1384,7 +1384,7 @@ class HeteroCountingEnv(EnvBase):
         # Agents all have the same camera
         # All have vector entry but different shapes
         # First 2 have lidar and last sonar
-        # All have a different keys with different n_dims
+        # All have a different key agent_i_obs with different n_dims
         if i == 0:
             return CompositeSpec(
                 {
@@ -1455,7 +1455,7 @@ class HeteroCountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         td = self.observation_spec.zero()
-        td.apply_(lambda x: x + self.counter)
+        td.apply_(lambda x: x + self.count)
         td.update(self.output_spec["_done_spec"].zero())
         td.update(self.output_spec["_reward_spec"].zero())
         return td.select().set("next", td)
