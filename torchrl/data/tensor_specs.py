@@ -3231,12 +3231,30 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         sub_str = ",\n".join(
             [indent(f"{k}: {repr(item)}", 4 * " ") for k, item in self.items()]
         )
-        device_str = f"device={self._specs[0].device}"
-        shape_str = f"shape={self.shape}"
-        sub_str = ", ".join([sub_str, device_str, shape_str])
-        return (
-            f"LazyStackedCompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
+        sub_str = indent(f"fields={{\n{', '.join([sub_str])}}}", 4 * " ")
+        lazy_key_str = self.repr_lay_keys()
+        device_str = f"\n    device={self._specs[0].device}"
+        shape_str = f"\n    shape={self.shape}"
+        stack_dim = f"\n    stack_dim={self.dim}"
+        return f"LazyStackedCompositeSpec(\n{', '.join([sub_str, lazy_key_str, shape_str,device_str, stack_dim])})"
+
+    def repr_lay_keys(self):
+        keys = set(self.keys())
+        lazy_keys = [
+            ",\n".join(
+                [
+                    indent(f"{k}: {repr(spec[k])}", 4 * " ")
+                    for k in spec.keys()
+                    if k not in keys
+                ]
+            )
+            for spec in self._specs
+        ]
+        lazy_key_str = ",\n".join(
+            [indent(f"{i} -> \n{line}", 4 * " ") for i, line in enumerate(lazy_keys)]
         )
+
+        return indent(f"\nlazy_fields={{\n{', '.join([lazy_key_str])}}}", 4 * " ")
 
     def is_in(self, val) -> bool:
         for spec, subval in zip(self._specs, val.unbind(self.dim)):
