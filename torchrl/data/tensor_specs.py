@@ -905,11 +905,20 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     @property
     def space(self):
-        return self._specs[0].space
+        raise NotImplementedError
 
     def __eq__(self, other):
-        # requires unbind to be implemented
-        pass
+        if not isinstance(other, LazyStackedTensorSpec):
+            return False
+        if len(self._specs) != len(other._specs):
+            return False
+        for _spec1, _spec2 in zip(self._specs, other._specs):
+            if _spec1 != _spec2:
+                return False
+        return True
+
+    def __len__(self):
+        return self.shape[0]
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
@@ -924,7 +933,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                 spec.assert_is_in(v)
         return val.detach().cpu().numpy()
 
-    def project(self, val: TensorDictBase) -> TensorDictBase:
+    def _project(self, val: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError
 
     def __repr__(self):
@@ -968,10 +977,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         self._specs[name] = spec
 
     def is_in(self, val) -> bool:
-        for spec, subval in zip(self._specs, val.unbind(self.dim)):
-            if not spec.is_in(subval):
-                return False
-        return True
+        raise NotImplementedError
 
     @property
     def shape(self):
@@ -3190,7 +3196,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             if not spec.is_in(subval):
                 vals.append(spec.project(subval))
             else:
-                vals.append(val)
+                vals.append(subval)
         res = torch.stack(vals, dim=self.dim)
         if not isinstance(val, LazyStackedTensorDict):
             res = res.to_tensordict()
