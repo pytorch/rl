@@ -2668,6 +2668,39 @@ class TestLazyStackedCompositeSpecs:
         c.type_check(td_c)
         c.type_check(td_c["camera"], "camera")
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    def test_project(self, batch_size):
+        c = self._get_het_specs(batch_size=batch_size)
+        td_c = c.rand()
+        assert c.is_in(td_c)
+        val = c.project(td_c)
+        assert c.is_in(val)
+
+        del td_c["camera"]
+        with pytest.raises(KeyError):
+            c.is_in(td_c)
+
+        td_c = c.rand()
+        del td_c[("agent_1_obs", "agent_1_obs_0")]
+        with pytest.raises(KeyError):
+            c.is_in(td_c)
+
+        td_c = c.rand()
+        td_c["camera"] += 1
+        assert not c.is_in(td_c)
+        val = c.project(td_c)
+        assert c.is_in(val)
+
+        td_c = c.rand()
+        td_c[1]["agent_1_obs", "agent_1_obs_0"] += 4
+        assert not c.is_in(td_c)
+        val = c.project(td_c)
+        assert c.is_in(val)
+
+        td_c = c.rand()
+        td_c[0]["agent_0_obs", "agent_0_obs_0"] += 1
+        assert c.is_in(td_c)
+
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
