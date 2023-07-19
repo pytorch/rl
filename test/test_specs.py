@@ -2559,6 +2559,10 @@ class TestLazyStackedCompositeSpecs:
         assert len(c) == c.shape[0]
         assert len(c) == len(c.rand())
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    def test_eq(self, batch_size):
+        pass
+
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
