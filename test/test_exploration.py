@@ -8,9 +8,13 @@ import argparse
 import pytest
 import torch
 from _utils_internal import get_default_devices
-from mocking_classes import ContinuousActionVecMockEnv
+from mocking_classes import (
+    ContinuousActionVecMockEnv,
+    CountingEnvCountModule,
+    NestedCountingEnv,
+)
 from scipy.stats import ttest_1samp
-from tensordict.nn import InteractionType
+from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.tensordict import TensorDict
 from torch import nn
 
@@ -178,6 +182,59 @@ class TestOrnsteinUhlenbeckProcessWrapper:
         for _ in collector:
             # check that we can run the policy
             pass
+        return
+
+    @pytest.mark.parametrize("nested_obs_action", [True, False])
+    @pytest.mark.parametrize("nested_done", [True, False])
+    @pytest.mark.parametrize("is_init_key", ["some", ("one", "nested")])
+    def test_nested(
+        self,
+        device,
+        nested_obs_action,
+        nested_done,
+        is_init_key,
+        seed=0,
+        n_envs=2,
+        nested_dim=5,
+        frames_per_batch=100,
+    ):
+        torch.manual_seed(seed)
+
+        env = SerialEnv(
+            n_envs,
+            lambda: TransformedEnv(
+                NestedCountingEnv(
+                    nest_obs_action=nested_obs_action,
+                    nest_done=nested_done,
+                    nested_dim=nested_dim,
+                ).to(device),
+                InitTracker(init_key=is_init_key),
+            ),
+        )
+
+        action_spec = env.action_spec
+        d_act = action_spec.shape[-1]
+
+        net = nn.LazyLinear(d_act).to(device)
+        policy = TensorDictModule(
+            CountingEnvCountModule(action_spec=action_spec),
+            in_keys=[("data", "states") if nested_obs_action else "observation"],
+            out_keys=[env.action_key],
+        )
+        exploratory_policy = OrnsteinUhlenbeckProcessWrapper(
+            policy, spec=action_spec, action_key=env.action_key, is_init_key=is_init_key
+        )
+        collector = SyncDataCollector(
+            create_env_fn=env,
+            policy=exploratory_policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=1000,
+            device=device,
+        )
+        for _td in collector:
+            assert _td[is_init_key].shape == _td[env.done_key].shape
+            break
+
         return
 
 

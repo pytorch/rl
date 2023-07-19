@@ -263,8 +263,10 @@ without shared parameters. It is mainly intended as a replacement for
     ValueOperator
 
 
-Other modules
-~~~~~~~~~~~~~
+Domain-specific TensorDict modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These modules include dedicated solutions for MBRL or RLHF pipelines.
 
 .. currentmodule:: torchrl.modules.tensordict_module
 
@@ -272,6 +274,7 @@ Other modules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    LMHeadActorValueOperator
     WorldModelWrapper
 
 Hooks
@@ -331,6 +334,20 @@ algorithms, such as DQN, DDPG or Dreamer.
     ObsDecoder
     RSSMPrior
     RSSMPosterior
+
+Multi-agent-specific modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These networks implement models that can be used in
+multi-agent contexts.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    MultiAgentMLP
+    QMixer
+    VDNMixer
 
 
 Exploration
@@ -394,3 +411,11 @@ Utils
     mappings
     inv_softplus
     biased_softplus
+
+.. currentmodule:: torchrl.modules
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    VmapModule

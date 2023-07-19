@@ -33,6 +33,7 @@ from torchrl.data.replay_buffers.storages import (
     LazyMemmapStorage,
     LazyTensorStorage,
     ListStorage,
+    TensorStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 from torchrl.envs.transforms.transforms import (
@@ -242,10 +243,68 @@ class TestComposableBuffers:
         assert b
 
 
+@pytest.mark.parametrize("storage_type", [TensorStorage])
+class TestStorages:
+    def _get_tensor(self):
+        return torch.randn(10, 11)
+
+    def _get_tensordict(self):
+        return TensorDict(
+            {"data": torch.randn(10, 11), ("nested", "data"): torch.randn(10, 11, 3)},
+            [10, 11],
+        )
+
+    def _get_tensorclass(self):
+        data = self._get_tensordict()
+        return make_tc(data)(**data, batch_size=data.shape)
+
+    def test_errors(self, storage_type):
+        with pytest.raises(ValueError, match="Expected storage to be non-null"):
+            storage_type(None)
+        data = torch.randn(3)
+        with pytest.raises(
+            ValueError, match="The max-size and the storage shape mismatch"
+        ):
+            storage_type(data, max_size=4)
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    def test_get_set(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        storage.set(range(10), torch.zeros_like(data))
+        assert (storage.get(range(10)) == 0).all()
+
+    @pytest.mark.parametrize("data_type", ["tensor", "tensordict", "tensorclass"])
+    def test_state_dict(self, storage_type, data_type):
+        if data_type == "tensor":
+            data = self._get_tensor()
+        elif data_type == "tensorclass":
+            data = self._get_tensorclass()
+        elif data_type == "tensordict":
+            data = self._get_tensordict()
+        else:
+            raise NotImplementedError
+        storage = storage_type(data)
+        sd = storage.state_dict()
+        storage2 = storage_type(torch.zeros_like(data))
+        storage2.load_state_dict(sd)
+        assert (storage.get(range(10)) == storage2.get(range(10))).all()
+        assert type(storage.get(range(10))) is type(  # noqa: E721
+            storage2.get(range(10))
+        )
+
+
 @pytest.mark.parametrize("max_size", [1000])
 @pytest.mark.parametrize("shape", [[3, 4]])
 @pytest.mark.parametrize("storage", [LazyTensorStorage, LazyMemmapStorage])
-class TestStorages:
+class TestLazyStorages:
     def _get_nested_tensorclass(self, shape):
         @tensorclass
         class NestedTensorClass:

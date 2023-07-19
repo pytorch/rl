@@ -1,5 +1,12 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import os
+
 import time
+import warnings
 from collections import defaultdict
 
 import pytest
@@ -45,3 +52,17 @@ def measure_duration(request: pytest.FixtureRequest):
         CALL_TIMES[name] = CALL_TIMES[name] + duration
 
     request.addfinalizer(fin)
+
+
+@pytest.fixture(autouse=True)
+def set_warnings() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Lazy modules are a new feature under heavy development",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Couldn't cast the policy onto the desired device on remote process",
+    )

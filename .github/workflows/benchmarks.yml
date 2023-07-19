@@ -86,20 +86,6 @@ jobs:
       run: |
         apt-get install python3.8 python3-pip -y
         pip3 install --upgrade pip
-    - name: Setup conda
-      run: |
-        rm -rf $HOME/miniconda
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: setup Path
-      run: |
-        echo "$HOME/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=$HOME/miniconda" >> $GITHUB_PATH
-    - name: create and activate conda env
-      run: |
-        $HOME/miniconda/bin/conda create --name build_binary python=${{ matrix.python-version }}
-        $HOME/miniconda/bin/conda info
-        $HOME/miniconda/bin/activate build_binary
     - name: Setup git
       run: git config --global --add safe.directory /__w/rl/rl
     - name: setup Path
@@ -107,15 +93,15 @@ jobs:
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Setup Environment
       run: |
-        python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
-        python -m pip install git+https://github.com/pytorch-labs/tensordict 
-        python setup.py develop
-        python -m pip install pytest pytest-benchmark
-        python -m pip install dm_control
+        python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu118 
+        python3 -m pip install git+https://github.com/pytorch-labs/tensordict 
+        python3 setup.py develop
+        python3 -m pip install pytest pytest-benchmark
+        python3 -m pip install dm_control
     - name: Run benchmarks
       run: |
         cd benchmarks/
-        python -m pytest --benchmark-json output.json
+        python3 -m pytest --benchmark-json output.json
     - name: Store benchmark results
       uses: benchmark-action/github-action-benchmark@v1
       if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}

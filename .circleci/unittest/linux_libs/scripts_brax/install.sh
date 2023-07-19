@@ -5,7 +5,7 @@ unset PYTORCH_VERSION
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
 
-set -e
+set -euxo pipefail
 
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
@@ -30,13 +30,13 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
 #    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu --force-reinstall  --progress-bar off
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu116 --force-reinstall  --progress-bar off
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict.git
+pip install git+https://github.com/pytorch-labs/tensordict.git --progress-bar off
 
 # smoke test
 python -c "import functorch;import tensordict"

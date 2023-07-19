@@ -8,29 +8,163 @@ import pytest
 import torch
 
 from _utils_internal import get_default_devices
+
+from mocking_classes import NestedCountingEnv
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
+from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
-
 from torchrl.data import (
+    BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
 )
-from torchrl.modules import MLP, SafeModule
+from torchrl.data.rlhf.dataset import _has_transformers
+from torchrl.modules import MLP, SafeModule, TanhDelta, TanhNormal
 from torchrl.modules.tensordict_module.actors import (
     _process_action_space_spec,
     ActorValueOperator,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    LMHeadActorValueOperator,
     ProbabilisticActor,
     QValueActor,
     QValueHook,
     QValueModule,
     ValueOperator,
 )
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
+    env = NestedCountingEnv(nested_dim=nested_dim)
+    action_spec = BoundedTensorSpec(
+        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+    )
+    policy_module = TensorDictModule(
+        nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
+    )
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys=[("data", "param")],
+        out_keys=[("data", "action")],
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+
+    td = env.reset()
+    td["data", "states"] = td["data", "states"].to(torch.float)
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys={"param": ("data", "param")},
+        out_keys=[("data", "action")],
+        distribution_class=TanhDelta,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions=3):
+    env = NestedCountingEnv(nested_dim=nested_dim)
+    action_spec = BoundedTensorSpec(
+        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+    )
+    actor_net = nn.Sequential(
+        nn.Linear(1, 2),
+        NormalParamExtractor(),
+    )
+    policy_module = TensorDictModule(
+        actor_net,
+        in_keys=[("data", "states")],
+        out_keys=[("data", "loc"), ("data", "scale")],
+    )
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys=[("data", "loc"), ("data", "scale")],
+        out_keys=[("data", "action")],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+
+    td = env.reset()
+    td["data", "states"] = td["data", "states"].to(torch.float)
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
+
+    policy = ProbabilisticActor(
+        module=policy_module,
+        spec=action_spec,
+        in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+        out_keys=[("data", "action")],
+        distribution_class=TanhNormal,
+        distribution_kwargs={
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
+        },
+        log_prob_key=log_prob_key,
+        return_log_prob=True,
+    )
+    td_out = policy(td)
+    assert td_out["data", "action"].shape == (5, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (5,)
+    else:
+        assert td_out["sample_log_prob"].shape == (5,)
 
 
 class TestQValue:
@@ -73,6 +207,64 @@ class TestQValue:
             ValueError, match="Neither action_space nor spec was defined"
         ):
             _process_action_space_spec(None, None)
+
+    @pytest.mark.parametrize("nested_action", [True, False])
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
+    def test_nested_keys(self, nested_action, batch_size, nested_dim=5):
+        # _process_action_space_spec can take
+        # an action_space argument (which can be string or non-composite spec)
+        # and a action_spec, which can be a spec
+        env = NestedCountingEnv(
+            nest_obs_action=nested_action, batch_size=batch_size, nested_dim=nested_dim
+        )
+        action_spec = env._input_spec["_action_spec"]
+        leaf_action_spec = env.action_spec
+
+        space_str, spec = _process_action_space_spec(None, action_spec)
+        assert spec == action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(None, leaf_action_spec)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(leaf_action_spec, None)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec(leaf_action_spec, action_spec)
+        assert spec == action_spec  # Spec wins
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec("binary", action_spec)
+        assert spec == action_spec
+        assert space_str == "binary"
+
+        space_str, spec = _process_action_space_spec("binary", leaf_action_spec)
+        assert spec == leaf_action_spec
+        assert space_str == "binary"
+
+        with pytest.raises(
+            ValueError,
+            match="Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match.",
+        ):
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), action_spec)
+            _process_action_space_spec(BinaryDiscreteTensorSpec(n=1), leaf_action_spec)
+        with pytest.raises(
+            ValueError, match="action_space cannot be of type CompositeSpec"
+        ):
+            _process_action_space_spec(action_spec, None)
+
+        mod = QValueModule(
+            action_value_key=("data", "action_value"),
+            out_keys=[
+                env.action_key,
+                ("data", "action_value"),
+                ("data", "chosen_action_value"),
+            ],
+            action_space=None,
+            spec=action_spec,
+        )
 
     @pytest.mark.parametrize(
         "action_space, expected_action",
@@ -554,6 +746,68 @@ def test_actorcritic(device):
 
     policy_params = set(
         list(op.get_policy_operator().parameters()) + list(op.module[0].parameters())
+    )
+    policy_params2 = set(policy_op.parameters())
+    assert len(policy_params.difference(policy_params2)) == 0 and len(
+        policy_params.intersection(policy_params2)
+    ) == len(policy_params)
+
+
+@pytest.mark.skipif(not _has_transformers, reason="missing dependencies")
+@pytest.mark.parametrize("device", get_default_devices())
+def test_lmhead_actorvalueoperator(device):
+    from transformers import AutoModelForCausalLM
+
+    base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
+    aco = LMHeadActorValueOperator(base_model)
+
+    # check common
+    assert aco.module[0][0].module is base_model.transformer
+    assert aco.module[0][1].in_keys == ["x"]
+    assert aco.module[0][1].out_keys == ["x"]
+
+    # check actor
+    assert aco.module[1].in_keys == ["x"]
+    assert aco.module[1].out_keys == ["logits", "action", "sample_log_prob"]
+    assert aco.module[1][0].module is base_model.lm_head
+
+    # check critic
+    assert aco.module[2].in_keys == ["x"]
+    assert aco.module[2].out_keys == ["state_value"]
+    assert isinstance(aco.module[2].module, nn.Linear)
+    assert aco.module[2].module.in_features == base_model.transformer.embed_dim
+    assert aco.module[2].module.out_features == 1
+
+    td = TensorDict(
+        source={
+            "input_ids": torch.randint(50257, (4, 3)),
+            "attention_mask": torch.ones((4, 3)),
+        },
+        batch_size=[
+            4,
+        ],
+    ).to(device)
+    td_total = aco(td.clone())
+    policy_op = aco.get_policy_operator()
+    td_policy = policy_op(td.clone())
+    value_op = aco.get_value_operator()
+    td_value = value_op(td)
+    torch.testing.assert_close(td_total.get("action"), td_policy.get("action"))
+    torch.testing.assert_close(
+        td_total.get("sample_log_prob"), td_policy.get("sample_log_prob")
+    )
+    torch.testing.assert_close(td_total.get("state_value"), td_value.get("state_value"))
+
+    value_params = set(
+        list(aco.get_value_operator().parameters()) + list(aco.module[0].parameters())
+    )
+    value_params2 = set(value_op.parameters())
+    assert len(value_params.difference(value_params2)) == 0 and len(
+        value_params.intersection(value_params2)
+    ) == len(value_params)
+
+    policy_params = set(
+        list(aco.get_policy_operator().parameters()) + list(aco.module[0].parameters())
     )
     policy_params2 = set(policy_op.parameters())
     assert len(policy_params.difference(policy_params2)) == 0 and len(

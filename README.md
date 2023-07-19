@@ -30,7 +30,7 @@ TorchRL aims at having as few dependencies as possible (python standard library,
 
 On the low-level end, torchrl comes with a set of highly re-usable functionals for [cost functions](torchrl/objectives/costs), [returns](torchrl/objectives/returns) and data processing.
 
-TorchRL aims at (1) a high modularity and (2) good runtime performance.
+TorchRL aims at (1) a high modularity and (2) good runtime performance. Read the [full paper](https://arxiv.org/abs/2306.00577) for a more curated description of the library.
 
 ## Documentation and knowledge base
 
