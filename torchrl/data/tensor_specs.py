@@ -842,35 +842,6 @@ class _LazyStackedMixin(Generic[T]):
     def clone(self) -> T:
         return torch.stack([spec.clone() for spec in self._specs], 0)
 
-    def expand(self, *shape):
-        if len(shape) == 1 and not isinstance(shape[0], (int,)):
-            return self.expand(*shape[0])
-        expand_shape = shape[: -len(self.shape)]
-        existing_shape = self.shape
-        shape_check = shape[-len(self.shape) :]
-        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
-            if size1 != size2 and size1 != 1:
-                raise RuntimeError(
-                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
-                )
-            elif size1 != size2 and size1 == 1 and _i == self.dim:
-                # if we're expanding along the stack dim we just need to clone the existing spec
-                return torch.stack(
-                    [self._specs[0].clone() for _ in range(size2)], self.dim
-                ).expand(*shape)
-        if _i != len(self.shape) - 1:
-            raise RuntimeError(
-                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
-            )
-        # remove the stack dim from the expanded shape, which we know to match
-        unstack_shape = list(expand_shape) + [
-            s for i, s in enumerate(shape_check) if i != self.dim
-        ]
-        return torch.stack(
-            [spec.expand(unstack_shape) for spec in self._specs],
-            self.dim + len(expand_shape),
-        )
-
     def zero(self, shape=None) -> TensorDictBase:
         if shape is not None:
             dim = self.dim + len(shape)
@@ -996,6 +967,40 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             dim = len(shape) + dim + 1
         shape.insert(dim, len(self._specs))
         return torch.Size(shape)
+
+    def expand(self, *shape):
+        if len(shape) == 1 and not isinstance(shape[0], (int,)):
+            return self.expand(*shape[0])
+        expand_shape = shape[: -len(self.shape)]
+        existing_shape = self.shape
+        shape_check = shape[-len(self.shape) :]
+        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+            if size1 != size2 and size1 != 1:
+                raise RuntimeError(
+                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+                )
+            elif size1 != size2 and size1 == 1 and _i == self.dim:
+                # if we're expanding along the stack dim we just need to clone the existing spec
+                return torch.stack(
+                    [self._specs[0].clone() for _ in range(size2)], self.dim
+                ).expand(*shape)
+        if _i != len(self.shape) - 1:
+            raise RuntimeError(
+                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+            )
+        # remove the stack dim from the expanded shape, which we know to match
+        shape_check = [s for i, s in enumerate(shape_check) if i != self.dim]
+        specs = []
+        for spec in self._specs:
+            spec_shape = []
+            for dim_check, spec_dim in zip(shape_check, spec.shape):
+                spec_shape.append(dim_check if dim_check != -1 else spec_dim)
+            unstack_shape = list(expand_shape) + list(spec_shape)
+            specs.append(spec.expand(unstack_shape))
+        return torch.stack(
+            specs,
+            self.dim + len(expand_shape),
+        )
 
 
 @dataclass(repr=False)
@@ -3351,6 +3356,35 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             dim = len(shape) + dim + 1
         shape.insert(dim, len(self._specs))
         return torch.Size(shape)
+
+    def expand(self, *shape):
+        if len(shape) == 1 and not isinstance(shape[0], (int,)):
+            return self.expand(*shape[0])
+        expand_shape = shape[: -len(self.shape)]
+        existing_shape = self.shape
+        shape_check = shape[-len(self.shape) :]
+        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+            if size1 != size2 and size1 != 1:
+                raise RuntimeError(
+                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+                )
+            elif size1 != size2 and size1 == 1 and _i == self.dim:
+                # if we're expanding along the stack dim we just need to clone the existing spec
+                return torch.stack(
+                    [self._specs[0].clone() for _ in range(size2)], self.dim
+                ).expand(*shape)
+        if _i != len(self.shape) - 1:
+            raise RuntimeError(
+                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+            )
+        # remove the stack dim from the expanded shape, which we know to match
+        unstack_shape = list(expand_shape) + [
+            s for i, s in enumerate(shape_check) if i != self.dim
+        ]
+        return torch.stack(
+            [spec.expand(unstack_shape) for spec in self._specs],
+            self.dim + len(expand_shape),
+        )
 
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
