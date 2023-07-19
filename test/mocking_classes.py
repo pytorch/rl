@@ -1444,7 +1444,6 @@ class HeteroCountingEnv(EnvBase):
         reset_td.update(self.output_spec["_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
-        reset_td.device = self.device
 
         return reset_td
 
