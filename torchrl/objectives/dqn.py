@@ -278,23 +278,13 @@ class DQNLoss(LossModule):
             a tensor containing the DQN loss.
 
         """
-        if self.device is not None:
-            warnings.warn(
-                "The use of a device for the objective function will soon be deprecated",
-                category=DeprecationWarning,
-            )
-            device = self.device
-        else:
-            device = tensordict.device
-        tddevice = tensordict.to(device)
-
-        td_copy = tddevice.clone(False)
+        td_copy = tensordict.clone(False)
         self.value_network(
             td_copy,
             params=self.value_network_params,
         )
 
-        action = tddevice.get(self.tensor_keys.action)
+        action = tensordict.get(self.tensor_keys.action)
         pred_val = td_copy.get(self.tensor_keys.action_value)
 
         if self.action_space == "categorical":
