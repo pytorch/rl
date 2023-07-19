@@ -2767,7 +2767,7 @@ class CompositeSpec(TensorSpec):
             value = {selected_keys: value}
             selected_keys = [selected_keys]
 
-        for _key in self:
+        for _key in self.keys():
             if self[_key] is not None and (
                 selected_keys is None or _key in selected_keys
             ):
@@ -3201,11 +3201,20 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         value: Union[torch.Tensor, TensorDictBase],
         selected_keys: Union[NestedKey, Optional[Sequence[NestedKey]]] = None,
     ):
-        if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
-            value = {selected_keys: value}
-            selected_keys = [selected_keys]
-        for spec in self._specs:
-            spec.type_check(value, selected_keys)
+        if selected_keys is None:
+            if isinstance(value, torch.Tensor):
+                raise ValueError(
+                    "value must be of type TensorDictBase when key is None"
+                )
+            for spec, subvalue in zip(self._specs, value.unbind(self.dim)):
+                spec.type_check(subvalue)
+        else:
+            if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
+                value = {selected_keys: value}
+                selected_keys = [selected_keys]
+            for _key in self.keys():
+                if self[_key] is not None and _key in selected_keys:
+                    self[_key].type_check(value[_key], _key)
 
     def __repr__(self) -> str:
         sub_str = ",\n".join(
@@ -3230,8 +3239,19 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         raise NotImplementedError
 
     def __delitem__(self, key: NestedKey):
+        """Deletes a key only if present in all stacked specs."""
+        at_least_one_deletion = False
         for spec in self._specs:
-            del spec[key]
+            try:
+                del spec[key]
+                at_least_one_deletion = True
+            except KeyError:
+                continue
+        if not at_least_one_deletion:
+            raise KeyError(
+                f"Key {key} must be present in at least one of the stacked specs"
+            )
+        return self
 
     def __iter__(self):
         raise NotImplementedError

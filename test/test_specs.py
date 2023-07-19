@@ -2226,14 +2226,34 @@ class TestLazyStackedCompositeSpecs:
             ),
         )
 
-        agent_0_obs = UnboundedContinuousTensorSpec(
-            shape=(
-                *batch_size,
-                1,
-            )
+        agent_0_obs = CompositeSpec(
+            {
+                "agent_0_obs_0": UnboundedContinuousTensorSpec(
+                    shape=(
+                        *batch_size,
+                        3,
+                        1,
+                    )
+                )
+            },
+            shape=(*batch_size, 3),
         )
-        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(*batch_size, 1, 2))
-        agent_2_obs = UnboundedContinuousTensorSpec(shape=(*batch_size, 1, 2, 3))
+        agent_1_obs = CompositeSpec(
+            {
+                "agent_1_obs_0": BoundedTensorSpec(
+                    minimum=0, maximum=3, shape=(*batch_size, 3, 1, 2)
+                )
+            },
+            shape=(*batch_size, 3),
+        )
+        agent_2_obs = CompositeSpec(
+            {
+                "agent_1_obs_0": UnboundedContinuousTensorSpec(
+                    shape=(*batch_size, 3, 1, 2, 3)
+                )
+            },
+            shape=(*batch_size, 3),
+        )
 
         # Agents all have the same camera
         # All have vector entry but different shapes
@@ -2561,7 +2581,92 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
     def test_eq(self, batch_size):
-        pass
+        c = self._get_het_specs(batch_size=batch_size)
+        c2 = self._get_het_specs(batch_size=batch_size)
+
+        assert c == c2 and not c != c2
+        assert c == c.clone() and not c != c.clone()
+
+        del c2["camera"]
+        assert not c == c2 and c != c2
+
+        c2 = self._get_het_specs(batch_size=batch_size)
+        del c2[0]["lidar"]
+
+        assert not c == c2 and c != c2
+
+        c2 = self._get_het_specs(batch_size=batch_size)
+        c2[0]["lidar"].space.minimum += 1
+        assert not c == c2 and c != c2
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("include_nested", [True, False])
+    @pytest.mark.parametrize("leaves_only", [True, False])
+    def test_del(self, batch_size, include_nested, leaves_only):
+        c = self._get_het_specs(batch_size=batch_size)
+        td_c = c.rand()
+
+        keys = list(c.keys(include_nested=include_nested, leaves_only=leaves_only))
+        for k in keys:
+            del c[k]
+            del td_c[k]
+        assert len(c.keys(include_nested=include_nested, leaves_only=leaves_only)) == 0
+        assert (
+            len(td_c.keys(include_nested=include_nested, leaves_only=leaves_only)) == 0
+        )
+
+        keys = list(c[0].keys(include_nested=include_nested, leaves_only=leaves_only))
+        for k in keys:
+            del c[k]
+            del td_c[k]
+        assert (
+            len(c[0].keys(include_nested=include_nested, leaves_only=leaves_only)) == 0
+        )
+        assert (
+            len(td_c[0].keys(include_nested=include_nested, leaves_only=leaves_only))
+            == 0
+        )
+        with pytest.raises(KeyError):
+            del c["agent_1_obs_0"]
+        with pytest.raises(KeyError):
+            del td_c["agent_1_obs_0"]
+
+        del c[("agent_1_obs", "agent_1_obs_0")]
+        del td_c[("agent_1_obs", "agent_1_obs_0")]
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    def test_is_in(self, batch_size):
+        c = self._get_het_specs(batch_size=batch_size)
+        td_c = c.rand()
+        assert c.is_in(td_c)
+
+        del td_c["camera"]
+        with pytest.raises(KeyError):
+            assert not c.is_in(td_c)
+
+        td_c = c.rand()
+        del td_c[("agent_1_obs", "agent_1_obs_0")]
+        with pytest.raises(KeyError):
+            assert not c.is_in(td_c)
+
+        td_c = c.rand()
+        td_c["camera"] += 1
+        assert not c.is_in(td_c)
+
+        td_c = c.rand()
+        td_c[1]["agent_1_obs", "agent_1_obs_0"] += 4
+        assert not c.is_in(td_c)
+
+        td_c = c.rand()
+        td_c[0]["agent_0_obs", "agent_0_obs_0"] += 1
+        assert c.is_in(td_c)
+
+    def test_type_check(self):
+        c = self._get_het_specs()
+        td_c = c.rand()
+
+        c.type_check(td_c)
+        c.type_check(td_c["camera"], "camera")
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
