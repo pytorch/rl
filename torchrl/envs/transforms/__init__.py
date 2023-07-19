@@ -42,6 +42,7 @@ from .transforms import (
     TransformedEnv,
     UnsqueezeTransform,
     VecNorm,
+    PermuteTransform,
 )
 from .vc1 import VC1Transform
 from .vip import VIPRewardTransform, VIPTransform

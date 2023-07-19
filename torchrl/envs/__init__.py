@@ -49,6 +49,7 @@ from .transforms import (
     VecNorm,
     VIPRewardTransform,
     VIPTransform,
+    PermuteTransform,
 )
 from .utils import (
     check_env_specs,

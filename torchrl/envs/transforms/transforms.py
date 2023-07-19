@@ -1632,6 +1632,41 @@ class SqueezeTransform(UnsqueezeTransform):
     _apply_transform = UnsqueezeTransform._inv_apply_transform
     _inv_apply_transform = UnsqueezeTransform._apply_transform
 
+class PermuteTransform(Transform):
+    def __init__(
+        self,
+        dims,
+        in_keys,
+        out_keys = None,
+    ):
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        # check dims
+        self.dims=dims
+        if sorted(list(dims))[0]!=-len(dims) or sorted(list(dims))[-1]!= -1:
+            raise ValueError("only tailing dims with negative indices are supported")
+
+    def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
+        observation = observation.permute(
+            *list(range(observation.ndimension() - len(self.dims))), *self.dims
+        )
+        return observation
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = self._pixel_observation(observation_spec)
+        observation_spec.shape = torch.Size(
+            [
+                *observation_spec.shape[:-len(self.dims)],
+                *[observation_spec.shape[dim] for dim in self.dims]
+            ]
+        )
+        return observation_spec
+
+    def _pixel_observation(self, spec: TensorSpec) -> None:
+        if isinstance(spec.space, ContinuousBox):
+            spec.space.maximum = self._apply_transform(spec.space.maximum)
+            spec.space.minimum = self._apply_transform(spec.space.minimum)
+        return spec
 
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""

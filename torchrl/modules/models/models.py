@@ -19,6 +19,7 @@ from torchrl.modules.models.utils import (
     LazyMapping,
     SquashDims,
     Squeeze2dLayer,
+    SqueezeLayer,
 )
 
 
@@ -480,6 +481,223 @@ class ConvNet(nn.Sequential):
             out = out.unflatten(0, batch)
         return out
 
+
+Conv2dNet=ConvNet
+
+class Conv3dNet(nn.Sequential):
+    """A 3D-convolutional neural network.
+
+    Args:
+        in_features (int, optional): number of input features;
+        depth (int, optional): depth of the network. A depth of 1 will produce a single linear layer network with the
+            desired input size, and with an output size equal to the last element of the num_cells argument.
+            If no depth is indicated, the depth information should be contained in the num_cells argument (see below).
+            If num_cells is an iterable and depth is indicated, both should match: len(num_cells) must be equal to
+            the depth.
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
+            an integer is provided, every layer will have the same number of cells. If an iterable is provided,
+            the linear layers out_features will match the content of num_cells.
+            default: [32, 32, 32];
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments.
+        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments.
+        activation_class (Type[nn.Module]): activation class to be used.
+            default: nn.Tanh
+        activation_kwargs (dict, optional): kwargs to be used with the activation class;
+        norm_class (Type, optional): normalization class, if any;
+        norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
+            default: True;
+        aggregator_class (Type[nn.Module]): aggregator to use at the end of the chain.
+            default:  SquashDims;
+        aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
+        squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
+            default: False.
+        device (Optional[DEVICE_TYPING]): device to create the module on.
+
+    Examples:
+        >>> # All of the following examples provide valid, working MLPs
+        >>> cnet = Conv3dNet(in_features=3, depth=1, num_cells=[32,])
+        >>> print(cnet)
+        Conv3dNet(
+            (0): Conv3d(3, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (1): ELU(alpha=1.0)
+            (2): SquashDims()
+        )
+        >>> cnet = Conv3dNet(in_features=3, depth=4, num_cells=32)
+        >>> print(cnet)
+        Conv3dNet(
+            (0): Conv3d(3, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (1): ELU(alpha=1.0)
+            (2): Conv3d(32, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (3): ELU(alpha=1.0)
+            (4): Conv3d(32, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (5): ELU(alpha=1.0)
+            (6): Conv3d(32, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (7): ELU(alpha=1.0)
+            (8): SquashDims()
+        )
+        >>> cnet = Conv3dNet(in_features=3, num_cells=[32, 33, 34, 35])  # defines the depth by the num_cells arg
+        >>> print(cnet)
+        Conv3dNet(
+            (0): Conv3d(3, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (1): ELU(alpha=1.0)
+            (2): Conv3d(32, 33, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (3): ELU(alpha=1.0)
+            (4): Conv3d(33, 34, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (5): ELU(alpha=1.0)
+            (6): Conv3d(34, 35, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (7): ELU(alpha=1.0)
+            (8): SquashDims()
+        )
+        >>> cnet = Conv3dNet(in_features=3, num_cells=[32, 33, 34, 35], kernel_sizes=[3, 4, 5, (2, 3, 4)])  # defines kernels, possibly rectangular
+        >>> print(cnet)
+        Conv3dNet(
+            (0): Conv3d(3, 32, kernel_size=(3, 3, 3), stride=(1, 1, 1))
+            (1): ELU(alpha=1.0)
+            (2): Conv3d(32, 33, kernel_size=(4, 4, 4), stride=(1, 1, 1))
+            (3): ELU(alpha=1.0)
+            (4): Conv3d(33, 34, kernel_size=(5, 5, 5), stride=(1, 1, 1))
+            (5): ELU(alpha=1.0)
+            (6): Conv3d(34, 35, kernel_size=(2, 3, 4), stride=(1, 1, 1))
+            (7): ELU(alpha=1.0)
+            (8): SquashDims()
+        )
+
+    """
+    def __init__(
+        self,
+        in_features: Optional[int] = None,
+        depth: Optional[int] = None,
+        num_cells: Union[Sequence, int] = None,
+        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 3,
+        strides: Union[Sequence, int] = 1,
+        paddings: Union[Sequence, int] = 0,
+        activation_class: Type[nn.Module] = nn.ELU,
+        activation_kwargs: Optional[dict] = None,
+        norm_class: Optional[Type[nn.Module]] = None,
+        norm_kwargs: Optional[dict] = None,
+        bias_last_layer: bool = True,
+        aggregator_class: Optional[Type[nn.Module]] = SquashDims,
+        aggregator_kwargs: Optional[dict] = None,
+        squeeze_output: bool = False,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        if num_cells is None:
+            num_cells = [32, 32, 32]
+
+        self.in_features = in_features
+        self.activation_class = activation_class
+        self.activation_kwargs = (
+            activation_kwargs if activation_kwargs is not None else {}
+        )
+        self.norm_class = norm_class
+        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
+        self.bias_last_layer = bias_last_layer
+        self.aggregator_class = aggregator_class
+        self.aggregator_kwargs = (
+            aggregator_kwargs if aggregator_kwargs is not None else {"ndims_in": 4}
+        )
+        self.squeeze_output = squeeze_output
+        # self.single_bias_last_layer = single_bias_last_layer
+
+        depth = _find_depth(depth, num_cells, kernel_sizes, strides, paddings)
+        self.depth = depth
+        if depth == 0:
+            raise ValueError("Null depth is not permitted with Conv3dNet.")
+
+        for _field, _value in zip(
+            ["num_cells", "kernel_sizes", "strides", "paddings"],
+            [num_cells, kernel_sizes, strides, paddings],
+        ):
+            _depth = depth
+            setattr(
+                self,
+                _field,
+                (_value if isinstance(_value, Sequence) else [_value] * _depth),
+            )
+            if not (isinstance(_value, Sequence) or _depth is not None):
+                raise RuntimeError(
+                    f"If {_field} is provided as an integer, "
+                    "depth must be provided too."
+                )
+            if not (len(getattr(self, _field)) == _depth or _depth is None):
+                raise RuntimeError(
+                    f"depth={depth} and {_field}={len(getattr(self, _field))} length conflict, "
+                    + f"consider matching or specifying a constan {_field} argument together with a a desired depth"
+                )
+
+        self.out_features = self.num_cells[-1]
+
+        self.depth = len(self.kernel_sizes)
+        layers = self._make_net(device)
+        super().__init__(*layers)
+
+    def _make_net(self, device: Optional[DEVICE_TYPING]) -> nn.Module:
+        layers = []
+        in_features = [self.in_features] + self.num_cells[: self.depth]
+        out_features = self.num_cells + [self.out_features]
+        kernel_sizes = self.kernel_sizes
+        strides = self.strides
+        paddings = self.paddings
+        for i, (_in, _out, _kernel, _stride, _padding) in enumerate(
+            zip(in_features, out_features, kernel_sizes, strides, paddings)
+        ):
+            _bias = (i < len(in_features) - 1) or self.bias_last_layer
+            if _in is not None:
+                layers.append(
+                    nn.Conv3d(
+                        _in,
+                        _out,
+                        kernel_size=_kernel,
+                        stride=_stride,
+                        bias=_bias,
+                        padding=_padding,
+                        device=device,
+                    )
+                )
+            else:
+                layers.append(
+                    nn.LazyConv3d(
+                        _out,
+                        kernel_size=_kernel,
+                        stride=_stride,
+                        bias=_bias,
+                        padding=_padding,
+                        device=device,
+                    )
+                )
+
+            layers.append(
+                create_on_device(
+                    self.activation_class, device, **self.activation_kwargs
+                )
+            )
+            if self.norm_class is not None:
+                layers.append(
+                    create_on_device(self.norm_class, device, **self.norm_kwargs)
+                )
+
+        if self.aggregator_class is not None:
+            layers.append(
+                create_on_device(
+                    self.aggregator_class, device, **self.aggregator_kwargs
+                )
+            )
+
+        if self.squeeze_output:
+            layers.append(SqueezeLayer((-3,-2,-1)))
+        return layers
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        *batch, C, D, L, W = inputs.shape
+        if len(batch) > 1:
+            inputs = inputs.flatten(0, len(batch) - 1)
+        out = super().forward(inputs)
+        if len(batch) > 1:
+            out = out.unflatten(0, batch)
+        return out
 
 class DuelingMlpDQNet(nn.Module):
     """Creates a Dueling MLP Q-network.

@@ -84,6 +84,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
     VC1Transform,
     VIPTransform,
+    PermuteTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
@@ -8027,6 +8028,14 @@ class TestKLRewardTransform(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
 
+class TestPermuteTransform:
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_no_env(self, batch):
+        D, W, H, C= 8, 32, 64, 3
+        trans=PermuteTransform(dims=(-1, -4,-2, -3), in_keys=["pixels"],) # DxWxHxC => CxDxHxW
+        td=TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td=trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

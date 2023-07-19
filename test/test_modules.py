@@ -25,7 +25,7 @@ from torchrl.modules import (
     VDNMixer,
 )
 from torchrl.modules.distributions.utils import safeatanh, safetanh
-from torchrl.modules.models import ConvNet, MLP, NoisyLazyLinear, NoisyLinear
+from torchrl.modules.models import ConvNet, Conv3dNet, MLP, NoisyLazyLinear, NoisyLinear
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -174,6 +174,71 @@ def test_convnet(
     y = convnet(x)
     assert y.shape == torch.Size([*batch, expected_features])
 
+@pytest.mark.parametrize("in_features", [3, 10, None])
+@pytest.mark.parametrize(
+    "input_size, depth, num_cells, kernel_sizes, strides, paddings, expected_features",
+    [(10, None, None, 3, 1, 0, 32 * 4 * 4 * 4), (10, 3, 32, 3, 1, 1, 32 * 10 * 10 * 10)],
+)
+@pytest.mark.parametrize(
+    "activation_class, activation_kwargs",
+    [(nn.ReLU, {"inplace": True}), (nn.ReLU, {}), (nn.PReLU, {})],
+)
+@pytest.mark.parametrize(
+    "norm_class, norm_kwargs",
+    [(None, None), (nn.LazyBatchNorm3d, {}), (nn.BatchNorm3d, {"num_features": 32})],
+)
+@pytest.mark.parametrize("bias_last_layer", [True, False])
+@pytest.mark.parametrize(
+    "aggregator_class, aggregator_kwargs",
+    [(SquashDims, None)],
+)
+@pytest.mark.parametrize("squeeze_output", [False])
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("batch", [(2,), (2, 2)])
+def test_conv3dnet(
+    batch,
+    in_features,
+    depth,
+    num_cells,
+    kernel_sizes,
+    strides,
+    paddings,
+    activation_class,
+    activation_kwargs,
+    norm_class,
+    norm_kwargs,
+    bias_last_layer,
+    aggregator_class,
+    aggregator_kwargs,
+    squeeze_output,
+    device,
+    input_size,
+    expected_features,
+    seed=0,
+):
+    torch.manual_seed(seed)
+    convnet = Conv3dNet(
+        in_features=in_features,
+        depth=depth,
+        num_cells=num_cells,
+        kernel_sizes=kernel_sizes,
+        strides=strides,
+        paddings=paddings,
+        activation_class=activation_class,
+        activation_kwargs=activation_kwargs,
+        norm_class=norm_class,
+        norm_kwargs=norm_kwargs,
+        bias_last_layer=bias_last_layer,
+        aggregator_class=aggregator_class,
+        aggregator_kwargs=aggregator_kwargs,
+        squeeze_output=squeeze_output,
+        device=device,
+    )
+    if in_features is None:
+        in_features = 5
+    x = torch.randn(*batch, in_features, input_size, input_size, input_size, device=device)
+    y = convnet(x)
+    assert y.shape == torch.Size([*batch, expected_features])
 
 @pytest.mark.parametrize(
     "layer_class",
