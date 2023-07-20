@@ -5,7 +5,7 @@
 
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule, NormalParamExtractor
+from tensordict.nn import NormalParamExtractor, TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
@@ -336,7 +336,9 @@ def make_ppo_modules_state(proof_environment):
         in_features=shared_features_size, out_features=num_outputs, num_cells=[]
     )
     if continuous_actions:
-        policy_net = torch.nn.Sequential(policy_net, NormalParamExtractor(scale_lb=1e-2))
+        policy_net = torch.nn.Sequential(
+            policy_net, NormalParamExtractor(scale_lb=1e-2)
+        )
 
     policy_module = TensorDictModule(
         module=policy_net,
