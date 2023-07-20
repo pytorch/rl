@@ -1643,7 +1643,7 @@ class PermuteTransform(Transform):
         # check dims
         self.dims=dims
         if sorted(list(dims))[0]!=-len(dims) or sorted(list(dims))[-1]!= -1:
-            raise ValueError("only tailing dims with negative indices are supported")
+            raise ValueError(f"Only tailing dims with negative indices are supported by {self.__class__.__name__}. Got {dims} instead.")
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
         observation = observation.permute(
