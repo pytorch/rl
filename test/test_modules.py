@@ -217,7 +217,7 @@ def test_conv3dnet(
     seed=0,
 ):
     torch.manual_seed(seed)
-    convnet = Conv3dNet(
+    conv3dnet = Conv3dNet(
         in_features=in_features,
         depth=depth,
         num_cells=num_cells,
@@ -237,8 +237,10 @@ def test_conv3dnet(
     if in_features is None:
         in_features = 5
     x = torch.randn(*batch, in_features, input_size, input_size, input_size, device=device)
-    y = convnet(x)
+    y = conv3dnet(x)
     assert y.shape == torch.Size([*batch, expected_features])
+    with pytest.raises(ValueError):
+        conv3dnet(torch.randn(3, 16, 16))
 
 @pytest.mark.parametrize(
     "layer_class",

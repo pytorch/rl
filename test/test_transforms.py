@@ -29,6 +29,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     NestedCountingEnv,
+    DiscreteActionConvMockEnv,
 )
 from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
@@ -8028,7 +8029,68 @@ class TestKLRewardTransform(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
 
-class TestPermuteTransform:
+class TestPermuteTransform(TransformBase):
+    envclass = DiscreteActionConvMockEnv
+    
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(self.envclass(), PermuteTransform((-1, -2)))
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, lambda: TransformedEnv(self.envclass(), PermuteTransform((-1, -2))))
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(2, lambda: TransformedEnv(self.envclass(), PermuteTransform((-1, -2))))
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, self.envclass), PermuteTransform((-1, -2)))
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(ParallelEnv(2, self.envclass), PermuteTransform((-1, -2)))
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_compose(self, batch):
+        D, W, H, C= 8, 32, 64, 3
+        trans=Compose(PermuteTransform(dims=(-1, -4,-2, -3), in_keys=["pixels"],)) # DxWxHxC => CxDxHxW
+        td=TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td=trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+    def test_transform_env(self):
+        env = TransformedEnv(self.envclass(), PermuteTransform((-1, -2, -3)))
+        td=env.rollout(3)
+        assert td["pixels"].shape == torch.Size(3, 7, 7, 1)
+
+    def test_transform_model(self):
+        batch = [2]
+        D, W, H, C= 8, 32, 64, 3
+        trans=PermuteTransform(dims=(-1, -4,-2, -3), in_keys=["pixels"],) # DxWxHxC => CxDxHxW
+        td=TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        out_channels = 4
+        from tensordict.nn import TensorDictModule
+        model = nn.Sequential(trans, TensorDictModule(nn.Conv3d(C, out_channels, 3, padding=1), in_keys=["pixels"], out_keys=["pixels"]))
+        td = model(td)
+        assert td["pixels"].shape == torch.Size((*batch, out_channels, D, H, W))
+
+    def test_transform_rb(self):
+        batch=[6]
+        D, W, H, C= 4, 5, 6, 3
+        trans=PermuteTransform(dims=(-1, -4,-2, -3), in_keys=["pixels"],) # DxWxHxC => CxDxHxW
+        td=TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td=trans(td)
+        rb=TensorDictReplayBuffer(storage=LazyTensorStorage(5), transform=trans)
+        rb.extend(td)
+        sample = rb.sample(2)
+        assert sample.shape == torch.Size(2, C, D, H, W)
+
+    def test_transform_inverse(self):
+        pytest.skip("No inverse yet for PermuteTransform")
+
+    
     @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
     def test_transform_no_env(self, batch):
         D, W, H, C= 8, 32, 64, 3
