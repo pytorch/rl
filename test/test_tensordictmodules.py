@@ -7,10 +7,9 @@ import argparse
 
 import pytest
 import torch
-from tensordict import TensorDict, unravel_key_list
+from tensordict import pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
-from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
@@ -1645,16 +1644,13 @@ class TestLSTMModule:
         )
         td = TensorDict(
             {
-                "bork": torch.randn(3, 3, 3),
-                "is_init": torch.zeros(3, 3, 1, dtype=torch.bool),
-                "next": TensorDict(
-                    {"done": torch.ones(3, 3, 1, dtype=torch.bool)}, [3, 3]
-                ),
+                "bork": torch.randn(3, 3),
+                "is_init": torch.zeros(3, 1, dtype=torch.bool),
             },
-            [3, 3],
+            [3],
         )
-        split_td = split_trajectories(td)
-        lstm_module(split_td)
+        padded = pad(td, [0, 5])
+        lstm_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     def test_singel_step(self, shape):
