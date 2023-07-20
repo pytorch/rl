@@ -423,10 +423,9 @@ class DistributionalDQNLoss(LossModule):
 
     def forward(self, input_tensordict: TensorDictBase) -> TensorDict:
         # from https://github.com/Kaixhin/Rainbow/blob/9ff5567ad1234ae0ed30d8471e8f13ae07119395/agent.py
-        device = self.device
         tensordict = TensorDict(
             source=input_tensordict, batch_size=input_tensordict.batch_size
-        ).to(device)
+        )
 
         if tensordict.batch_dims != 1:
             raise RuntimeError(
@@ -533,7 +532,7 @@ class DistributionalDQNLoss(LossModule):
             m.view(-1).index_add_(0, index, tensor)
 
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
-        loss = -torch.sum(m.to(device) * log_ps_a, 1)
+        loss = -torch.sum(m.to(input_tensordict.device) * log_ps_a, 1)
         input_tensordict.set(
             self.tensor_keys.priority,
             loss.detach().unsqueeze(1).to(input_tensordict.device),
