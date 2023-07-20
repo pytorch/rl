@@ -695,7 +695,10 @@ class Conv3dNet(nn.Sequential):
         return layers
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        *batch, C, D, L, W = inputs.shape
+        try:
+            *batch, C, D, L, W = inputs.shape
+        except ValueError as err:
+            raise ValueError(f"The input value of {self.__class__.__name__} must have at least 4 dimensions, got {inputs.ndim} instead.") from err
         if len(batch) > 1:
             inputs = inputs.flatten(0, len(batch) - 1)
         out = super().forward(inputs)
