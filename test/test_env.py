@@ -1418,7 +1418,6 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1750,9 +1749,26 @@ class TestNestedSpecs:
 
 
 class TestHeteroEnvs:
-    def test_reset(self):
-        env = HeteroCountingEnv()
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_reset(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
         env.reset()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rand_step(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.reset()
+        assert (td["agents"][..., 0]["agent_0_obs"] == 0).all()
+        td = env.rand_step()
+        assert (td["next", "agents"][..., 0]["agent_0_obs"] == 1).all()
+        td = env.rand_step()
+        assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rollout_one(self, batch_size, rollout_steps=1):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.rollout(rollout_steps)
+        td.get("agents")
 
 
 @pytest.mark.parametrize(

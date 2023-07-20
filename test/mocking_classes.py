@@ -7,7 +7,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -1323,16 +1323,10 @@ class HeteroCountingEnv(EnvBase):
                     3,
                 )
             ),
-            shape=(),
         )
 
         self.unbatched_action_spec = CompositeSpec(
-            {
-                "agents": CompositeSpec(
-                    {"action": agent_action_specs},
-                    shape=(self.n_agents,),
-                )
-            }
+            agents=agent_action_specs,
         )
         self.unbatched_reward_spec = CompositeSpec(
             {
@@ -1420,13 +1414,15 @@ class HeteroCountingEnv(EnvBase):
         # Some have 2d action and some 3d
         # TODO Introduce composite heterogeneous actions
         if i == 0:
-            return force_3d
+            ret = force_3d
         elif i == 1:
-            return force_2d
+            ret = force_2d
         elif i == 2:
-            return force_2d
+            ret = force_2d
         else:
             raise ValueError(f"Index {i} undefined for 3 agents")
+
+        return CompositeSpec({"action": ret})
 
     def _reset(
         self,
@@ -1440,7 +1436,7 @@ class HeteroCountingEnv(EnvBase):
             self.count[:] = self.start_val
 
         reset_td = self.observation_spec.zero()
-        reset_td.apply_(lambda x: x + self.count)
+        reset_td.apply_(lambda x: x + expand_right(self.count, x.shape))
         reset_td.update(self.output_spec["_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
@@ -1452,9 +1448,16 @@ class HeteroCountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         td = self.observation_spec.zero()
-        td.apply_(lambda x: x + self.count)
+        self.count += 1
+        td.apply_(lambda x: x + expand_right(self.count, x.shape))
         td.update(self.output_spec["_done_spec"].zero())
         td.update(self.output_spec["_reward_spec"].zero())
+
+        assert td.batch_size == self.batch_size
+        td[self.done_key] = expand_right(
+            self.count > self.max_steps, self.done_spec.shape
+        )
+
         return td.select().set("next", td)
 
     def _set_seed(self, seed: Optional[int]):
