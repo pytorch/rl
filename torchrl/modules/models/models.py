@@ -488,7 +488,8 @@ class Conv3dNet(nn.Sequential):
     """A 3D-convolutional neural network.
 
     Args:
-        in_features (int, optional): number of input features;
+        in_features (int, optional): number of input features. A lazy implementation that automatically retrieves
+            the input size will be used if none is provided.
         depth (int, optional): depth of the network. A depth of 1 will produce a single linear layer network with the
             desired input size, and with an output size equal to the last element of the num_cells argument.
             If no depth is indicated, the depth information should be contained in the num_cells argument (see below).
