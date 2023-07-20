@@ -913,13 +913,10 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     def __repr__(self):
         shape_str = "shape=" + str(self.shape)
-        space_str = "space=" + str(self._specs[0].space)
         device_str = "device=" + str(self.device)
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self._specs[0].domain)
-        sub_string = ", ".join(
-            [shape_str, space_str, device_str, dtype_str, domain_str]
-        )
+        sub_string = ", ".join([shape_str, device_str, dtype_str, domain_str])
         string = f"LazyStacked{self._specs[0].__class__.__name__}(\n     {sub_string})"
         return string
 
