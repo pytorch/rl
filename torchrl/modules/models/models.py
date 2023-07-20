@@ -498,7 +498,7 @@ class Conv3dNet(nn.Sequential):
         num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
             the linear layers out_features will match the content of num_cells.
-            default: [32, 32, 32];
+            default: ``[32, 32, 32]`` or ``[32] * depth` is depth is not ``None``.
         kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
         strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
