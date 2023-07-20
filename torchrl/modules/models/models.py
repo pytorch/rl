@@ -586,7 +586,10 @@ class Conv3dNet(nn.Sequential):
         device: Optional[DEVICE_TYPING] = None,
     ):
         if num_cells is None:
-            num_cells = [32, 32, 32]
+            if depth is None:
+                num_cells = [32, 32, 32]
+            else:
+                num_cells = [32] * depth
 
         self.in_features = in_features
         self.activation_class = activation_class
