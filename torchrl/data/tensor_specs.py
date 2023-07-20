@@ -391,7 +391,7 @@ class ContinuousBox(Box):
             f"\nmaximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})",
             " " * 4,
         )
-        return f"{self.__class__.__name__}({min_str}, {max_str})"
+        return f"{self.__class__.__name__}({min_str},{max_str})"
 
     def __eq__(self, other):
         return (
@@ -3257,7 +3257,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         ]
         lazy_key_str = ",\n".join(
             [
-                indent(f"{i} -> \n{line}", 4 * " ")
+                indent(f"{i} ->\n{line}", 4 * " ")
                 for i, line in enumerate(lazy_keys)
                 if line != ""
             ]
