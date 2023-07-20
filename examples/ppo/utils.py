@@ -1,6 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, NormalParamExtractor
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
@@ -29,7 +34,6 @@ from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
     MLP,
-    NormalParamWrapper,
     OneHotCategorical,
     ProbabilisticActor,
     TanhNormal,
@@ -332,7 +336,7 @@ def make_ppo_modules_state(proof_environment):
         in_features=shared_features_size, out_features=num_outputs, num_cells=[]
     )
     if continuous_actions:
-        policy_net = NormalParamWrapper(policy_net)
+        policy_net = nn.Sequential(policy_net, NormalParamExtractor(scale_lb=1e-2))
 
     policy_module = TensorDictModule(
         module=policy_net,
