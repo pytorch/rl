@@ -842,6 +842,10 @@ class _LazyStackedMixin(Generic[T]):
     def clone(self) -> T:
         return torch.stack([spec.clone() for spec in self._specs], 0)
 
+    @property
+    def stack_dim(self):
+        return self.dim
+
     def zero(self, shape=None) -> TensorDictBase:
         if shape is not None:
             dim = self.dim + len(shape)
@@ -3252,7 +3256,11 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             for spec in self._specs
         ]
         lazy_key_str = ",\n".join(
-            [indent(f"{i} -> \n{line}", 4 * " ") for i, line in enumerate(lazy_keys)]
+            [
+                indent(f"{i} -> \n{line}", 4 * " ")
+                for i, line in enumerate(lazy_keys)
+                if line != ""
+            ]
         )
 
         return indent(f"lazy_fields={{\n{lazy_key_str}}}", 4 * " ")

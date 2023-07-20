@@ -2701,6 +2701,99 @@ class TestLazyStackedCompositeSpecs:
         td_c[0]["agent_0_obs", "agent_0_obs_0"] += 1
         assert c.is_in(td_c)
 
+    def test_repr(self):
+        c = self._get_het_specs()
+
+        expected = f"""LazyStackedCompositeSpec(
+    fields={{
+        camera: BoundedTensorSpec(
+            shape=torch.Size([3, 32, 32, 3]),
+            space=ContinuousBox(
+                minimum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                maximum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        vector: LazyStackedUnboundedContinuousTensorSpec(
+             shape=torch.Size([3, -1]), space=None, device=cpu, dtype=torch.float32, domain=continuous)}},
+    lazy_fields={{
+        0 ->
+            lidar: BoundedTensorSpec(
+                shape=torch.Size([20]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            agent_0_obs: CompositeSpec(
+                agent_0_obs_0: UnboundedContinuousTensorSpec(
+                    shape=torch.Size([3, 1]),
+                    space=None,
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([3])),
+        1 ->
+            lidar: BoundedTensorSpec(
+                shape=torch.Size([20]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous),
+            agent_1_obs: CompositeSpec(
+                agent_1_obs_0: BoundedTensorSpec(
+                    shape=torch.Size([3, 1, 2]),
+                    space=ContinuousBox(
+                        minimum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+                        maximum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([3])),
+        2 ->
+            agent_2_obs: CompositeSpec(
+                agent_1_obs_0: UnboundedContinuousTensorSpec(
+                    shape=torch.Size([3, 1, 2, 3]),
+                    space=None,
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([3]))}},
+    device=cpu,
+    shape={torch.Size((3,))},
+    stack_dim={c.stack_dim})"""
+        assert expected == repr(c)
+
+        c = c[0:2]
+        del c["agent_0_obs"]
+        del c["agent_1_obs"]
+        expected = f"""LazyStackedCompositeSpec(
+    fields={{
+        camera: BoundedTensorSpec(
+            shape=torch.Size([2, 32, 32, 3]),
+            space=ContinuousBox(
+                minimum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                maximum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        lidar: BoundedTensorSpec(
+            shape=torch.Size([2, 20]),
+            space=ContinuousBox(
+                minimum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
+                maximum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous),
+        vector: LazyStackedUnboundedContinuousTensorSpec(
+             shape=torch.Size([2, -1]), space=None, device=cpu, dtype=torch.float32, domain=continuous)}},
+    lazy_fields={{
+    }},
+    device=cpu,
+    shape={torch.Size((2,))},
+    stack_dim={c.stack_dim})"""
+        assert expected == repr(c)
+
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
 @pytest.mark.parametrize(
