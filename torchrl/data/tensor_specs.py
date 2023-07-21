@@ -32,8 +32,8 @@ from typing import (
 import numpy as np
 import torch
 from tensordict import unravel_key
-from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _getitem_batch_size
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.utils import _getitem_batch_size, NestedKey
 
 from torchrl._utils import get_binary_env_var
 
@@ -391,7 +391,7 @@ class ContinuousBox(Box):
             f"\nmaximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})",
             " " * 4,
         )
-        return f"{self.__class__.__name__}({min_str}, {max_str})"
+        return f"{self.__class__.__name__}({min_str},{max_str})"
 
     def __eq__(self, other):
         return (
@@ -839,46 +839,12 @@ class _LazyStackedMixin(Generic[T]):
                 return out
             return torch.stack(list(out), 0)
 
-    @property
-    def shape(self):
-        shape = list(self._specs[0].shape)
-        dim = self.dim
-        if dim < 0:
-            dim = len(shape) + dim + 1
-        shape.insert(dim, len(self._specs))
-        return torch.Size(shape)
-
     def clone(self) -> T:
         return torch.stack([spec.clone() for spec in self._specs], 0)
 
-    def expand(self, *shape):
-        if len(shape) == 1 and not isinstance(shape[0], (int,)):
-            return self.expand(*shape[0])
-        expand_shape = shape[: -len(self.shape)]
-        existing_shape = self.shape
-        shape_check = shape[-len(self.shape) :]
-        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
-            if size1 != size2 and size1 != 1:
-                raise RuntimeError(
-                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
-                )
-            elif size1 != size2 and size1 == 1 and _i == self.dim:
-                # if we're expanding along the stack dim we just need to clone the existing spec
-                return torch.stack(
-                    [self._specs[0].clone() for _ in range(size2)], self.dim
-                ).expand(*shape)
-        if _i != len(self.shape) - 1:
-            raise RuntimeError(
-                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
-            )
-        # remove the stack dim from the expanded shape, which we know to match
-        unstack_shape = list(expand_shape) + [
-            s for i, s in enumerate(shape_check) if i != self.dim
-        ]
-        return torch.stack(
-            [spec.expand(unstack_shape) for spec in self._specs],
-            self.dim + len(expand_shape),
-        )
+    @property
+    def stack_dim(self):
+        return self.dim
 
     def zero(self, shape=None) -> TensorDictBase:
         if shape is not None:
@@ -914,11 +880,20 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     @property
     def space(self):
-        return self._specs[0].space
+        raise NotImplementedError
 
     def __eq__(self, other):
-        # requires unbind to be implemented
-        pass
+        if not isinstance(other, LazyStackedTensorSpec):
+            return False
+        if len(self._specs) != len(other._specs):
+            return False
+        for _spec1, _spec2 in zip(self._specs, other._specs):
+            if _spec1 != _spec2:
+                return False
+        return True
+
+    def __len__(self):
+        return self.shape[0]
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
@@ -933,29 +908,23 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                 spec.assert_is_in(v)
         return val.detach().cpu().numpy()
 
-    def __len__(self):
-        pass
-
-    def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
+    def _project(self, val: TensorDictBase) -> TensorDictBase:
+        raise NotImplementedError
 
     def __repr__(self):
         shape_str = "shape=" + str(self.shape)
-        space_str = "space=" + str(self._specs[0].space)
         device_str = "device=" + str(self.device)
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self._specs[0].domain)
-        sub_string = ", ".join(
-            [shape_str, space_str, device_str, dtype_str, domain_str]
-        )
-        string = f"{self.__class__.__name__}(\n     {sub_string})"
+        sub_string = ", ".join([shape_str, device_str, dtype_str, domain_str])
+        string = f"LazyStacked{self._specs[0].__class__.__name__}(\n     {sub_string})"
         return string
 
     def __iter__(self):
-        pass
+        raise NotImplementedError
 
     def __setitem__(self, key, value):
-        pass
+        raise NotImplementedError
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -978,6 +947,61 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                     f"CompositeSpec.shape={self.shape}."
                 )
         self._specs[name] = spec
+
+    def is_in(self, val) -> bool:
+        raise NotImplementedError
+
+    @property
+    def shape(self):
+        first_shape = self._specs[0].shape
+        shape = []
+        for i in range(len(first_shape)):
+            homo_dim = True
+            for spec in self._specs:
+                if spec.shape[i] != first_shape[i]:
+                    homo_dim = False
+                    break
+            shape.append(first_shape[i] if homo_dim else -1)
+
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self._specs))
+        return torch.Size(shape)
+
+    def expand(self, *shape):
+        if len(shape) == 1 and not isinstance(shape[0], (int,)):
+            return self.expand(*shape[0])
+        expand_shape = shape[: -len(self.shape)]
+        existing_shape = self.shape
+        shape_check = shape[-len(self.shape) :]
+        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+            if size1 != size2 and size1 != 1:
+                raise RuntimeError(
+                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+                )
+            elif size1 != size2 and size1 == 1 and _i == self.dim:
+                # if we're expanding along the stack dim we just need to clone the existing spec
+                return torch.stack(
+                    [self._specs[0].clone() for _ in range(size2)], self.dim
+                ).expand(*shape)
+        if _i != len(self.shape) - 1:
+            raise RuntimeError(
+                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+            )
+        # remove the stack dim from the expanded shape, which we know to match
+        shape_check = [s for i, s in enumerate(shape_check) if i != self.dim]
+        specs = []
+        for spec in self._specs:
+            spec_shape = []
+            for dim_check, spec_dim in zip(shape_check, spec.shape):
+                spec_shape.append(dim_check if dim_check != -1 else spec_dim)
+            unstack_shape = list(expand_shape) + list(spec_shape)
+            specs.append(spec.expand(unstack_shape))
+        return torch.stack(
+            specs,
+            self.dim + len(expand_shape),
+        )
 
 
 @dataclass(repr=False)
@@ -1031,7 +1055,6 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
         use_register: bool = False,
     ):
-
         dtype, device = _default_dtype_and_device(dtype, device)
         self.use_register = use_register
         space = DiscreteBox(n)
@@ -2756,14 +2779,14 @@ class CompositeSpec(TensorSpec):
             value = {selected_keys: value}
             selected_keys = [selected_keys]
 
-        for _key in self:
+        for _key in self.keys():
             if self[_key] is not None and (
                 selected_keys is None or _key in selected_keys
             ):
                 self._specs[_key].type_check(value[_key], _key)
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        for (key, item) in self._specs.items():
+        for key, item in self._specs.items():
             if item is None:
                 continue
             if not item.is_in(val.get(key)):
@@ -3116,10 +3139,17 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     """
 
     def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
-        pass
+        raise NotImplementedError
 
     def __eq__(self, other):
-        pass
+        if not isinstance(other, LazyStackedCompositeSpec):
+            return False
+        if len(self._specs) != len(other._specs):
+            return False
+        for _spec1, _spec2 in zip(self._specs, other._specs):
+            if _spec1 != _spec2:
+                return False
+        return True
 
     def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         if safe is None:
@@ -3135,14 +3165,22 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
     def __len__(self):
-        pass
+        return self.shape[0]
 
-    def values(self):
-        for key in self.keys():
+    def values(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ):
+        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield self[key]
 
-    def items(self):
-        for key in self.keys():
+    def items(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ):
+        for key in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield key, self[key]
 
     def keys(
@@ -3150,47 +3188,111 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         include_nested: bool = False,
         leaves_only: bool = False,
     ) -> KeysView:
-        return self._specs[0].keys(
+        keys = self._specs[0].keys(
             include_nested=include_nested, leaves_only=leaves_only
         )
+        keys = set(keys)
+        for spec in self._specs[1:]:
+            keys = keys.intersection(spec.keys(include_nested, leaves_only))
+        return sorted(keys, key=str)
 
     def project(self, val: TensorDictBase) -> TensorDictBase:
-        pass
-
-    def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
-        pass
+        vals = []
+        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+            if not spec.is_in(subval):
+                vals.append(spec.project(subval))
+            else:
+                vals.append(subval)
+        res = torch.stack(vals, dim=self.dim)
+        if not isinstance(val, LazyStackedTensorDict):
+            res = res.to_tensordict()
+        return res
 
     def type_check(
         self,
         value: Union[torch.Tensor, TensorDictBase],
-        selected_keys: Union[str, Optional[Sequence[str]]] = None,
+        selected_keys: Union[NestedKey, Optional[Sequence[NestedKey]]] = None,
     ):
-        pass
+        if selected_keys is None:
+            if isinstance(value, torch.Tensor):
+                raise ValueError(
+                    "value must be of type TensorDictBase when key is None"
+                )
+            for spec, subvalue in zip(self._specs, value.unbind(self.dim)):
+                spec.type_check(subvalue)
+        else:
+            if isinstance(value, torch.Tensor) and isinstance(selected_keys, str):
+                value = {selected_keys: value}
+                selected_keys = [selected_keys]
+            for _key in self.keys():
+                if self[_key] is not None and _key in selected_keys:
+                    self[_key].type_check(value[_key], _key)
 
     def __repr__(self) -> str:
         sub_str = ",\n".join(
             [indent(f"{k}: {repr(item)}", 4 * " ") for k, item in self.items()]
         )
-        device_str = f"device={self._specs[0].device}"
-        shape_str = f"shape={self.shape}"
-        sub_str = ", ".join([sub_str, device_str, shape_str])
-        return (
-            f"LazyStackedCompositeSpec(\n{', '.join([sub_str, device_str, shape_str])})"
+        sub_str = indent(f"fields={{\n{', '.join([sub_str])}}}", 4 * " ")
+        lazy_key_str = self.repr_lay_keys()
+        device_str = indent(f"device={self._specs[0].device}", 4 * " ")
+        shape_str = indent(f"shape={self.shape}", 4 * " ")
+        stack_dim = indent(f"stack_dim={self.dim}", 4 * " ")
+        string = ",\n".join([sub_str, lazy_key_str, device_str, shape_str, stack_dim])
+        return f"LazyStackedCompositeSpec(\n{string})"
+
+    def repr_lay_keys(self):
+        keys = set(self.keys())
+        lazy_keys = [
+            ",\n".join(
+                [
+                    indent(f"{k}: {repr(spec[k])}", 4 * " ")
+                    for k in spec.keys()
+                    if k not in keys
+                ]
+            )
+            for spec in self._specs
+        ]
+        lazy_key_str = ",\n".join(
+            [
+                indent(f"{i} ->\n{line}", 4 * " ")
+                for i, line in enumerate(lazy_keys)
+                if line != ""
+            ]
         )
+
+        return indent(f"lazy_fields={{\n{lazy_key_str}}}", 4 * " ")
+
+    def is_in(self, val) -> bool:
+        for spec, subval in zip(self._specs, val.unbind(self.dim)):
+            if not spec.is_in(subval):
+                return False
+        return True
 
     def encode(
         self, vals: Dict[str, Any], ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
-        pass
+        raise NotImplementedError
 
-    def __delitem__(self, key):
-        pass
+    def __delitem__(self, key: NestedKey):
+        """Deletes a key only if present in all stacked specs."""
+        at_least_one_deletion = False
+        for spec in self._specs:
+            try:
+                del spec[key]
+                at_least_one_deletion = True
+            except KeyError:
+                continue
+        if not at_least_one_deletion:
+            raise KeyError(
+                f"Key {key} must be present in at least one of the stacked specs"
+            )
+        return self
 
     def __iter__(self):
-        pass
+        raise NotImplementedError
 
     def __setitem__(self, key, value):
-        pass
+        raise NotImplementedError
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -3214,6 +3316,100 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
                 )
         self._specs[name] = spec
 
+    def unsqueeze(self, dim: int):
+        if dim < 0:
+            new_dim = dim + len(self.shape) + 1
+        else:
+            new_dim = dim
+        if new_dim > len(self.shape) or new_dim < 0:
+            raise ValueError(f"Cannot unsqueeze along dim {dim}.")
+        if new_dim > self.dim:
+            # unsqueeze 2, stack is on 1 => unsqueeze 1, stack along 1
+            new_stack_dim = self.dim
+            new_dim = new_dim - 1
+        else:
+            # unsqueeze 0, stack is on 1 => unsqueeze 0, stack on 1
+            new_stack_dim = self.dim + 1
+        return LazyStackedCompositeSpec(
+            *[spec.unsqueeze(new_dim) for spec in self._specs], dim=new_stack_dim
+        )
+
+    def squeeze(self, dim: int = None):
+        if dim is None:
+            size = self.shape
+            if len(size) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+
+            squeezed_dict = self.squeeze(first_singleton_dim)
+            return squeezed_dict.squeeze(dim=None)
+
+        if dim < 0:
+            new_dim = self.ndim + dim
+        else:
+            new_dim = dim
+
+        if self.shape and (new_dim >= self.ndim or new_dim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between 0 and "
+                f"spec.ndim only. Got dim={dim} and shape"
+                f"={self.shape}."
+            )
+
+        if new_dim >= self.ndim or self.shape[new_dim] != 1:
+            return self
+
+        if new_dim == self.dim:
+            return self._specs[0]
+        if new_dim > self.dim:
+            # squeeze 2, stack is on 1 => squeeze 1, stack along 1
+            new_stack_dim = self.dim
+            new_dim = new_dim - 1
+        else:
+            # squeeze 0, stack is on 1 => squeeze 0, stack on 1
+            new_stack_dim = self.dim - 1
+        return LazyStackedCompositeSpec(
+            *[spec.squeeze(new_dim) for spec in self._specs], dim=new_stack_dim
+        )
+
+    @property
+    def shape(self):
+        shape = list(self._specs[0].shape)
+        dim = self.dim
+        if dim < 0:
+            dim = len(shape) + dim + 1
+        shape.insert(dim, len(self._specs))
+        return torch.Size(shape)
+
+    def expand(self, *shape):
+        if len(shape) == 1 and not isinstance(shape[0], (int,)):
+            return self.expand(*shape[0])
+        expand_shape = shape[: -len(self.shape)]
+        existing_shape = self.shape
+        shape_check = shape[-len(self.shape) :]
+        for _i, (size1, size2) in enumerate(zip(existing_shape, shape_check)):
+            if size1 != size2 and size1 != 1:
+                raise RuntimeError(
+                    f"Expanding a non-singletom dimension: existing shape={size1} vs expand={size2}"
+                )
+            elif size1 != size2 and size1 == 1 and _i == self.dim:
+                # if we're expanding along the stack dim we just need to clone the existing spec
+                return torch.stack(
+                    [self._specs[0].clone() for _ in range(size2)], self.dim
+                ).expand(*shape)
+        if _i != len(self.shape) - 1:
+            raise RuntimeError(
+                f"Trying to expand non-congruent shapes: received {shape} when the shape is {self.shape}."
+            )
+        # remove the stack dim from the expanded shape, which we know to match
+        unstack_shape = list(expand_shape) + [
+            s for i, s in enumerate(shape_check) if i != self.dim
+        ]
+        return torch.stack(
+            [spec.expand(unstack_shape) for spec in self._specs],
+            self.dim + len(expand_shape),
+        )
+
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
 @TensorSpec.implements_for_spec(torch.stack)
@@ -3228,14 +3424,19 @@ def _stack_specs(list_of_spec, dim, out=None):
     spec0 = list_of_spec[0]
     if isinstance(spec0, TensorSpec):
         device = spec0.device
+
         all_equal = True
         for spec in list_of_spec[1:]:
-            if not isinstance(spec, TensorSpec):
+            if not isinstance(spec, spec0.__class__):
                 raise RuntimeError(
                     "Stacking specs cannot occur: Found more than one type of specs in the list."
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            if spec.dtype != spec0.dtype:
+                raise RuntimeError(f"Dtypes differ, got {spec0.dtype} and {spec.dtype}")
+            if spec.ndim != spec0.ndim:
+                raise RuntimeError(f"Ndims differ, got {spec0.ndim} and {spec.ndim}")
             all_equal = all_equal and spec == spec0
         if all_equal:
             shape = list(spec0.shape)
@@ -3269,6 +3470,8 @@ def _stack_composite_specs(list_of_spec, dim, out=None):
                 )
             if device != spec.device:
                 raise RuntimeError(f"Devices differ, got {device} and {spec.device}")
+            if spec.shape != spec0.shape:
+                raise RuntimeError(f"Shapes differ, got {spec.shape} and {spec0.shape}")
             all_equal = all_equal and spec == spec0
         if all_equal:
             shape = list(spec0.shape)

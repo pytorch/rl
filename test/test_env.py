@@ -33,6 +33,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    HeteroCountingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -1417,7 +1418,6 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
-@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1669,7 +1669,6 @@ class TestConcurrentEnvs:
 class TestNestedSpecs:
     @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
     def test_nested_env(self, envclass):
-
         if envclass == "CountingEnv":
             env = CountingEnv()
         elif envclass == "NestedCountingEnv":
@@ -1700,7 +1699,6 @@ class TestNestedSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
         td_reset = env.reset()
@@ -1750,6 +1748,29 @@ class TestNestedSpecs:
         )
 
 
+class TestHeteroEnvs:
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_reset(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        env.reset()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rand_step(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.reset()
+        assert (td["agents"][..., 0]["agent_0_obs"] == 0).all()
+        td = env.rand_step()
+        assert (td["next", "agents"][..., 0]["agent_0_obs"] == 1).all()
+        td = env.rand_step()
+        assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rollout_one(self, batch_size, rollout_steps=1):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.rollout(rollout_steps)
+        td.get("agents")
+
+
 @pytest.mark.parametrize(
     "envclass",
     [
@@ -1768,6 +1789,7 @@ class TestNestedSpecs:
         MockBatchedUnLockedEnv,
         MockSerialEnv,
         NestedCountingEnv,
+        HeteroCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):
