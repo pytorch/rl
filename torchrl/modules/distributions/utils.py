@@ -152,6 +152,7 @@ if version.parse(torch.__version__) >= version.parse("2.0.0"):
     safeatanh = _SafeaTanh.apply
 
 else:
+
     def safetanh(x, eps):  # noqa: D103
         lim = 1.0 - eps
         y = x.tanh()
