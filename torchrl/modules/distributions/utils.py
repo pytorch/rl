@@ -161,4 +161,4 @@ def safetanh(x, eps):  # noqa: D103
 def safeatanh(y, eps):  # noqa: D103
     lim = 1.0 - eps
     y = y.clone()
-    return y.clamp(-lim, lim)
+    return y.clamp(-lim, lim).atanh()
