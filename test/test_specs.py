@@ -2715,7 +2715,7 @@ class TestLazyStackedCompositeSpecs:
             dtype=torch.float32,
             domain=continuous),
         vector: LazyStackedUnboundedContinuousTensorSpec(
-             shape=torch.Size([3, -1]), space=None, device=cpu, dtype=torch.float32, domain=continuous)}},
+             shape=torch.Size([3, -1]), device=cpu, dtype=torch.float32, domain=continuous)}},
     lazy_fields={{
         0 ->
             lidar: BoundedTensorSpec(
@@ -2786,7 +2786,7 @@ class TestLazyStackedCompositeSpecs:
             dtype=torch.float32,
             domain=continuous),
         vector: LazyStackedUnboundedContinuousTensorSpec(
-             shape=torch.Size([2, -1]), space=None, device=cpu, dtype=torch.float32, domain=continuous)}},
+             shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, domain=continuous)}},
     lazy_fields={{
     }},
     device=cpu,
