@@ -41,7 +41,7 @@ from mocking_classes import (
 )
 from packaging import version
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1765,10 +1765,16 @@ class TestHeteroEnvs:
         assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
-    def test_rollout_one(self, batch_size, rollout_steps=1):
+    def test_rollout_one(self, batch_size, rollout_steps=1, n_agents=3):
         env = HeteroCountingEnv(batch_size=batch_size)
-        td = env.rollout(rollout_steps)
-        td.get("agents")
+        td = env.rollout(rollout_steps, return_contiguous=True)
+
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (*batch_size, rollout_steps)
+
+        assert isinstance(td["agents"], LazyStackedTensorDict)
+        assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
+        assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
 
 
 @pytest.mark.parametrize(

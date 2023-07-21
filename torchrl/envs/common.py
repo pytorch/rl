@@ -1267,7 +1267,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
-            out_td = out_td.contiguous()
+            out_td = out_td.resolve_stack_dim()
         out_td.refine_names(..., "time")
         return out_td
 
