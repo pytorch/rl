@@ -8,7 +8,9 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
+from tensordict import TensorDictBase
 from torch import Tensor
+
 
 numpy_to_torch_dtype_dict = {
     np.dtype("bool"): torch.bool,
@@ -33,6 +35,18 @@ else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+
+
+def dense_stack_tds(td_list: List[TensorDictBase], stack_dim: int) -> TensorDictBase:
+    """Temp."""
+    shape = list(td_list[0].shape)
+    shape.insert(stack_dim, len(td_list))
+
+    out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
+    for i in range(1, len(td_list)):
+        index = (slice(None),) * stack_dim + (i,)  # this is index_select
+        out[index] = td_list[i]
+    return out
 
 
 class CloudpickleWrapper(object):

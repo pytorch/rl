@@ -22,7 +22,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.utils import dense_stack_tds, DEVICE_TYPING
 from torchrl.envs.utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -1265,9 +1265,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
-        out_td = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            out_td = out_td.resolve_stack_dim()
+        out_td = dense_stack_tds(tensordicts, len(batch_size))
+
         out_td.refine_names(..., "time")
         return out_td
 
