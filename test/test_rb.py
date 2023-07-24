@@ -252,7 +252,8 @@ class TestComposableBuffers:
         rb2 = pickle.loads(serialized)
         assert rb.__dict__.keys() == rb2.__dict__.keys()
         for key in sorted(rb.__dict__.keys()):
-            assert type(rb.__dict__[key]) == type(rb2.__dict__[key])
+            assert isinstance(rb.__dict__[key], type(rb2.__dict__[key]))
+
 
 @pytest.mark.parametrize("storage_type", [TensorStorage])
 class TestStorages:
