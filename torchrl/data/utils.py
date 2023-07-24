@@ -2,13 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import re
 import typing
 from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
+from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDictBase
 from torch import Tensor
+
 
 numpy_to_torch_dtype_dict = {
     np.dtype("bool"): torch.bool,
@@ -33,6 +35,105 @@ else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+
+
+def dense_stack_tds(td_list: List[TensorDictBase], stack_dim: int) -> TensorDictBase:
+    """Temp."""
+    shape = list(td_list[0].shape)
+    shape.insert(stack_dim, len(td_list))
+
+    out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
+    for i in range(1, len(td_list)):
+        index = (slice(None),) * stack_dim + (i,)  # this is index_select
+        out[index] = td_list[i]
+    return out
+
+
+def unlazyfy_keys(
+    td,
+    recurse_through_entries: bool = True,
+    recurse_through_stack: bool = True,
+):
+    """Remove lazy keys by adding 0 shaped tensors."""
+    if not is_tensor_collection(td):
+        return td
+
+    if isinstance(td, LazyStackedTensorDict):
+        keys = set(td.keys())  # shared keys
+        lazy_keys_per_td = [
+            set() for _ in range(len(td.tensordicts))
+        ]  # list of lay keys per td
+        lazy_keys_examples = {}  # set of all lazy keys with an example for each
+        for td_index in range(len(td.tensordicts)):  # gather all lazy keys
+            sub_td = td.tensordicts[td_index]
+            if isinstance(sub_td, LazyStackedTensorDict) and recurse_through_stack:
+                sub_td = unlazyfy_keys(
+                    sub_td, recurse_through_entries, recurse_through_stack
+                )
+                td.tensordicts[td_index] = sub_td
+            for sub_td_key in sub_td.keys():
+                if sub_td_key not in keys:  # lazy key
+                    lazy_keys_per_td[td_index].add(sub_td_key)
+                    if sub_td_key not in lazy_keys_examples:
+                        try:
+                            value = sub_td.get(sub_td_key)
+                        except RuntimeError as err:
+                            if re.match(
+                                r"Found more than one unique shape in the tensors",
+                                str(err),
+                            ):
+                                # sub_td_key is het leaf so lets recurse to a dense version of it to get the example
+                                temp_td = sub_td
+                                while hasattr(
+                                    temp_td, "tensordicts"
+                                ):  # we need to grab the het tensor from the inner nesting level
+                                    temp_td = sub_td.tensordicts[0]
+                                value = temp_td.get(sub_td_key)
+                            else:
+                                raise err
+                        lazy_keys_examples.update({sub_td_key: value})
+
+        for td_index in range(len(td.tensordicts)):  # add missing lazy entries
+            sub_td = td.tensordicts[td_index]
+            for lazy_key in set(lazy_keys_examples.keys()).difference(
+                lazy_keys_per_td[td_index]
+            ):
+                lazy_key_example = lazy_keys_examples[lazy_key]
+                sub_td.set(
+                    lazy_key,
+                    _empty_like(lazy_key_example, sub_td.batch_size),
+                )
+            td.tensordicts[td_index] = sub_td
+
+    for key in td.keys():
+        try:
+            td.set(
+                key,
+                unlazyfy_keys(
+                    td.get(key), recurse_through_entries, recurse_through_stack
+                ),
+                inplace=True,
+            )
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                pass  # no need to unlazify since key is het leaf
+            else:
+                raise err
+
+    return td
+
+
+def _empty_like(td, batch_size):
+    if is_tensor_collection(td):
+        return td.empty()
+    else:
+        shape = [dim if i < len(batch_size) else 0 for i, dim in enumerate(td.shape)]
+
+        return torch.empty(
+            shape,
+            dtype=td.dtype,
+            device=td.device,
+        )
 
 
 class CloudpickleWrapper(object):
