@@ -55,6 +55,8 @@ def unlazyfy_keys(
     recurse_through_stack: bool = True,
 ):
     """Remove lazy keys by adding 0 shaped tensors."""
+    td = td.clone()
+
     if not is_tensor_collection(td):
         return td
 
@@ -105,20 +107,22 @@ def unlazyfy_keys(
                 )
             td.tensordicts[td_index] = sub_td
 
-    for key in td.keys():
-        try:
-            td.set(
-                key,
-                unlazyfy_keys(
-                    td.get(key), recurse_through_entries, recurse_through_stack
-                ),
-                inplace=True,
-            )
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                pass  # no need to unlazify since key is het leaf
-            else:
-                raise err
+    if recurse_through_entries:
+        for key in td.keys():
+            try:
+                td.set(
+                    key,
+                    unlazyfy_keys(
+                        td.get(key), recurse_through_entries, recurse_through_stack
+                    ),
+                )
+            except RuntimeError as err:
+                if re.match(
+                    r"Found more than one unique shape in the tensors", str(err)
+                ):
+                    pass  # no need to unlazify since key is het leaf
+                else:
+                    raise err
 
     return td
 
