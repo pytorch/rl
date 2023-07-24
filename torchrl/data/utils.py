@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDictBase
+from tensordict import is_tensor_collection, LazyStackedTensorDict
 from torch import Tensor
 
 
@@ -37,18 +37,6 @@ else:
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
-def dense_stack_tds(td_list: List[TensorDictBase], stack_dim: int) -> TensorDictBase:
-    """Temp."""
-    shape = list(td_list[0].shape)
-    shape.insert(stack_dim, len(td_list))
-
-    out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-    for i in range(1, len(td_list)):
-        index = (slice(None),) * stack_dim + (i,)  # this is index_select
-        out[index] = td_list[i]
-    return out
-
-
 def unlazyfy_keys(
     td,
     recurse_through_entries: bool = True,
@@ -64,7 +52,7 @@ def unlazyfy_keys(
         keys = set(td.keys())  # shared keys
         lazy_keys_per_td = [
             set() for _ in range(len(td.tensordicts))
-        ]  # list of lay keys per td
+        ]  # list of lazy keys per td
         lazy_keys_examples = {}  # set of all lazy keys with an example for each
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
