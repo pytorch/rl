@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict
+from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
 from torch import Tensor
 
 
@@ -56,7 +56,7 @@ def unlazyfy_keys(
         lazy_keys_examples = {}  # set of all lazy keys with an example for each
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
-            if isinstance(sub_td, LazyStackedTensorDict) and recurse_through_stack:
+            if recurse_through_stack:
                 sub_td = unlazyfy_keys(
                     sub_td, recurse_through_entries, recurse_through_stack
                 )
@@ -112,6 +112,42 @@ def unlazyfy_keys(
                 else:
                     raise err
 
+    return td
+
+
+def relazyfy_keys(
+    td,
+):
+    """Remove any keys with 0 dims and any orphan tensordicts."""
+    if not is_tensor_collection(td):
+        return None if td.numel() == 0 else td.clone()
+
+    td = td.clone()
+
+    if isinstance(td, LazyStackedTensorDict):
+        for td_index in range(len(td.tensordicts)):
+            sub_td = td.tensordicts[td_index]
+            sub_td = relazyfy_keys(sub_td)
+            td.tensordicts[td_index] = sub_td
+
+    for key in list(td.keys()):
+        try:
+            value = relazyfy_keys(td.get(key))
+            if value is None:
+                del td[key]
+            else:
+                td.set(
+                    key,
+                    value,
+                )
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                pass
+            else:
+                raise err
+
+    if isinstance(td, TensorDict) and not len(td.keys()):
+        return None
     return td
 
 
