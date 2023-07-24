@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from copy import deepcopy
 from typing import Any, Callable, Dict, Iterator, Optional, Union
 
@@ -1207,6 +1208,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
+        if not return_contiguous:
+            warnings.warn(
+                "return_contiguous will soon be deprecated and as"
+                " rollouts are always stored contiguously along the time dimension",
+                category=DeprecationWarning,
+            )
+
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):

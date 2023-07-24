@@ -1765,6 +1765,7 @@ class TestHeteroEnvs:
         td = env.rand_step()
         assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_rollout_one(self, batch_size, rollout_steps=1, n_agents=3):
         env = HeteroCountingEnv(batch_size=batch_size)
         td = env.rollout(rollout_steps)
@@ -1776,10 +1777,18 @@ class TestHeteroEnvs:
         assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
         assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
 
-    @pytest.mark.parametrize("batch_size", [(32,)])
-    def test_rollout_two(self, batch_size, rollout_steps=2, n_agents=3):
+    @pytest.mark.parametrize("batch_size", [()])
+    @pytest.mark.parametrize("rollout_steps", [2])
+    def test_rollout(self, batch_size, rollout_steps, n_agents=3):
         env = HeteroCountingEnv(batch_size=batch_size)
         td = env.rollout(rollout_steps)
+
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (*batch_size, rollout_steps)
+
+        assert isinstance(td["agents"], LazyStackedTensorDict)
+        assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
+        assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
 
 
 @pytest.mark.parametrize(
