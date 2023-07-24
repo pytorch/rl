@@ -43,6 +43,18 @@ else:
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
+def dense_stack_tds(
+    td_list: typing.Sequence[TensorDictBase], stack_dim: int = 0
+) -> TensorDictBase:
+    """Dnesely stack a list of TensorDictBase objects given that they have the same structure."""
+    shape = list(td_list[0].shape)
+    shape.insert(stack_dim, len(td_list))
+
+    out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
+
+    return torch.stack(td_list, dim=stack_dim, out=out)
+
+
 def unlazyfy_keys(
     td,
     recurse_through_entries: bool = True,

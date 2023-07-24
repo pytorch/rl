@@ -1759,26 +1759,14 @@ class TestHeteroEnvs:
     def test_rand_step(self, batch_size):
         env = HeteroCountingEnv(batch_size=batch_size)
         td = env.reset()
-        assert (td["agents"][..., 0]["agent_0_obs"] == 0).all()
+        assert (td["lazy"][..., 0]["tensor_0"] == 0).all()
         td = env.rand_step()
-        assert (td["next", "agents"][..., 0]["agent_0_obs"] == 1).all()
+        assert (td["next", "lazy"][..., 0]["tensor_0"] == 1).all()
         td = env.rand_step()
-        assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
+        assert (td["next", "lazy"][..., 1]["tensor_1"] == 2).all()
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
-    def test_rollout_one(self, batch_size, rollout_steps=1, n_agents=3):
-        env = HeteroCountingEnv(batch_size=batch_size)
-        td = env.rollout(rollout_steps)
-
-        assert isinstance(td, TensorDict)
-        assert td.batch_size == (*batch_size, rollout_steps)
-
-        assert isinstance(td["agents"], LazyStackedTensorDict)
-        assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
-        assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
-
-    @pytest.mark.parametrize("batch_size", [()])
-    @pytest.mark.parametrize("rollout_steps", [2])
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
     def test_rollout(self, batch_size, rollout_steps, n_agents=3):
         env = HeteroCountingEnv(batch_size=batch_size)
         td = env.rollout(rollout_steps)
@@ -1786,9 +1774,9 @@ class TestHeteroEnvs:
         assert isinstance(td, TensorDict)
         assert td.batch_size == (*batch_size, rollout_steps)
 
-        assert isinstance(td["agents"], LazyStackedTensorDict)
-        assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
-        assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
+        assert isinstance(td["lazy"], LazyStackedTensorDict)
+        assert td["lazy"].shape == (*batch_size, rollout_steps, n_agents)
+        assert td["lazy"].stack_dim == len(td["lazy"].batch_size) - 1
 
 
 @pytest.mark.parametrize(

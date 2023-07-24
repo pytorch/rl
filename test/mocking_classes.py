@@ -1297,7 +1297,7 @@ class HeteroCountingEnv(EnvBase):
 
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
         super().__init__(**kwargs)
-        self.n_agents = 3
+        self.n_nested_dim = 3
         self.max_steps = max_steps
         self.start_val = start_val
 
@@ -1306,16 +1306,16 @@ class HeteroCountingEnv(EnvBase):
 
         self.register_buffer("count", count)
 
-        agent_obs_specs = []
-        agent_action_specs = []
-        for angent_id in range(self.n_agents):
-            agent_obs_specs.append(self.get_agent_obs_spec(angent_id))
-            agent_action_specs.append(self.get_agent_action_spec(angent_id))
-        agent_obs_specs = torch.stack(agent_obs_specs, dim=0)
-        agent_action_specs = torch.stack(agent_action_specs, dim=0)
+        obs_specs = []
+        action_specs = []
+        for index in range(self.n_nested_dim):
+            obs_specs.append(self.get_agent_obs_spec(index))
+            action_specs.append(self.get_agent_action_spec(index))
+        obs_specs = torch.stack(obs_specs, dim=0)
+        action_specs = torch.stack(action_specs, dim=0)
 
         self.unbatched_observation_spec = CompositeSpec(
-            agents=agent_obs_specs,
+            lazy=obs_specs,
             state=UnboundedContinuousTensorSpec(
                 shape=(
                     64,
@@ -1326,27 +1326,31 @@ class HeteroCountingEnv(EnvBase):
         )
 
         self.unbatched_action_spec = CompositeSpec(
-            agents=agent_action_specs,
+            lazy=action_specs,
         )
         self.unbatched_reward_spec = CompositeSpec(
             {
-                "agents": CompositeSpec(
-                    {"reward": UnboundedContinuousTensorSpec(shape=(self.n_agents, 1))},
-                    shape=(self.n_agents,),
+                "lazy": CompositeSpec(
+                    {
+                        "reward": UnboundedContinuousTensorSpec(
+                            shape=(self.n_nested_dim, 1)
+                        )
+                    },
+                    shape=(self.n_nested_dim,),
                 )
             }
         )
         self.unbatched_done_spec = CompositeSpec(
             {
-                "agents": CompositeSpec(
+                "lazy": CompositeSpec(
                     {
                         "done": DiscreteTensorSpec(
                             n=2,
-                            shape=(self.n_agents, 1),
+                            shape=(self.n_nested_dim, 1),
                             dtype=torch.bool,
                         ),
                     },
-                    shape=(self.n_agents,),
+                    shape=(self.n_nested_dim,),
                 )
             }
         )
@@ -1365,35 +1369,31 @@ class HeteroCountingEnv(EnvBase):
         )
 
     def get_agent_obs_spec(self, i):
-        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(32, 32, 3))
+        camera = BoundedTensorSpec(minimum=0, maximum=200, shape=(7, 7, 3))
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
-        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(20,))
+        # lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(8,))
+        #
+        # tensor_0 = UnboundedContinuousTensorSpec(shape=(1,))
+        # tensor_1 = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        # tensor_2 = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
 
-        agent_0_obs = UnboundedContinuousTensorSpec(shape=(1,))
-        agent_1_obs = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
-        agent_2_obs = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
-
-        # Agents all have the same camera
-        # All have vector entry but different shapes
-        # First 2 have lidar and last sonar
-        # All have a different key agent_i_obs with different n_dims
         if i == 0:
             return CompositeSpec(
                 {
                     "camera": camera,
-                    "lidar": lidar,
+                    # "lidar": lidar,
                     "vector": vector_3d,
-                    "agent_0_obs": agent_0_obs,
+                    # "tensor_0": tensor_0,
                 }
             )
         elif i == 1:
             return CompositeSpec(
                 {
                     "camera": camera,
-                    "lidar": lidar,
+                    # "lidar": lidar,
                     "vector": vector_2d,
-                    "agent_1_obs": agent_1_obs,
+                    # "tensor_1": tensor_1,
                 }
             )
         elif i == 2:
@@ -1401,26 +1401,26 @@ class HeteroCountingEnv(EnvBase):
                 {
                     "camera": camera,
                     "vector": vector_2d,
-                    "agent_2_obs": agent_2_obs,
+                    # "tensor_2": tensor_2,
                 }
             )
         else:
-            raise ValueError(f"Index {i} undefined for 3 agents")
+            raise ValueError(f"Index {i} undefined for index 3")
 
     def get_agent_action_spec(self, i):
-        force_3d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(3,))
-        force_2d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(2,))
+        action_3d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(3,))
+        action_2d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(2,))
 
         # Some have 2d action and some 3d
         # TODO Introduce composite heterogeneous actions
         if i == 0:
-            ret = force_3d
+            ret = action_3d
         elif i == 1:
-            ret = force_2d
+            ret = action_2d
         elif i == 2:
-            ret = force_2d
+            ret = action_2d
         else:
-            raise ValueError(f"Index {i} undefined for 3 agents")
+            raise ValueError(f"Index {i} undefined for index 3")
 
         return CompositeSpec({"action": ret})
 
