@@ -12,8 +12,8 @@ import _utils_internal
 import pytest
 
 import torch
-from tensordict import TensorDict
-
+from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict._tensordict import _unravel_key_to_tuple
 from torchrl._utils import get_binary_env_var, implement_for
 from torchrl.data.utils import unlazyfy_keys
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
@@ -285,108 +285,112 @@ def test_set_gym_backend_types():
 
 
 class TestUnlazify:
-    def get_agent_tensors(
-        self,
-        i,
-    ):
-        camera = torch.zeros(32, 32, 3)
-        vector_3d = torch.zeros(3)
-        vector_2d = torch.zeros(2)
-        lidar = torch.zeros(20)
+    @staticmethod
+    def nested_lazy_het_td(batch_size):
+        shared = torch.zeros(4, 4, 2)
+        hetero_3d = torch.zeros(3)
+        hetero_2d = torch.zeros(2)
 
-        agent_0_obs = torch.zeros(1)
-        agent_1_obs = torch.zeros(1, 2)
-        agent_2_obs = torch.zeros(1, 2, 3)
+        individual_0_tensor = torch.zeros(1)
+        individual_1_tensor = torch.zeros(1, 2)
+        individual_2_tensor = torch.zeros(1, 2, 3)
 
-        if i == 0:
-            return TensorDict(
+        td_list = [
+            TensorDict(
                 {
-                    "camera": camera,
-                    "lidar": lidar,
-                    "vector": vector_3d,
-                    "agent_0_obs": TensorDict({"agent_0_obs": agent_0_obs}, []),
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_0_tensor": individual_0_tensor,
                 },
                 [],
-            )
-        elif i == 1:
-            return TensorDict(
+            ),
+            TensorDict(
                 {
-                    "camera": camera,
-                    "lidar": lidar,
-                    "vector": vector_2d,
-                    "agent_1_obs": TensorDict({"agent_1_obs": agent_1_obs}, []),
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_1_tensor": individual_1_tensor,
                 },
                 [],
-            )
-        elif i == 2:
-            return TensorDict(
+            ),
+            TensorDict(
                 {
-                    "camera": camera,
-                    "vector": vector_2d,
-                    "agent_2_obs": TensorDict({"agent_2_obs": agent_2_obs}, []),
+                    "shared": shared,
+                    "hetero": hetero_2d,
+                    "individual_2_tensor": individual_2_tensor,
                 },
                 [],
-            )
-        else:
-            raise ValueError(f"Index {i} undefined for 3 agents")
+            ),
+        ]
+        for i, td in enumerate(td_list):
+            td[f"individual_{i}_td"] = td.clone()
+            td["shared_td"] = td.clone()
 
-    def get_lazy_stack(self, batch_size):
-        agent_obs = []
-        for angent_id in range(3):
-            agent_obs.append(self.get_agent_tensors(angent_id))
-        agent_obs = torch.stack(agent_obs, dim=0)
+        td_stack = torch.stack(td_list, dim=0)
         obs = TensorDict(
-            {
-                "agents": agent_obs,
-                "state": torch.zeros(
-                    64,
-                    64,
-                    3,
-                ),
-            },
+            {"lazy": td_stack, "dense": torch.zeros(3, 3, 2)},
             [],
         )
         obs = obs.expand(batch_size)
         return obs
 
+    @staticmethod
+    def check_no_lazy_keys(td, recurse: bool = True):
+        if isinstance(td, LazyStackedTensorDict):
+            keys = set(td.keys())
+            for t in td.tensordicts:
+                if recurse and not TestUnlazify.check_no_lazy_keys(t):
+                    return False
+                if set(t.keys()) != keys:
+                    return False
+        elif isinstance(td, TensorDict) and recurse:
+            for i in td.values():
+                if not TestUnlazify.check_no_lazy_keys(i):
+                    return False
+        elif isinstance(td, torch.Tensor):
+            return True
+        else:
+            return False
+
+        return True
+
+    @staticmethod
+    def get_all_keys(td, include_lazy: bool):
+        keys = set()
+        if isinstance(td, LazyStackedTensorDict) and include_lazy:
+            for t in td.tensordicts:
+                keys = keys.union(
+                    TestUnlazify.get_all_keys(t, include_lazy=include_lazy)
+                )
+        if isinstance(td, TensorDictBase):
+            for key in td.keys():
+                try:
+                    keys.add((key,))
+                    value = td.get(key)
+                    inner_keys = TestUnlazify.get_all_keys(
+                        value, include_lazy=include_lazy
+                    )
+                    for inner_key in inner_keys:
+                        keys.add((key,) + _unravel_key_to_tuple(inner_key))
+                except RuntimeError:
+                    pass
+        return keys
+
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_unlazify(self, batch_size):
-        obs = self.get_lazy_stack(batch_size)
+        obs = self.nested_lazy_het_td(batch_size)
+        obs_lazy = obs["lazy"].clone()
 
-        assert "camera" in obs["agents"].keys()
-        assert "vector" in obs["agents"].keys()
-        assert "agent_0_obs" not in obs["agents"].keys()
-        assert "agent_1_obs" not in obs["agents"].keys()
+        assert not TestUnlazify.check_no_lazy_keys(obs_lazy)
 
-        obs = unlazyfy_keys(obs, recurse_through_entries=False)
+        obs_lazy = unlazyfy_keys(obs_lazy, recurse_through_entries=False)
+        assert TestUnlazify.check_no_lazy_keys(obs_lazy, recurse=False)
 
-        assert "camera" in obs["agents"].keys()
-        assert "vector" in obs["agents"].keys()
-        assert "agent_0_obs" not in obs["agents"].keys()
-        assert "agent_1_obs" not in obs["agents"].keys()
+        obs_lazy = unlazyfy_keys(obs_lazy, recurse_through_entries=True)
+        assert TestUnlazify.check_no_lazy_keys(obs_lazy, recurse=True)
 
-        agent_obs_proc = unlazyfy_keys(obs["agents"], recurse_through_entries=False)
-
-        assert "camera" in agent_obs_proc.keys()
-        assert "vector" in agent_obs_proc.keys()
-        assert "agent_0_obs" in agent_obs_proc.keys()
-        assert "agent_1_obs" in agent_obs_proc.keys()
-        assert "agent_2_obs" in agent_obs_proc.keys()
-
-        assert not len(agent_obs_proc["agent_0_obs"].keys())
-        assert not len(agent_obs_proc["agent_1_obs"].keys())
-        assert not len(agent_obs_proc["agent_2_obs"].keys())
-
-        agent_obs_proc = unlazyfy_keys(obs["agents"], recurse_through_entries=True)
-
-        assert "camera" in agent_obs_proc.keys()
-        assert "vector" in agent_obs_proc.keys()
-        assert "agent_0_obs" in agent_obs_proc.keys()
-        assert "agent_1_obs" in agent_obs_proc.keys()
-        assert "agent_2_obs" in agent_obs_proc.keys()
-        assert "agent_0_obs" in agent_obs_proc["agent_0_obs"].keys()
-        assert "agent_1_obs" in agent_obs_proc["agent_1_obs"].keys()
-        assert "agent_2_obs" in agent_obs_proc["agent_2_obs"].keys()
+        assert TestUnlazify.get_all_keys(
+            obs["lazy"], include_lazy=True
+        ) == TestUnlazify.get_all_keys(obs_lazy, include_lazy=False)
 
 
 if __name__ == "__main__":
