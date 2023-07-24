@@ -52,7 +52,7 @@ def unlazyfy_keys(
         keys = set(td.keys())  # shared keys
         lazy_keys_per_td = [
             set() for _ in range(len(td.tensordicts))
-        ]  # list of lay keys per td
+        ]  # list of lazy keys per td
         lazy_keys_examples = {}  # set of all lazy keys with an example for each
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
