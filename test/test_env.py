@@ -50,6 +50,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import unlazyfy_keys
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
@@ -1418,6 +1419,7 @@ def test_batch_unlocked(device):
     env.step(td_expanded)
 
 
+@pytest.mark.parametrize("device", get_default_devices())
 def test_batch_unlocked_with_batch_size(device):
     env = MockBatchedUnLockedEnv(device, batch_size=torch.Size([2]))
     assert not env.batch_locked
@@ -1764,10 +1766,9 @@ class TestHeteroEnvs:
         td = env.rand_step()
         assert (td["next", "agents"][..., 1]["agent_1_obs"] == 2).all()
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_rollout_one(self, batch_size, rollout_steps=1, n_agents=3):
         env = HeteroCountingEnv(batch_size=batch_size)
-        td = env.rollout(rollout_steps, return_contiguous=True)
+        td = env.rollout(rollout_steps)
 
         assert isinstance(td, TensorDict)
         assert td.batch_size == (*batch_size, rollout_steps)
@@ -1775,6 +1776,87 @@ class TestHeteroEnvs:
         assert isinstance(td["agents"], LazyStackedTensorDict)
         assert td["agents"].shape == (*batch_size, rollout_steps, n_agents)
         assert td["agents"].stack_dim == len(td["agents"].batch_size) - 1
+
+    @pytest.mark.parametrize("batch_size", [(32,)])
+    def test_rollout_two(self, batch_size, rollout_steps=2, n_agents=3):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.rollout(rollout_steps)
+
+
+class TestNestedLazyStacks:
+    def get_agent_tensors(
+        self,
+        i,
+    ):
+        camera = torch.zeros(32, 32, 3)
+        vector_3d = torch.zeros(3)
+        vector_2d = torch.zeros(2)
+        lidar = torch.zeros(20)
+
+        agent_0_obs = torch.zeros(1)
+        agent_1_obs = torch.zeros(1, 2)
+        agent_2_obs = torch.zeros(1, 2, 3)
+
+        # Agents all have the same camera
+        # All have vector entry but different shapes
+        # First 2 have lidar and last sonar
+        # All have a different key agent_i_obs with different n_dims
+        if i == 0:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_3d,
+                    "agent_0_obs": TensorDict({"agent_0_obs": agent_0_obs}, []),
+                },
+                [],
+            )
+        elif i == 1:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_2d,
+                    "agent_1_obs": TensorDict({"agent_1_obs": agent_1_obs}, []),
+                },
+                [],
+            )
+        elif i == 2:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "vector": vector_2d,
+                    "agent_2_obs": TensorDict({"agent_2_obs": agent_2_obs}, []),
+                },
+                [],
+            )
+        else:
+            raise ValueError(f"Index {i} undefined for 3 agents")
+
+    def get_lazy_stack(self, batch_size):
+        agent_obs = []
+        for angent_id in range(3):
+            agent_obs.append(self.get_agent_tensors(angent_id))
+        agent_obs = torch.stack(agent_obs, dim=0)
+        obs = TensorDict(
+            {
+                "agents": agent_obs,
+                "state": torch.zeros(
+                    64,
+                    64,
+                    3,
+                ),
+            },
+            [],
+        )
+        obs = obs.expand(batch_size)
+        return obs
+
+    def test(self):
+        obs = self.get_lazy_stack(())
+        print(obs)
+        obs = unlazyfy_keys(obs)
+        print(obs)
 
 
 @pytest.mark.parametrize(
