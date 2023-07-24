@@ -37,7 +37,7 @@ For example:
 python mappo_ippo.py
 ```
 
-You can even change the config frim the command line like:
+You can even change the config from the command line like:
 
 ```bash
 python mappo_ippo.py --m env.scenario_name=navigation
