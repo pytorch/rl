@@ -11,7 +11,11 @@ from unittest import mock
 import _utils_internal
 import pytest
 
+import torch
+from tensordict import TensorDict
+
 from torchrl._utils import get_binary_env_var, implement_for
+from torchrl.data.utils import unlazyfy_keys
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -278,6 +282,111 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
     with set_gym_backend(gym):
         assert gym_backend() == gym
+
+
+class TestUnlazify:
+    def get_agent_tensors(
+        self,
+        i,
+    ):
+        camera = torch.zeros(32, 32, 3)
+        vector_3d = torch.zeros(3)
+        vector_2d = torch.zeros(2)
+        lidar = torch.zeros(20)
+
+        agent_0_obs = torch.zeros(1)
+        agent_1_obs = torch.zeros(1, 2)
+        agent_2_obs = torch.zeros(1, 2, 3)
+
+        if i == 0:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_3d,
+                    "agent_0_obs": TensorDict({"agent_0_obs": agent_0_obs}, []),
+                },
+                [],
+            )
+        elif i == 1:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "lidar": lidar,
+                    "vector": vector_2d,
+                    "agent_1_obs": TensorDict({"agent_1_obs": agent_1_obs}, []),
+                },
+                [],
+            )
+        elif i == 2:
+            return TensorDict(
+                {
+                    "camera": camera,
+                    "vector": vector_2d,
+                    "agent_2_obs": TensorDict({"agent_2_obs": agent_2_obs}, []),
+                },
+                [],
+            )
+        else:
+            raise ValueError(f"Index {i} undefined for 3 agents")
+
+    def get_lazy_stack(self, batch_size):
+        agent_obs = []
+        for angent_id in range(3):
+            agent_obs.append(self.get_agent_tensors(angent_id))
+        agent_obs = torch.stack(agent_obs, dim=0)
+        obs = TensorDict(
+            {
+                "agents": agent_obs,
+                "state": torch.zeros(
+                    64,
+                    64,
+                    3,
+                ),
+            },
+            [],
+        )
+        obs = obs.expand(batch_size)
+        return obs
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_unlazify(self, batch_size):
+        obs = self.get_lazy_stack(batch_size)
+
+        assert "camera" in obs["agents"].keys()
+        assert "vector" in obs["agents"].keys()
+        assert "agent_0_obs" not in obs["agents"].keys()
+        assert "agent_1_obs" not in obs["agents"].keys()
+
+        obs = unlazyfy_keys(obs, recurse_through_entries=False)
+
+        assert "camera" in obs["agents"].keys()
+        assert "vector" in obs["agents"].keys()
+        assert "agent_0_obs" not in obs["agents"].keys()
+        assert "agent_1_obs" not in obs["agents"].keys()
+
+        agent_obs_proc = unlazyfy_keys(obs["agents"], recurse_through_entries=False)
+
+        assert "camera" in agent_obs_proc.keys()
+        assert "vector" in agent_obs_proc.keys()
+        assert "agent_0_obs" in agent_obs_proc.keys()
+        assert "agent_1_obs" in agent_obs_proc.keys()
+        assert "agent_2_obs" in agent_obs_proc.keys()
+
+        assert not len(agent_obs_proc["agent_0_obs"].keys())
+        assert not len(agent_obs_proc["agent_1_obs"].keys())
+        assert not len(agent_obs_proc["agent_2_obs"].keys())
+
+        agent_obs_proc = unlazyfy_keys(obs["agents"], recurse_through_entries=True)
+
+        assert "camera" in agent_obs_proc.keys()
+        assert "vector" in agent_obs_proc.keys()
+        assert "agent_0_obs" in agent_obs_proc.keys()
+        assert "agent_1_obs" in agent_obs_proc.keys()
+        assert "agent_2_obs" in agent_obs_proc.keys()
+        assert "agent_0_obs" in agent_obs_proc["agent_0_obs"].keys()
+        assert "agent_1_obs" in agent_obs_proc["agent_1_obs"].keys()
+        assert "agent_2_obs" in agent_obs_proc["agent_2_obs"].keys()
 
 
 if __name__ == "__main__":
