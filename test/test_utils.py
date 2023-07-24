@@ -6,17 +6,21 @@ import argparse
 import os
 import sys
 from importlib import import_module
-from typing import Union
 from unittest import mock
 
 import _utils_internal
 import pytest
 
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict import TensorDict
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.data.utils import relazyfy_keys, unlazyfy_keys
+from torchrl.data.utils import (
+    all_eq,
+    check_no_lazy_keys,
+    get_all_keys,
+    relazyfy_keys,
+    unlazyfy_keys,
+)
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -334,99 +338,25 @@ class TestUnlazify:
         obs = obs.expand(batch_size)
         return obs
 
-    @staticmethod
-    def check_no_lazy_keys(td, recurse: bool = True):
-        if isinstance(td, LazyStackedTensorDict):
-            keys = set(td.keys())
-            for t in td.tensordicts:
-                if recurse and not TestUnlazify.check_no_lazy_keys(t):
-                    return False
-                if set(t.keys()) != keys:
-                    return False
-        elif isinstance(td, TensorDict) and recurse:
-            for i in td.values():
-                if not TestUnlazify.check_no_lazy_keys(i):
-                    return False
-        elif isinstance(td, torch.Tensor):
-            return True
-        else:
-            return False
-
-        return True
-
-    @staticmethod
-    def get_all_keys(td, include_lazy: bool):
-        keys = set()
-        if isinstance(td, LazyStackedTensorDict) and include_lazy:
-            for t in td.tensordicts:
-                keys = keys.union(
-                    TestUnlazify.get_all_keys(t, include_lazy=include_lazy)
-                )
-        if isinstance(td, TensorDictBase):
-            for key in td.keys():
-                try:
-                    keys.add((key,))
-                    value = td.get(key)
-                    inner_keys = TestUnlazify.get_all_keys(
-                        value, include_lazy=include_lazy
-                    )
-                    for inner_key in inner_keys:
-                        keys.add((key,) + _unravel_key_to_tuple(inner_key))
-                except RuntimeError:
-                    pass
-        return keys
-
-    @staticmethod
-    def all_eq(
-        td: Union[TensorDictBase, torch.Tensor],
-        other: Union[TensorDictBase, torch.Tensor],
-    ):
-        if td.__class__ != other.__class__:
-            return False
-
-        if td.shape != other.shape or td.device != other.device:
-            return False
-
-        if isinstance(td, LazyStackedTensorDict):
-            if td.stack_dim != other.stack_dim:
-                return False
-            for t, o in zip(td.tensordicts, other.tensordicts):
-                if not TestUnlazify.all_eq(t, o):
-                    return False
-        elif isinstance(td, TensorDictBase):
-            td_keys = list(td.keys())
-            other_keys = list(other.keys())
-            if td_keys != other_keys:
-                return False
-            for k in td_keys:
-                if not TestUnlazify.all_eq(td[k], other[k]):
-                    return False
-        elif isinstance(td, torch.Tensor):
-            return torch.equal(td, other)
-        else:
-            raise AssertionError()
-
-        return True
-
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_lazify(self, batch_size):
         obs = self.nested_lazy_het_td(batch_size)
         obs_lazy = obs["lazy"].clone()
 
-        assert not TestUnlazify.check_no_lazy_keys(obs_lazy)
+        assert not check_no_lazy_keys(obs_lazy)
 
         obs_lazy = unlazyfy_keys(obs_lazy, recurse_through_entries=False)
-        assert TestUnlazify.check_no_lazy_keys(obs_lazy, recurse=False)
+        assert check_no_lazy_keys(obs_lazy, recurse=False)
 
         obs_lazy = unlazyfy_keys(obs_lazy, recurse_through_entries=True)
-        assert TestUnlazify.check_no_lazy_keys(obs_lazy, recurse=True)
+        assert check_no_lazy_keys(obs_lazy, recurse=True)
 
-        assert TestUnlazify.get_all_keys(
-            obs["lazy"], include_lazy=True
-        ) == TestUnlazify.get_all_keys(obs_lazy, include_lazy=False)
+        assert get_all_keys(obs["lazy"], include_lazy=True) == get_all_keys(
+            obs_lazy, include_lazy=False
+        )
 
         relazyfyied_obs = relazyfy_keys(obs_lazy)
-        assert TestUnlazify.all_eq(relazyfyied_obs, obs["lazy"])
+        assert all_eq(relazyfyied_obs, obs["lazy"])
 
 
 if __name__ == "__main__":
