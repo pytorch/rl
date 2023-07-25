@@ -109,7 +109,7 @@ def _unlazyfy_td(
                 lazy_key_example = lazy_keys_examples[lazy_key]
                 sub_td.set(
                     lazy_key,
-                    _empty_like(lazy_key_example, sub_td.batch_size),
+                    _empty_like_td(lazy_key_example, sub_td.batch_size),
                 )
             td.tensordicts[td_index] = sub_td
 
@@ -159,7 +159,7 @@ def _relazyfy_td(
     return td
 
 
-def _empty_like(td, batch_size):
+def _empty_like_td(td, batch_size):
     if is_tensor_collection(td):
         return td.empty()
     else:
@@ -243,18 +243,18 @@ def _empty_like_spec(spec, shape):
         return spec.__class__(shape=shape)
 
 
-def _check_no_lazy_keys(td, recurse: bool = True):
+def _check_no_lazy_keys_td(td, recurse: bool = True):
     """Given a TensorDictBase, returns true if there are no lazy keys."""
     if isinstance(td, LazyStackedTensorDict):
         keys = set(td.keys())
         for inner_td in td.tensordicts:
-            if recurse and not _check_no_lazy_keys(inner_td):
+            if recurse and not _check_no_lazy_keys_td(inner_td):
                 return False
             if set(inner_td.keys()) != keys:
                 return False
     elif isinstance(td, TensorDict) and recurse:
         for i in td.values():
-            if not _check_no_lazy_keys(i):
+            if not _check_no_lazy_keys_td(i):
                 return False
     elif isinstance(td, torch.Tensor):
         return True
