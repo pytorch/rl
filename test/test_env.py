@@ -33,6 +33,7 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    HeteroCountingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -40,7 +41,7 @@ from mocking_classes import (
 )
 from packaging import version
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1669,7 +1670,6 @@ class TestConcurrentEnvs:
 class TestNestedSpecs:
     @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
     def test_nested_env(self, envclass):
-
         if envclass == "CountingEnv":
             env = CountingEnv()
         elif envclass == "NestedCountingEnv":
@@ -1700,7 +1700,6 @@ class TestNestedSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
         td_reset = env.reset()
@@ -1750,6 +1749,36 @@ class TestNestedSpecs:
         )
 
 
+class TestHeteroEnvs:
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_reset(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        env.reset()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rand_step(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.reset()
+        assert (td["lazy"][..., 0]["tensor_0"] == 0).all()
+        td = env.rand_step()
+        assert (td["next", "lazy"][..., 0]["tensor_0"] == 1).all()
+        td = env.rand_step()
+        assert (td["next", "lazy"][..., 1]["tensor_1"] == 2).all()
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
+    def test_rollout(self, batch_size, rollout_steps, n_agents=3):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.rollout(rollout_steps)
+
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (*batch_size, rollout_steps)
+
+        assert isinstance(td["lazy"], LazyStackedTensorDict)
+        assert td["lazy"].shape == (*batch_size, rollout_steps, n_agents)
+        assert td["lazy"].stack_dim == len(td["lazy"].batch_size) - 1
+
+
 @pytest.mark.parametrize(
     "envclass",
     [
@@ -1768,6 +1797,7 @@ class TestNestedSpecs:
         MockBatchedUnLockedEnv,
         MockSerialEnv,
         NestedCountingEnv,
+        HeteroCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):
