@@ -22,7 +22,7 @@ jobs:
         set -euxo pipefail
 
         export PYTHON_VERSION="3.9"
-        export CU_VERSION="11.6"
+        export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
         export docker_image="pytorch/manylinux-cuda116"
