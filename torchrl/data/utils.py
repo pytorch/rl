@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import re
+
 import typing
 from typing import Any, Callable, List, Tuple, Union
 
@@ -14,7 +14,6 @@ from tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict._tensordict import _unravel_key_to_tuple
 from torch import Tensor
 
 
@@ -55,7 +54,7 @@ def dense_stack_tds(
     return torch.stack(td_list, dim=stack_dim, out=out)
 
 
-def unlazyfy_keys(
+def _unlazyfy_keys(
     td,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
@@ -75,7 +74,7 @@ def unlazyfy_keys(
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
             if recurse_through_stack:
-                sub_td = unlazyfy_keys(
+                sub_td = _unlazyfy_keys(
                     sub_td, recurse_through_entries, recurse_through_stack
                 )
                 td.tensordicts[td_index] = sub_td
@@ -83,22 +82,18 @@ def unlazyfy_keys(
                 if sub_td_key not in keys:  # lazy key
                     lazy_keys_per_td[td_index].add(sub_td_key)
                     if sub_td_key not in lazy_keys_examples:
-                        try:
+                        shape = sub_td.get_item_shape(sub_td_key)
+                        if -1 not in shape:
                             value = sub_td.get(sub_td_key)
-                        except RuntimeError as err:
-                            if re.match(
-                                r"Found more than one unique shape in the tensors",
-                                str(err),
-                            ):
-                                # sub_td_key is het leaf so lets recurse to a dense version of it to get the example
-                                temp_td = sub_td
-                                while hasattr(
-                                    temp_td, "tensordicts"
-                                ):  # we need to grab the het tensor from the inner nesting level
-                                    temp_td = sub_td.tensordicts[0]
-                                value = temp_td.get(sub_td_key)
-                            else:
-                                raise err
+                        else:
+                            # sub_td_key is het leaf so lets recurse to a dense version of it to get the example
+                            temp_td = sub_td
+                            while hasattr(
+                                temp_td, "tensordicts"
+                            ):  # we need to grab the het tensor from the inner nesting level
+                                temp_td = sub_td.tensordicts[0]
+                            value = temp_td.get(sub_td_key)
+
                         lazy_keys_examples.update({sub_td_key: value})
 
         for td_index in range(len(td.tensordicts)):  # add missing lazy entries
@@ -115,25 +110,19 @@ def unlazyfy_keys(
 
     if recurse_through_entries:
         for key in td.keys():
-            try:
+            shape = td.get_item_shape(key)
+            if -1 not in shape:
                 td.set(
                     key,
-                    unlazyfy_keys(
+                    _unlazyfy_keys(
                         td.get(key), recurse_through_entries, recurse_through_stack
                     ),
                 )
-            except RuntimeError as err:
-                if re.match(
-                    r"Found more than one unique shape in the tensors", str(err)
-                ):
-                    pass  # no need to unlazify since key is het leaf
-                else:
-                    raise err
 
     return td
 
 
-def relazyfy_keys(
+def _relazyfy_keys(
     td,
 ):
     """Given a TensorDictBase, restores lazy keys by removing 0 shaped tensors and related orphan tensordicts."""
@@ -145,12 +134,13 @@ def relazyfy_keys(
     if isinstance(td, LazyStackedTensorDict):
         for td_index in range(len(td.tensordicts)):
             sub_td = td.tensordicts[td_index]
-            sub_td = relazyfy_keys(sub_td)
+            sub_td = _relazyfy_keys(sub_td)
             td.tensordicts[td_index] = sub_td
 
     for key in list(td.keys()):
-        try:
-            value = relazyfy_keys(td.get(key))
+        shape = td.get_item_shape(key)
+        if -1 not in shape:
+            value = _relazyfy_keys(td.get(key))
             if value is None:
                 del td[key]
             else:
@@ -158,11 +148,6 @@ def relazyfy_keys(
                     key,
                     value,
                 )
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                pass
-            else:
-                raise err
 
     if isinstance(td, TensorDict) and not len(td.keys()):
         return None
@@ -182,18 +167,18 @@ def _empty_like(td, batch_size):
         )
 
 
-def check_no_lazy_keys(td, recurse: bool = True):
+def _check_no_lazy_keys(td, recurse: bool = True):
     """Given a TensorDictBase, returns true if there are no lazy keys."""
     if isinstance(td, LazyStackedTensorDict):
         keys = set(td.keys())
-        for t in td.tensordicts:
-            if recurse and not check_no_lazy_keys(t):
+        for inner_td in td.tensordicts:
+            if recurse and not _check_no_lazy_keys(inner_td):
                 return False
-            if set(t.keys()) != keys:
+            if set(inner_td.keys()) != keys:
                 return False
     elif isinstance(td, TensorDict) and recurse:
         for i in td.values():
-            if not check_no_lazy_keys(i):
+            if not _check_no_lazy_keys(i):
                 return False
     elif isinstance(td, torch.Tensor):
         return True
@@ -203,26 +188,7 @@ def check_no_lazy_keys(td, recurse: bool = True):
     return True
 
 
-def get_all_keys(td, include_lazy: bool):
-    """Given a TensorDictBase, returns all lazy and not lazy keys as a set tuples."""
-    keys = set()
-    if isinstance(td, LazyStackedTensorDict) and include_lazy:
-        for t in td.tensordicts:
-            keys = keys.union(get_all_keys(t, include_lazy=include_lazy))
-    if isinstance(td, TensorDictBase):
-        for key in td.keys():
-            try:
-                keys.add((key,))
-                value = td.get(key)
-                inner_keys = get_all_keys(value, include_lazy=include_lazy)
-                for inner_key in inner_keys:
-                    keys.add((key,) + _unravel_key_to_tuple(inner_key))
-            except RuntimeError:
-                pass
-    return keys
-
-
-def all_eq(
+def _all_eq(
     td: Union[TensorDictBase, torch.Tensor],
     other: Union[TensorDictBase, torch.Tensor],
 ):
@@ -236,21 +202,21 @@ def all_eq(
     if isinstance(td, LazyStackedTensorDict):
         if td.stack_dim != other.stack_dim:
             return False
-        for t, o in zip(td.tensordicts, other.tensordicts):
-            if not all_eq(t, o):
+        for stacked_td, stacked_other in zip(td.tensordicts, other.tensordicts):
+            if not _all_eq(stacked_td, stacked_other):
                 return False
     elif isinstance(td, TensorDictBase):
-        td_keys = list(td.keys())
-        other_keys = list(other.keys())
+        td_keys = set(td.keys())
+        other_keys = set(other.keys())
         if td_keys != other_keys:
             return False
-        for k in td_keys:
-            if not all_eq(td[k], other[k]):
+        for key in td_keys:
+            if not _all_eq(td[key], other[key]):
                 return False
     elif isinstance(td, torch.Tensor):
         return torch.equal(td, other)
     else:
-        raise AssertionError()
+        raise ValueError("_all_eq was provided arguments from the wrong class")
 
     return True
 
