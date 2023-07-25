@@ -19,6 +19,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import _unlazyfy_spec
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
 
@@ -1312,10 +1313,11 @@ class HeteroCountingEnv(EnvBase):
             obs_specs.append(self.get_agent_obs_spec(index))
             action_specs.append(self.get_agent_action_spec(index))
         obs_specs = torch.stack(obs_specs, dim=0)
+        obs_spec_unlazy = _unlazyfy_spec(obs_specs)
         action_specs = torch.stack(action_specs, dim=0)
 
         self.unbatched_observation_spec = CompositeSpec(
-            lazy=obs_specs,
+            lazy=obs_spec_unlazy,
             state=UnboundedContinuousTensorSpec(
                 shape=(
                     64,
@@ -1372,28 +1374,28 @@ class HeteroCountingEnv(EnvBase):
         camera = BoundedTensorSpec(minimum=0, maximum=200, shape=(7, 7, 3))
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
-        # lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(8,))
-        #
-        # tensor_0 = UnboundedContinuousTensorSpec(shape=(1,))
-        # tensor_1 = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
-        # tensor_2 = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
+        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(8,))
+
+        tensor_0 = UnboundedContinuousTensorSpec(shape=(1,))
+        tensor_1 = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        tensor_2 = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
 
         if i == 0:
             return CompositeSpec(
                 {
                     "camera": camera,
-                    # "lidar": lidar,
+                    "lidar": lidar,
                     "vector": vector_3d,
-                    # "tensor_0": tensor_0,
+                    "tensor_0": tensor_0,
                 }
             )
         elif i == 1:
             return CompositeSpec(
                 {
                     "camera": camera,
-                    # "lidar": lidar,
+                    "lidar": lidar,
                     "vector": vector_2d,
-                    # "tensor_1": tensor_1,
+                    "tensor_1": tensor_1,
                 }
             )
         elif i == 2:
@@ -1401,7 +1403,7 @@ class HeteroCountingEnv(EnvBase):
                 {
                     "camera": camera,
                     "vector": vector_2d,
-                    # "tensor_2": tensor_2,
+                    "tensor_2": tensor_2,
                 }
             )
         else:

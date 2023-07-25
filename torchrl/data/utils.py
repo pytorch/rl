@@ -279,9 +279,12 @@ def _empty_like_spec(spec, shape):
             spec.stack_dim,
         )
     else:
-        shape = [dim if i < len(shape) else 0 for i, dim in enumerate(spec.shape)]
+        spec_shape = spec.shape
+        shape = [dim if i < len(shape) else 0 for i, dim in enumerate(spec_shape)]
+        spec = spec[(0,) * len(spec_shape)]
+        spec = spec.expand(shape)
 
-        return spec.__class__(shape=shape)
+        return spec
 
 
 def _check_no_lazy_keys_td(td, recurse: bool = True):
