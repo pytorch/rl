@@ -2201,21 +2201,19 @@ class TestDenseStackedCompositeSpecs:
 
 
 class TestLazyStackedCompositeSpecs:
-    def _get_het_specs(self, stack_dim: int = 0, batch_size=()):
-        specs = []
-        for i in range(3):
-            specs.append(self._get_sinlge_spec(i, batch_size=batch_size))
-        return torch.stack(specs, dim=stack_dim)
-
-    def _get_sinlge_spec(self, i, batch_size=()):
-        camera = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
-        vector_3d = UnboundedContinuousTensorSpec(
+    def _get_het_specs(
+        self,
+        batch_size=(),
+        stack_dim: int = 0,
+    ):
+        shared = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
+        hetero_3d = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
                 3,
             )
         )
-        vector_2d = UnboundedContinuousTensorSpec(
+        hetero_2d = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
                 2,
@@ -2230,9 +2228,9 @@ class TestLazyStackedCompositeSpecs:
             ),
         )
 
-        agent_0_obs = CompositeSpec(
+        individual_0_obs = CompositeSpec(
             {
-                "agent_0_obs_0": UnboundedContinuousTensorSpec(
+                "individual_0_obs_0": UnboundedContinuousTensorSpec(
                     shape=(
                         *batch_size,
                         3,
@@ -2242,58 +2240,53 @@ class TestLazyStackedCompositeSpecs:
             },
             shape=(*batch_size, 3),
         )
-        agent_1_obs = CompositeSpec(
+        individual_1_obs = CompositeSpec(
             {
-                "agent_1_obs_0": BoundedTensorSpec(
+                "individual_1_obs_0": BoundedTensorSpec(
                     minimum=0, maximum=3, shape=(*batch_size, 3, 1, 2)
                 )
             },
             shape=(*batch_size, 3),
         )
-        agent_2_obs = CompositeSpec(
+        individual_2_obs = CompositeSpec(
             {
-                "agent_1_obs_0": UnboundedContinuousTensorSpec(
+                "individual_1_obs_0": UnboundedContinuousTensorSpec(
                     shape=(*batch_size, 3, 1, 2, 3)
                 )
             },
             shape=(*batch_size, 3),
         )
 
-        # Agents all have the same camera
-        # All have vector entry but different shapes
-        # First 2 have lidar and last sonar
-        # All have a different key agent_i_obs with different n_dims
-        if i == 0:
-            return CompositeSpec(
+        spec_list = [
+            CompositeSpec(
                 {
-                    "camera": camera,
+                    "shared": shared,
                     "lidar": lidar,
-                    "vector": vector_3d,
-                    "agent_0_obs": agent_0_obs,
+                    "hetero": hetero_3d,
+                    "individual_0_obs": individual_0_obs,
                 },
                 shape=batch_size,
-            )
-        elif i == 1:
-            return CompositeSpec(
+            ),
+            CompositeSpec(
                 {
-                    "camera": camera,
+                    "shared": shared,
                     "lidar": lidar,
-                    "vector": vector_2d,
-                    "agent_1_obs": agent_1_obs,
+                    "hetero": hetero_2d,
+                    "individual_1_obs": individual_1_obs,
                 },
                 shape=batch_size,
-            )
-        elif i == 2:
-            return CompositeSpec(
+            ),
+            CompositeSpec(
                 {
-                    "camera": camera,
-                    "vector": vector_2d,
-                    "agent_2_obs": agent_2_obs,
+                    "shared": shared,
+                    "hetero": hetero_2d,
+                    "individual_2_obs": individual_2_obs,
                 },
                 shape=batch_size,
-            )
-        else:
-            raise AssertionError()
+            ),
+        ]
+
+        return torch.stack(spec_list, dim=stack_dim)
 
     def test_stack_index(self):
         c1 = CompositeSpec(a=UnboundedContinuousTensorSpec())
@@ -2577,13 +2570,13 @@ class TestLazyStackedCompositeSpecs:
         cus = cu.squeeze(0)
         assert cus == c
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_len(self, batch_size):
         c = self._get_het_specs(batch_size=batch_size)
         assert len(c) == c.shape[0]
         assert len(c) == len(c.rand())
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_eq(self, batch_size):
         c = self._get_het_specs(batch_size=batch_size)
         c2 = self._get_het_specs(batch_size=batch_size)
@@ -2591,7 +2584,7 @@ class TestLazyStackedCompositeSpecs:
         assert c == c2 and not c != c2
         assert c == c.clone() and not c != c.clone()
 
-        del c2["camera"]
+        del c2["shared"]
         assert not c == c2 and c != c2
 
         c2 = self._get_het_specs(batch_size=batch_size)
@@ -2603,7 +2596,7 @@ class TestLazyStackedCompositeSpecs:
         c2[0]["lidar"].space.minimum += 1
         assert not c == c2 and c != c2
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     @pytest.mark.parametrize("include_nested", [True, False])
     @pytest.mark.parametrize("leaves_only", [True, False])
     def test_del(self, batch_size, include_nested, leaves_only):
@@ -2631,38 +2624,38 @@ class TestLazyStackedCompositeSpecs:
             == 0
         )
         with pytest.raises(KeyError):
-            del c["agent_1_obs_0"]
+            del c["individual_1_obs_0"]
         with pytest.raises(KeyError):
-            del td_c["agent_1_obs_0"]
+            del td_c["individual_1_obs_0"]
 
-        del c[("agent_1_obs", "agent_1_obs_0")]
-        del td_c[("agent_1_obs", "agent_1_obs_0")]
+        del c[("individual_1_obs", "individual_1_obs_0")]
+        del td_c[("individual_1_obs", "individual_1_obs_0")]
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_is_in(self, batch_size):
         c = self._get_het_specs(batch_size=batch_size)
         td_c = c.rand()
         assert c.is_in(td_c)
 
-        del td_c["camera"]
+        del td_c["shared"]
         with pytest.raises(KeyError):
             assert not c.is_in(td_c)
 
         td_c = c.rand()
-        del td_c[("agent_1_obs", "agent_1_obs_0")]
+        del td_c[("individual_1_obs", "individual_1_obs_0")]
         with pytest.raises(KeyError):
             assert not c.is_in(td_c)
 
         td_c = c.rand()
-        td_c["camera"] += 1
+        td_c["shared"] += 1
         assert not c.is_in(td_c)
 
         td_c = c.rand()
-        td_c[1]["agent_1_obs", "agent_1_obs_0"] += 4
+        td_c[1]["individual_1_obs", "individual_1_obs_0"] += 4
         assert not c.is_in(td_c)
 
         td_c = c.rand()
-        td_c[0]["agent_0_obs", "agent_0_obs_0"] += 1
+        td_c[0]["individual_0_obs", "individual_0_obs_0"] += 1
         assert c.is_in(td_c)
 
     def test_type_check(self):
@@ -2670,9 +2663,9 @@ class TestLazyStackedCompositeSpecs:
         td_c = c.rand()
 
         c.type_check(td_c)
-        c.type_check(td_c["camera"], "camera")
+        c.type_check(td_c["shared"], "shared")
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 2)])
+    @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
     def test_project(self, batch_size):
         c = self._get_het_specs(batch_size=batch_size)
         td_c = c.rand()
@@ -2680,29 +2673,29 @@ class TestLazyStackedCompositeSpecs:
         val = c.project(td_c)
         assert c.is_in(val)
 
-        del td_c["camera"]
+        del td_c["shared"]
         with pytest.raises(KeyError):
             c.is_in(td_c)
 
         td_c = c.rand()
-        del td_c[("agent_1_obs", "agent_1_obs_0")]
+        del td_c[("individual_1_obs", "individual_1_obs_0")]
         with pytest.raises(KeyError):
             c.is_in(td_c)
 
         td_c = c.rand()
-        td_c["camera"] += 1
+        td_c["shared"] += 1
         assert not c.is_in(td_c)
         val = c.project(td_c)
         assert c.is_in(val)
 
         td_c = c.rand()
-        td_c[1]["agent_1_obs", "agent_1_obs_0"] += 4
+        td_c[1]["individual_1_obs", "individual_1_obs_0"] += 4
         assert not c.is_in(td_c)
         val = c.project(td_c)
         assert c.is_in(val)
 
         td_c = c.rand()
-        td_c[0]["agent_0_obs", "agent_0_obs_0"] += 1
+        td_c[0]["individual_0_obs", "individual_0_obs_0"] += 1
         assert c.is_in(td_c)
 
     def test_repr(self):
@@ -2710,16 +2703,16 @@ class TestLazyStackedCompositeSpecs:
 
         expected = f"""LazyStackedCompositeSpec(
     fields={{
-        camera: BoundedTensorSpec(
+        hetero: LazyStackedUnboundedContinuousTensorSpec(
+            shape=torch.Size([3, -1]), device=cpu, dtype=torch.float32, domain=continuous),
+        shared: BoundedTensorSpec(
             shape=torch.Size([3, 32, 32, 3]),
             space=ContinuousBox(
                 minimum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
                 maximum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
-            domain=continuous),
-        vector: LazyStackedUnboundedContinuousTensorSpec(
-             shape=torch.Size([3, -1]), device=cpu, dtype=torch.float32, domain=continuous)}},
+            domain=continuous)}},
     lazy_fields={{
         0 ->
             lidar: BoundedTensorSpec(
@@ -2730,8 +2723,8 @@ class TestLazyStackedCompositeSpecs:
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
-            agent_0_obs: CompositeSpec(
-                agent_0_obs_0: UnboundedContinuousTensorSpec(
+            individual_0_obs: CompositeSpec(
+                individual_0_obs_0: UnboundedContinuousTensorSpec(
                     shape=torch.Size([3, 1]),
                     space=None,
                     device=cpu,
@@ -2746,8 +2739,8 @@ class TestLazyStackedCompositeSpecs:
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
-            agent_1_obs: CompositeSpec(
-                agent_1_obs_0: BoundedTensorSpec(
+            individual_1_obs: CompositeSpec(
+                individual_1_obs_0: BoundedTensorSpec(
                     shape=torch.Size([3, 1, 2]),
                     space=ContinuousBox(
                         minimum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
@@ -2756,8 +2749,8 @@ class TestLazyStackedCompositeSpecs:
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([3])),
         2 ->
-            agent_2_obs: CompositeSpec(
-                agent_1_obs_0: UnboundedContinuousTensorSpec(
+            individual_2_obs: CompositeSpec(
+                individual_1_obs_0: UnboundedContinuousTensorSpec(
                     shape=torch.Size([3, 1, 2, 3]),
                     space=None,
                     device=cpu,
@@ -2769,18 +2762,12 @@ class TestLazyStackedCompositeSpecs:
         assert expected == repr(c)
 
         c = c[0:2]
-        del c["agent_0_obs"]
-        del c["agent_1_obs"]
+        del c["individual_0_obs"]
+        del c["individual_1_obs"]
         expected = f"""LazyStackedCompositeSpec(
     fields={{
-        camera: BoundedTensorSpec(
-            shape=torch.Size([2, 32, 32, 3]),
-            space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
-            device=cpu,
-            dtype=torch.float32,
-            domain=continuous),
+        hetero: LazyStackedUnboundedContinuousTensorSpec(
+            shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, domain=continuous),
         lidar: BoundedTensorSpec(
             shape=torch.Size([2, 20]),
             space=ContinuousBox(
@@ -2789,14 +2776,37 @@ class TestLazyStackedCompositeSpecs:
             device=cpu,
             dtype=torch.float32,
             domain=continuous),
-        vector: LazyStackedUnboundedContinuousTensorSpec(
-             shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, domain=continuous)}},
+        shared: BoundedTensorSpec(
+            shape=torch.Size([2, 32, 32, 3]),
+            space=ContinuousBox(
+                minimum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                maximum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+            device=cpu,
+            dtype=torch.float32,
+            domain=continuous)}},
     lazy_fields={{
     }},
     device=cpu,
     shape={torch.Size((2,))},
     stack_dim={c.stack_dim})"""
         assert expected == repr(c)
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    def test_consolidate_spec(self, batch_size):
+        spec = self._get_het_specs(batch_size)
+        spec_lazy = spec.clone()
+
+        assert not check_no_exclusive_keys(spec_lazy)
+
+        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=False)
+        assert check_no_exclusive_keys(spec_lazy, recurse=False)
+
+        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=True)
+        assert check_no_exclusive_keys(spec_lazy, recurse=True)
+
+        assert get_all_keys(spec, include_exclusive=True) == get_all_keys(
+            spec_lazy, include_exclusive=False
+        )
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
@@ -3016,72 +3026,6 @@ def test_composite_contains():
     assert ("a", "b", "c") in spec.keys(True, True)
     assert ("a", ("b", ("c",))) in spec.keys(True)
     assert ("a", ("b", ("c",))) in spec.keys(True, True)
-
-
-class TestConsolidate:
-    @staticmethod
-    def nested_lazy_het_specs(batch_size):
-        shared = UnboundedContinuousTensorSpec(shape=(4, 4, 2))
-        hetero_3d = UnboundedContinuousTensorSpec(shape=(3,))
-        hetero_2d = UnboundedContinuousTensorSpec(shape=(2,))
-
-        individual_0_tensor = UnboundedContinuousTensorSpec(shape=(1,))
-        individual_1_tensor = UnboundedContinuousTensorSpec(shape=(1, 2))
-        individual_2_tensor = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
-
-        spec_list = [
-            CompositeSpec(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_0_tensor": individual_0_tensor,
-                },
-            ),
-            CompositeSpec(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_1_tensor": individual_1_tensor,
-                },
-            ),
-            CompositeSpec(
-                {
-                    "shared": shared,
-                    "hetero": hetero_2d,
-                    "individual_2_tensor": individual_2_tensor,
-                },
-            ),
-        ]
-        for i, spec in enumerate(spec_list):
-            spec[f"individual_{i}_td"] = spec.clone()
-            spec["shared_td"] = spec.clone()
-
-        spec_stack = torch.stack(spec_list, dim=0)
-        spec = CompositeSpec(
-            {
-                "lazy": spec_stack,
-                "dense": UnboundedContinuousTensorSpec(shape=(3, 3, 2)),
-            },
-        )
-        spec = spec.expand(batch_size)
-        return spec
-
-    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
-    def test_consolidate_spec(self, batch_size):
-        spec = TestConsolidate.nested_lazy_het_specs(batch_size)
-        spec_lazy = spec["lazy"].clone()
-
-        assert not check_no_exclusive_keys(spec_lazy)
-
-        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=False)
-        assert check_no_exclusive_keys(spec_lazy, recurse=False)
-
-        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=True)
-        assert check_no_exclusive_keys(spec_lazy, recurse=True)
-
-        assert get_all_keys(spec["lazy"], include_exclusive=True) == get_all_keys(
-            spec_lazy, include_exclusive=False
-        )
 
 
 def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):

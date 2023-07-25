@@ -840,7 +840,7 @@ class _LazyStackedMixin(Generic[T]):
             return torch.stack(list(out), 0)
 
     def clone(self) -> T:
-        return torch.stack([spec.clone() for spec in self._specs], 0)
+        return torch.stack([spec.clone() for spec in self._specs], self.stack_dim)
 
     @property
     def stack_dim(self):
@@ -926,7 +926,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         dtype_str = "dtype=" + str(self.dtype)
         domain_str = "domain=" + str(self._specs[0].domain)
         sub_string = ", ".join([shape_str, device_str, dtype_str, domain_str])
-        string = f"LazyStacked{self._specs[0].__class__.__name__}(\n     {sub_string})"
+        string = f"LazyStacked{self._specs[0].__class__.__name__}(\n    {sub_string})"
         return string
 
     def __iter__(self):
