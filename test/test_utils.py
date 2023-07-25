@@ -17,7 +17,7 @@ from tensordict._tensordict import _unravel_key_to_tuple
 from torchrl._utils import get_binary_env_var, implement_for
 from torchrl.data.utils import (
     _all_eq_td,
-    _check_no_lazy_keys,
+    _check_no_lazy_keys_td,
     _relazyfy_td,
     _unlazyfy_td,
 )
@@ -366,13 +366,13 @@ class TestUnlazifyTd:
         obs = self.nested_lazy_het_td(batch_size)
         obs_lazy = obs["lazy"].clone()
 
-        assert not _check_no_lazy_keys(obs_lazy)
+        assert not _check_no_lazy_keys_td(obs_lazy)
 
         obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=False)
-        assert _check_no_lazy_keys(obs_lazy, recurse=False)
+        assert _check_no_lazy_keys_td(obs_lazy, recurse=False)
 
         obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
-        assert _check_no_lazy_keys(obs_lazy, recurse=True)
+        assert _check_no_lazy_keys_td(obs_lazy, recurse=True)
 
         assert TestUnlazifyTd.get_all_keys(
             obs["lazy"], include_lazy=True
