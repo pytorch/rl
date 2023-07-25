@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import importlib.util
-import re
 
 import torch
 
@@ -219,62 +218,44 @@ def _set_single_key(source, dest, key, clone=False):
     if isinstance(key, str):
         key = (key,)
     for k in key:
-        try:
-            val = source.get(k)
-            if is_tensor_collection(val):
-                new_val = dest.get(k, None)
-                if new_val is None:
-                    new_val = val.empty()
-                    # dest.set(k, new_val)
-                    dest._set_str(k, new_val, inplace=False, validated=True)
-                source = val
-                dest = new_val
-            else:
-                if clone:
-                    val = val.clone()
-                # dest.set(k, val)
-                dest._set_str(k, val, inplace=False, validated=True)
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                # this is a het key
-                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                    _set_single_key(s_td, d_td, key)
-                break
-            else:
-                raise err
+        val = source.get(k)
+        if is_tensor_collection(val):
+            new_val = dest.get(k, None)
+            if new_val is None:
+                new_val = val.empty()
+                # dest.set(k, new_val)
+                dest._set_str(k, new_val, inplace=False, validated=True)
+            source = val
+            dest = new_val
+        else:
+            if clone:
+                val = val.clone()
+            # dest.set(k, val)
+            dest._set_str(k, val, inplace=False, validated=True)
 
 
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
     if unravel_key(total_key) not in excluded:
-        try:
-            val = source.get(key)
-            if is_tensor_collection(val):
-                new_val = dest.get(key, None)
-                if new_val is None:
-                    new_val = val.empty()
-                non_empty_local = False
-                for subkey in val.keys():
-                    non_empty_local = (
-                        _set(val, new_val, subkey, total_key, excluded)
-                        or non_empty_local
-                    )
-                if non_empty_local:
-                    # dest.set(key, new_val)
-                    dest._set_str(key, new_val, inplace=False, validated=True)
-                non_empty = non_empty_local
-            else:
-                non_empty = True
-                # dest.set(key, val)
-                dest._set_str(key, val, inplace=False, validated=True)
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                # this is a het key
-                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                    _set(s_td, d_td, key, total_key, excluded)
-            else:
-                raise err
+        val = source.get(key)
+        if is_tensor_collection(val):
+            new_val = dest.get(key, None)
+            if new_val is None:
+                new_val = val.empty()
+            non_empty_local = False
+            for subkey in val.keys():
+                non_empty_local = (
+                    _set(val, new_val, subkey, total_key, excluded) or non_empty_local
+                )
+            if non_empty_local:
+                # dest.set(key, new_val)
+                dest._set_str(key, new_val, inplace=False, validated=True)
+            non_empty = non_empty_local
+        else:
+            non_empty = True
+            # dest.set(key, val)
+            dest._set_str(key, val, inplace=False, validated=True)
     return non_empty
 
 
