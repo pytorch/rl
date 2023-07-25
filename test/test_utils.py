@@ -15,12 +15,7 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.data.utils import (
-    _all_eq,
-    _check_no_lazy_keys,
-    _relazyfy_keys,
-    _unlazyfy_keys,
-)
+from torchrl.data.utils import _all_eq, _check_no_lazy_keys, _relazyfy_td, _unlazyfy_td
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -368,17 +363,17 @@ class TestUnlazify:
 
         assert not _check_no_lazy_keys(obs_lazy)
 
-        obs_lazy = _unlazyfy_keys(obs_lazy, recurse_through_entries=False)
+        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=False)
         assert _check_no_lazy_keys(obs_lazy, recurse=False)
 
-        obs_lazy = _unlazyfy_keys(obs_lazy, recurse_through_entries=True)
+        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
         assert _check_no_lazy_keys(obs_lazy, recurse=True)
 
         assert TestUnlazify.get_all_keys(
             obs["lazy"], include_lazy=True
         ) == TestUnlazify.get_all_keys(obs_lazy, include_lazy=False)
 
-        relazyfyied_obs = _relazyfy_keys(obs_lazy)
+        relazyfyied_obs = _relazyfy_td(obs_lazy)
         assert _all_eq(relazyfyied_obs, obs["lazy"])
 
 
