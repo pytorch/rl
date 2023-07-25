@@ -76,10 +76,9 @@ def _unlazyfy_td(
                         else:
                             # sub_td_key is het leaf so lets recurse to a dense version of it to get the example
                             temp_td = sub_td
-                            while hasattr(
-                                temp_td, "tensordicts"
-                            ):  # we need to grab the het tensor from the inner nesting level
-                                temp_td = sub_td.tensordicts[0]
+                            while isinstance(temp_td, LazyStackedTensorDict):
+                                # we need to grab the het tensor from the inner nesting level
+                                temp_td = temp_td.tensordicts[0]
                             value = temp_td.get(sub_td_key)
 
                         lazy_keys_examples.update({sub_td_key: value})
