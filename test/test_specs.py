@@ -11,8 +11,8 @@ import torchrl.data.tensor_specs
 from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.utils import _unravel_key_to_tuple
 
-from test_utils import TestUnlazifyTd
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
@@ -23,16 +23,11 @@ from torchrl.data.tensor_specs import (
     MultiDiscreteTensorSpec,
     MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
+    TensorSpec,
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import (
-    _all_eq_td,
-    _relazyfy_spec,
-    _relazyfy_td,
-    _unlazyfy_spec,
-    _unlazyfy_td,
-)
+from torchrl.data.utils import consolidate_spec
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3023,7 +3018,7 @@ def test_composite_contains():
     assert ("a", ("b", ("c",))) in spec.keys(True, True)
 
 
-class TestUnlazyfy:
+class TestConsolidate:
     @staticmethod
     def nested_lazy_het_specs(batch_size):
         shared = UnboundedContinuousTensorSpec(shape=(4, 4, 2))
@@ -3071,20 +3066,56 @@ class TestUnlazyfy:
         spec = spec.expand(batch_size)
         return spec
 
-    def test_unlazify_spec(self):
-        spec = TestUnlazyfy.nested_lazy_het_specs(())
-        td = TestUnlazifyTd.nested_lazy_het_td(())
-        assert _all_eq_td(td, spec.zero(), check_device=False)
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    def test_consolidate_spec(self, batch_size):
+        spec = TestConsolidate.nested_lazy_het_specs(batch_size)
+        spec_lazy = spec["lazy"].clone()
 
-        new_spec = _unlazyfy_spec(spec)
-        new_td = _unlazyfy_td(td)
+        assert not check_no_exclusive_keys(spec_lazy)
 
-        assert _all_eq_td(new_td, new_spec.zero(), check_device=False)
+        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=False)
+        assert check_no_exclusive_keys(spec_lazy, recurse=False)
 
-        spec = _relazyfy_spec(new_spec)
-        td = _relazyfy_td(new_td)
+        spec_lazy = consolidate_spec(spec_lazy, recurse_through_entries=True)
+        assert check_no_exclusive_keys(spec_lazy, recurse=True)
 
-        assert _all_eq_td(td, spec.zero(), check_device=False)
+        assert get_all_keys(spec["lazy"], include_exclusive=True) == get_all_keys(
+            spec_lazy, include_exclusive=False
+        )
+
+
+def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
+    """Given a TensorSpec, returns true if there are no exclusive keys."""
+    if isinstance(spec, LazyStackedCompositeSpec):
+        keys = set(spec.keys())
+        for inner_td in spec._specs:
+            if recurse and not check_no_exclusive_keys(inner_td):
+                return False
+            if set(inner_td.keys()) != keys:
+                return False
+    elif isinstance(spec, CompositeSpec) and recurse:
+        for value in spec.values():
+            if not check_no_exclusive_keys(value):
+                return False
+    else:
+        return True
+    return True
+
+
+def get_all_keys(spec: TensorSpec, include_exclusive: bool):
+    """Given a TensorSpec, returns all exclusive and non-exclusive keys as a set tuples."""
+    keys = set()
+    if isinstance(spec, LazyStackedCompositeSpec) and include_exclusive:
+        for t in spec._specs:
+            keys = keys.union(get_all_keys(t, include_exclusive))
+    if isinstance(spec, CompositeSpec):
+        for key in spec.keys():
+            keys.add((key,))
+            inner_keys = get_all_keys(spec[key], include_exclusive)
+            for inner_key in inner_keys:
+                keys.add((key,) + _unravel_key_to_tuple(inner_key))
+
+    return keys
 
 
 if __name__ == "__main__":

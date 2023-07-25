@@ -8,12 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import (
-    is_tensor_collection,
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict import TensorDictBase
 from torch import Tensor
 
 from .tensor_specs import (
@@ -60,119 +55,7 @@ def dense_stack_tds(
     return torch.stack(td_list, dim=stack_dim, out=out)
 
 
-def _unlazyfy_td(
-    td,
-    recurse_through_entries: bool = True,
-    recurse_through_stack: bool = True,
-):
-    """Given a TensorDictBase, removes lazy keys by adding 0 shaped tensors."""
-    td = td.clone()
-
-    if not is_tensor_collection(td):
-        return td
-
-    if isinstance(td, LazyStackedTensorDict):
-        keys = set(td.keys())  # shared keys
-        lazy_keys_per_td = [
-            set() for _ in range(len(td.tensordicts))
-        ]  # list of lazy keys per td
-        lazy_keys_examples = {}  # set of all lazy keys with an example for each
-        for td_index in range(len(td.tensordicts)):  # gather all lazy keys
-            sub_td = td.tensordicts[td_index]
-            if recurse_through_stack:
-                sub_td = _unlazyfy_td(
-                    sub_td, recurse_through_entries, recurse_through_stack
-                )
-                td.tensordicts[td_index] = sub_td
-            for sub_td_key in sub_td.keys():
-                if sub_td_key not in keys:  # lazy key
-                    lazy_keys_per_td[td_index].add(sub_td_key)
-                    if sub_td_key not in lazy_keys_examples:
-                        shape = sub_td.get_item_shape(sub_td_key)
-                        if -1 not in shape:
-                            value = sub_td.get(sub_td_key)
-                        else:
-                            # sub_td_key is het leaf so lets recurse to a dense version of it to get the example
-                            temp_td = sub_td
-                            while isinstance(temp_td, LazyStackedTensorDict):
-                                # we need to grab the het tensor from the inner nesting level
-                                temp_td = temp_td.tensordicts[0]
-                            value = temp_td.get(sub_td_key)
-
-                        lazy_keys_examples.update({sub_td_key: value})
-
-        for td_index in range(len(td.tensordicts)):  # add missing lazy entries
-            sub_td = td.tensordicts[td_index]
-            for lazy_key in set(lazy_keys_examples.keys()).difference(
-                lazy_keys_per_td[td_index]
-            ):
-                lazy_key_example = lazy_keys_examples[lazy_key]
-                sub_td.set(
-                    lazy_key,
-                    _empty_like_td(lazy_key_example, sub_td.batch_size),
-                )
-            td.tensordicts[td_index] = sub_td
-
-    if recurse_through_entries:
-        for key in td.keys():
-            shape = td.get_item_shape(key)
-            if -1 not in shape:
-                td.set(
-                    key,
-                    _unlazyfy_td(
-                        td.get(key), recurse_through_entries, recurse_through_stack
-                    ),
-                )
-
-    return td
-
-
-def _relazyfy_td(
-    td,
-):
-    """Given a TensorDictBase, restores lazy keys by removing 0 shaped tensors and related orphan tensordicts."""
-    if not is_tensor_collection(td):
-        return None if td.numel() == 0 else td.clone()
-
-    td = td.clone()
-
-    if isinstance(td, LazyStackedTensorDict):
-        for td_index in range(len(td.tensordicts)):
-            sub_td = td.tensordicts[td_index]
-            sub_td = _relazyfy_td(sub_td)
-            td.tensordicts[td_index] = sub_td
-
-    for key in list(td.keys()):
-        shape = td.get_item_shape(key)
-        if -1 not in shape:
-            value = _relazyfy_td(td.get(key))
-            if value is None:
-                del td[key]
-            else:
-                td.set(
-                    key,
-                    value,
-                )
-
-    if isinstance(td, TensorDict) and not len(td.keys()):
-        return None
-    return td
-
-
-def _empty_like_td(td, batch_size):
-    if is_tensor_collection(td):
-        return td.empty()
-    else:
-        shape = [dim if i < len(batch_size) else 0 for i, dim in enumerate(td.shape)]
-
-        return torch.empty(
-            shape,
-            dtype=td.dtype,
-            device=td.device,
-        )
-
-
-def _unlazyfy_spec(
+def consolidate_spec(
     spec: TensorSpec,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
@@ -192,7 +75,7 @@ def _unlazyfy_spec(
         for spec_index in range(len(spec._specs)):  # gather all lazy keys
             sub_spec = spec._specs[spec_index]
             if recurse_through_stack:
-                sub_spec = _unlazyfy_spec(
+                sub_spec = consolidate_spec(
                     sub_spec, recurse_through_entries, recurse_through_stack
                 )
                 spec._specs[spec_index] = sub_spec
@@ -221,51 +104,10 @@ def _unlazyfy_spec(
             if isinstance(value, (CompositeSpec, LazyStackedCompositeSpec)):
                 spec.set(
                     key,
-                    _unlazyfy_spec(
+                    consolidate_spec(
                         value, recurse_through_entries, recurse_through_stack
                     ),
                 )
-    return spec
-
-
-def _relazyfy_spec(
-    spec,
-):
-    """Given a TensorSpec, restores lazy keys by removing 0 shaped specs and related orphan specs."""
-    if not isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
-        if isinstance(spec, LazyStackedTensorSpec):
-            subspecs = []
-            for sub_spec in spec._specs:
-                sub_spec = _relazyfy_spec(sub_spec)
-                if sub_spec is not None:
-                    subspecs.append(sub_spec)
-            return torch.stack(subspecs, dim=spec.stack_dim) if len(subspecs) else None
-        else:
-            return None if 0 in spec.shape else spec.clone()
-
-    spec = spec.clone()
-
-    if isinstance(spec, LazyStackedCompositeSpec):
-        for spec_index in range(len(spec._specs)):
-            sub_spec = spec._specs[spec_index]
-            sub_spec = _relazyfy_spec(sub_spec)
-            spec._specs[spec_index] = sub_spec
-
-    for key in list(spec.keys()):
-        value = spec[key]
-        value = _relazyfy_spec(value)
-        if value is None:
-            del spec[key]
-        elif isinstance(
-            value, (CompositeSpec, LazyStackedCompositeSpec, LazyStackedTensorSpec)
-        ):
-            spec.set(
-                key,
-                value,
-            )
-
-    if isinstance(spec, CompositeSpec) and not len(spec.keys()):
-        return None
     return spec
 
 
@@ -285,63 +127,6 @@ def _empty_like_spec(spec, shape):
         spec = spec.expand(shape)
 
         return spec
-
-
-def _check_no_lazy_keys_td(td, recurse: bool = True):
-    """Given a TensorDictBase, returns true if there are no lazy keys."""
-    if isinstance(td, LazyStackedTensorDict):
-        keys = set(td.keys())
-        for inner_td in td.tensordicts:
-            if recurse and not _check_no_lazy_keys_td(inner_td):
-                return False
-            if set(inner_td.keys()) != keys:
-                return False
-    elif isinstance(td, TensorDict) and recurse:
-        for i in td.values():
-            if not _check_no_lazy_keys_td(i):
-                return False
-    elif isinstance(td, torch.Tensor):
-        return True
-    else:
-        return False
-
-    return True
-
-
-def _all_eq_td(
-    td: Union[TensorDictBase, torch.Tensor],
-    other: Union[TensorDictBase, torch.Tensor],
-    check_device: bool = True,
-    check_class: bool = True,
-):
-    """Returns true if the two classes match all entries in the keys and stack dimensions."""
-    if check_class and td.__class__ != other.__class__:
-        return False
-    if check_device and td.device != other.device:
-        return False
-    if td.shape != other.shape:
-        return False
-
-    if isinstance(td, LazyStackedTensorDict):
-        if td.stack_dim != other.stack_dim:
-            return False
-        for stacked_td, stacked_other in zip(td.tensordicts, other.tensordicts):
-            if not _all_eq_td(stacked_td, stacked_other, check_device, check_class):
-                return False
-    elif isinstance(td, TensorDictBase):
-        td_keys = set(td.keys())
-        other_keys = set(other.keys())
-        if td_keys != other_keys:
-            return False
-        for key in td_keys:
-            if not _all_eq_td(td[key], other[key], check_device, check_class):
-                return False
-    elif isinstance(td, torch.Tensor):
-        return torch.equal(td, other)
-    else:
-        raise ValueError("_all_eq was provided arguments from the wrong class")
-
-    return True
 
 
 class CloudpickleWrapper(object):

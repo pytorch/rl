@@ -11,16 +11,8 @@ from unittest import mock
 import _utils_internal
 import pytest
 
-import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.data.utils import (
-    _all_eq_td,
-    _check_no_lazy_keys_td,
-    _relazyfy_td,
-    _unlazyfy_td,
-)
+
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -287,99 +279,6 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
     with set_gym_backend(gym):
         assert gym_backend() == gym
-
-
-class TestUnlazifyTd:
-    @staticmethod
-    def nested_lazy_het_td(batch_size):
-        shared = torch.zeros(4, 4, 2)
-        hetero_3d = torch.zeros(3)
-        hetero_2d = torch.zeros(2)
-
-        individual_0_tensor = torch.zeros(1)
-        individual_1_tensor = torch.zeros(1, 2)
-        individual_2_tensor = torch.zeros(1, 2, 3)
-
-        td_list = [
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_0_tensor": individual_0_tensor,
-                },
-                [],
-            ),
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_1_tensor": individual_1_tensor,
-                },
-                [],
-            ),
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_2d,
-                    "individual_2_tensor": individual_2_tensor,
-                },
-                [],
-            ),
-        ]
-        for i, td in enumerate(td_list):
-            td[f"individual_{i}_td"] = td.clone()
-            td["shared_td"] = td.clone()
-
-        td_stack = torch.stack(td_list, dim=0)
-        obs = TensorDict(
-            {"lazy": td_stack, "dense": torch.zeros(3, 3, 2)},
-            [],
-        )
-        obs = obs.expand(batch_size)
-        return obs
-
-    @staticmethod
-    def get_all_keys_td(td, include_lazy: bool):
-        """Given a TensorDictBase, returns all lazy and not lazy keys as a set tuples."""
-        keys = set()
-        if isinstance(td, LazyStackedTensorDict) and include_lazy:
-            for t in td.tensordicts:
-                keys = keys.union(
-                    TestUnlazifyTd.get_all_keys_td(t, include_lazy=include_lazy)
-                )
-        if isinstance(td, TensorDictBase):
-            for key in td.keys():
-                try:
-                    keys.add((key,))
-                    value = td.get(key)
-                    inner_keys = TestUnlazifyTd.get_all_keys_td(
-                        value, include_lazy=include_lazy
-                    )
-                    for inner_key in inner_keys:
-                        keys.add((key,) + _unravel_key_to_tuple(inner_key))
-                except RuntimeError:
-                    pass
-        return keys
-
-    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
-    def test_lazify(self, batch_size):
-        obs = self.nested_lazy_het_td(batch_size)
-        obs_lazy = obs["lazy"].clone()
-
-        assert not _check_no_lazy_keys_td(obs_lazy)
-
-        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=False)
-        assert _check_no_lazy_keys_td(obs_lazy, recurse=False)
-
-        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
-        assert _check_no_lazy_keys_td(obs_lazy, recurse=True)
-
-        assert TestUnlazifyTd.get_all_keys_td(
-            obs["lazy"], include_lazy=True
-        ) == TestUnlazifyTd.get_all_keys_td(obs_lazy, include_lazy=False)
-
-        relazyfyied_obs = _relazyfy_td(obs_lazy)
-        assert _all_eq_td(relazyfyied_obs, obs["lazy"])
 
 
 if __name__ == "__main__":

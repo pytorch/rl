@@ -3174,6 +3174,8 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             return False
         if len(self._specs) != len(other._specs):
             return False
+        if self.stack_dim != other.stack_dim:
+            return False
         for _spec1, _spec2 in zip(self._specs, other._specs):
             if _spec1 != _spec2:
                 return False
