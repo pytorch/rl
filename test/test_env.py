@@ -1748,6 +1748,13 @@ class TestHeteroEnvs:
         assert td["lazy"].shape == (*batch_size, rollout_steps, n_agents)
         assert td["lazy"].stack_dim == len(td["lazy"].batch_size) - 1
 
+        assert (td[..., -1]["next", "state"] == rollout_steps).all()
+        assert (td[..., -1]["next", "lazy", "camera"] == rollout_steps).all()
+        assert (
+            td["lazy"][(0,) * len(batch_size)][..., 0]["tensor_0"].squeeze(-1)
+            == torch.arange(rollout_steps)
+        ).all()
+
 
 @pytest.mark.parametrize(
     "envclass",
