@@ -191,7 +191,7 @@ def _set_single_key(source, dest, key, clone=False):
     if isinstance(key, str):
         key = (key,)
     for k in key:
-        shape = source.get_item_shape(key)
+        shape = source.get_item_shape(k)
         if -1 not in shape:
             val = source.get(k)
             if is_tensor_collection(val):
@@ -210,7 +210,7 @@ def _set_single_key(source, dest, key, clone=False):
         else:
             # this is a het key
             for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                _set_single_key(s_td, d_td, key)
+                _set_single_key(s_td, d_td, k)
             break
 
 
@@ -241,8 +241,12 @@ def _set(source, dest, key, total_key, excluded):
                 dest._set_str(key, val, inplace=False, validated=True)
         else:
             # this is a het key
+            non_empty_local = False
             for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                _set(s_td, d_td, key, total_key, excluded)
+                non_empty_local = (
+                    _set(s_td, d_td, key, total_key, excluded) or non_empty_local
+                )
+            non_empty = non_empty_local
 
     return non_empty
 
