@@ -15,7 +15,12 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.data.utils import _all_eq, _check_no_lazy_keys, _relazyfy_td, _unlazyfy_td
+from torchrl.data.utils import (
+    _all_eq_td,
+    _check_no_lazy_keys,
+    _relazyfy_td,
+    _unlazyfy_td,
+)
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -284,7 +289,7 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
 
 
-class TestUnlazify:
+class TestUnlazifyTd:
     @staticmethod
     def nested_lazy_het_td(batch_size):
         shared = torch.zeros(4, 4, 2)
@@ -340,14 +345,14 @@ class TestUnlazify:
         if isinstance(td, LazyStackedTensorDict) and include_lazy:
             for t in td.tensordicts:
                 keys = keys.union(
-                    TestUnlazify.get_all_keys(t, include_lazy=include_lazy)
+                    TestUnlazifyTd.get_all_keys(t, include_lazy=include_lazy)
                 )
         if isinstance(td, TensorDictBase):
             for key in td.keys():
                 try:
                     keys.add((key,))
                     value = td.get(key)
-                    inner_keys = TestUnlazify.get_all_keys(
+                    inner_keys = TestUnlazifyTd.get_all_keys(
                         value, include_lazy=include_lazy
                     )
                     for inner_key in inner_keys:
@@ -369,12 +374,12 @@ class TestUnlazify:
         obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
         assert _check_no_lazy_keys(obs_lazy, recurse=True)
 
-        assert TestUnlazify.get_all_keys(
+        assert TestUnlazifyTd.get_all_keys(
             obs["lazy"], include_lazy=True
-        ) == TestUnlazify.get_all_keys(obs_lazy, include_lazy=False)
+        ) == TestUnlazifyTd.get_all_keys(obs_lazy, include_lazy=False)
 
         relazyfyied_obs = _relazyfy_td(obs_lazy)
-        assert _all_eq(relazyfyied_obs, obs["lazy"])
+        assert _all_eq_td(relazyfyied_obs, obs["lazy"])
 
 
 if __name__ == "__main__":
