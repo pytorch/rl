@@ -60,7 +60,7 @@ def consolidate_spec(
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
 ):
-    """Given a TensorSpec, removes lazy keys by adding 0 shaped tensors."""
+    """Given a TensorSpec, removes exclusive keys by adding 0 shaped specs."""
     spec = spec.clone()
 
     if not isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
@@ -70,8 +70,8 @@ def consolidate_spec(
         keys = set(spec.keys())  # shared keys
         lazy_keys_per_spec = [
             set() for _ in range(len(spec._specs))
-        ]  # list of lazy keys per td
-        lazy_keys_examples = {}  # set of all lazy keys with an example for each
+        ]  # list of exclusive keys per td
+        lazy_keys_examples = {}  # set of all exclusive keys with an example for each
         for spec_index in range(len(spec._specs)):  # gather all lazy keys
             sub_spec = spec._specs[spec_index]
             if recurse_through_stack:
@@ -86,7 +86,7 @@ def consolidate_spec(
                         value = sub_spec[sub_spec_key]
                         lazy_keys_examples.update({sub_spec_key: value})
 
-        for spec_index in range(len(spec._specs)):  # add missing lazy entries
+        for spec_index in range(len(spec._specs)):  # add missing exclusive entries
             sub_spec = spec._specs[spec_index]
             for lazy_key in set(lazy_keys_examples.keys()).difference(
                 lazy_keys_per_spec[spec_index]
