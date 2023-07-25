@@ -12,7 +12,6 @@ import _utils_internal
 import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
-
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
