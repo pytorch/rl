@@ -157,33 +157,6 @@ def step_mdp(
             is_shared=False)
 
     """
-    if isinstance(tensordict, LazyStackedTensorDict):
-        if next_tensordict is not None:
-            next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
-        else:
-            next_tensordicts = [None] * len(tensordict.tensordicts)
-        out = torch.stack(
-            [
-                step_mdp(
-                    td,
-                    next_tensordict=ntd,
-                    keep_other=keep_other,
-                    exclude_reward=exclude_reward,
-                    exclude_done=exclude_done,
-                    exclude_action=exclude_action,
-                    reward_key=reward_key,
-                    done_key=done_key,
-                    action_key=action_key,
-                )
-                for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
-            ],
-            tensordict.stack_dim,
-        )
-        if next_tensordict is not None:
-            next_tensordict.update(out)
-            return next_tensordict
-        return out
-
     action_key = unravel_key(action_key)
     done_key = unravel_key(done_key)
     reward_key = unravel_key(reward_key)
