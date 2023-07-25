@@ -256,7 +256,9 @@ def _relazyfy_spec(
         value = _relazyfy_spec(value)
         if value is None:
             del spec[key]
-        else:
+        elif isinstance(
+            value, (CompositeSpec, LazyStackedCompositeSpec, LazyStackedTensorSpec)
+        ):
             spec.set(
                 key,
                 value,

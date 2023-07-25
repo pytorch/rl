@@ -27,9 +27,9 @@ from torchrl.data.tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 from torchrl.data.utils import (
-    # _relazyfy_spec,
-    # _relazyfy_td,
     _all_eq_td,
+    _relazyfy_spec,
+    _relazyfy_td,
     _unlazyfy_spec,
     _unlazyfy_td,
 )
@@ -3081,10 +3081,10 @@ class TestUnlazyfy:
 
         assert _all_eq_td(new_td, new_spec.zero(), check_device=False)
 
-        # spec = _relazyfy_spec(new_spec)
-        # td = _relazyfy_td(new_td)
-        #
-        # assert _all_eq_td(td, spec.zero(), check_device=False)
+        spec = _relazyfy_spec(new_spec)
+        td = _relazyfy_td(new_td)
+
+        assert _all_eq_td(td, spec.zero(), check_device=False)
 
 
 if __name__ == "__main__":
