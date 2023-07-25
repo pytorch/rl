@@ -872,6 +872,62 @@ class _LazyStackedMixin(Generic[T]):
         else:
             raise ValueError("Can only unbind in stack dim")
 
+    def unsqueeze(self, dim: int):
+        if dim < 0:
+            new_dim = dim + len(self.shape) + 1
+        else:
+            new_dim = dim
+        if new_dim > len(self.shape) or new_dim < 0:
+            raise ValueError(f"Cannot unsqueeze along dim {dim}.")
+        if new_dim > self.dim:
+            # unsqueeze 2, stack is on 1 => unsqueeze 1, stack along 1
+            new_stack_dim = self.dim
+            new_dim = new_dim - 1
+        else:
+            # unsqueeze 0, stack is on 1 => unsqueeze 0, stack on 1
+            new_stack_dim = self.dim + 1
+        return torch.stack(
+            [spec.unsqueeze(new_dim) for spec in self._specs], dim=new_stack_dim
+        )
+
+    def squeeze(self, dim: int = None):
+        if dim is None:
+            size = self.shape
+            if len(size) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+
+            squeezed_dict = self.squeeze(first_singleton_dim)
+            return squeezed_dict.squeeze(dim=None)
+
+        if dim < 0:
+            new_dim = self.ndim + dim
+        else:
+            new_dim = dim
+
+        if self.shape and (new_dim >= self.ndim or new_dim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between 0 and "
+                f"spec.ndim only. Got dim={dim} and shape"
+                f"={self.shape}."
+            )
+
+        if new_dim >= self.ndim or self.shape[new_dim] != 1:
+            return self
+
+        if new_dim == self.dim:
+            return self._specs[0]
+        if new_dim > self.dim:
+            # squeeze 2, stack is on 1 => squeeze 1, stack along 1
+            new_stack_dim = self.dim
+            new_dim = new_dim - 1
+        else:
+            # squeeze 0, stack is on 1 => squeeze 0, stack on 1
+            new_stack_dim = self.dim - 1
+        return torch.stack(
+            [spec.squeeze(new_dim) for spec in self._specs], dim=new_stack_dim
+        )
+
 
 class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     """A lazy representation of a stack of tensor specs.
@@ -3161,7 +3217,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def update(self, dict) -> None:
         for key, item in dict.items():
             if key in self.keys() and isinstance(
-                item, (dict, CompositeSpec, LazyStackedCompositeSpec)
+                item, (Dict, CompositeSpec, LazyStackedCompositeSpec)
             ):
                 for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
                     spec[key].update(sub_item)
@@ -3263,16 +3319,18 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             [indent(f"{k}: {repr(item)}", 4 * " ") for k, item in self.items()]
         )
         sub_str = indent(f"fields={{\n{', '.join([sub_str])}}}", 4 * " ")
-        lazy_key_str = self.repr_lay_keys()
+        exclusive_key_str = self.repr_exclusive_keys()
         device_str = indent(f"device={self._specs[0].device}", 4 * " ")
         shape_str = indent(f"shape={self.shape}", 4 * " ")
         stack_dim = indent(f"stack_dim={self.dim}", 4 * " ")
-        string = ",\n".join([sub_str, lazy_key_str, device_str, shape_str, stack_dim])
+        string = ",\n".join(
+            [sub_str, exclusive_key_str, device_str, shape_str, stack_dim]
+        )
         return f"LazyStackedCompositeSpec(\n{string})"
 
-    def repr_lay_keys(self):
+    def repr_exclusive_keys(self):
         keys = set(self.keys())
-        lazy_keys = [
+        exclusive_keys = [
             ",\n".join(
                 [
                     indent(f"{k}: {repr(spec[k])}", 4 * " ")
@@ -3282,15 +3340,15 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             )
             for spec in self._specs
         ]
-        lazy_key_str = ",\n".join(
+        exclusive_key_str = ",\n".join(
             [
                 indent(f"{i} ->\n{line}", 4 * " ")
-                for i, line in enumerate(lazy_keys)
+                for i, line in enumerate(exclusive_keys)
                 if line != ""
             ]
         )
 
-        return indent(f"lazy_fields={{\n{lazy_key_str}}}", 4 * " ")
+        return indent(f"exclusive_fields={{\n{exclusive_key_str}}}", 4 * " ")
 
     def is_in(self, val) -> bool:
         for spec, subval in zip(self._specs, val.unbind(self.dim)):
@@ -3348,62 +3406,6 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def set(self, name, spec):
         for sub_spec, sub_item in zip(self._specs, spec.unbind(self.dim)):
             sub_spec[name] = sub_item
-
-    def unsqueeze(self, dim: int):
-        if dim < 0:
-            new_dim = dim + len(self.shape) + 1
-        else:
-            new_dim = dim
-        if new_dim > len(self.shape) or new_dim < 0:
-            raise ValueError(f"Cannot unsqueeze along dim {dim}.")
-        if new_dim > self.dim:
-            # unsqueeze 2, stack is on 1 => unsqueeze 1, stack along 1
-            new_stack_dim = self.dim
-            new_dim = new_dim - 1
-        else:
-            # unsqueeze 0, stack is on 1 => unsqueeze 0, stack on 1
-            new_stack_dim = self.dim + 1
-        return LazyStackedCompositeSpec(
-            *[spec.unsqueeze(new_dim) for spec in self._specs], dim=new_stack_dim
-        )
-
-    def squeeze(self, dim: int = None):
-        if dim is None:
-            size = self.shape
-            if len(size) == 1 or size.count(1) == 0:
-                return self
-            first_singleton_dim = size.index(1)
-
-            squeezed_dict = self.squeeze(first_singleton_dim)
-            return squeezed_dict.squeeze(dim=None)
-
-        if dim < 0:
-            new_dim = self.ndim + dim
-        else:
-            new_dim = dim
-
-        if self.shape and (new_dim >= self.ndim or new_dim < 0):
-            raise RuntimeError(
-                f"squeezing is allowed for dims comprised between 0 and "
-                f"spec.ndim only. Got dim={dim} and shape"
-                f"={self.shape}."
-            )
-
-        if new_dim >= self.ndim or self.shape[new_dim] != 1:
-            return self
-
-        if new_dim == self.dim:
-            return self._specs[0]
-        if new_dim > self.dim:
-            # squeeze 2, stack is on 1 => squeeze 1, stack along 1
-            new_stack_dim = self.dim
-            new_dim = new_dim - 1
-        else:
-            # squeeze 0, stack is on 1 => squeeze 0, stack on 1
-            new_stack_dim = self.dim - 1
-        return LazyStackedCompositeSpec(
-            *[spec.squeeze(new_dim) for spec in self._specs], dim=new_stack_dim
-        )
 
     @property
     def shape(self):

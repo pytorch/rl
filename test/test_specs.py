@@ -2713,7 +2713,7 @@ class TestLazyStackedCompositeSpecs:
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
-    lazy_fields={{
+    exclusive_fields={{
         0 ->
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
@@ -2784,7 +2784,7 @@ class TestLazyStackedCompositeSpecs:
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
-    lazy_fields={{
+    exclusive_fields={{
     }},
     device=cpu,
     shape={torch.Size((2,))},
@@ -2807,6 +2807,73 @@ class TestLazyStackedCompositeSpecs:
         assert get_all_keys(spec, include_exclusive=True) == get_all_keys(
             spec_lazy, include_exclusive=False
         )
+
+    @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
+    def test_update(self, batch_size, stack_dim=0):
+        spec = self._get_het_specs(batch_size, stack_dim)
+        spec2 = self._get_het_specs(batch_size, stack_dim)
+
+        del spec2["shared"]
+        spec2["hetero"] = spec2["hetero"].unsqueeze(-1)
+        assert spec["hetero"].shape == (3, *batch_size, -1)
+        spec.update(spec2)
+        assert spec["hetero"].shape == (3, *batch_size, -1, 1)
+
+        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum += 1
+        assert (
+            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
+        )
+        spec.update(spec2)
+        assert (
+            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
+        )  # Only non exclusive keys will be updated
+
+        new = torch.stack(
+            [UnboundedContinuousTensorSpec(shape=(*batch_size, i)) for i in range(3)], 0
+        )
+        spec2["new"] = new
+        spec.update(spec2)
+        assert spec["new"] == new
+
+    @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_set_item(self, batch_size, stack_dim):
+        spec = self._get_het_specs(batch_size, stack_dim)
+
+        new = torch.stack(
+            [UnboundedContinuousTensorSpec(shape=(*batch_size, i)) for i in range(3)],
+            stack_dim,
+        )
+        spec["new"] = new
+        assert spec["new"] == new
+
+        new = new.unsqueeze(-1)
+        spec["new"] = new
+        assert spec["new"] == new
+
+        new = new.squeeze(-1)
+        assert spec["new"] == new.unsqueeze(-1)
+
+        spec[("other", "key")] = new
+        assert spec[("other", "key")] == new
+        assert isinstance(spec["other"], LazyStackedCompositeSpec)
+
+        with pytest.raises(RuntimeError, match="key should be a Sequence<NestedKey>"):
+            spec[0] = new
+
+        comp = torch.stack(
+            [
+                CompositeSpec(
+                    {"a": UnboundedContinuousTensorSpec(shape=(*batch_size, i))},
+                    shape=batch_size,
+                )
+                for i in range(3)
+            ],
+            stack_dim,
+        )
+        spec["comp"] = comp
+        assert spec["comp"] == comp
+        assert spec["comp", "a"] == new
 
 
 # MultiDiscreteTensorSpec: Pending resolution of https://github.com/pytorch/pytorch/issues/100080.
