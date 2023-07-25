@@ -11,6 +11,8 @@ import torchrl.data.tensor_specs
 from _utils_internal import get_available_devices, get_default_devices, set_global_var
 from scipy.stats import chisquare
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+
+from test_utils import TestUnlazifyTd
 from torchrl.data.tensor_specs import (
     _keys_to_empty_composite_spec,
     BinaryDiscreteTensorSpec,
@@ -24,6 +26,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
+from torchrl.data.utils import _all_eq, _unlazyfy_spec, _unlazyfy_td
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3012,6 +3015,65 @@ def test_composite_contains():
     assert ("a", "b", "c") in spec.keys(True, True)
     assert ("a", ("b", ("c",))) in spec.keys(True)
     assert ("a", ("b", ("c",))) in spec.keys(True, True)
+
+
+class TestUnlazyfy:
+    @staticmethod
+    def nested_lazy_het_specs(batch_size):
+        shared = UnboundedContinuousTensorSpec(shape=(4, 4, 2))
+        hetero_3d = UnboundedContinuousTensorSpec(shape=(3,))
+        hetero_2d = UnboundedContinuousTensorSpec(shape=(2,))
+
+        individual_0_tensor = UnboundedContinuousTensorSpec(shape=(1,))
+        individual_1_tensor = UnboundedContinuousTensorSpec(shape=(1, 2))
+        individual_2_tensor = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
+
+        spec_list = [
+            CompositeSpec(
+                {
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_0_tensor": individual_0_tensor,
+                },
+            ),
+            CompositeSpec(
+                {
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_1_tensor": individual_1_tensor,
+                },
+            ),
+            CompositeSpec(
+                {
+                    "shared": shared,
+                    "hetero": hetero_2d,
+                    "individual_2_tensor": individual_2_tensor,
+                },
+            ),
+        ]
+        for i, spec in enumerate(spec_list):
+            spec[f"individual_{i}_td"] = spec.clone()
+            spec["shared_td"] = spec.clone()
+
+        spec_stack = torch.stack(spec_list, dim=0)
+        spec = CompositeSpec(
+            {
+                "lazy": spec_stack,
+                "dense": UnboundedContinuousTensorSpec(shape=(3, 3, 2)),
+            },
+        )
+        spec = spec.expand(batch_size)
+        return spec
+
+    def test_unlazify_spec(self):
+        spec = TestUnlazyfy.nested_lazy_het_specs(())
+        td = TestUnlazifyTd.nested_lazy_het_td(())
+        assert _all_eq(td, spec.zero(), check_device=False)
+
+        new_spec = _unlazyfy_spec(spec)
+        new_td = _unlazyfy_td(td)
+
+        assert _all_eq(new_td, new_spec.zero(), check_device=False)
 
 
 if __name__ == "__main__":

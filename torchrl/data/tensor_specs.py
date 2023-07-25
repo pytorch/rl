@@ -747,7 +747,7 @@ T = TypeVar("T")
 
 class _LazyStackedMixin(Generic[T]):
     def __init__(self, *specs: tuple[T, ...], dim: int) -> None:
-        self._specs = specs
+        self._specs = list(specs)
         self.dim = dim
         if self.dim < 0:
             self.dim = len(self.shape) + self.dim
@@ -862,6 +862,15 @@ class _LazyStackedMixin(Generic[T]):
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> T:
         return torch.stack([spec.to(dest) for spec in self._specs], self.dim)
+
+    def unbind(self, dim: int):
+        if dim == self.stack_dim:
+            return self._specs
+        shape = self.shape
+        if dim < 0 or dim > self.ndim - 1 or shape[dim] == -1:
+            raise ValueError(f"Provided dim is not valid for unbinding shape {shape}")
+        else:
+            raise ValueError("Can only unbind in stack dim")
 
 
 class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
@@ -2931,6 +2940,17 @@ class CompositeSpec(TensorSpec):
             shape=self.shape,
         )
 
+    def empty(self):
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
+        return self.__class__(
+            {},
+            device=device,
+            shape=self.shape,
+        )
+
     def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
@@ -3420,6 +3440,9 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
             [spec.expand(unstack_shape) for spec in self._specs],
             self.dim + len(expand_shape),
         )
+
+    def empty(self):
+        return torch.stack([spec.empty() for spec in self._specs], dim=self.stack_dim)
 
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
