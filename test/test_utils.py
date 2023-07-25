@@ -335,7 +335,7 @@ class TestConsolidateTd:
         return obs
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
-    def test_lazify(self, batch_size):
+    def test_consolidate(self, batch_size):
         obs = TestConsolidateTd.nested_lazy_het_td(batch_size)
         obs_lazy = obs["lazy"].clone()
 

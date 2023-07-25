@@ -52,9 +52,9 @@ def _consolidate_entries_td(
         keys = set(td.keys())  # shared keys
         lazy_keys_per_td = [
             set() for _ in range(len(td.tensordicts))
-        ]  # list of lazy keys per td
-        lazy_keys_examples = {}  # set of all lazy keys with an example for each
-        for td_index in range(len(td.tensordicts)):  # gather all lazy keys
+        ]  # list of exclusive keys per td
+        lazy_keys_examples = {}  # set of all exclusive keys with an example for each
+        for td_index in range(len(td.tensordicts)):  # gather all exclusive keys
             sub_td = td.tensordicts[td_index]
             if recurse_through_stack:
                 sub_td = _consolidate_entries_td(
@@ -78,7 +78,7 @@ def _consolidate_entries_td(
 
                         lazy_keys_examples.update({sub_td_key: value})
 
-        for td_index in range(len(td.tensordicts)):  # add missing lazy entries
+        for td_index in range(len(td.tensordicts)):  # add missing exclusive entries
             sub_td = td.tensordicts[td_index]
             for lazy_key in set(lazy_keys_examples.keys()).difference(
                 lazy_keys_per_td[td_index]
