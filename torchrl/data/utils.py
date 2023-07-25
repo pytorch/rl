@@ -54,7 +54,7 @@ def dense_stack_tds(
     return torch.stack(td_list, dim=stack_dim, out=out)
 
 
-def _unlazyfy_keys(
+def _unlazyfy_td(
     td,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
@@ -74,7 +74,7 @@ def _unlazyfy_keys(
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
             if recurse_through_stack:
-                sub_td = _unlazyfy_keys(
+                sub_td = _unlazyfy_td(
                     sub_td, recurse_through_entries, recurse_through_stack
                 )
                 td.tensordicts[td_index] = sub_td
@@ -114,7 +114,7 @@ def _unlazyfy_keys(
             if -1 not in shape:
                 td.set(
                     key,
-                    _unlazyfy_keys(
+                    _unlazyfy_td(
                         td.get(key), recurse_through_entries, recurse_through_stack
                     ),
                 )
@@ -122,7 +122,7 @@ def _unlazyfy_keys(
     return td
 
 
-def _relazyfy_keys(
+def _relazyfy_td(
     td,
 ):
     """Given a TensorDictBase, restores lazy keys by removing 0 shaped tensors and related orphan tensordicts."""
@@ -134,13 +134,13 @@ def _relazyfy_keys(
     if isinstance(td, LazyStackedTensorDict):
         for td_index in range(len(td.tensordicts)):
             sub_td = td.tensordicts[td_index]
-            sub_td = _relazyfy_keys(sub_td)
+            sub_td = _relazyfy_td(sub_td)
             td.tensordicts[td_index] = sub_td
 
     for key in list(td.keys()):
         shape = td.get_item_shape(key)
         if -1 not in shape:
-            value = _relazyfy_keys(td.get(key))
+            value = _relazyfy_td(td.get(key))
             if value is None:
                 del td[key]
             else:
