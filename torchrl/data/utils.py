@@ -228,6 +228,45 @@ def _unlazyfy_spec(
     return spec
 
 
+def _relazyfy_spec(
+    spec,
+):
+    """Given a TensorSpec, restores lazy keys by removing 0 shaped specs and related orphan specs."""
+    if not isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
+        if isinstance(spec, LazyStackedTensorSpec):
+            subspecs = []
+            for sub_spec in spec._specs:
+                sub_spec = _relazyfy_spec(sub_spec)
+                if sub_spec is not None:
+                    subspecs.append(sub_spec)
+            return torch.stack(subspecs, dim=spec.stack_dim) if len(subspecs) else None
+        else:
+            return None if 0 in spec.shape else spec.clone()
+
+    spec = spec.clone()
+
+    if isinstance(spec, LazyStackedCompositeSpec):
+        for spec_index in range(len(spec._specs)):
+            sub_spec = spec._specs[spec_index]
+            sub_spec = _relazyfy_spec(sub_spec)
+            spec._specs[spec_index] = sub_spec
+
+    for key in list(spec.keys()):
+        value = spec[key]
+        value = _relazyfy_spec(value)
+        if value is None:
+            del spec[key]
+        else:
+            spec.set(
+                key,
+                value,
+            )
+
+    if isinstance(spec, CompositeSpec) and not len(spec.keys()):
+        return None
+    return spec
+
+
 def _empty_like_spec(spec, shape):
     if isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
         return spec.empty()

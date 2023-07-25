@@ -26,7 +26,13 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import _all_eq, _unlazyfy_spec, _unlazyfy_td
+from torchrl.data.utils import (
+    # _relazyfy_spec,
+    # _relazyfy_td,
+    _all_eq_td,
+    _unlazyfy_spec,
+    _unlazyfy_td,
+)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3068,12 +3074,17 @@ class TestUnlazyfy:
     def test_unlazify_spec(self):
         spec = TestUnlazyfy.nested_lazy_het_specs(())
         td = TestUnlazifyTd.nested_lazy_het_td(())
-        assert _all_eq(td, spec.zero(), check_device=False)
+        assert _all_eq_td(td, spec.zero(), check_device=False)
 
         new_spec = _unlazyfy_spec(spec)
         new_td = _unlazyfy_td(td)
 
-        assert _all_eq(new_td, new_spec.zero(), check_device=False)
+        assert _all_eq_td(new_td, new_spec.zero(), check_device=False)
+
+        # spec = _relazyfy_spec(new_spec)
+        # td = _relazyfy_td(new_td)
+        #
+        # assert _all_eq_td(td, spec.zero(), check_device=False)
 
 
 if __name__ == "__main__":
