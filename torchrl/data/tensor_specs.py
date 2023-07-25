@@ -3138,8 +3138,16 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     """
 
-    def update(self, dict_or_spec: Union[CompositeSpec, Dict[str, TensorSpec]]) -> None:
-        raise NotImplementedError
+    def update(self, dict) -> None:
+        for key, item in dict.items():
+            if key in self.keys() and isinstance(
+                item, (dict, CompositeSpec, LazyStackedCompositeSpec)
+            ):
+                for spec, sub_item in zip(self._specs, item.unbind(self.dim)):
+                    spec[key].update(sub_item)
+                continue
+            self[key] = item
+        return self
 
     def __eq__(self, other):
         if not isinstance(other, LazyStackedCompositeSpec):
@@ -3289,74 +3297,20 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return self
 
     def __iter__(self):
-        raise NotImplementedError
+        for k in self.keys():
+            yield self[k]
 
-    def __setitem__(self, index: INDEX_TYPING, value: TensorSpec):
-        pass
-        # is_key = isinstance(index, str) or (
-        #     isinstance(index, tuple) and all(isinstance(_item, str) for _item in index)
-        # )
-        # if is_key:
-        #     for spec, v in zip(self._specs, value.unbind(self.dim)):
-        #         spec[index] = v
-        #
-        #     if any(isinstance(sub_index, (list, range)) for sub_index in index):
-        #         index = tuple(
-        #             torch.tensor(sub_index, device=self.device)
-        #             if isinstance(sub_index, (list, range))
-        #             else sub_index
-        #             for sub_index in index
-        #         )
-        # if (isinstance(index, Tensor) and index.dtype == torch.bool) or (
-        #     isinstance(index, tuple)
-        #     and any(
-        #         isinstance(_index, Tensor) and _index.dtype == torch.bool
-        #         for _index in index
-        #     )
-        # ):
-        #     raise RuntimeError(
-        #         "setting values to a LazyStackTensorDict using boolean values is not supported yet. "
-        #         "If this feature is needed, feel free to raise an issue on github."
-        #     )
-        #
-        # if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
-        #     index = convert_ellipsis_to_idx(index, self.batch_size)
-        # elif isinstance(index, (list, range)):
-        #     index = torch.tensor(index, device=self.device)
-        #
-        # if isinstance(value, (TensorDictBase, dict)):
-        #     indexed_bs = _getitem_batch_size(self.batch_size, index)
-        #     if isinstance(value, dict):
-        #         value = TensorDict(
-        #             value, batch_size=indexed_bs, device=self.device, _run_checks=False
-        #         )
-        #     if value.batch_size != indexed_bs:
-        #         # try to expand
-        #         try:
-        #             value = value.expand(indexed_bs)
-        #         except RuntimeError as err:
-        #             raise RuntimeError(
-        #                 f"indexed destination TensorDict batch size is {indexed_bs} "
-        #                 f"(batch_size = {self.batch_size}, index={index}), "
-        #                 f"which differs from the source batch size {value.batch_size}"
-        #             ) from err
-        #     converted_idx, num_single, isinteger = self._split_index(index)
-        #     if isinteger:
-        #         # this will break if the index along the stack dim is [0] or :1 or smth
-        #         for i, _idx in converted_idx.items():
-        #             self.tensordicts[i][_idx] = value
-        #         return self
-        #     unbind_dim = self.stack_dim - num_single
-        #     for (i, _idx), _value in zip(
-        #         converted_idx.items(),
-        #         value.unbind(unbind_dim),
-        #     ):
-        #         self.tensordicts[i][_idx] = _value
-        #     return self
-        #
-        # else:
-        #     for key in self.keys():
-        #         self.set_at_(key, value, index)
+    def __setitem__(self, key: NestedKey, value):
+        key = unravel_key(key)
+        is_key = isinstance(key, str) or (
+            isinstance(key, tuple) and all(isinstance(_item, str) for _item in key)
+        )
+        if is_key:
+            self.set(key, value)
+        else:
+            raise ValueError(
+                f"{self.__class__} expects str or tuple of str as key to set values "
+            )
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -3370,15 +3324,8 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         return len(self.shape)
 
     def set(self, name, spec):
-        if spec is not None:
-            shape = spec.shape
-            if shape[: self.ndim] != self.shape:
-                raise ValueError(
-                    "The shape of the spec and the CompositeSpec mismatch: the first "
-                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
-                    f"CompositeSpec.shape={self.shape}."
-                )
-        self._specs[name] = spec
+        for sub_spec, sub_item in zip(self._specs, spec.unbind(self.dim)):
+            sub_spec[name] = sub_item
 
     def unsqueeze(self, dim: int):
         if dim < 0:
