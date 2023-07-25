@@ -339,20 +339,20 @@ class TestUnlazifyTd:
         return obs
 
     @staticmethod
-    def get_all_keys(td, include_lazy: bool):
+    def get_all_keys_td(td, include_lazy: bool):
         """Given a TensorDictBase, returns all lazy and not lazy keys as a set tuples."""
         keys = set()
         if isinstance(td, LazyStackedTensorDict) and include_lazy:
             for t in td.tensordicts:
                 keys = keys.union(
-                    TestUnlazifyTd.get_all_keys(t, include_lazy=include_lazy)
+                    TestUnlazifyTd.get_all_keys_td(t, include_lazy=include_lazy)
                 )
         if isinstance(td, TensorDictBase):
             for key in td.keys():
                 try:
                     keys.add((key,))
                     value = td.get(key)
-                    inner_keys = TestUnlazifyTd.get_all_keys(
+                    inner_keys = TestUnlazifyTd.get_all_keys_td(
                         value, include_lazy=include_lazy
                     )
                     for inner_key in inner_keys:
@@ -374,9 +374,9 @@ class TestUnlazifyTd:
         obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
         assert _check_no_lazy_keys_td(obs_lazy, recurse=True)
 
-        assert TestUnlazifyTd.get_all_keys(
+        assert TestUnlazifyTd.get_all_keys_td(
             obs["lazy"], include_lazy=True
-        ) == TestUnlazifyTd.get_all_keys(obs_lazy, include_lazy=False)
+        ) == TestUnlazifyTd.get_all_keys_td(obs_lazy, include_lazy=False)
 
         relazyfyied_obs = _relazyfy_td(obs_lazy)
         assert _all_eq_td(relazyfyied_obs, obs["lazy"])
