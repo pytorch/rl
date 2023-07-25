@@ -8,12 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import (
-    is_tensor_collection,
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict import is_tensor_collection, LazyStackedTensorDict
 from torch import Tensor
 
 
@@ -42,7 +37,7 @@ else:
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
-def _unlazyfy_td(
+def _consolidate_entries_td(
     td,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
@@ -62,7 +57,7 @@ def _unlazyfy_td(
         for td_index in range(len(td.tensordicts)):  # gather all lazy keys
             sub_td = td.tensordicts[td_index]
             if recurse_through_stack:
-                sub_td = _unlazyfy_td(
+                sub_td = _consolidate_entries_td(
                     sub_td, recurse_through_entries, recurse_through_stack
                 )
                 td.tensordicts[td_index] = sub_td
@@ -101,43 +96,11 @@ def _unlazyfy_td(
             if -1 not in shape:
                 td.set(
                     key,
-                    _unlazyfy_td(
+                    _consolidate_entries_td(
                         td.get(key), recurse_through_entries, recurse_through_stack
                     ),
                 )
 
-    return td
-
-
-def _relazyfy_td(
-    td,
-):
-    """Given a TensorDictBase, restores lazy keys by removing 0 shaped tensors and related orphan tensordicts."""
-    if not is_tensor_collection(td):
-        return None if td.numel() == 0 else td.clone()
-
-    td = td.clone()
-
-    if isinstance(td, LazyStackedTensorDict):
-        for td_index in range(len(td.tensordicts)):
-            sub_td = td.tensordicts[td_index]
-            sub_td = _relazyfy_td(sub_td)
-            td.tensordicts[td_index] = sub_td
-
-    for key in list(td.keys()):
-        shape = td.get_item_shape(key)
-        if -1 not in shape:
-            value = _relazyfy_td(td.get(key))
-            if value is None:
-                del td[key]
-            else:
-                td.set(
-                    key,
-                    value,
-                )
-
-    if isinstance(td, TensorDict) and not len(td.keys()):
-        return None
     return td
 
 
@@ -152,63 +115,6 @@ def _empty_like_td(td, batch_size):
             dtype=td.dtype,
             device=td.device,
         )
-
-
-def _check_no_lazy_keys_td(td, recurse: bool = True):
-    """Given a TensorDictBase, returns true if there are no lazy keys."""
-    if isinstance(td, LazyStackedTensorDict):
-        keys = set(td.keys())
-        for inner_td in td.tensordicts:
-            if recurse and not _check_no_lazy_keys_td(inner_td):
-                return False
-            if set(inner_td.keys()) != keys:
-                return False
-    elif isinstance(td, TensorDict) and recurse:
-        for i in td.values():
-            if not _check_no_lazy_keys_td(i):
-                return False
-    elif isinstance(td, torch.Tensor):
-        return True
-    else:
-        return False
-
-    return True
-
-
-def _all_eq_td(
-    td: Union[TensorDictBase, torch.Tensor],
-    other: Union[TensorDictBase, torch.Tensor],
-    check_device: bool = True,
-    check_class: bool = True,
-):
-    """Returns true if the two classes match all entries in the keys and stack dimensions."""
-    if check_class and td.__class__ != other.__class__:
-        return False
-    if check_device and td.device != other.device:
-        return False
-    if td.shape != other.shape:
-        return False
-
-    if isinstance(td, LazyStackedTensorDict):
-        if td.stack_dim != other.stack_dim:
-            return False
-        for stacked_td, stacked_other in zip(td.tensordicts, other.tensordicts):
-            if not _all_eq_td(stacked_td, stacked_other, check_device, check_class):
-                return False
-    elif isinstance(td, TensorDictBase):
-        td_keys = set(td.keys())
-        other_keys = set(other.keys())
-        if td_keys != other_keys:
-            return False
-        for key in td_keys:
-            if not _all_eq_td(td[key], other[key], check_device, check_class):
-                return False
-    elif isinstance(td, torch.Tensor):
-        return torch.equal(td, other)
-    else:
-        raise ValueError("_all_eq was provided arguments from the wrong class")
-
-    return True
 
 
 class CloudpickleWrapper(object):

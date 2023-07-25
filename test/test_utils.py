@@ -12,15 +12,11 @@ import _utils_internal
 import pytest
 
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple
+from _utils_internal import TestUtilsTd
+from tensordict import TensorDict
+
 from torchrl._utils import get_binary_env_var, implement_for
-from torchrl.data.utils import (
-    _all_eq_td,
-    _check_no_lazy_keys_td,
-    _relazyfy_td,
-    _unlazyfy_td,
-)
+from torchrl.data.utils import _consolidate_entries_td
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -289,7 +285,7 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
 
 
-class TestUnlazifyTd:
+class TestConsolidateTd:
     @staticmethod
     def nested_lazy_het_td(batch_size):
         shared = torch.zeros(4, 4, 2)
@@ -338,48 +334,22 @@ class TestUnlazifyTd:
         obs = obs.expand(batch_size)
         return obs
 
-    @staticmethod
-    def get_all_keys_td(td, include_lazy: bool):
-        """Given a TensorDictBase, returns all lazy and not lazy keys as a set tuples."""
-        keys = set()
-        if isinstance(td, LazyStackedTensorDict) and include_lazy:
-            for t in td.tensordicts:
-                keys = keys.union(
-                    TestUnlazifyTd.get_all_keys_td(t, include_lazy=include_lazy)
-                )
-        if isinstance(td, TensorDictBase):
-            for key in td.keys():
-                try:
-                    keys.add((key,))
-                    value = td.get(key)
-                    inner_keys = TestUnlazifyTd.get_all_keys_td(
-                        value, include_lazy=include_lazy
-                    )
-                    for inner_key in inner_keys:
-                        keys.add((key,) + _unravel_key_to_tuple(inner_key))
-                except RuntimeError:
-                    pass
-        return keys
-
     @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
     def test_lazify(self, batch_size):
-        obs = self.nested_lazy_het_td(batch_size)
+        obs = TestConsolidateTd.nested_lazy_het_td(batch_size)
         obs_lazy = obs["lazy"].clone()
 
-        assert not _check_no_lazy_keys_td(obs_lazy)
+        assert not TestUtilsTd.check_no_exclusive_keys(obs_lazy)
 
-        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=False)
-        assert _check_no_lazy_keys_td(obs_lazy, recurse=False)
+        obs_lazy = _consolidate_entries_td(obs_lazy, recurse_through_entries=False)
+        assert TestUtilsTd.check_no_exclusive_keys(obs_lazy, recurse=False)
 
-        obs_lazy = _unlazyfy_td(obs_lazy, recurse_through_entries=True)
-        assert _check_no_lazy_keys_td(obs_lazy, recurse=True)
+        obs_lazy = _consolidate_entries_td(obs_lazy, recurse_through_entries=True)
+        assert TestUtilsTd.check_no_exclusive_keys(obs_lazy, recurse=True)
 
-        assert TestUnlazifyTd.get_all_keys_td(
-            obs["lazy"], include_lazy=True
-        ) == TestUnlazifyTd.get_all_keys_td(obs_lazy, include_lazy=False)
-
-        relazyfyied_obs = _relazyfy_td(obs_lazy)
-        assert _all_eq_td(relazyfyied_obs, obs["lazy"])
+        assert TestUtilsTd.get_all_keys(
+            obs["lazy"], include_exclusive=True
+        ) == TestUtilsTd.get_all_keys(obs_lazy, include_exclusive=False)
 
 
 if __name__ == "__main__":
