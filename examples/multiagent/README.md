@@ -3,7 +3,7 @@
 In this folder we provide a set of multi-agent example scripts using the [VMAS](https://github.com/proroklab/VectorizedMultiAgentSimulator) simulator.
 
 <p align="center">
-<img src="../media/marl_vmas.png" width="600px">
+<img src="https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/marl_vmas.png" width="600px">
 </p>
 
 <center><i>The MARL algorithms contained in the scripts of this folder run on three multi-robot tasks in VMAS.</i></center>
