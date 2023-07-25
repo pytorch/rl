@@ -175,22 +175,25 @@ def _check_no_lazy_keys(td, recurse: bool = True):
     return True
 
 
-def _all_eq(
+def _all_eq_td(
     td: Union[TensorDictBase, torch.Tensor],
     other: Union[TensorDictBase, torch.Tensor],
+    check_device: bool = True,
+    check_class: bool = True,
 ):
     """Returns true if the two classes match all entries in the keys and stack dimensions."""
-    if td.__class__ != other.__class__:
+    if check_class and td.__class__ != other.__class__:
         return False
-
-    if td.shape != other.shape or td.device != other.device:
+    if check_device and td.device != other.device:
+        return False
+    if td.shape != other.shape:
         return False
 
     if isinstance(td, LazyStackedTensorDict):
         if td.stack_dim != other.stack_dim:
             return False
         for stacked_td, stacked_other in zip(td.tensordicts, other.tensordicts):
-            if not _all_eq(stacked_td, stacked_other):
+            if not _all_eq_td(stacked_td, stacked_other, check_device, check_class):
                 return False
     elif isinstance(td, TensorDictBase):
         td_keys = set(td.keys())
@@ -198,7 +201,7 @@ def _all_eq(
         if td_keys != other_keys:
             return False
         for key in td_keys:
-            if not _all_eq(td[key], other[key]):
+            if not _all_eq_td(td[key], other[key], check_device, check_class):
                 return False
     elif isinstance(td, torch.Tensor):
         return torch.equal(td, other)
