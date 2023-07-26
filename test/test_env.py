@@ -1354,15 +1354,15 @@ class TestStepMdp:
             assert nested_key[0] not in td_keys
         assert (td[other_key] == 0).all()
 
-    @pytest.mark.parametrize("het_action", [True])
-    @pytest.mark.parametrize("het_done", [True])
-    @pytest.mark.parametrize("het_reward", [True])
-    @pytest.mark.parametrize("het_other", [True])
-    @pytest.mark.parametrize("het_obs", [True])
-    @pytest.mark.parametrize("exclude_reward", [False])
-    @pytest.mark.parametrize("exclude_done", [False])
-    @pytest.mark.parametrize("exclude_action", [False])
-    @pytest.mark.parametrize("keep_other", [True])
+    @pytest.mark.parametrize("het_action", [True, False])
+    @pytest.mark.parametrize("het_done", [True, False])
+    @pytest.mark.parametrize("het_reward", [True, False])
+    @pytest.mark.parametrize("het_other", [True, False])
+    @pytest.mark.parametrize("het_obs", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("keep_other", [True, False])
     def test_heterogeenous(
         self,
         het_action,
@@ -1428,9 +1428,6 @@ class TestStepMdp:
                                     obs_key: torch.ones(
                                         td_batch_size, i if het_obs else 1
                                     ),
-                                    other_key: torch.ones(
-                                        td_batch_size, i if het_other else 1
-                                    ),
                                 },
                                 [td_batch_size],
                             ),
@@ -1455,17 +1452,47 @@ class TestStepMdp:
         td_nested_keys = td.keys(True, True)
         td_keys = td.keys()
         for i in range(nested_dim):
+            if het_obs:
+                assert td[..., i][nested_obs_key].shape == (td_batch_size, i + 1)
+            else:
+                assert td[..., i][nested_obs_key].shape == (td_batch_size, 1)
             assert (td[..., i][nested_obs_key] == 1).all()
         if exclude_reward:
-            assert reward_key not in td_keys
+            assert nested_reward_key not in td_keys
         else:
             for i in range(nested_dim):
+                if het_reward:
+                    assert td[..., i][nested_reward_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_reward_key].shape == (td_batch_size, 1)
                 assert (td[..., i][nested_reward_key] == 1).all()
         if exclude_done:
-            assert done_key not in td_keys
+            assert nested_done_key not in td_keys
         else:
             for i in range(nested_dim):
+                if het_done:
+                    assert td[..., i][nested_done_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_done_key].shape == (td_batch_size, 1)
                 assert (td[..., i][nested_done_key] == 1).all()
+        if exclude_action:
+            assert nested_action_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_action:
+                    assert td[..., i][nested_action_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_action_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_action_key] == 0).all()
+        if not keep_other:
+            assert nested_other_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_other:
+                    assert td[..., i][nested_other_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_other_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_other_key] == 0).all()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
