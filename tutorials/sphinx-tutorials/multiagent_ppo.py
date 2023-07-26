@@ -481,9 +481,9 @@ policy = ProbabilisticActor(
 # considerations to be made:
 #
 # - Sharing is not recommended when agents have different reward functions, as the critics will need to learn
-# to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
+#   to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
 # - In decentralised training settings, sharing cannot be performed without additional infrastructure to
-# synchronise parameters.
+#   synchronise parameters.
 #
 # In all other cases where the reward function (to be differentiated from the reward) is the same for all agents
 # (as in the current scenario),
