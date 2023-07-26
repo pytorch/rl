@@ -19,6 +19,8 @@ from mocking_classes import (
     DiscreteActionConvPolicy,
     DiscreteActionVecMockEnv,
     DiscreteActionVecPolicy,
+    HeteroCountingEnv,
+    HeteroCountingEnvPolicy,
     MockSerialEnv,
     NestedCountingEnv,
 )
@@ -1290,7 +1292,6 @@ class TestPreemptiveThreshold:
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
-
         frames_per_batch = 800
 
         def env_fn(seed):
@@ -1466,6 +1467,28 @@ class TestNestedEnvsCollector:
             frames_per_batch // prod(batch_size),
             nested_dim,
         )
+
+
+class TestHetEnvsCollector:
+    def test_collector_nested_env_combinations(
+        self,
+        seed=1,
+        frames_per_batch=20,
+    ):
+        env = HeteroCountingEnv()
+        torch.manual_seed(seed)
+        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
