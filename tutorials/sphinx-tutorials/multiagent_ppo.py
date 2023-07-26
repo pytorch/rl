@@ -306,7 +306,7 @@ assert env.done_spec == env.output_spec["_done_spec"][env.done_key]
 #
 # We can append any TorchRL transform we need to our enviornment.
 # These will modify its input/output in some desired way.
-# Remember that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
+# We stress that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
 # For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
 # We will tell this transform where to find the reward key and where to write the summed episode reward.
@@ -477,10 +477,18 @@ policy = ProbabilisticActor(
 # return the corresponding value estimates.
 #
 # As before, one should think carefully about the decision of **sharing the critic parameters**.
-# Sharing is not recommended when agents have different reward functions. In cases
-# where the reward function (to be differentiated from the reward) is the same for all agents (as in the current scenario),
-# sharing might improve performance. In general, even with the same reward function, this choice could have a considerable
-# impacts you need to consider when designing your networks.
+# In general, parameter sharing will grant faster training convergence, but there are a few important
+# considerations to be made:
+#
+# - Sharing is not recommended when agents have different reward functions, as the critics will need to learn
+# to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
+# - In decentralized training settings, sharing cannot be performed without additional infrastructure to
+# synchronise parameters.
+#
+# In all other cases where the reward function (to be differentiated from the reward) is the same for all agents
+# (as in the current scenario),
+# sharing can provide improved performance. This can come at the cost of homogeneity in the agent strategies.
+# In general, the best way to know which choice is preferable is to quickly experiment both options.
 #
 # Here is also where we have to choose between **MAPPO and IPPO**:
 #
@@ -577,7 +585,7 @@ replay_buffer = ReplayBuffer(
 # -------------
 #
 # The PPO loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilizing PPO:
+# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
 # it hides away the mathematical operations of PPO and the control flow that
 # goes with it.
 #
