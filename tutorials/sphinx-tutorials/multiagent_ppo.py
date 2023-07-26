@@ -190,7 +190,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # This means that all its state and physics
 # are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
 # This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
-# speed up parallel computation by leveraging parallelization in GPU warps. I also means
+# speed up parallel computation by leveraging parallelization in GPU warps. It also means
 # that, when using it in TorchRL, both simulation and training can be run on-device, without ever passing
 # data to the CPU.
 #
@@ -211,7 +211,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 #
 # We will now instantiate the environment.
 # For this tutorial, we will limit the episodes to ``max_steps``, after which the done flag is set. This is
-# functionality is already provided in the VMAS simulator but the TorchRL ``StepCount``
+# functionality is already provided in the VMAS simulator but the TorchRL :class:`~.envs.transforms.StepCount`
 # transform could alternatively be used.
 # We will also use ``num_vmas_envs`` vectorized environments, to leverage batch simulation.
 #
@@ -241,7 +241,7 @@ env = VmasEnv(
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`VmasEnv` takes care of setting the proper specs for your env so
+# In our example, the :class:`~.envs.libs.vmas.VmasEnv` takes care of setting the proper specs for your env so
 # you should not have to care about this.
 #
 # There are four specs to look at:
@@ -263,7 +263,7 @@ print("observation_spec:", env.observation_spec)
 # Using the commands just shown we can access the domain of each value.
 # Doing this we can see that all specs apart from done have a leading shape ``(num_vmas_envs, n_agents)``.
 # This represents the fact that those values will be present for each agent in each individual environment.
-# The done spec, on the other hand, has leading shape ``(num_vmas_envs)``, representing that done is shared among
+# The done spec, on the other hand, has leading shape ``num_vmas_envs``, representing that done is shared among
 # agents.
 #
 # TorchRL has a way to keep track of which MARL specs are shared and which are not.
@@ -310,8 +310,8 @@ assert env.done_spec == env.output_spec["_done_spec"][env.done_key]
 #
 # For example, in this case, we will instantiate a ``RewardSum`` transform which will sum rewards over the episode.
 # We will tell this transform where to find the reward key and where to write the summed episode reward.
-# The transformed env will inherit
-# the device and meta-data of the wrapped env, and transform these depending on the sequence
+# The transformed environment will inherit
+# the device and meta-data of the wrapped environment, and transform these depending on the sequence
 # of transforms it contains.
 #
 
@@ -359,7 +359,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # In torchrl the convention is that done and observations will be present in both root and next (as these are
 # available both at reset time and after a step). Action will only be available in root (as there is no action
 # resulting from a step) and reward will only be available in next (as there is no reward at reset time).
-# This structure follows the one in the Sutton and Barto book where root represents data at time :math:`t` and
+# This structure follows the one in **Reinforcement Learning: An Introduction (Sutton and Barto)** where root represents data at time :math:`t` and
 # next represents data at time :math:`t+1` of a world step.
 #
 #
@@ -390,10 +390,10 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # For this, our neural network will have to output a mean and a standard deviation for each action.
 # Each agent will thus have ``2 * n_actions_per_agents`` outputs.
 #
-# Another important decision is whether we want our agents to **share the policy parameters**.
-# Sharing parameters means that they will all share the same policy, which will allow them to benefit from
+# Another important decision we need to make is whether we want our agents to **share the policy parameters**.
+# On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same brain.
+# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -474,12 +474,12 @@ policy = ProbabilisticActor(
 #
 # The critic network is a crucial component of the PPO algorithm, even though it
 # isn't used at sampling time. This module will read the observations and
-# return the corresponding value.
+# return the corresponding value estimates.
 #
-# As before, you have to think carefully about the decision of **sharing the critic parameters**.
-# Sharing is definitely not recommended when agents have different reward functions. In cases
-# where the reward function (note: the reward function, NOT the reward) is the same for all agents (like here),
-# sharing might help performance. In general, even with the same reward function, this choice might have important
+# As before, one should think carefully about the decision of **sharing the critic parameters**.
+# Sharing is not recommended when agents have different reward functions. In cases
+# where the reward function (to be differentiated from the reward) is the same for all agents (as in the current scenario),
+# sharing might improve performance. In general, even with the same reward function, this choice could have a considerable
 # impacts you need to consider when designing your networks.
 #
 # Here is also where we have to choose between **MAPPO and IPPO**:
@@ -517,7 +517,7 @@ critic = TensorDictModule(
 )
 
 ######################################################################
-# let's try our policy and critic modules. As we said earlier, the usage of
+# Let us try our policy and critic modules. As pointed earlier, the usage of
 # :class:`TensorDictModule` makes it possible to directly read the output
 # of the environment to run these modules, as they know what information to read
 # and where to write it:
@@ -532,7 +532,7 @@ print("Running value:", critic(env.reset()))
 # Data collector
 # --------------
 #
-# TorchRL provides a set of :class:`DataCollector` classes. Briefly, these
+# TorchRL provides a set of data collector classes. Briefly, these
 # classes execute three operations: reset an environment, compute an action
 # using the policy and the latest observation, execute a step in the environment, and repeat
 # the last two steps until the environment signals a stop (or reaches a done
@@ -577,7 +577,7 @@ replay_buffer = ReplayBuffer(
 # -------------
 #
 # The PPO loss can be directly imported from torchrl for convenience using the
-# :class:`ClipPPOLoss` class. This is the easiest way of utilizing PPO:
+# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilizing PPO:
 # it hides away the mathematical operations of PPO and the control flow that
 # goes with it.
 #
