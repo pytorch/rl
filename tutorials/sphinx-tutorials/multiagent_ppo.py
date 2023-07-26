@@ -8,7 +8,7 @@ This tutorial demonstrates how to use PyTorch and :py:mod:`torchrl` to
 solve a Multi-Agent Reinforcement Learning (MARL) problem.
 
 A code-only version of this tutorial is available in the
-`torchrl examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
+`TorchRL examples <https://github.com/pytorch/rl/tree/main/examples/multiagent/mappo_ippo.py>`__,
 alongside other simple scripts for many MARL algorithms (QMIX, MADDPG, IQL).
 
 For ease of use, this tutorial will follow the general structure of the already available
@@ -304,7 +304,7 @@ assert env.done_spec == env.output_spec["_done_spec"][env.done_key]
 # Transforms
 # ~~~~~~~~~~
 #
-# We can append any torchrl transform we need to our enviornment.
+# We can append any TorchRL transform we need to our enviornment.
 # These will modify its input/output in some desired way.
 # Remember that, in multi-agent contexts, it is paramount to provide explicitly the keys to modify.
 #
@@ -356,7 +356,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # - *In the next* (accessible by running ``rollout.get("next")`` ). We will find the same structure as the root,
 #   but for keys that are available only after a step.
 #
-# In torchrl the convention is that done and observations will be present in both root and next (as these are
+# In TorchRL the convention is that done and observations will be present in both root and next (as these are
 # available both at reset time and after a step). Action will only be available in root (as there is no action
 # resulting from a step) and reward will only be available in next (as there is no reward at reset time).
 # This structure follows the one in **Reinforcement Learning: An Introduction (Sutton and Barto)** where root represents data at time :math:`t` and
@@ -401,7 +401,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #
 # **First**: define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
 #
-# For this we use the ``MultiAgentMLP``, a torchrl module made exactly for
+# For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
 # multiple agents, with much customization available.
 #
 
@@ -576,7 +576,7 @@ replay_buffer = ReplayBuffer(
 # Loss function
 # -------------
 #
-# The PPO loss can be directly imported from torchrl for convenience using the
+# The PPO loss can be directly imported from TorchRL for convenience using the
 # :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilizing PPO:
 # it hides away the mathematical operations of PPO and the control flow that
 # goes with it.
