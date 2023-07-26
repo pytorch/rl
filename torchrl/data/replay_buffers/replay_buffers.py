@@ -410,7 +410,7 @@ class ReplayBuffer:
             data = self.sample()
             yield data
 
-    def __getstate__(self) -> dict:
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         _replay_lock = state.pop("_replay_lock", None)
         _futures_lock = state.pop("_futures_lock", None)
@@ -420,7 +420,7 @@ class ReplayBuffer:
             state["_futures_lock_placeholder"] = None
         return state
 
-    def __setstate__(self, state: dict):
+    def __setstate__(self, state: Dict[str, Any]):
         if "_replay_lock_placeholder" in state:
             state.pop("_replay_lock_placeholder")
             _replay_lock = threading.RLock()
