@@ -824,9 +824,9 @@ class SyncDataCollector(DataCollectorBase):
                 # better cloning here than when passing the td for stacking
                 # cloning is necessary to avoid modifying dones in-place
                 self._tensordict = self._tensordict.clone()
-                self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
-                    td_reset[traj_done_or_terminated]
-                )
+                self._tensordict[traj_done_or_terminated] = td_reset[
+                    traj_done_or_terminated
+                ]
             else:
                 self._tensordict.update(td_reset)
 
@@ -861,7 +861,6 @@ class SyncDataCollector(DataCollectorBase):
                 else:
                     self.policy(self._tensordict)
                     self.env.step(self._tensordict)
-
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 tensordicts.append(self._tensordict.to(self.storing_device))
 
