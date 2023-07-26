@@ -96,6 +96,10 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
             in_keys_inv=[],
         )
     )
+    obsnorm = ObservationNorm(
+        loc=obs_loc, scale=obs_std, in_keys="observation", standard_normal=True
+    )
+    transformed_env.append_transform(obsnorm)
     transformed_env.append_transform(
         UnsqueezeTransform(-2, in_keys=["observation", "action", "return_to_go"])
     )
@@ -104,12 +108,9 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
             in_keys=["observation", "action", "return_to_go"],
             N=env_cfg.stacked_frames,
             dim=-2,
+            padding="zeros",
         )
     )
-    obsnorm = ObservationNorm(
-        loc=obs_loc, scale=obs_std, in_keys="observation", standard_normal=True
-    )
-    transformed_env.append_transform(obsnorm)
 
     if train:
         transformed_env.append_transform(RewardSum())
@@ -176,11 +177,10 @@ def make_collector(cfg, policy):
 
 
 def get_loc_std(env_name):
-    data = D4RLExperienceReplay(env_name, 1024)
-    for sample in data:
-        loc = sample.get("observation").mean()
-        std = sample.get("observation").std()
-        break
+    buffer = D4RLExperienceReplay(env_name, 1024)
+    full_data = buffer._get_dataset_from_env(env_name, {})
+    loc = full_data["observation"].mean(axis=0).float()
+    std = full_data["observation"].std(axis=0).float()
     return loc, std
 
 

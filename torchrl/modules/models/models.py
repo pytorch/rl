@@ -1188,8 +1188,11 @@ class OnlineDTActor(nn.Module):
             action_dim=action_dim,
             config=transformer_config,
         )
-        self.action_layer = nn.Linear(
-            transformer_config["n_embd"], action_dim * 2, device=device
+        self.action_layer_mean = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+        self.action_layer_logstd = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
         )
 
         self.log_std_min, self.log_std_max = -5.0, 2.0
@@ -1210,8 +1213,9 @@ class OnlineDTActor(nn.Module):
         return_to_go: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden_state = self.transformer(observation, action, return_to_go)
-        out = self.action_layer(hidden_state)
-        mu, log_std = torch.chunk(out, 2, -1)
+        mu = self.action_layer_mean(hidden_state)
+        log_std = self.action_layer_logstd(hidden_state)
+        # mu, log_std = torch.chunk(out, 2, -1)
         log_std = torch.tanh(log_std)
         # log_std is the output of tanh so it will be between [-1, 1]
         # map it to be between [log_std_min, log_std_max]
@@ -1226,10 +1230,10 @@ class OnlineDTActor(nn.Module):
     def default_config(cls):
         """Default configuration for :class:`~.OnlineDTActor`."""
         return DecisionTransformer.DTConfig(
-            n_embd=256,
+            n_embd=512,
             n_layer=4,
             n_head=4,
-            n_inner=1024,
+            n_inner=2048,
             activation="relu",
             n_positions=1024,
             resid_pdrop=0.1,
@@ -1307,10 +1311,10 @@ class DTActor(nn.Module):
     def default_config(cls):
         """Default configuration for :class:`~.DTActor`."""
         return DecisionTransformer.DTConfig(
-            n_embd=256,
+            n_embd=512,
             n_layer=4,
             n_head=4,
-            n_inner=1024,
+            n_inner=2048,
             activation="relu",
             n_positions=1024,
             resid_pdrop=0.1,

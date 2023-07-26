@@ -182,7 +182,7 @@ class OnlineDTLoss(LossModule):
     def get_entropy_bonus(self, dist: d.Distribution) -> torch.Tensor:
         x = dist.rsample((self.samples_mc_entropy,))
         log_p = dist.log_prob(x)
-        # log_p: (batch_size, context_len,
+        # log_p: (batch_size, context_len)
         return -log_p.mean(axis=0)
 
     @dispatch
