@@ -1293,6 +1293,18 @@ class CountingBatchedEnv(EnvBase):
         return tensordict.select().set("next", tensordict)
 
 
+class HeteroCountingEnvPolicy:
+    def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+        self.full_action_spec = full_action_spec
+        self.count = count
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        action_td = self.full_action_spec.zero()
+        if self.count:
+            action_td.apply_(lambda x: x + 1)
+        return td.update(action_td)
+
+
 class HeteroCountingEnv(EnvBase):
     """A heterogeneous, counting Env."""
 
@@ -1449,8 +1461,15 @@ class HeteroCountingEnv(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
+        actions = torch.zeros_like(self.count.squeeze(-1), dtype=torch.bool)
+        for i in range(self.n_nested_dim):
+            action = tensordict["lazy"][..., i]["action"]
+            action = action[..., 0].to(torch.bool)
+            actions += action
+
+        self.count += actions.unsqueeze(-1).to(torch.int)
+
         td = self.observation_spec.zero()
-        self.count += 1
         td.apply_(lambda x: x + expand_right(self.count, x.shape))
         td.update(self.output_spec["_done_spec"].zero())
         td.update(self.output_spec["_reward_spec"].zero())
