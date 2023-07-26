@@ -279,12 +279,14 @@ class PPOLoss(LossModule):
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
-        self.register_buffer(
-            "entropy_coef", torch.tensor(entropy_coef, device=self.device)
-        )
-        self.register_buffer(
-            "critic_coef", torch.tensor(critic_coef, device=self.device)
-        )
+
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
+
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
