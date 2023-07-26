@@ -33,6 +33,8 @@ from mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     DiscreteActionVecMockEnv,
     DummyModelBasedEnvBase,
+    HeteroCountingEnv,
+    HeteroCountingEnvPolicy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
@@ -40,7 +42,7 @@ from mocking_classes import (
 )
 from packaging import version
 from tensordict.nn import TensorDictModuleBase
-from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1076,7 +1078,6 @@ class TestStepMdp:
     @pytest.mark.parametrize("exclude_done", [True, False])
     @pytest.mark.parametrize("exclude_action", [True, False])
     @pytest.mark.parametrize("has_out", [True, False])
-    @pytest.mark.parametrize("lazy_stack", [False, True])
     def test_steptensordict(
         self,
         keep_other,
@@ -1084,7 +1085,6 @@ class TestStepMdp:
         exclude_done,
         exclude_action,
         has_out,
-        lazy_stack,
     ):
         torch.manual_seed(0)
         tensordict = TensorDict(
@@ -1102,16 +1102,7 @@ class TestStepMdp:
             },
             [4],
         )
-        if lazy_stack:
-            # let's spice this a little bit
-            tds = tensordict.unbind(0)
-            tds[0]["this", "one"] = torch.zeros(2)
-            tds[1]["but", "not", "this", "one"] = torch.ones(2)
-            tds[0]["next", "this", "one"] = torch.ones(2) * 2
-            tensordict = torch.stack(tds, 0)
         next_tensordict = TensorDict({}, [4]) if has_out else None
-        if has_out and lazy_stack:
-            next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
         out = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
@@ -1121,43 +1112,24 @@ class TestStepMdp:
             next_tensordict=next_tensordict,
         )
         assert "ledzep" in out.keys()
-        if lazy_stack:
-            assert (out["ledzep"] == tensordict["next", "ledzep"]).all()
-            assert (out[0]["this", "one"] == 2).all()
-            if keep_other:
-                assert (out[1]["but", "not", "this", "one"] == 1).all()
-        else:
-            assert out["ledzep"] is tensordict["next", "ledzep"]
         if keep_other:
             assert "beatles" in out.keys()
-            if lazy_stack:
-                assert (out["beatles"] == tensordict["beatles"]).all()
-            else:
-                assert out["beatles"] is tensordict["beatles"]
+            assert out["beatles"] is tensordict["beatles"]
         else:
             assert "beatles" not in out.keys()
         if not exclude_reward:
             assert "reward" in out.keys()
-            if lazy_stack:
-                assert (out["reward"] == tensordict["next", "reward"]).all()
-            else:
-                assert out["reward"] is tensordict["next", "reward"]
+            assert out["reward"] is tensordict["next", "reward"]
         else:
             assert "reward" not in out.keys()
         if not exclude_action:
             assert "action" in out.keys()
-            if lazy_stack:
-                assert (out["action"] == tensordict["action"]).all()
-            else:
-                assert out["action"] is tensordict["action"]
+            assert out["action"] is tensordict["action"]
         else:
             assert "action" not in out.keys()
         if not exclude_done:
             assert "done" in out.keys()
-            if lazy_stack:
-                assert (out["done"] == tensordict["next", "done"]).all()
-            else:
-                assert out["done"] is tensordict["next", "done"]
+            assert out["done"] is tensordict["next", "done"]
         else:
             assert "done" not in out.keys()
         if has_out:
@@ -1382,6 +1354,146 @@ class TestStepMdp:
         else:
             assert nested_key[0] not in td_keys
         assert (td[other_key] == 0).all()
+
+    @pytest.mark.parametrize("het_action", [True, False])
+    @pytest.mark.parametrize("het_done", [True, False])
+    @pytest.mark.parametrize("het_reward", [True, False])
+    @pytest.mark.parametrize("het_other", [True, False])
+    @pytest.mark.parametrize("het_obs", [True, False])
+    @pytest.mark.parametrize("exclude_reward", [True, False])
+    @pytest.mark.parametrize("exclude_done", [True, False])
+    @pytest.mark.parametrize("exclude_action", [True, False])
+    @pytest.mark.parametrize("keep_other", [True, False])
+    def test_heterogeenous(
+        self,
+        het_action,
+        het_done,
+        het_reward,
+        het_other,
+        het_obs,
+        exclude_reward,
+        exclude_done,
+        exclude_action,
+        keep_other,
+    ):
+        td_batch_size = 4
+        nested_dim = 3
+        nested_batch_size = (td_batch_size, nested_dim)
+        nested_key = ("data",)
+
+        reward_key = "reward"
+        nested_reward_key = nested_key + (reward_key,)
+        done_key = "done"
+        nested_done_key = nested_key + (done_key,)
+        action_key = "action"
+        nested_action_key = nested_key + (action_key,)
+        obs_key = "state"
+        nested_obs_key = nested_key + (obs_key,)
+        other_key = "beatles"
+        nested_other_key = nested_key + (other_key,)
+
+        tds = []
+        for i in range(1, nested_dim + 1):
+            tds.append(
+                TensorDict(
+                    {
+                        nested_key: TensorDict(
+                            {
+                                reward_key: torch.zeros(
+                                    td_batch_size, i if het_reward else 1
+                                ),
+                                done_key: torch.zeros(
+                                    td_batch_size, i if het_done else 1
+                                ),
+                                action_key: torch.zeros(
+                                    td_batch_size, i if het_action else 1
+                                ),
+                                obs_key: torch.zeros(
+                                    td_batch_size, i if het_obs else 1
+                                ),
+                                other_key: torch.zeros(
+                                    td_batch_size, i if het_other else 1
+                                ),
+                            },
+                            [td_batch_size],
+                        ),
+                        "next": {
+                            nested_key: TensorDict(
+                                {
+                                    reward_key: torch.ones(
+                                        td_batch_size, i if het_reward else 1
+                                    ),
+                                    done_key: torch.ones(
+                                        td_batch_size, i if het_done else 1
+                                    ),
+                                    obs_key: torch.ones(
+                                        td_batch_size, i if het_obs else 1
+                                    ),
+                                },
+                                [td_batch_size],
+                            ),
+                        },
+                    },
+                    [td_batch_size],
+                )
+            )
+        lazy_td = torch.stack(tds, dim=1)
+        input_td = lazy_td
+
+        td = step_mdp(
+            lazy_td.lock_(),
+            exclude_reward=exclude_reward,
+            exclude_done=exclude_done,
+            exclude_action=exclude_action,
+            reward_key=nested_reward_key,
+            done_key=nested_done_key,
+            action_key=nested_action_key,
+            keep_other=keep_other,
+        )
+        td_nested_keys = td.keys(True, True)
+        td_keys = td.keys()
+        for i in range(nested_dim):
+            if het_obs:
+                assert td[..., i][nested_obs_key].shape == (td_batch_size, i + 1)
+            else:
+                assert td[..., i][nested_obs_key].shape == (td_batch_size, 1)
+            assert (td[..., i][nested_obs_key] == 1).all()
+        if exclude_reward:
+            assert nested_reward_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_reward:
+                    assert td[..., i][nested_reward_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_reward_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_reward_key] == 1).all()
+        if exclude_done:
+            assert nested_done_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_done:
+                    assert td[..., i][nested_done_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_done_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_done_key] == 1).all()
+        if exclude_action:
+            assert nested_action_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_action:
+                    assert td[..., i][nested_action_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_action_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_action_key] == 0).all()
+        if not keep_other:
+            assert nested_other_key not in td_keys
+        else:
+            for i in range(nested_dim):
+                if het_other:
+                    assert td[..., i][nested_other_key].shape == (td_batch_size, i + 1)
+                else:
+                    assert td[..., i][nested_other_key].shape == (td_batch_size, 1)
+                assert (td[..., i][nested_other_key] == 0).all()
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -1669,7 +1781,6 @@ class TestConcurrentEnvs:
 class TestNestedSpecs:
     @pytest.mark.parametrize("envclass", ["CountingEnv", "NestedCountingEnv"])
     def test_nested_env(self, envclass):
-
         if envclass == "CountingEnv":
             env = CountingEnv()
         elif envclass == "NestedCountingEnv":
@@ -1700,7 +1811,6 @@ class TestNestedSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
-
         env = NestedCountingEnv(batch_size=batch_size, nested_dim=nested_dim)
 
         td_reset = env.reset()
@@ -1750,6 +1860,60 @@ class TestNestedSpecs:
         )
 
 
+class TestHeteroEnvs:
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_reset(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        env.reset()
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (1, 2)])
+    def test_rand_step(self, batch_size):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.reset()
+        assert (td["lazy"][..., 0]["tensor_0"] == 0).all()
+        td = env.rand_step()
+        assert (td["next", "lazy"][..., 0]["tensor_0"] == 1).all()
+        td = env.rand_step()
+        assert (td["next", "lazy"][..., 1]["tensor_1"] == 2).all()
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
+    def test_rollout(self, batch_size, rollout_steps, n_lazy_dim=3):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        td = env.rollout(rollout_steps)
+
+        assert isinstance(td, TensorDict)
+        assert td.batch_size == (*batch_size, rollout_steps)
+
+        assert isinstance(td["lazy"], LazyStackedTensorDict)
+        assert td["lazy"].shape == (*batch_size, rollout_steps, n_lazy_dim)
+        assert td["lazy"].stack_dim == len(td["lazy"].batch_size) - 1
+
+        assert (td[..., -1]["next", "state"] == rollout_steps).all()
+        assert (td[..., -1]["next", "lazy", "camera"] == rollout_steps).all()
+        assert (
+            td["lazy"][(0,) * len(batch_size)][..., 0]["tensor_0"].squeeze(-1)
+            == torch.arange(rollout_steps)
+        ).all()
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
+    @pytest.mark.parametrize("count", [True, False])
+    def test_rollout_policy(self, batch_size, rollout_steps, count):
+        env = HeteroCountingEnv(batch_size=batch_size)
+        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"], count=count)
+        td = env.rollout(rollout_steps, policy=policy)
+        for i in range(env.n_nested_dim):
+            if count:
+                agent_obs = td["lazy"][(0,) * len(batch_size)][..., i][f"tensor_{i}"]
+                for _ in range(i + 1):
+                    agent_obs = agent_obs.mean(-1)
+                assert (agent_obs == torch.arange(rollout_steps)).all()
+                assert (td["lazy"][..., i]["action"] == 1).all()
+            else:
+                assert (td["lazy"][..., i]["action"] == 0).all()
+
+
 @pytest.mark.parametrize(
     "envclass",
     [
@@ -1768,6 +1932,7 @@ class TestNestedSpecs:
         MockBatchedUnLockedEnv,
         MockSerialEnv,
         NestedCountingEnv,
+        HeteroCountingEnv,
     ],
 )
 def test_mocking_envs(envclass):

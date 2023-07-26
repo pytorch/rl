@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import warnings
 from copy import deepcopy
 from typing import Any, Callable, Dict, Iterator, Optional, Union
 
@@ -22,7 +23,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.utils import dense_stack_tds, DEVICE_TYPING
 from torchrl.envs.utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
@@ -1207,6 +1208,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
+        if not return_contiguous:
+            warnings.warn(
+                "return_contiguous will soon be deprecated and as"
+                " rollouts are always stored contiguously along the time dimension",
+                category=DeprecationWarning,
+            )
+
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):
@@ -1265,9 +1273,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
-        out_td = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            out_td = out_td.contiguous()
+        out_td = dense_stack_tds(tensordicts, len(batch_size))
+
         out_td.refine_names(..., "time")
         return out_td
 
