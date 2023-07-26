@@ -77,7 +77,7 @@ Key learnings:
 # In multi-agent settings, things are a bit different. We now have multiple policies :math:`\mathbf{\pi}`,
 # one for each agent. Policies are typically local and decentralised. This means that
 # the policy for a single agent will output an action for that agent based only on its observation.
-# In the MARL literature, this is referred to as **decentralized execution**.
+# In the MARL literature, this is referred to as **decentralised execution**.
 # On the other hand, different formulations exist for the critic, mainly:
 #
 # - In `MAPPO <https://arxiv.org/abs/2103.01955>`_ the critic is centralised and takes as input the global state
@@ -104,10 +104,10 @@ Key learnings:
 #
 # 4. Next, we will create the sampling collector and the replay buffer.
 #
-# 5. Finally, we will run our training loop and analyze the results.
+# 5. Finally, we will run our training loop and analyse the results.
 #
 # If you are running this in Colab or in a machine with a GUI, you will also have the option
-# to render and visualize your own trained policy prior and after training.
+# to render and visualise your own trained policy prior and after training.
 #
 # Let's import our dependencies
 #
@@ -171,7 +171,7 @@ max_grad_norm = 1.0  # Maximum norm for the gradients
 # PPO
 clip_epsilon = 0.2  # clip value for PPO loss
 gamma = 0.9  # discount factor
-lmbda = 0.9  # lambda for generalized advantage estimation
+lmbda = 0.9  # lambda for generalised advantage estimation
 entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 
 ######################################################################
@@ -190,7 +190,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # This means that all its state and physics
 # are PyTorch tensors with a first dimension representing the number of parallel environments in a batch.
 # This allows leveraging the Single Instruction Multiple Data (SIMD) paradigm of GPUs and significantly
-# speed up parallel computation by leveraging parallelization in GPU warps. It also means
+# speed up parallel computation by leveraging parallelisation in GPU warps. It also means
 # that, when using it in TorchRL, both simulation and training can be run on-device, without ever passing
 # data to the CPU.
 #
@@ -202,7 +202,7 @@ entropy_eps = 1e-4  # coefficient of the entropy term in the PPO loss
 # avoid colliding into each other.
 # Agents act in a 2D continuous world with drag and elastic collisions.
 # Their actions are 2D continuous forces which determine their acceleration.
-# The reward is composed of three terms: a collision penalization, a reward based on the distance to the goal, and a
+# The reward is composed of three terms: a collision penalisation, a reward based on the distance to the goal, and a
 # final shared reward given when all agents reach their goal.
 # The distance-based term is computed as the difference in the relative distance
 # between an agent and its goal over two consecutive timesteps.
@@ -377,7 +377,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Policy
 # ------
 #
-# PPO utilizes a stochastic policy to handle exploration. This means that our
+# PPO utilises a stochastic policy to handle exploration. This means that our
 # neural network will have to output the parameters of a distribution, rather
 # than a single value corresponding to the action taken.
 #
@@ -402,7 +402,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # **First**: define a neural network ``n_obs_per_agent`` -> ``2 * n_actions_per_agents``
 #
 # For this we use the ``MultiAgentMLP``, a TorchRL module made exactly for
-# multiple agents, with much customization available.
+# multiple agents, with much customisation available.
 #
 
 share_parameters_policy = True
@@ -414,7 +414,7 @@ policy_net = torch.nn.Sequential(
         ],  # n_obs_per_agent
         n_agent_outputs=2 * env.action_spec.shape[-1],  # 2 * n_actions_per_agents
         n_agents=env.n_agents,
-        centralised=False,  # the policies are decentralized (ie each agent will act from its observation)
+        centralised=False,  # the policies are decentralised (ie each agent will act from its observation)
         share_params=share_parameters_policy,
         device=device,
         depth=2,
@@ -482,7 +482,7 @@ policy = ProbabilisticActor(
 #
 # - Sharing is not recommended when agents have different reward functions, as the critics will need to learn
 # to assign different values to the same state (e.g., in mixed cooperative-competitive settings).
-# - In decentralized training settings, sharing cannot be performed without additional infrastructure to
+# - In decentralised training settings, sharing cannot be performed without additional infrastructure to
 # synchronise parameters.
 #
 # In all other cases where the reward function (to be differentiated from the reward) is the same for all agents
@@ -496,7 +496,7 @@ policy = ProbabilisticActor(
 #   (i.e., it will take all the concatenated agent observations as input).
 #   We can do this because we are in a simulator
 #   and training is centralised.
-# - With IPPO, we will have a local decentralized critic, just like the policy.
+# - With IPPO, we will have a local decentralised critic, just like the policy.
 #
 # In any case, the critic output will have shape ``(..., n_agents, 1)``.
 # If the critic is centralised and shared,
@@ -593,7 +593,7 @@ replay_buffer = ReplayBuffer(
 # is a value that reflects an expectancy over the return value while dealing with
 # the bias / variance tradeoff.
 # To compute the advantage, one just needs to (1) build the advantage module, which
-# utilizes our value operator, and (2) pass each batch of data through it before each
+# utilises our value operator, and (2) pass each batch of data through it before each
 # epoch.
 # The GAE module will update the input :class:`TensorDict` with new ``"advantage"`` and
 # ``"value_target"`` entries.
@@ -636,7 +636,7 @@ optim = torch.optim.Adam(loss_module.parameters(), lr)
 #         * Loop over epochs
 #             * Loop over minibatches to compute loss values
 #                 * Back propagate
-#                 * Optimize
+#                 * Optimise
 #             * Repeat
 #         * Repeat
 #     * Repeat
