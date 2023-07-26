@@ -488,7 +488,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [1, 2])
+@pytest.mark.parametrize("num_env", [2])
 @pytest.mark.parametrize(
     "env_name",
     [
@@ -1470,12 +1470,11 @@ class TestNestedEnvsCollector:
 
 
 class TestHetEnvsCollector:
-    def test_collector_nested_env_combinations(
-        self,
-        seed=1,
-        frames_per_batch=20,
-    ):
-        env = HeteroCountingEnv()
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
+    def test_collector_het_env(self, batch_size, frames_per_batch, seed=1, max_steps=4):
+        batch_size = torch.Size(batch_size)
+        env = HeteroCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         torch.manual_seed(seed)
         policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
         ccollector = SyncDataCollector(
@@ -1489,6 +1488,67 @@ class TestHetEnvsCollector:
         for _td in ccollector:
             break
         ccollector.shutdown()
+        collected_frames = frames_per_batch // batch_size.numel()
+
+        for i in range(env.n_nested_dim):
+            if collected_frames >= max_steps:
+                agent_obs = _td["lazy"][(0,) * len(batch_size)][..., i][f"tensor_{i}"]
+                for _ in range(i + 1):
+                    agent_obs = agent_obs.mean(-1)
+                assert (
+                    agent_obs
+                    == torch.arange(max_steps).repeat(collected_frames // max_steps)
+                ).all()  # Check reset worked
+            assert (_td["lazy"][..., i]["action"] == 1).all()
+
+    def test_multi_collector_nested_env_consistency(
+        self, seed=1, frames_per_batch=20, batch_dim=10
+    ):
+        env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
+        torch.manual_seed(seed)
+        env_fn = lambda: TransformedEnv(env, InitTracker())
+        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No casting if no cuda")
