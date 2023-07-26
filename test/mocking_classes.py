@@ -1444,7 +1444,7 @@ class HeteroCountingEnv(EnvBase):
         **kwargs,
     ) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
-            _reset = tensordict.get("_reset")
+            _reset = tensordict.get("_reset").squeeze(-1).any(-1)
             self.count[_reset] = self.start_val
         else:
             self.count[:] = self.start_val
