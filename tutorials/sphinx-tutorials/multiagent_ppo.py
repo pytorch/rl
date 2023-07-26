@@ -25,7 +25,7 @@ we need to train multiple robots (spawned at random positions)
 to navigate to their goals (also at random positions), while
 using  `LIDAR sensors <https://en.wikipedia.org/wiki/Lidar>`__ to avoid collisions among each other.
 
-.. figure:: /_static/img/navigation.gif
+.. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/navigation.gif
    :alt: Navigation
 
    Multi-agent *Navigation* scenario
@@ -63,7 +63,7 @@ Key learnings:
 # backpropagation. This leads to updated policies which are then used again for sampling.
 # The execution of this process in a loop constitutes *on-policy learning*.
 #
-# .. figure:: /_static/img/on_policy_vmas.png
+# .. figure:: https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/img/on_policy_vmas.png
 #    :alt: On-policy learning
 #
 #    On-policy learning
