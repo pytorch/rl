@@ -27,7 +27,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from torchrl.data.utils import consolidate_spec
+from torchrl.data.utils import check_no_exclusive_keys, consolidate_spec
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
@@ -3093,24 +3093,6 @@ def test_composite_contains():
     assert ("a", "b", "c") in spec.keys(True, True)
     assert ("a", ("b", ("c",))) in spec.keys(True)
     assert ("a", ("b", ("c",))) in spec.keys(True, True)
-
-
-def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
-    """Given a TensorSpec, returns true if there are no exclusive keys."""
-    if isinstance(spec, LazyStackedCompositeSpec):
-        keys = set(spec.keys())
-        for inner_td in spec._specs:
-            if recurse and not check_no_exclusive_keys(inner_td):
-                return False
-            if set(inner_td.keys()) != keys:
-                return False
-    elif isinstance(spec, CompositeSpec) and recurse:
-        for value in spec.values():
-            if not check_no_exclusive_keys(value):
-                return False
-    else:
-        return True
-    return True
 
 
 def get_all_keys(spec: TensorSpec, include_exclusive: bool):

@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import TensorDictBase
+from tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import Tensor
 
 from .tensor_specs import (
@@ -44,14 +44,32 @@ INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 
 
 def dense_stack_tds(
-    td_list: typing.Sequence[TensorDictBase], stack_dim: int = 0
+    td_list: Union[typing.Sequence[TensorDictBase], LazyStackedTensorDict],
+    stack_dim: int = None,
 ) -> TensorDictBase:
-    """Densely stack a list of TensorDictBase objects given that they have the same structure."""
+    """Densely stack a list of TensorDictBase objects (or a LazyStackedTensorDict) given that they have the same structure.
+
+    This must be used when some of the tds involved can have LazyTds among keys (or keys of keys, recursively).
+    In those cases, calling `torch.stack(td_list).to_tensordict()` is infeasible.
+    Thus, this function provides an alternative for densifying the list provided.
+
+    Args:
+        td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack
+        stack_dim (int, optional): the dimension to stack them.
+        If td_list is a LazyStackedTensorDict, it will be retrieved automatically
+    """
+    if isinstance(td_list, LazyStackedTensorDict):
+        stack_dim = td_list.stack_dim
+        td_list = td_list.tensordicts
+    if stack_dim is None:
+        raise ValueError(
+            "If a list of tensordicts is provided, stack_dim must not be None"
+        )
+
     shape = list(td_list[0].shape)
     shape.insert(stack_dim, len(td_list))
 
     out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-
     return torch.stack(td_list, dim=stack_dim, out=out)
 
 
@@ -127,6 +145,24 @@ def _empty_like_spec(spec, shape):
         spec = spec.expand(shape)
 
         return spec
+
+
+def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
+    """Given a TensorSpec, returns true if there are no exclusive keys."""
+    if isinstance(spec, LazyStackedCompositeSpec):
+        keys = set(spec.keys())
+        for inner_td in spec._specs:
+            if recurse and not check_no_exclusive_keys(inner_td):
+                return False
+            if set(inner_td.keys()) != keys:
+                return False
+    elif isinstance(spec, CompositeSpec) and recurse:
+        for value in spec.values():
+            if not check_no_exclusive_keys(value):
+                return False
+    else:
+        return True
+    return True
 
 
 class CloudpickleWrapper(object):

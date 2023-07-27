@@ -51,6 +51,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import dense_stack_tds
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
@@ -1078,6 +1079,7 @@ class TestStepMdp:
     @pytest.mark.parametrize("exclude_done", [True, False])
     @pytest.mark.parametrize("exclude_action", [True, False])
     @pytest.mark.parametrize("has_out", [True, False])
+    @pytest.mark.parametrize("lazy_stack", [False, True])
     def test_steptensordict(
         self,
         keep_other,
@@ -1085,6 +1087,7 @@ class TestStepMdp:
         exclude_done,
         exclude_action,
         has_out,
+        lazy_stack,
     ):
         torch.manual_seed(0)
         tensordict = TensorDict(
@@ -1102,7 +1105,16 @@ class TestStepMdp:
             },
             [4],
         )
+        if lazy_stack:
+            # let's spice this a little bit
+            tds = tensordict.unbind(0)
+            tds[0]["this", "one"] = torch.zeros(2)
+            tds[1]["but", "not", "this", "one"] = torch.ones(2)
+            tds[0]["next", "this", "one"] = torch.ones(2) * 2
+            tensordict = torch.stack(tds, 0)
         next_tensordict = TensorDict({}, [4]) if has_out else None
+        if has_out and lazy_stack:
+            next_tensordict = torch.stack(next_tensordict.unbind(0), 0)
         out = step_mdp(
             tensordict.lock_(),
             keep_other=keep_other,
@@ -1112,24 +1124,43 @@ class TestStepMdp:
             next_tensordict=next_tensordict,
         )
         assert "ledzep" in out.keys()
+        if lazy_stack:
+            assert (out["ledzep"] == tensordict["next", "ledzep"]).all()
+            assert (out[0]["this", "one"] == 2).all()
+            if keep_other:
+                assert (out[1]["but", "not", "this", "one"] == 1).all()
+        else:
+            assert out["ledzep"] is tensordict["next", "ledzep"]
         if keep_other:
             assert "beatles" in out.keys()
-            assert out["beatles"] is tensordict["beatles"]
+            if lazy_stack:
+                assert (out["beatles"] == tensordict["beatles"]).all()
+            else:
+                assert out["beatles"] is tensordict["beatles"]
         else:
             assert "beatles" not in out.keys()
         if not exclude_reward:
             assert "reward" in out.keys()
-            assert out["reward"] is tensordict["next", "reward"]
+            if lazy_stack:
+                assert (out["reward"] == tensordict["next", "reward"]).all()
+            else:
+                assert out["reward"] is tensordict["next", "reward"]
         else:
             assert "reward" not in out.keys()
         if not exclude_action:
             assert "action" in out.keys()
-            assert out["action"] is tensordict["action"]
+            if lazy_stack:
+                assert (out["action"] == tensordict["action"]).all()
+            else:
+                assert out["action"] is tensordict["action"]
         else:
             assert "action" not in out.keys()
         if not exclude_done:
             assert "done" in out.keys()
-            assert out["done"] is tensordict["next", "done"]
+            if lazy_stack:
+                assert (out["done"] == tensordict["next", "done"]).all()
+            else:
+                assert out["done"] is tensordict["next", "done"]
         else:
             assert "done" not in out.keys()
         if has_out:
@@ -1880,7 +1911,8 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
     def test_rollout(self, batch_size, rollout_steps, n_lazy_dim=3):
         env = HeteroCountingEnv(batch_size=batch_size)
-        td = env.rollout(rollout_steps)
+        td = env.rollout(rollout_steps, return_contiguous=False)
+        td = dense_stack_tds(td)
 
         assert isinstance(td, TensorDict)
         assert td.batch_size == (*batch_size, rollout_steps)
@@ -1902,7 +1934,8 @@ class TestHeteroEnvs:
     def test_rollout_policy(self, batch_size, rollout_steps, count):
         env = HeteroCountingEnv(batch_size=batch_size)
         policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"], count=count)
-        td = env.rollout(rollout_steps, policy=policy)
+        td = env.rollout(rollout_steps, policy=policy, return_contiguous=False)
+        td = dense_stack_tds(td)
         for i in range(env.n_nested_dim):
             if count:
                 agent_obs = td["lazy"][(0,) * len(batch_size)][..., i][f"tensor_{i}"]
@@ -1940,7 +1973,7 @@ def test_mocking_envs(envclass):
     env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
-    check_env_specs(env, seed=100)
+    check_env_specs(env, seed=100, return_contiguous=False)
 
 
 if __name__ == "__main__":

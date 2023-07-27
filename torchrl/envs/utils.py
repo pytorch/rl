@@ -34,6 +34,7 @@ __all__ = [
 
 
 from torchrl.data import CompositeSpec
+from torchrl.data.utils import check_no_exclusive_keys
 
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
@@ -157,6 +158,33 @@ def step_mdp(
             is_shared=False)
 
     """
+    if isinstance(tensordict, LazyStackedTensorDict):
+        if next_tensordict is not None:
+            next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
+        else:
+            next_tensordicts = [None] * len(tensordict.tensordicts)
+        out = torch.stack(
+            [
+                step_mdp(
+                    td,
+                    next_tensordict=ntd,
+                    keep_other=keep_other,
+                    exclude_reward=exclude_reward,
+                    exclude_done=exclude_done,
+                    exclude_action=exclude_action,
+                    reward_key=reward_key,
+                    done_key=done_key,
+                    action_key=action_key,
+                )
+                for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
+            ],
+            tensordict.stack_dim,
+        )
+        if next_tensordict is not None:
+            next_tensordict.update(out)
+            return next_tensordict
+        return out
+
     action_key = unravel_key(action_key)
     done_key = unravel_key(done_key)
     reward_key = unravel_key(reward_key)
@@ -405,6 +433,12 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         ("done", _done_spec),
         ("obs", _obs_spec),
     ):
+        if not check_no_exclusive_keys(spec):
+            raise AssertionError(
+                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "(keys only present in some of the stacked specs). In order to use envs like "
+                "this you need to first pass your specs to torch.data.consolidate_spec"
+            )
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
