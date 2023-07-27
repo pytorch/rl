@@ -158,6 +158,33 @@ def step_mdp(
             is_shared=False)
 
     """
+    if isinstance(tensordict, LazyStackedTensorDict):
+        if next_tensordict is not None:
+            next_tensordicts = next_tensordict.unbind(tensordict.stack_dim)
+        else:
+            next_tensordicts = [None] * len(tensordict.tensordicts)
+        out = torch.stack(
+            [
+                step_mdp(
+                    td,
+                    next_tensordict=ntd,
+                    keep_other=keep_other,
+                    exclude_reward=exclude_reward,
+                    exclude_done=exclude_done,
+                    exclude_action=exclude_action,
+                    reward_key=reward_key,
+                    done_key=done_key,
+                    action_key=action_key,
+                )
+                for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
+            ],
+            tensordict.stack_dim,
+        )
+        if next_tensordict is not None:
+            next_tensordict.update(out)
+            return next_tensordict
+        return out
+
     action_key = unravel_key(action_key)
     done_key = unravel_key(done_key)
     reward_key = unravel_key(reward_key)
@@ -346,7 +373,7 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, check_dtype=True, seed=0):
+def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -374,11 +401,13 @@ def check_env_specs(env, check_dtype=True, seed=0):
     env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict()
-    real_tensordict = env.rollout(3)
+    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
 
-    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
-    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
-
+    if return_contiguous:
+        fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+        fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+    else:
+        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
