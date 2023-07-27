@@ -51,6 +51,7 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
+from torchrl.data.utils import dense_stack_tds
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
@@ -1880,7 +1881,8 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("rollout_steps", [1, 2, 5])
     def test_rollout(self, batch_size, rollout_steps, n_lazy_dim=3):
         env = HeteroCountingEnv(batch_size=batch_size)
-        td = env.rollout(rollout_steps)
+        td = env.rollout(rollout_steps, return_contiguous=False)
+        td = dense_stack_tds(td)
 
         assert isinstance(td, TensorDict)
         assert td.batch_size == (*batch_size, rollout_steps)
@@ -1902,7 +1904,8 @@ class TestHeteroEnvs:
     def test_rollout_policy(self, batch_size, rollout_steps, count):
         env = HeteroCountingEnv(batch_size=batch_size)
         policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"], count=count)
-        td = env.rollout(rollout_steps, policy=policy)
+        td = env.rollout(rollout_steps, policy=policy, return_contiguous=False)
+        td = dense_stack_tds(td)
         for i in range(env.n_nested_dim):
             if count:
                 agent_obs = td["lazy"][(0,) * len(batch_size)][..., i][f"tensor_{i}"]
