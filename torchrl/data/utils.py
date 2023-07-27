@@ -116,6 +116,24 @@ def _empty_like_spec(spec, shape):
         return spec
 
 
+def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
+    """Given a TensorSpec, returns true if there are no exclusive keys."""
+    if isinstance(spec, LazyStackedCompositeSpec):
+        keys = set(spec.keys())
+        for inner_td in spec._specs:
+            if recurse and not check_no_exclusive_keys(inner_td):
+                return False
+            if set(inner_td.keys()) != keys:
+                return False
+    elif isinstance(spec, CompositeSpec) and recurse:
+        for value in spec.values():
+            if not check_no_exclusive_keys(value):
+                return False
+    else:
+        return True
+    return True
+
+
 class CloudpickleWrapper(object):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
