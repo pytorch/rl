@@ -346,7 +346,7 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
+def check_env_specs(env, check_dtype=True, seed=0):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -374,13 +374,11 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict()
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
+    real_tensordict = env.rollout(3)
 
-    if return_contiguous:
-        fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
-        fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
-    else:
-        fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+    fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)
+    fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
+
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))

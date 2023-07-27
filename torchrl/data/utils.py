@@ -51,7 +51,6 @@ def dense_stack_tds(
     shape.insert(stack_dim, len(td_list))
 
     out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-
     return torch.stack(td_list, dim=stack_dim, out=out)
 
 
