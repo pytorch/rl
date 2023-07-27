@@ -34,6 +34,7 @@ __all__ = [
 
 
 from torchrl.data import CompositeSpec
+from torchrl.data.utils import check_no_exclusive_keys
 
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
@@ -405,6 +406,12 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         ("done", _done_spec),
         ("obs", _obs_spec),
     ):
+        if not check_no_exclusive_keys(spec):
+            raise AssertionError(
+                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "(keys only present in some of the stacked specs). In order to use envs like "
+                "this you need to first pass your specs to torch.data.consolidate_spec"
+            )
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
