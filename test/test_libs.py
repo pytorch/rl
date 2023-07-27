@@ -23,6 +23,7 @@ from _utils_internal import (
     PONG_VERSIONED,
 )
 from packaging import version
+from tensordict import LazyStackedTensorDict
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
@@ -1102,7 +1103,8 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         torch.manual_seed(0)
@@ -1114,17 +1116,31 @@ class TestVmas:
         )
         env.set_seed(0)
         tdreset = env.reset()
-        tdrollout = env.rollout(max_steps=n_rollout_samples)
+        tdrollout = env.rollout(
+            max_steps=n_rollout_samples,
+            return_contiguous=False if env.het_specs else True,
+        )
         env.close()
 
+        if env.het_specs:
+            assert isinstance(tdreset["agents"], LazyStackedTensorDict)
+        else:
+            assert isinstance(tdreset["agents"], TensorDict)
+
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["agents"].batch_size == (num_envs, n_agents)
-        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["agents"].batch_size == (num_envs, env.n_agents)
+        if not env.het_specs:
+            assert tdreset["agents", "observation"].shape[1] == env.n_agents
         assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdreset["agents"].batch_size == (num_envs, n_rollout_samples, n_agents)
-        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["agents"].batch_size == (
+            num_envs,
+            n_rollout_samples,
+            env.n_agents,
+        )
+        if not env.het_specs:
+            assert tdrollout["agents", "observation"].shape[2] == env.n_agents
         assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
         assert tdrollout["agents", "action"].shape[2] == env.n_agents
         assert tdrollout["done"].shape[2] == 1
@@ -1134,7 +1150,8 @@ class TestVmas:
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("continuous_actions", [True, False])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
@@ -1155,7 +1172,7 @@ class TestVmas:
         )
         for e in [env, wrapped]:
             e.set_seed(0)
-            check_env_specs(e)
+            check_env_specs(e, return_contiguous=False if e.het_specs else True)
             del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1351,6 +1368,44 @@ class TestVmas:
 
     def test_collector_hetero(self):
         pass
+        # env = VmasEnv(
+        #     scenario="simple_tag",
+        #     num_envs=3,
+        # )
+        # torch.manual_seed(1)
+        # env_fun = lambda: VmasEnv(
+        #     scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
+        # )
+        #
+        # env = ParallelEnv(n_workers, env_fun)
+        #
+        # n_actions_per_agent = env.action_spec.shape[-1]
+        # n_observations_per_agent = env.observation_spec["agents", "observation"].shape[
+        #     -1
+        # ]
+        #
+        # policy = SafeModule(
+        #     nn.Linear(
+        #         n_observations_per_agent,
+        #         n_actions_per_agent,
+        #     ),
+        #     in_keys=[("agents", "observation")],
+        #     out_keys=[env.action_key],
+        #     spec=env.action_spec,
+        #     safe=True,
+        # )
+        # ccollector = SyncDataCollector(
+        #     create_env_fn=env,
+        #     policy=policy,
+        #     frames_per_batch=frames_per_batch,
+        #     total_frames=1000,
+        #     device="cpu",
+        # )
+        #
+        # for i, _td in enumerate(ccollector):
+        #     if i == 1:
+        #         break
+        # ccollector.shutdown()
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
