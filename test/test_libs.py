@@ -1289,7 +1289,6 @@ class TestVmas:
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
     def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
-
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
             scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
@@ -1349,6 +1348,9 @@ class TestVmas:
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
+
+    def test_collector_hetero(self):
+        pass
 
 
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
