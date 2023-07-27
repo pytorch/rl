@@ -1030,6 +1030,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
         use_register: bool = False,
+        mask: torch.Tensor | None = None,
     ):
 
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1045,6 +1046,17 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                     f"Got n={space.n} and shape={shape}."
                 )
         super().__init__(shape, space, device, dtype, "discrete")
+        self.update_mask(mask)
+
+    def update_mask(self, mask):
+        if mask is not None:
+            try:
+                mask = mask.expand(self.shape)
+            except RuntimeError as err:
+                raise RuntimeError("Cannot expand mask to the desired shape.") from err
+            if mask.dtype != torch.bool:
+                raise ValueError("Only boolean masks are accepted.")
+        self.mask = mask
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
@@ -1084,8 +1096,15 @@ class OneHotDiscreteTensorSpec(TensorSpec):
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
+        mask = self.mask
+        if mask is not None:
+            mask = mask.expand(shape)
         return self.__class__(
-            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=shape[-1],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def squeeze(self, dim=None):
@@ -1097,13 +1116,16 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         shape = _squeezed_shape(self.shape, dim)
         if shape is None:
             return self
-
+        mask = self.mask
+        if mask is not None:
+            mask = mask.reshape(shape)
         return self.__class__(
             n=shape[-1],
             shape=shape,
             device=self.device,
             dtype=self.dtype,
             use_register=self.use_register,
+            mask=mask,
         )
 
     def unsqueeze(self, dim: int):
@@ -1113,12 +1135,16 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             )
 
         shape = _unsqueezed_shape(self.shape, dim)
+        mask = self.mask
+        if mask is not None:
+            mask = mask.reshape(shape)
         return self.__class__(
             n=shape[-1],
             shape=shape,
             device=self.device,
             dtype=self.dtype,
             use_register=self.use_register,
+            mask=mask,
         )
 
     def rand(self, shape=None) -> torch.Tensor:
@@ -1126,9 +1152,19 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             shape = self.shape[:-1]
         else:
             shape = torch.Size([*shape, *self.shape[:-1]])
-        n = self.space.n
-        m = torch.randint(n, (*shape, 1), device=self.device)
-        out = torch.zeros((*shape, n), device=self.device, dtype=self.dtype)
+        mask = self.mask
+        if mask is None:
+            n = self.space.n
+            m = torch.randint(n, (*shape, 1), device=self.device)
+        else:
+            mask = mask.expand(*shape, mask.shape[-1])
+            if mask.ndim > 2:
+                mask_flat = torch.flatten(mask, 0, -2)
+            else:
+                mask_flat = mask
+            shape_out = mask.shape[:-1]
+            m = torch.multinomial(mask_flat.float(), 1).reshape(*shape_out, 1)
+        out = torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
         out.scatter_(-1, m, 1)
         return out
 
@@ -1200,13 +1236,29 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        # idx = val.sum(-1) != 1
-        out = torch.nn.functional.gumbel_softmax(val.to(torch.float))
-        out = (out == out.max(dim=-1, keepdim=True)[0]).to(torch.long)
-        return out
+        if self.mask is None:
+            out = torch.multinomial(val.to(torch.float), 1)
+            out = (out == out.max(dim=-1, keepdim=True)[0]).to(self.dtype)
+            return out
+        shape = self.mask.shape
+        shape = torch.broadcast_shapes(shape, val.shape)
+        mask_expand = self.mask.expand(shape)
+        gathered = mask_expand & val
+        oob = ~gathered.any(-1)
+        new_val = torch.multinomial(mask_expand[oob].float(), 1)
+        val = val.clone()
+        val[oob] = 0
+        val[oob] = torch.scatter(val[oob], -1, new_val, 1)
+        return val
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return (val.sum(-1) == 1).all()
+        if self.mask is None:
+            return (val.sum(-1) == 1).all()
+        shape = self.mask.shape
+        shape = torch.broadcast_shapes(shape, val.shape)
+        mask_expand = self.mask.expand(shape)
+        gathered = mask_expand & val
+        return gathered.any(-1).all()
 
     def __eq__(self, other):
         return (
@@ -1956,34 +2008,73 @@ class DiscreteTensorSpec(TensorSpec):
     def __init__(
         self,
         n: int,
-        shape: Optional[torch.Size] = None,
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        shape: torch.Size | None = None,
+        device: DEVICE_TYPING | None = None,
+        dtype: str | torch.dtype = torch.long,
+        mask: torch.Tensor | None = None,
     ):
         if shape is None:
             shape = torch.Size([])
         dtype, device = _default_dtype_and_device(dtype, device)
         space = DiscreteBox(n)
         super().__init__(shape, space, device, dtype, domain="discrete")
+        self.update_mask(mask)
+
+    def update_mask(self, mask):
+        if mask is not None:
+            try:
+                mask = mask.expand(*self.shape, self.space.n)
+            except RuntimeError as err:
+                raise RuntimeError("Cannot expand mask to the desired shape.") from err
+            if mask.dtype != torch.bool:
+                raise ValueError("Only boolean masks are accepted.")
+        self.mask = mask
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        return torch.randint(
-            0,
-            self.space.n,
-            torch.Size([*shape, *self.shape]),
-            device=self.device,
-            dtype=self.dtype,
-        )
+        if self.mask is None:
+            return torch.randint(
+                0,
+                self.space.n,
+                torch.Size([*shape, *self.shape]),
+                device=self.device,
+                dtype=self.dtype,
+            )
+        mask = self.mask
+        mask = mask.expand(*shape, *mask.shape)
+        if mask.ndim > 2:
+            mask_flat = torch.flatten(mask, 0, -2)
+        else:
+            mask_flat = mask
+        shape_out = mask.shape[:-1]
+        print("mask in spec", mask_flat)
+        out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+        print("out", out)
+        return out
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if val.dtype not in (torch.int, torch.long):
             val = torch.round(val)
-        return val.clamp_(min=0, max=self.space.n - 1)
+        if self.mask is None:
+            return val.clamp_(min=0, max=self.space.n - 1)
+        shape = self.mask.shape
+        shape = torch.Size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
+        mask_expand = self.mask.expand(shape)
+        gathered = mask_expand.gather(-1, val.unsqueeze(-1))
+        oob = ~gathered.all(-1)
+        new_val = torch.multinomial(mask_expand[oob].float(), 1).squeeze(-1)
+        val = torch.masked_scatter(val, oob, new_val)
+        return val
 
     def is_in(self, val: torch.Tensor) -> bool:
-        return (0 <= val).all() and (val < self.space.n).all()
+        if self.mask is None:
+            return (0 <= val).all() and (val < self.space.n).all()
+        shape = self.mask.shape
+        shape = torch.Size([*torch.broadcast_shapes(shape[:-1], val.shape), shape[-1]])
+        mask_expand = self.mask.expand(shape)
+        gathered = mask_expand.gather(-1, val.unsqueeze(-1))
+        return gathered.all()
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
@@ -2030,7 +2121,11 @@ class DiscreteTensorSpec(TensorSpec):
         """Converts the spec to the equivalent one-hot spec."""
         shape = [*self.shape, self.space.n]
         return OneHotDiscreteTensorSpec(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=self.mask,
         )
 
     def expand(self, *shape):

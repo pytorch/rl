@@ -371,7 +371,48 @@ class Transform(nn.Module):
         return self_copy
 
     @property
+    def container(self):
+        """Returns the env containing the transform.
+
+        Examples:
+            >>> from torchrl.envs import TransformedEnv, Compose, RewardSum, StepCounter
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), Compose(RewardSum(), StepCounter()))
+            >>> env.transform[0].container is env
+            True
+        """
+        if "_container" not in self.__dict__:
+            raise AttributeError("transform parent uninitialized")
+        container = self.__dict__["_container"]
+        if container is None:
+            return container
+        while not isinstance(container, EnvBase):
+            # if it's not an env, it should be a Compose transform
+            if not isinstance(container, Compose):
+                raise ValueError(
+                    "A transform parent must be either another Compose transform or an environment object."
+                )
+            compose = container
+            container = compose.__dict__.get("_container", None)
+        return container
+
+    @property
     def parent(self) -> Optional[EnvBase]:
+        """Returns the parent env of the transform.
+
+        The parent env is the env that contains all the transforms up until the current one.
+
+        Examples:
+            >>> from torchrl.envs import TransformedEnv, Compose, RewardSum, StepCounter
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = TransformedEnv(GymEnv("Pendulum-v1"), Compose(RewardSum(), StepCounter()))
+            >>> env.transform[1].parent
+            TransformedEnv(
+                env=GymEnv(env=Pendulum-v1, batch_size=torch.Size([]), device=cpu),
+                transform=Compose(
+                        RewardSum(keys=['reward'])))
+
+        """
         if self.__dict__.get("_parent", None) is None:
             if "_container" not in self.__dict__:
                 raise AttributeError("transform parent uninitialized")
@@ -4353,3 +4394,84 @@ class Reward2GoTransform(Transform):
     def set_container(self, container):
         if isinstance(container, EnvBase) or container.parent is not None:
             raise ValueError(self.ENV_ERR)
+
+
+class ActionMask(Transform):
+    """An adaptive action masker.
+
+    This transform reads the mask from the input tensordict after the step is executed,
+    and adapts the mask of the one-hot / categorical action spec.
+
+      .. note:: This transform will fail when used without an environment.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data.tensor_specs import DiscreteTensorSpec, BinaryDiscreteTensorSpec, UnboundedContinuousTensorSpec, CompositeSpec
+        >>> from torchrl.envs.transforms import ActionMask, TransformedEnv, EnvBase
+        >>> class MaskedEnv(EnvBase):
+        ...     def __init__(self, *args, **kwargs):
+        ...         super().__init__(*args, **kwargs)
+        ...         self.action_spec = DiscreteTensorSpec(4)
+        ...         self.state_spec = CompositeSpec(mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool))
+        ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec(3))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec(1)
+        ...
+        ...     def _reset(self, data):
+        ...         td = self.observation_spec.rand()
+        ...         td.update(torch.ones_like(self.state_spec.rand()))
+        ...         return td
+        ...
+        ...     def _step(self, data):
+        ...         td = self.observation_spec.rand()
+        ...         mask = data.get("mask")
+        ...         action = data.get("action")
+        ...         mask = mask.scatter(-1, action.unsqueeze(-1), 0)
+        ...
+        ...         td.set("mask", mask)
+        ...         td.set("reward", self.reward_spec.rand())
+        ...         td.set("done", ~mask.any().view(1))
+        ...         return td.empty().set("next", td)
+        ...
+        ...     def _set_seed(self, seed):
+        ...         return seed
+        >>> base_env = MaskedEnv()
+        >>> env = TransformedEnv(base_env, ActionMask())
+        >>> r = env.rollout(10)
+        >>> env = TransformedEnv(base_env, ActionMask())
+        >>> r = env.rollout(10)
+        >>> r["mask"]
+
+    """
+
+    def __init__(self, action_key="action", mask_key="mask"):
+        if not isinstance(action_key, str):
+            raise ValueError(
+                f"The action key must be a string. Got {type(action_key)} instead."
+            )
+        if not isinstance(mask_key, str):
+            raise ValueError(
+                f"The mask key must be a string. Got {type(mask_key)} instead."
+            )
+        super().__init__(
+            in_keys=[action_key, mask_key], out_keys=[], in_keys_inv=[], out_keys_inv=[]
+        )
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        mask = tensordict.get(self.in_keys[1])
+        parent = self.parent
+        if parent is None:
+            raise RuntimeError(
+                f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
+            )
+        action_spec = self._container.action_spec
+        if not isinstance(action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec)):
+            raise ValueError(
+                f"The action spec must be one of (OneHotDiscreteTensorSpec, DiscreteTensorSpec). Got {type(action_spec)} instead."
+            )
+        action_spec.update_mask(mask)
+        return tensordict
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action_spec = self._container.action_spec
+        action_spec.update_mask(tensordict.get(self.in_keys[1], None))
+        return action_spec
