@@ -1118,10 +1118,12 @@ class TestVmas:
         env.close()
 
         assert tdreset.batch_size == (num_envs,)
+        assert tdreset["agents"].batch_size == (num_envs, n_agents)
         assert tdreset["agents", "observation"].shape[1] == env.n_agents
         assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
+        assert tdreset["agents"].batch_size == (num_envs, n_rollout_samples, n_agents)
         assert tdrollout["agents", "observation"].shape[2] == env.n_agents
         assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
         assert tdrollout["agents", "action"].shape[2] == env.n_agents

@@ -299,20 +299,22 @@ class VmasWrapper(_EnvWrapper):
 
             agent_td = TensorDict(
                 source={
-                    "agents": {
-                        "observation": agent_obs,
-                    },
+                    "observation": agent_obs,
                 },
-                batch_size=(self.num_envs,),
+                batch_size=self.batch_size,
                 device=self.device,
             )
             if agent_info is not None:
-                agent_td.set(("agents", "info"), agent_info)
+                agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
-        tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
-        tensordict_out.batch_size = self.batch_size
-        tensordict_out.set("done", dones)
+        agent_tds = torch.stack(agent_tds, dim=1)
+        tensordict_out = TensorDict(
+            source={"agents": agent_tds, "done": dones},
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+
         return tensordict_out
 
     def _step(
@@ -334,23 +336,24 @@ class VmasWrapper(_EnvWrapper):
 
             agent_td = TensorDict(
                 source={
-                    "agents": {
-                        "observation": agent_obs,
-                        "reward": agent_rew,
-                    },
+                    "observation": agent_obs,
+                    "reward": agent_rew,
                 },
-                batch_size=(self.num_envs,),
+                batch_size=self.batch_size,
                 device=self.device,
             )
             if agent_info is not None:
-                agent_td.set(("agents", "info"), agent_info)
+                agent_td.set("info", agent_info)
             agent_tds.append(agent_td)
 
-        tensordict_out = torch.stack(agent_tds, dim=1).to_tensordict()
-        tensordict_out.batch_size = self.batch_size
-        tensordict_out.set("done", dones)
+        agent_tds = torch.stack(agent_tds, dim=1)
+        tensordict_out = TensorDict(
+            source={"next": {"agents": agent_tds, "done": dones}},
+            batch_size=self.batch_size,
+            device=self.device,
+        )
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
         observations = _selective_unsqueeze(
