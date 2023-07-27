@@ -1973,7 +1973,7 @@ def test_mocking_envs(envclass):
     env.set_seed(100)
     reset = env.reset()
     _ = env.rand_step(reset)
-    check_env_specs(env, seed=100)
+    check_env_specs(env, seed=100, return_contiguous=False)
 
 
 if __name__ == "__main__":
