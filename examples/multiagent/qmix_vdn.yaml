@@ -20,7 +20,7 @@ buffer:
   memory_size: ???
 
 loss:
-  mixer_type: "qmix"  # or "vdn"
+  mixer_type: "qgnn-state"   # choose from "qmix", "vdn", "qgnn", "qgnn-state"
   gamma: 0.9
   tau: 0.005 # For target net
 

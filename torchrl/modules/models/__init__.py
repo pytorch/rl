@@ -7,6 +7,7 @@
 from .exploration import NoisyLazyLinear, NoisyLinear, reset_noise
 from .model_based import DreamerActor, ObsDecoder, ObsEncoder, RSSMPosterior, RSSMPrior
 from .models import (
+    AbsLinear,
     ConvNet,
     DdpgCnnActor,
     DdpgCnnQNet,
@@ -14,8 +15,9 @@ from .models import (
     DdpgMlpQNet,
     DistributionalDQNnet,
     DuelingCnnDQNet,
+    HyperLinear,
     LSTMNet,
     MLP,
 )
-from .multiagent import MultiAgentMLP, QMixer, VDNMixer
+from .multiagent import MultiAgentMLP, QGNNMixer, QMixer, VDNMixer
 from .utils import Squeeze2dLayer, SqueezeLayer

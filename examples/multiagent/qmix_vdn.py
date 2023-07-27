@@ -18,7 +18,7 @@ from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
-from torchrl.modules.models.multiagent import MultiAgentMLP, QMixer, VDNMixer
+from torchrl.modules.models.multiagent import MultiAgentMLP, QGNNMixer, QMixer, VDNMixer
 from torchrl.objectives import SoftUpdate, ValueEstimators
 from torchrl.objectives.multiagent.qmixer import QMixerLoss
 from utils.logging import init_logging, log_evaluation, log_training
@@ -125,6 +125,30 @@ def train(cfg: "DictConfig"):  # noqa: F821
                 device=cfg.train.device,
             ),
             in_keys=[("agents", "chosen_action_value")],
+            out_keys=["chosen_action_value"],
+        )
+    elif cfg.loss.mixer_type == "qgnn":
+        mixer = TensorDictModule(
+            module=QGNNMixer(
+                use_state=False,
+                n_agents=env.n_agents,
+                device=cfg.train.device,
+            ),
+            in_keys=[("agents", "chosen_action_value")],
+            out_keys=["chosen_action_value"],
+        )
+    elif cfg.loss.mixer_type == "qgnn-state":
+        mixer = TensorDictModule(
+            module=QGNNMixer(
+                state_shape=env.unbatched_observation_spec[
+                    "agents", "observation"
+                ].shape,
+                mixing_embed_dim=8,
+                use_state=True,
+                n_agents=env.n_agents,
+                device=cfg.train.device,
+            ),
+            in_keys=[("agents", "chosen_action_value"), ("agents", "observation")],
             out_keys=["chosen_action_value"],
         )
     else:

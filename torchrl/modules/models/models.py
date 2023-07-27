@@ -1138,3 +1138,57 @@ class LSTMNet(nn.Module):
 
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class HyperLinear(nn.Module):
+    """Missing."""
+
+    def __init__(self, in_dim, out_dim, pos=True, **kwargs):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.pos = pos
+        self.w = None
+        self.b = None
+
+    def num_params(self):
+        return self.in_dim * self.out_dim + self.out_dim
+
+    def update_params(self, params):
+        # params: b x (in_dim * out_dim + out_dim)
+        assert params.shape[1] == self.in_dim * self.out_dim + self.out_dim
+        batch = params.shape[0]
+        self.w = params[:, : self.in_dim * self.out_dim].view(
+            batch, self.in_dim, self.out_dim
+        )
+        self.b = params[:, self.in_dim * self.out_dim :].view(batch, self.out_dim)
+        if self.pos:
+            self.w = torch.abs(self.w)
+
+    def forward(self, x):
+        # x: b x in_dim OR b x n x in_dim
+        w = self.w
+        b = self.b
+        assert x.shape[0] == w.shape[0]
+        assert x.shape[-1] == w.shape[1]
+        squeeze_output = False
+        if x.dim() == 2:
+            squeeze_output = True
+            x = x.unsqueeze(1)
+        if b.dim() == 3:
+            b = b.squeeze(1)
+        xw = torch.bmm(x, w)
+        out = xw + b[:, None]
+        if squeeze_output:
+            out = out.squeeze(1)
+        return out
+
+
+class AbsLinear(nn.Linear):
+    """Missing."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def forward(self, input):
+        return nn.functional.linear(input, torch.abs(self.weight), self.bias)
