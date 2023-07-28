@@ -400,7 +400,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         )
 
     # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype)
+    _per_level_env_check(
+        fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+    )
 
     # Check specs
     last_td = real_tensordict[..., -1]
