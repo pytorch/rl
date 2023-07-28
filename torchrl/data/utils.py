@@ -126,9 +126,9 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
         # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
         # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
-        return torch.stack(
-            [_empty_like_spec(spec._specs, shape) for _ in spec._specs],
-            spec.stack_dim,
+        return LazyStackedTensorSpec(
+            *[_empty_like_spec(spec._specs, shape) for _ in spec._specs],
+            dim=spec.stack_dim
         )
     else:
         # the exclusive key has values which are TensorSpecs ->
