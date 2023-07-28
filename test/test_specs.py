@@ -2808,6 +2808,54 @@ class TestLazyStackedCompositeSpecs:
             spec_lazy, include_exclusive=False
         )
 
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    def test_consolidate_spec_exclusive_lazy_stacked(self, batch_size):
+        hetero_3d = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                3,
+            )
+        )
+        hetero_2d = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                2,
+            )
+        )
+        lazy_spec = torch.stack(
+            [
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 6)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 7)),
+            ],
+            dim=len(batch_size),
+        )
+
+        spec_list = [
+            CompositeSpec(
+                {
+                    "hetero": hetero_3d,
+                    "lazy_spec": lazy_spec,
+                },
+                shape=batch_size,
+            ),
+            CompositeSpec(
+                {
+                    "hetero": hetero_2d,
+                },
+                shape=batch_size,
+            ),
+        ]
+
+        spec = torch.stack(spec_list, dim=0)
+        spec_consolidated = consolidate_spec(spec)
+
+        assert check_no_exclusive_keys(spec_consolidated, recurse=True)
+
+        assert get_all_keys(spec, include_exclusive=True) == get_all_keys(
+            spec_consolidated, include_exclusive=False
+        )
+
     @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
     def test_update(self, batch_size, stack_dim=0):
         spec = self._get_het_specs(batch_size, stack_dim)
