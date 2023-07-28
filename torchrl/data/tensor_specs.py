@@ -868,9 +868,9 @@ class _LazyStackedMixin(Generic[T]):
             return self._specs
         shape = self.shape
         if dim < 0 or dim > self.ndim - 1 or shape[dim] == -1:
-            raise ValueError(f"Provided dim is not valid for unbinding shape {shape}")
+            raise ValueError(f"Provided dim {dim} is not valid for unbinding shape {shape}")
         else:
-            raise ValueError("Can only unbind in stack dim")
+            raise ValueError(f"A {type(self)} instance can only be unbound along its stack dimension. Expected {self.stack_dim}, received {dim} instead.")
 
     def unsqueeze(self, dim: int):
         if dim < 0:
@@ -3362,7 +3362,10 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
         raise NotImplementedError
 
     def __delitem__(self, key: NestedKey):
-        """Deletes a key only if present in all stacked specs."""
+        """Deletes a key from the stacked composite spec.
+        
+         This method will be executed if and only if the key is present in all stacked specs.
+         """
         at_least_one_deletion = False
         for spec in self._specs:
             try:
