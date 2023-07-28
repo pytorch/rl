@@ -388,9 +388,11 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+    fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
+    real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
     if (
-        fake_tensordict.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict.apply(lambda x: torch.zeros_like(x))
+        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
+        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
     ).any():
         raise AssertionError(
             "zeroing the two tensordicts did not make them identical. "
@@ -398,7 +400,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         )
 
     # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(fake_tensordict, real_tensordict, check_dtype=check_dtype)
+    _per_level_env_check(fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype)
 
     # Check specs
     last_td = real_tensordict[..., -1]
