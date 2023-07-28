@@ -2810,23 +2810,20 @@ class TestLazyStackedCompositeSpecs:
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     def test_consolidate_spec_exclusive_lazy_stacked(self, batch_size):
-        hetero_3d = UnboundedContinuousTensorSpec(
+        shared = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
-                3,
-            )
-        )
-        hetero_2d = UnboundedContinuousTensorSpec(
-            shape=(
-                *batch_size,
-                2,
+                5,
+                5,
+                5,
             )
         )
         lazy_spec = torch.stack(
             [
-                UnboundedContinuousTensorSpec(shape=(*batch_size, 5)),
-                UnboundedContinuousTensorSpec(shape=(*batch_size, 6)),
-                UnboundedContinuousTensorSpec(shape=(*batch_size, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 6, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 7, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 8, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 8, 7)),
             ],
             dim=len(batch_size),
         )
@@ -2834,24 +2831,31 @@ class TestLazyStackedCompositeSpecs:
         spec_list = [
             CompositeSpec(
                 {
-                    "hetero": hetero_3d,
+                    "shared": shared,
                     "lazy_spec": lazy_spec,
                 },
                 shape=batch_size,
             ),
             CompositeSpec(
                 {
-                    "hetero": hetero_2d,
+                    "shared": shared,
                 },
                 shape=batch_size,
+            ),
+            CompositeSpec(
+                {},
+                shape=batch_size,
+                device="cpu",
             ),
         ]
 
         spec = torch.stack(spec_list, dim=0)
         spec_consolidated = consolidate_spec(spec)
 
-        assert check_no_exclusive_keys(spec_consolidated, recurse=True)
+        assert spec_consolidated["shared"].shape == (3, *batch_size, -1, -1, -1)
+        assert spec_consolidated["lazy_spec"].shape == (3, *batch_size, 4, 5, -1, 7)
 
+        assert check_no_exclusive_keys(spec_consolidated, recurse=True)
         assert get_all_keys(spec, include_exclusive=True) == get_all_keys(
             spec_consolidated, include_exclusive=False
         )
