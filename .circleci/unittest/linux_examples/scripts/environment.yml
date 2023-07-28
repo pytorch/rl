@@ -25,4 +25,5 @@ dependencies:
     - mlflow
     - av
     - coverage
+    - vmas
     - transformers

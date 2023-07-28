@@ -11,6 +11,7 @@ from .decision_transformer import DTLoss, OnlineDTLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
 from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from .iql import IQLLoss
+from .multiagent import QMixerLoss
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from .redq import REDQLoss
 from .reinforce import ReinforceLoss

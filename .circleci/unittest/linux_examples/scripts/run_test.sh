@@ -267,6 +267,31 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.collector_device=cuda:0 \
   env.name=Pendulum-v1 \
   logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/mappo_ippo.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/maddpg_iddpg.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/iql.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/qmix_vdn.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 

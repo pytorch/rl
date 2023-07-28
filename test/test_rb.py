@@ -5,6 +5,7 @@
 
 import argparse
 import importlib
+import pickle
 import sys
 from functools import partial
 from unittest import mock
@@ -241,6 +242,17 @@ class TestComposableBuffers:
         if not isinstance(b, bool):
             b = b.all()
         assert b
+
+    def test_pickable(self, rb_type, sampler, writer, storage, size):
+
+        rb = self._get_rb(
+            rb_type=rb_type, sampler=sampler, writer=writer, storage=storage, size=size
+        )
+        serialized = pickle.dumps(rb)
+        rb2 = pickle.loads(serialized)
+        assert rb.__dict__.keys() == rb2.__dict__.keys()
+        for key in sorted(rb.__dict__.keys()):
+            assert isinstance(rb.__dict__[key], type(rb2.__dict__[key]))
 
 
 @pytest.mark.parametrize("storage_type", [TensorStorage])

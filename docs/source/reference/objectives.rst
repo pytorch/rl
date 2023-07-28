@@ -19,12 +19,13 @@ The main characteristics of TorchRL losses are:
   written under a ``"loss_<smth>"`` where ``smth`` is a string describing the
   loss. Additional keys in the tensordict may be useful metrics to log during
   training time.
-  .. note::
+
+.. note::
     The reason we return independent losses is to let the user use a different
     optimizer for different sets of parameters for instance. Summing the losses
     can be simply done via
 
-        >>> loss_val = sum(loss for key, loss in loss_vals.items() if key.startswith("loss_"))
+    >>> loss_val = sum(loss for key, loss in loss_vals.items() if key.startswith("loss_"))
 
 Training value functions
 ------------------------
@@ -194,6 +195,21 @@ Dreamer
     DreamerActorLoss
     DreamerModelLoss
     DreamerValueLoss
+
+Multi-agent objectives
+-----------------------
+.. currentmodule:: torchrl.objectives.multiagent
+
+These objectives are specific to multi-agent algorithms.
+
+QMixer
+~~~~~~
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    QMixerLoss
 
 
 Returns
