@@ -232,12 +232,14 @@ class A2CLoss(LossModule):
         self.convert_to_functional(critic, "critic", compare_against=policy_params)
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus and entropy_coef
-        self.register_buffer(
-            "entropy_coef", torch.tensor(entropy_coef, device=self.device)
-        )
-        self.register_buffer(
-            "critic_coef", torch.tensor(critic_coef, device=self.device)
-        )
+
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
+
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma

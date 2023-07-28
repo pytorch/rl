@@ -410,6 +410,27 @@ class ReplayBuffer:
             data = self.sample()
             yield data
 
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+        _replay_lock = state.pop("_replay_lock", None)
+        _futures_lock = state.pop("_futures_lock", None)
+        if _replay_lock is not None:
+            state["_replay_lock_placeholder"] = None
+        if _futures_lock is not None:
+            state["_futures_lock_placeholder"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]):
+        if "_replay_lock_placeholder" in state:
+            state.pop("_replay_lock_placeholder")
+            _replay_lock = threading.RLock()
+            state["_replay_lock"] = _replay_lock
+        if "_futures_lock_placeholder" in state:
+            state.pop("_futures_lock_placeholder")
+            _futures_lock = threading.RLock()
+            state["_futures_lock"] = _futures_lock
+        self.__dict__.update(state)
+
 
 class PrioritizedReplayBuffer(ReplayBuffer):
     """Prioritized replay buffer.
