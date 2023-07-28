@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-# this code is supposed to run on CPU
-# rendering with the combination of packages we have here in headless mode
-# is hard to nail.
-# IMPORTANT: As a consequence, we can't guarantee TorchRL compatibility with
-# rendering with this version of gym / mujoco-py.
+# Leave blank as code needs to start on line 29 for run_local.sh
+#
+#
+#
+#
+#
+#
+#
 
 set -e
 set -v
-
-eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
@@ -246,6 +246,31 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.collector_device=cuda:0 \
   env.name=Pendulum-v1 \
   logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/mappo_ippo.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/maddpg_iddpg.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/iql.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/qmix_vdn.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
 

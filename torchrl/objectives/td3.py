@@ -343,6 +343,15 @@ class TD3Loss(LossModule):
         obs_keys = self.actor_network.in_keys
         tensordict_save = tensordict
         tensordict = tensordict.clone(False)
+        act = tensordict.get(self.tensor_keys.action)
+        action_shape = act.shape
+        action_device = act.device
+        # computing early for reprod
+        noise = torch.normal(
+            mean=torch.zeros(action_shape),
+            std=torch.full(action_shape, self.policy_noise),
+        ).to(action_device)
+        noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
         tensordict_actor_grad = tensordict.select(
             *obs_keys
@@ -351,24 +360,17 @@ class TD3Loss(LossModule):
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        tensordict_actor = tensordict_actor.contiguous()
-
+        # DO NOT call contiguous bc we'll update the tds later
         actor_output_td = self._vmap_actor_network00(
             tensordict_actor,
             self._cached_stack_actor_params,
         )
         # add noise to target policy
-        action = actor_output_td[1].get(self.tensor_keys.action)
-        noise = torch.normal(
-            mean=torch.zeros(action.shape),
-            std=torch.full(action.shape, self.policy_noise),
-        ).to(action.device)
-        noise = noise.clamp(-self.noise_clip, self.noise_clip)
-
-        next_action = (actor_output_td[1][self.tensor_keys.action] + noise).clamp(
+        actor_output_td1 = actor_output_td[1]
+        next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
             self.min_action, self.max_action
         )
-        actor_output_td[1].set(self.tensor_keys.action, next_action)
+        actor_output_td1.set(self.tensor_keys.action, next_action)
         tensordict_actor.set(
             self.tensor_keys.action,
             actor_output_td.get(self.tensor_keys.action),

@@ -230,10 +230,12 @@ def _main(argv):
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
+                "git",
             ],
             "checkpointing": [
                 "torchsnapshot",
             ],
+            "marl": ["vmas"],
         },
         zip_safe=False,
         classifiers=[
@@ -253,5 +255,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
     _main(sys.argv[1:])

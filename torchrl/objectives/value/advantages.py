@@ -192,6 +192,30 @@ class ValueEstimatorBase(TensorDictModuleBase):
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
 
+    @property
+    def advantage_key(self):
+        return self.tensor_keys.advantage
+
+    @property
+    def value_key(self):
+        return self.tensor_keys.value
+
+    @property
+    def value_target_key(self):
+        return self.tensor_keys.value_target
+
+    @property
+    def reward_key(self):
+        return self.tensor_keys.reward
+
+    @property
+    def done_key(self):
+        return self.tensor_keys.done
+
+    @property
+    def steps_to_next_obs_key(self):
+        return self.tensor_keys.steps_to_next_obs
+
     @abc.abstractmethod
     def forward(
         self,
@@ -365,7 +389,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         return self.value_network._is_stateless
 
     def _next_value(self, tensordict, target_params, kwargs):
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params
