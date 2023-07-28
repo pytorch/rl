@@ -20,6 +20,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     ProbabilisticTensorDictSequential as ProbSeq,
     TensorDictModule as Mod,
+    TensorDictSequential,
     TensorDictSequential as Seq,
 )
 
@@ -45,6 +46,7 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import ContinuousActionConvMockEnv
 from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
+from tensordict.nn.utils import Buffer
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -86,7 +88,6 @@ from torchrl.modules.tensordict_module.actors import (
     QValueModule,
     ValueOperator,
 )
-from torchrl.modules.utils import Buffer
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -1941,7 +1942,9 @@ class TestTD3(LossModuleTestBase):
             assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -7328,7 +7331,10 @@ class TestIQL(LossModuleTestBase):
 
 
 @pytest.mark.parametrize("create_target_params", [True, False])
-def test_param_buffer_types(create_target_params):
+@pytest.mark.parametrize(
+    "cast", [None, torch.float, torch.double, *get_default_devices()]
+)
+def test_param_buffer_types(create_target_params, cast):
     class MyLoss(LossModule):
         def __init__(self, actor_network):
             super().__init__()
@@ -7347,16 +7353,25 @@ def test_param_buffer_types(create_target_params):
         out_keys=["action"],
     )
     loss = MyLoss(actor_module)
-    assert isinstance(loss.actor_network_params["module", "0", "weight"], nn.Parameter)
-    assert isinstance(
-        loss.target_actor_network_params["module", "0", "weight"], nn.Parameter
-    )
-    assert loss.actor_network_params["module", "0", "weight"].requires_grad
-    assert not loss.target_actor_network_params["module", "0", "weight"].requires_grad
-    assert isinstance(loss.actor_network_params["module", "0", "bias"], nn.Parameter)
-    assert isinstance(
-        loss.target_actor_network_params["module", "0", "bias"], nn.Parameter
-    )
+    if cast is not None:
+        loss.to(cast)
+    for name in ("weight", "bias"):
+        param = loss.actor_network_params["module", "0", name]
+        assert isinstance(param, nn.Parameter)
+        target = loss.target_actor_network_params["module", "0", name]
+        if create_target_params:
+            assert target.data_ptr() != param.data_ptr()
+        else:
+            assert target.data_ptr() == param.data_ptr()
+        assert param.requires_grad
+        assert not target.requires_grad
+        if cast is not None:
+            if isinstance(cast, torch.dtype):
+                assert param.dtype == cast
+                assert target.dtype == cast
+            else:
+                assert param.device == cast
+                assert target.device == cast
 
     if create_target_params:
         assert (
@@ -9280,6 +9295,105 @@ class TestSingleCall:
             value_net, data, params, next_params, single_call, value_key, detach_next
         )
         assert (value != value_).all()
+
+
+class TestBuffer:
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_param_cast(self, dtype):
+    #     param = nn.Parameter(torch.zeros(3))
+    #     idb = param.data_ptr()
+    #     param = param.to(dtype)
+    #     assert param.data_ptr() == idb
+    #     assert param.dtype == dtype
+    #     assert param.data.dtype == dtype
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_buffer_cast(self, dtype):
+    #     buffer = Buffer(torch.zeros(3))
+    #     idb = buffer.data_ptr()
+    #     buffer = buffer.to(dtype)
+    #     assert isinstance(buffer, Buffer)
+    #     assert buffer.data_ptr() == idb
+    #     assert buffer.dtype == dtype
+    #     assert buffer.data.dtype == dtype
+
+    @pytest.mark.parametrize("create_target_params", [True, False])
+    @pytest.mark.parametrize(
+        "dest", [torch.float, torch.double, torch.half, *get_default_devices()]
+    )
+    def test_module_cast(self, create_target_params, dest):
+        # test that when casting a loss module, all the tensors (params and buffers)
+        # are properly cast
+        class DummyModule(LossModule):
+            def __init__(self):
+                common = nn.Linear(3, 4)
+                actor = nn.Linear(4, 4)
+                value = nn.Linear(4, 1)
+                common = TensorDictModule(common, in_keys=["obs"], out_keys=["hidden"])
+                actor = TensorDictSequential(
+                    common,
+                    TensorDictModule(actor, in_keys=["hidden"], out_keys=["action"]),
+                )
+                value = TensorDictSequential(
+                    common,
+                    TensorDictModule(value, in_keys=["hidden"], out_keys=["value"]),
+                )
+                super().__init__()
+                self.convert_to_functional(
+                    actor,
+                    "actor",
+                    expand_dim=None,
+                    create_target_params=False,
+                    compare_against=None,
+                )
+                self.convert_to_functional(
+                    value,
+                    "value",
+                    expand_dim=2,
+                    create_target_params=create_target_params,
+                    compare_against=actor.parameters(),
+                )
+
+        mod = DummyModule()
+        v_p1 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params1 = set(mod.parameters())
+        v_buffers1 = set(mod.buffers())
+        mod.to(dest)
+        v_p2 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params2 = set(mod.parameters())
+        v_buffers2 = set(mod.buffers())
+        assert v_p1 == v_p2
+        assert v_params1 == v_params2
+        assert v_buffers1 == v_buffers2
+        for p in mod.parameters():
+            assert isinstance(p, nn.Parameter)
+        for p in mod.buffers():
+            assert isinstance(p, Buffer)
+        for p in mod.actor_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        for p in mod.value_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        if isinstance(dest, torch.dtype):
+            for p in mod.parameters():
+                assert p.dtype == dest
+            for p in mod.buffers():
+                assert p.dtype == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.dtype == dest
+            for p in mod.value_params.values(True, True):
+                assert p.dtype == dest
+        else:
+            for p in mod.parameters():
+                assert p.device == dest
+            for p in mod.buffers():
+                assert p.device == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.device == dest
+            for p in mod.value_params.values(True, True):
+                assert p.device == dest
 
 
 if __name__ == "__main__":
