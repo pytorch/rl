@@ -818,7 +818,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
-
+        next_preset = tensordict.get("next", None)
         tensordict_out = self._step(tensordict)
         # this tensordict should contain a "next" key
         try:
@@ -829,6 +829,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "values at t+1 have been written under a 'next' entry. This "
                 f"tensordict couldn't be found in the output, got: {tensordict_out}."
             )
+        if next_preset is not None:
+            next_tensordict_out.update(next_preset)
         if tensordict_out is tensordict:
             raise RuntimeError(
                 "EnvBase._step should return outplace changes to the input "

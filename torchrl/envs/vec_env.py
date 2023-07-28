@@ -762,11 +762,6 @@ class ParallelEnv(_BatchedEnv):
         if self._single_task:
             # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
-                # self.shared_tensordict_parent.set(
-                #     key,
-                #     tensordict.get(key),
-                #     inplace=True,
-                # )
                 key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
                     key,

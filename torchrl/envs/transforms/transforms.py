@@ -2962,6 +2962,27 @@ class TensorDictPrimer(Transform):
             observation_spec[key] = spec.to(device)
         return observation_spec
 
+    # def transform_input_spec(
+    #     self, input_spec: CompositeSpec
+    # ) -> CompositeSpec:
+    #     if not isinstance(input_spec, CompositeSpec):
+    #         raise ValueError(
+    #             f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
+    #         )
+    #     state_spec = input_spec["_state_spec"]
+    #     for key, spec in self.primers.items():
+    #         if spec.shape[: len(state_spec.shape)] != state_spec.shape:
+    #             raise RuntimeError(
+    #                 f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
+    #                 f"Got state_spec.shape={state_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+    #             )
+    #         try:
+    #             device = state_spec.device
+    #         except RuntimeError:
+    #             device = self.device
+    #         state_spec[key] = spec.to(device)
+    #     return input_spec
+
     @property
     def _batch_size(self):
         return self.parent.batch_size
