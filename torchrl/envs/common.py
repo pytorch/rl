@@ -830,7 +830,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"tensordict couldn't be found in the output, got: {tensordict_out}."
             )
         if next_preset is not None:
-            next_tensordict_out.update(next_preset)
+            next_tensordict_out.update(
+                next_preset.exclude(*next_tensordict_out.keys(True, True))
+            )
         if tensordict_out is tensordict:
             raise RuntimeError(
                 "EnvBase._step should return outplace changes to the input "
