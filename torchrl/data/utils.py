@@ -11,7 +11,7 @@ import torch
 from tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import Tensor
 
-from .tensor_specs import (
+from torchrl.data.tensor_specs import (
     CompositeSpec,
     LazyStackedCompositeSpec,
     LazyStackedTensorSpec,
@@ -74,11 +74,20 @@ def dense_stack_tds(
 
 
 def consolidate_spec(
-    spec: TensorSpec,
+    spec: CompositeSpec,
     recurse_through_entries: bool = True,
     recurse_through_stack: bool = True,
 ):
-    """Given a TensorSpec, removes exclusive keys by adding 0 shaped specs."""
+    """Given a TensorSpec, removes exclusive keys by adding 0 shaped specs.
+
+    Args:
+        spec (CompositeSpec): the spec to be consolidated.
+        recurse_through_entries (bool): if True, call the function recursively on all entries of the spec.
+            Default is True.
+        recurse_through_stack (bool): if True, if the provided spec is lazy, the function recursively
+            on all specs in its list. Default is True.
+
+    """
     spec = spec.clone()
 
     if not isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
@@ -104,21 +113,18 @@ def consolidate_spec(
                         value = sub_spec[sub_spec_key]
                         lazy_keys_examples.update({sub_spec_key: value})
 
-        for spec_index in range(len(spec._specs)):  # add missing exclusive entries
-            sub_spec = spec._specs[spec_index]
-            for lazy_key in set(lazy_keys_examples.keys()).difference(
-                lazy_keys_per_spec[spec_index]
-            ):
+        for sub_spec, lazy_keys in zip(
+            spec._specs, lazy_keys_per_spec
+        ):  # add missing exclusive entries
+            for lazy_key in set(lazy_keys_examples.keys()).difference(lazy_keys):
                 lazy_key_example = lazy_keys_examples[lazy_key]
                 sub_spec.set(
                     lazy_key,
                     _empty_like_spec(lazy_key_example, sub_spec.shape),
                 )
-            spec._specs[spec_index] = sub_spec
 
     if recurse_through_entries:
-        for key in spec.keys():
-            value = spec[key]
+        for key, value in spec.items():
             if isinstance(value, (CompositeSpec, LazyStackedCompositeSpec)):
                 spec.set(
                     key,
@@ -148,7 +154,12 @@ def _empty_like_spec(spec, shape):
 
 
 def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
-    """Given a TensorSpec, returns true if there are no exclusive keys."""
+    """Given a TensorSpec, returns true if there are no exclusive keys.
+
+    Args:
+        spec (TensorSpec): the spec to check
+        recurse (bool): if True, check recursively in nested specs. Default is True.
+    """
     if isinstance(spec, LazyStackedCompositeSpec):
         keys = set(spec.keys())
         for inner_td in spec._specs:
