@@ -1072,6 +1072,9 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
             self.dim + len(expand_shape),
         )
 
+    def type_check(self, value: torch.Tensor, key: str = None) -> None:
+        raise NotImplementedError
+
 
 @dataclass(repr=False)
 class OneHotDiscreteTensorSpec(TensorSpec):
