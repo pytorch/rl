@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from tensordict import TensorDict, unravel_key_list
+from tensordict import pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, make_functional, TensorDictModule
 from torch import nn
 from torchrl.data.tensor_specs import (
@@ -857,7 +857,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -939,7 +940,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1014,7 +1016,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1103,7 +1106,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1184,7 +1188,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1633,6 +1638,24 @@ class TestLSTMModule:
         assert set(lstm_module.set_recurrent_mode(True).parameters()) == set(
             lstm_module.parameters()
         )
+
+    def test_noncontiguous(self):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["bork", "h0", "h1"],
+            out_keys=["dork", ("next", "h0"), ("next", "h1")],
+        )
+        td = TensorDict(
+            {
+                "bork": torch.randn(3, 3),
+                "is_init": torch.zeros(3, 1, dtype=torch.bool),
+            },
+            [3],
+        )
+        padded = pad(td, [0, 5])
+        lstm_module(padded)
 
     @pytest.mark.parametrize("shape", [[], [2], [2, 3], [2, 3, 4]])
     def test_singel_step(self, shape):

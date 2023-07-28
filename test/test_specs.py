@@ -3096,7 +3096,13 @@ def test_composite_contains():
 
 
 def get_all_keys(spec: TensorSpec, include_exclusive: bool):
-    """Given a TensorSpec, returns all exclusive and non-exclusive keys as a set tuples."""
+    """Given a TensorSpec, returns all exclusive and non-exclusive keys as a set of tuples.
+
+    Args:
+        spec (TensorSpec): the spec to get keys from.
+        include_exclusive (bool: if True, include also exclusive keys in the result.
+
+    """
     keys = set()
     if isinstance(spec, LazyStackedCompositeSpec) and include_exclusive:
         for t in spec._specs:
