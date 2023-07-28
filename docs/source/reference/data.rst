@@ -253,3 +253,5 @@ Utils
     :template: rl_template.rst
 
     MultiStep
+    consolidate_spec
+    check_no_exclusive_keys
