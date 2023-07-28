@@ -3369,7 +3369,11 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def __delitem__(self, key: NestedKey):
         """Deletes a key from the stacked composite spec.
 
-        This method will be executed if and only if the key is present in all stacked specs.
+        This method will be executed if the key is present in at least one of the stacked specs,
+        otherwise it will raise an error.
+
+        Args:
+            key (NestedKey): the key to delete.
         """
         at_least_one_deletion = False
         for spec in self._specs:
