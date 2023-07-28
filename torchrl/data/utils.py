@@ -130,7 +130,6 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
             [_empty_like_spec(spec._specs, shape) for _ in spec._specs],
             spec.stack_dim,
         )
-
     else:
         # the exclusive key has values which are TensorSpecs ->
         # if the shapes of the values are all the same, we create a TensorSpec with leading shape `shape` and following dims 0 (having the same ndims as the values)
