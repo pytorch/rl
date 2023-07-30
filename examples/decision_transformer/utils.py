@@ -16,6 +16,7 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    SerialEnv,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
@@ -129,7 +130,8 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(make_env)),
+        # ParallelEnv(num_envs, EnvCreator(make_env)),
+        SerialEnv(num_envs, EnvCreator(make_env)),
         env_cfg,
         obs_loc,
         obs_std,

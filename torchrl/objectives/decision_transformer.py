@@ -195,15 +195,15 @@ class OnlineDTLoss(LossModule):
             tensordict, params=self.actor_network_params
         )
 
-        loss_log_likelihood = action_dist.log_prob(target_actions).mean()
+        log_likelihood = action_dist.log_prob(target_actions).mean()
         entropy = self.get_entropy_bonus(action_dist).mean()
-        loss_entropy = self.alpha.detach() * entropy
+        entropy_bonus = self.alpha.detach() * entropy
 
         loss_alpha = self.log_alpha.exp() * (entropy - self.target_entropy).detach()
 
         out = {
-            "loss_log_likelihood": -loss_log_likelihood,
-            "loss_entropy": -loss_entropy,
+            "loss_log_likelihood": -log_likelihood,
+            "loss_entropy": -entropy_bonus,
             "loss_alpha": loss_alpha,
             "entropy": entropy.detach(),
             "alpha": self.alpha.detach(),
