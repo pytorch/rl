@@ -60,8 +60,8 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-pip install pip --upgrade
-pip install 'cython<3'
+pip3 install pip --upgrade
+conda install -c anaconda cython="<3.0.0"
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then
