@@ -179,7 +179,11 @@ __all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(
-    spec, dtype=None, device="cpu", categorical_action_encoding=False
+    spec,
+    dtype=None,
+    device="cpu",
+    categorical_action_encoding=False,
+    remap_state_to_observation: bool = True,
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
@@ -241,7 +245,11 @@ def _gym_to_torchrl_spec_transform(
         spec_out = {}
         for k in spec.keys():
             key = k
-            if k == "state" and "observation" not in spec.keys():
+            if (
+                remap_state_to_observation
+                and k == "state"
+                and "observation" not in spec.keys()
+            ):
                 # we rename "state" in "observation" as "observation" is the conventional name
                 # for single observation in torchrl.
                 # naming it 'state' will result in envs that have a different name for the state vector
@@ -251,6 +259,7 @@ def _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
+                remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
     elif isinstance(spec, gym.spaces.dict.Dict):
@@ -258,6 +267,7 @@ def _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
             categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
         )
     else:
         raise NotImplementedError(
