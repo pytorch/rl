@@ -69,6 +69,11 @@ _CHECK_SPEC_ENCODE = get_binary_env_var("CHECK_SPEC_ENCODE")
 _DEFAULT_SHAPE = torch.Size((1,))
 
 DEVICE_ERR_MSG = "device of empty CompositeSpec is not defined."
+NOT_IMPLEMENTED_ERROR = NotImplementedError(
+    "method is not currently implemented."
+    " If you are interested in this feature please submit"
+    " an issue at https://github.com/pytorch/rl/issues"
+)
 
 
 def _default_dtype_and_device(
@@ -947,10 +952,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     """
 
-    @property
-    def space(self):
-        raise NotImplementedError
-
     def __eq__(self, other):
         if not isinstance(other, LazyStackedTensorSpec):
             return False
@@ -977,9 +978,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
                 spec.assert_is_in(v)
         return val.detach().cpu().numpy()
 
-    def _project(self, val: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError
-
     def __repr__(self):
         shape_str = "shape=" + str(self.shape)
         device_str = "device=" + str(self.device)
@@ -988,12 +986,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         sub_string = ", ".join([shape_str, device_str, dtype_str, domain_str])
         string = f"LazyStacked{self._specs[0].__class__.__name__}(\n    {sub_string})"
         return string
-
-    def __iter__(self):
-        raise NotImplementedError
-
-    def __setitem__(self, key, value):
-        raise NotImplementedError
 
     @property
     def device(self) -> DEVICE_TYPING:
@@ -1005,20 +997,6 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
 
     def ndimension(self):
         return len(self.shape)
-
-    def set(self, name, spec):
-        if spec is not None:
-            shape = spec.shape
-            if shape[: self.ndim] != self.shape:
-                raise ValueError(
-                    "The shape of the spec and the CompositeSpec mismatch: the first "
-                    f"{self.ndim} dimensions should match but got spec.shape={spec.shape} and "
-                    f"CompositeSpec.shape={self.shape}."
-                )
-        self._specs[name] = spec
-
-    def is_in(self, val) -> bool:
-        raise NotImplementedError
 
     @property
     def shape(self):
@@ -1073,7 +1051,22 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
         )
 
     def type_check(self, value: torch.Tensor, key: str = None) -> None:
-        raise NotImplementedError
+        raise NOT_IMPLEMENTED_ERROR
+
+    def is_in(self, val) -> bool:
+        raise NOT_IMPLEMENTED_ERROR
+
+    @property
+    def space(self):
+        raise NOT_IMPLEMENTED_ERROR
+
+    def _project(self, val: TensorDictBase) -> TensorDictBase:
+        raise NOT_IMPLEMENTED_ERROR
+
+    def encode(
+        self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
+    ) -> torch.Tensor:
+        raise NOT_IMPLEMENTED_ERROR
 
 
 @dataclass(repr=False)
@@ -3364,11 +3357,6 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
                 return False
         return True
 
-    def encode(
-        self, vals: Dict[str, Any], ignore_device: bool = False
-    ) -> Dict[str, torch.Tensor]:
-        raise NotImplementedError
-
     def __delitem__(self, key: NestedKey):
         """Deletes a key from the stacked composite spec.
 
@@ -3462,6 +3450,11 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
 
     def empty(self):
         return torch.stack([spec.empty() for spec in self._specs], dim=self.stack_dim)
+
+    def encode(
+        self, vals: Dict[str, Any], ignore_device: bool = False
+    ) -> Dict[str, torch.Tensor]:
+        raise NOT_IMPLEMENTED_ERROR
 
 
 # for SPEC_CLASS in [BinaryDiscreteTensorSpec, BoundedTensorSpec, DiscreteTensorSpec, MultiDiscreteTensorSpec, MultiOneHotDiscreteTensorSpec, OneHotDiscreteTensorSpec, UnboundedContinuousTensorSpec, UnboundedDiscreteTensorSpec]:
