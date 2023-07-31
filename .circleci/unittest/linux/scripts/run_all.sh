@@ -81,6 +81,7 @@ conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISP
 pip3 install pip --upgrade
 
 if [[ $OSTYPE == 'darwin'* ]]; then
+  pip3 install "cython<3"
   conda install -c anaconda cython="<3.0.0" -y # for mujoco
 fi
 pip3 install virtualenv
