@@ -61,6 +61,7 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
+pip install 'cython<3'
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then
