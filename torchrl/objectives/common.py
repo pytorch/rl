@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Optional, Tuple
 
 import torch
 
@@ -24,6 +24,7 @@ from torch import nn, Tensor
 from torch.nn import Parameter
 
 from torchrl._utils import RL_WARNINGS
+from torchrl.data import DEVICE_TYPING
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.utils import Buffer
 from torchrl.objectives.utils import _cache_values, ValueEstimators
@@ -146,13 +147,13 @@ class LossModule(TensorDictModuleBase):
 
         try:
             self._forward_value_estimator_keys(**kwargs)
-        except AttributeError:
+        except AttributeError as err:
             raise AttributeError(
                 "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
                 "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
                 "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
                 "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
-            )
+            ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -252,7 +253,6 @@ class LossModule(TensorDictModuleBase):
         # as tensor = nn.Parameter(tensor) keeps its identity when moved to another device
 
         def create_buffers(tensor):
-
             if isinstance(tensor, torch.Tensor) and not isinstance(
                 tensor, (Buffer, nn.Parameter)
             ):
@@ -285,7 +285,6 @@ class LossModule(TensorDictModuleBase):
             # For buffers, a cloned expansion (or equivalently a repeat) is returned.
 
             def _compare_and_expand(param):
-
                 if param in compare_against:
                     expanded_param = param.data.expand(expand_dim, *param.shape)
                     # the expanded parameter must be sent to device when to()
@@ -373,14 +372,14 @@ class LossModule(TensorDictModuleBase):
 
         name_params_target = "_target_" + module_name
         if create_target_params:
-            target_params = params_and_buffers.detach().clone()
+            target_params = params_and_buffers.apply(_make_target_param(clone=True))
             target_params_items = target_params.items(True, True)
             target_params_list = []
-            for (key, val) in target_params_items:
+            for key, val in target_params_items:
                 if not isinstance(key, tuple):
                     key = (key,)
                 name = sep.join([name_params_target, *key])
-                self.register_buffer(name, Buffer(val))
+                self.register_buffer(name, val)
                 target_params_list.append((name, key))
             setattr(self, name_params_target + "_params", target_params)
         else:
@@ -409,7 +408,18 @@ class LossModule(TensorDictModuleBase):
                         if isinstance(value_to_set, str):
                             if value_to_set.endswith("_detached"):
                                 value_to_set = value_to_set[:-9]
-                                value_to_set = getattr(self, value_to_set).detach()
+                                value_to_set = getattr(self, value_to_set)
+                                is_param = isinstance(value_to_set, nn.Parameter)
+                                is_buffer = isinstance(value_to_set, Buffer)
+                                value_to_set = value_to_set.detach()
+                                if is_param:
+                                    value_to_set = nn.Parameter(
+                                        value_to_set, requires_grad=False
+                                    )
+                                elif is_buffer:
+                                    value_to_set = Buffer(
+                                        value_to_set, requires_grad=False
+                                    )
                             else:
                                 value_to_set = getattr(self, value_to_set)
                         # params.set(key, value_to_set)
@@ -419,7 +429,7 @@ class LossModule(TensorDictModuleBase):
                 return params
             else:
                 params = getattr(self, param_name)
-                return params.detach()
+                return params.apply(_make_target_param(clone=False))
 
         else:
             raise RuntimeError(
@@ -454,11 +464,12 @@ class LossModule(TensorDictModuleBase):
                         target_params._set_tuple(
                             key, value_to_set, inplace=False, validated=True
                         )
-                return target_params
             else:
                 params = getattr(self, param_name)
                 # should we clone here?
-                return params.detach()  # .clone()
+                target_params = params.apply(_make_target_param(clone=False))
+
+            return target_params
 
         else:
             raise RuntimeError(
@@ -480,12 +491,6 @@ class LossModule(TensorDictModuleBase):
         for item in self.__dir__():
             if isinstance(item, nn.Module):
                 yield item
-
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        return torch.device("cpu")
 
     def register_buffer(
         self, name: str, tensor: Optional[Tensor], persistent: bool = True
@@ -518,7 +523,7 @@ class LossModule(TensorDictModuleBase):
         out._cache = {}
         return out
 
-    def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
+    def cuda(self, device: Optional[DEVICE_TYPING] = None) -> LossModule:
         if device is None:
             return self.to("cuda")
         else:
@@ -611,3 +616,15 @@ class LossModule(TensorDictModuleBase):
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
+
+
+class _make_target_param:
+    def __init__(self, clone):
+        self.clone = clone
+
+    def __call__(self, x):
+        if isinstance(x, nn.Parameter):
+            return nn.Parameter(
+                x.data.clone() if self.clone else x.data, requires_grad=False
+            )
+        return Buffer(x.data.clone() if self.clone else x.data)
