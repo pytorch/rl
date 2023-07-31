@@ -44,6 +44,7 @@ conda activate "${env_dir}"
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
+conda install -c anaconda cython="<3.0.0"
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
