@@ -61,7 +61,7 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip3 install pip --upgrade
-conda install -c anaconda cython="<3.0.0"
+conda install -c anaconda cython="<3.0.0" -y
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then
