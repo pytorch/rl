@@ -38,6 +38,8 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
+pip3 uninstall cython -y
+pip uninstall cython -y
 
 
 # 3. Install mujoco
