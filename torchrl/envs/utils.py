@@ -238,7 +238,7 @@ def _set_single_key(source, dest, key, clone=False):
         else:
             # this is a het key
             for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                _set_single_key(s_td, d_td, k)
+                _set_single_key(s_td, d_td, k, clone)
             break
 
 
