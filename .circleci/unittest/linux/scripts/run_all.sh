@@ -82,7 +82,7 @@ pip3 install pip --upgrade
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   echo "Insalling mujoco"
-  pip install mujoco
+  conda install -c conda-forge mujoco-python -y
 fi
 pip3 install virtualenv
 
