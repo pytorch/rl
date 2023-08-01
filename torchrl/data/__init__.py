@@ -46,4 +46,4 @@ from .tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-from .utils import check_no_exclusive_keys, consolidate_spec
+from .utils import check_no_exclusive_keys, consolidate_spec, dense_stack_tds
