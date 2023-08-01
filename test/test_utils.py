@@ -11,7 +11,11 @@ from unittest import mock
 import _utils_internal
 import pytest
 
+import torch
+from tensordict import TensorDict
+from tensordict.tensordict import assert_allclose_td
 from torchrl._utils import get_binary_env_var, implement_for
+from torchrl.data import dense_stack_tds
 from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 
@@ -278,6 +282,46 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
     with set_gym_backend(gym):
         assert gym_backend() == gym
+
+
+@pytest.mark.parametrize(
+    "stack_dim",
+    [0, 1, 2, 3],
+)
+@pytest.mark.parametrize(
+    "nested_stack_dim",
+    [0, 1, 2],
+)
+def test_dense_stack_tds(stack_dim, nested_stack_dim):
+    batch_size = (5, 6)
+    a = TensorDict(
+        {"a": torch.zeros(*batch_size, 3)},
+        batch_size,
+    )
+    b = TensorDict(
+        {"a": torch.zeros(*batch_size, 4), "b": torch.zeros(*batch_size, 2)},
+        batch_size,
+    )
+    td_lazy = torch.stack([a, b], dim=nested_stack_dim)
+    td_lazy_clone = td_lazy.clone()
+    td_lazy_clone.apply_(lambda x: x + 1)
+
+    assert td_lazy.stack_dim == nested_stack_dim
+    td_stack = torch.stack([td_lazy, td_lazy_clone], dim=stack_dim)
+    assert td_stack.stack_dim == stack_dim
+
+    dense_td_stack = dense_stack_tds(td_stack)
+    assert assert_allclose_td(
+        dense_td_stack, dense_stack_tds([td_lazy, td_lazy_clone], dim=stack_dim)
+    )
+    for i in [0, 1]:
+        index = (slice(None),) * stack_dim + (i,)
+        assert (dense_td_stack[index] == i).all()
+
+    if stack_dim > nested_stack_dim:
+        assert dense_td_stack.stack_dim == nested_stack_dim
+    else:
+        assert dense_td_stack.stack_dim == nested_stack_dim + 1
 
 
 if __name__ == "__main__":
