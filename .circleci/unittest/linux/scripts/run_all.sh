@@ -134,7 +134,7 @@ else
 fi
 
 # smoke test
-python -c "import functorch"
+python3 -c "import functorch"
 
 # install snapshot
 pip3 install git+https://github.com/pytorch/torchsnapshot
@@ -143,7 +143,7 @@ pip3 install git+https://github.com/pytorch/torchsnapshot
 pip3 install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
-python setup.py develop
+python3 setup.py develop
 
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
@@ -165,7 +165,7 @@ fi
 
 
 export PYTORCH_TEST_WITH_SLOW='1'
-python -m torch.utils.collect_env
+python3 -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
@@ -177,10 +177,10 @@ export CKPT_BACKEND=torch
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 if [ "${CU_VERSION:-}" != cpu ] ; then
-  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+  python3 .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 --ignore test/test_rlhf.py
 else
-  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+  python3 .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 --ignore test/test_rlhf.py --ignore test/test_distributed.py
 fi
 
