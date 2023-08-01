@@ -38,8 +38,12 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
+# get rid of cython however we can
 pip3 uninstall cython -y
 pip uninstall cython -y
+conda uninstall cython -y
+pip3 install "cython<3"
+conda install -c anaconda cython="<3.0.0" -y
 
 
 # 3. Install mujoco
@@ -55,6 +59,9 @@ wget https://www.roboti.us/file/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
 # install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
+cd mujoco-py
+git checkout v2.0.2.1
+pip install -e .
 cd $this_dir
 
 # 4. Install Conda dependencies
@@ -63,8 +70,6 @@ echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
 pip3 install pip --upgrade
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then

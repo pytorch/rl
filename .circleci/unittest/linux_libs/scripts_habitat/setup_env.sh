@@ -39,15 +39,17 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
+# get rid of cython however we can
 pip3 uninstall cython -y
 pip uninstall cython -y
+conda uninstall cython -y
+pip3 install "cython<3"
+conda install -c anaconda cython="<3.0.0" -y
 
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
 cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
