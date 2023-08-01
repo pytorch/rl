@@ -2373,6 +2373,8 @@ class DoubleToFloat(Transform):
         in_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
+        if in_keys is None:
+            in_keys = []
         super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
