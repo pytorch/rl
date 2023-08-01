@@ -54,9 +54,9 @@ def dense_stack_tds(
     Thus, this function provides an alternative for densifying the list provided.
 
     Args:
-        td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack
+        td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack.
         stack_dim (int, optional): the dimension to stack them.
-        If td_list is a LazyStackedTensorDict, it will be retrieved automatically
+            If td_list is a LazyStackedTensorDict, it will be retrieved automatically.
     """
     if isinstance(td_list, LazyStackedTensorDict):
         stack_dim = td_list.stack_dim
