@@ -195,7 +195,7 @@ class VmasWrapper(_EnvWrapper):
                         {
                             key: UnboundedContinuousTensorSpec(
                                 shape=_selective_unsqueeze(
-                                    value, batch_size=torch.Size((self.num_envs,))
+                                    value, batch_size=self.batch_size
                                 ).shape[1:],
                                 device=self.device,
                                 dtype=torch.float32,
@@ -356,11 +356,15 @@ class VmasWrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def read_obs(self, observations: torch.Tensor) -> torch.Tensor:
-        observations = _selective_unsqueeze(
-            observations, batch_size=torch.Size((self.num_envs,))
+    def read_obs(
+        self, observations: Union[Dict, torch.Tensor]
+    ) -> Union[Dict, torch.Tensor]:
+        if isinstance(observations, torch.Tensor):
+            return _selective_unsqueeze(observations, batch_size=self.batch_size)
+        return TensorDict(
+            source={key: self.read_obs(value) for key, value in observations.items()},
+            batch_size=self.batch_size,
         )
-        return observations
 
     def read_info(self, infos: Dict[str, torch.Tensor]) -> torch.Tensor:
         if len(infos) == 0:
@@ -368,22 +372,22 @@ class VmasWrapper(_EnvWrapper):
         infos = TensorDict(
             source={
                 key: _selective_unsqueeze(
-                    value.to(torch.float32), batch_size=torch.Size((self.num_envs,))
+                    value.to(torch.float32), batch_size=self.batch_size
                 )
                 for key, value in infos.items()
             },
-            batch_size=torch.Size((self.num_envs,)),
+            batch_size=self.batch_size,
             device=self.device,
         )
 
         return infos
 
     def read_done(self, done):
-        done = _selective_unsqueeze(done, batch_size=torch.Size((self.num_envs,)))
+        done = _selective_unsqueeze(done, batch_size=self.batch_size)
         return done
 
     def read_reward(self, rewards):
-        rewards = _selective_unsqueeze(rewards, batch_size=torch.Size((self.num_envs,)))
+        rewards = _selective_unsqueeze(rewards, batch_size=self.batch_size)
         return rewards
 
     def read_action(self, action):

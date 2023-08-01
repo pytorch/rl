@@ -2808,6 +2808,58 @@ class TestLazyStackedCompositeSpecs:
             spec_lazy, include_exclusive=False
         )
 
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    def test_consolidate_spec_exclusive_lazy_stacked(self, batch_size):
+        shared = UnboundedContinuousTensorSpec(
+            shape=(
+                *batch_size,
+                5,
+                5,
+                5,
+            )
+        )
+        lazy_spec = torch.stack(
+            [
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 6, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 7, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 8, 7)),
+                UnboundedContinuousTensorSpec(shape=(*batch_size, 5, 8, 7)),
+            ],
+            dim=len(batch_size),
+        )
+
+        spec_list = [
+            CompositeSpec(
+                {
+                    "shared": shared,
+                    "lazy_spec": lazy_spec,
+                },
+                shape=batch_size,
+            ),
+            CompositeSpec(
+                {
+                    "shared": shared,
+                },
+                shape=batch_size,
+            ),
+            CompositeSpec(
+                {},
+                shape=batch_size,
+                device="cpu",
+            ),
+        ]
+
+        spec = torch.stack(spec_list, dim=0)
+        spec_consolidated = consolidate_spec(spec)
+
+        assert spec_consolidated["shared"].shape == (3, *batch_size, -1, -1, -1)
+        assert spec_consolidated["lazy_spec"].shape == (3, *batch_size, 4, 5, -1, 7)
+
+        assert check_no_exclusive_keys(spec_consolidated, recurse=True)
+        assert get_all_keys(spec, include_exclusive=True) == get_all_keys(
+            spec_consolidated, include_exclusive=False
+        )
+
     @pytest.mark.parametrize("batch_size", [(2,), (2, 1)])
     def test_update(self, batch_size, stack_dim=0):
         spec = self._get_het_specs(batch_size, stack_dim)
