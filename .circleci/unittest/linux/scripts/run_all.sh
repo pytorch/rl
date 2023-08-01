@@ -120,7 +120,7 @@ else
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-    version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
+    version="$(python3 -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
 # submodules
