@@ -95,11 +95,13 @@ def consolidate_spec(
 
     if isinstance(spec, LazyStackedCompositeSpec):
         keys = set(spec.keys())  # shared keys
-        lazy_keys_per_spec = [
+        exclusive_keys_per_spec = [
             set() for _ in range(len(spec._specs))
         ]  # list of exclusive keys per td
-        lazy_keys_examples = {}  # set of all exclusive keys with an example for each
-        for spec_index in range(len(spec._specs)):  # gather all lazy keys
+        exclusive_keys_examples = (
+            {}
+        )  # map of all exclusive keys to a list of their values
+        for spec_index in range(len(spec._specs)):  # gather all exclusive keys
             sub_spec = spec._specs[spec_index]
             if recurse_through_stack:
                 sub_spec = consolidate_spec(
@@ -107,20 +109,24 @@ def consolidate_spec(
                 )
                 spec._specs[spec_index] = sub_spec
             for sub_spec_key in sub_spec.keys():
-                if sub_spec_key not in keys:  # lazy key
-                    lazy_keys_per_spec[spec_index].add(sub_spec_key)
-                    if sub_spec_key not in lazy_keys_examples:
-                        value = sub_spec[sub_spec_key]
-                        lazy_keys_examples.update({sub_spec_key: value})
+                if sub_spec_key not in keys:  # exclusive key
+                    exclusive_keys_per_spec[spec_index].add(sub_spec_key)
+                    value = sub_spec[sub_spec_key]
+                    if sub_spec_key in exclusive_keys_examples:
+                        exclusive_keys_examples[sub_spec_key].append(value)
+                    else:
+                        exclusive_keys_examples.update({sub_spec_key: [value]})
 
-        for sub_spec, lazy_keys in zip(
-            spec._specs, lazy_keys_per_spec
+        for sub_spec, exclusive_keys in zip(
+            spec._specs, exclusive_keys_per_spec
         ):  # add missing exclusive entries
-            for lazy_key in set(lazy_keys_examples.keys()).difference(lazy_keys):
-                lazy_key_example = lazy_keys_examples[lazy_key]
+            for exclusive_key in set(exclusive_keys_examples.keys()).difference(
+                exclusive_keys
+            ):
+                exclusive_keys_example_list = exclusive_keys_examples[exclusive_key]
                 sub_spec.set(
-                    lazy_key,
-                    _empty_like_spec(lazy_key_example, sub_spec.shape),
+                    exclusive_key,
+                    _empty_like_spec(exclusive_keys_example_list, sub_spec.shape),
                 )
 
     if recurse_through_entries:
@@ -135,20 +141,48 @@ def consolidate_spec(
     return spec
 
 
-def _empty_like_spec(spec, shape):
+def _empty_like_spec(specs: List[TensorSpec], shape):
+    for spec in specs[1:]:
+        if spec.__class__ != specs[0].__class__:
+            raise ValueError(
+                "Found same key in lazy specs corresponding to entries with different classes"
+            )
+    spec = specs[0]
     if isinstance(spec, (CompositeSpec, LazyStackedCompositeSpec)):
+        # the exclusive key has values which are CompositeSpecs ->
+        # we create an empty composite spec with same batch size
         return spec.empty()
     elif isinstance(spec, LazyStackedTensorSpec):
+        # the exclusive key has values which are LazyStackedTensorSpecs ->
+        # we create a LazyStackedTensorSpec with the same shape (aka same -1s) as the first in the list.
+        # this will not add any new -1s when they are stacked
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
-        return torch.stack(
-            [_empty_like_spec(sub_spec, shape) for sub_spec in spec._specs],
-            spec.stack_dim,
+        return LazyStackedTensorSpec(
+            *[_empty_like_spec(spec._specs, shape) for _ in spec._specs],
+            dim=spec.stack_dim
         )
     else:
-        spec_shape = spec.shape
-        shape = [dim if i < len(shape) else 0 for i, dim in enumerate(spec_shape)]
-        spec = spec[(0,) * len(spec_shape)]
-        spec = spec.expand(shape)
+        # the exclusive key has values which are TensorSpecs ->
+        # if the shapes of the values are all the same, we create a TensorSpec with leading shape `shape` and following dims 0 (having the same ndims as the values)
+        # if the shapes of the values differ,  we create a TensorSpec with 0 size in the differing dims
+        spec_shape = list(spec.shape)
+
+        for dim_index in range(len(spec_shape)):
+            hetero_dim = False
+            for sub_spec in specs:
+                if sub_spec.shape[dim_index] != spec.shape[dim_index]:
+                    hetero_dim = True
+                    break
+            if hetero_dim:
+                spec_shape[dim_index] = 0
+
+        if 0 not in spec_shape:  # the values have all same shape
+            spec_shape = [
+                dim if i < len(shape) else 0 for i, dim in enumerate(spec_shape)
+            ]
+
+        spec = spec[(0,) * len(spec.shape)]
+        spec = spec.expand(spec_shape)
 
         return spec
 

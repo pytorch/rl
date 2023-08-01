@@ -93,7 +93,7 @@ from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.modules import ProbabilisticActor, TanhNormal
+from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
 
@@ -8026,6 +8026,50 @@ class TestKLRewardTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
+
+    @pytest.mark.parametrize("requires_grad", [True, False])
+    def test_kl_diff(self, requires_grad):
+        actor = self._make_actor()
+        t = KLRewardTransform(
+            actor, in_keys="reward", out_keys="reward", requires_grad=requires_grad
+        )
+        assert t.frozen_params.requires_grad is requires_grad
+
+    def test_kl_lstm(self):
+        from tensordict.nn import (
+            NormalParamExtractor,
+            ProbabilisticTensorDictModule,
+            ProbabilisticTensorDictSequential,
+            TensorDictModule,
+        )
+
+        env = TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+        lstm_module = LSTMModule(
+            input_size=env.observation_spec["observation"].shape[-1],
+            hidden_size=2,
+            in_keys=["observation", "rs_h", "rs_c"],
+            out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+        )
+        mlp = MLP(num_cells=[2], out_features=env.action_spec.shape[-1] * 2)
+        policy = ProbabilisticTensorDictSequential(
+            lstm_module,
+            TensorDictModule(mlp, in_keys=["intermediate"], out_keys=["intermediate"]),
+            TensorDictModule(
+                NormalParamExtractor(),
+                in_keys=["intermediate"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        policy(env.reset())
+        klt = KLRewardTransform(policy)
+        # check that this runs: it can only run if the params are nn.Parameter instances
+        klt(env.rollout(3, policy))
 
 
 if __name__ == "__main__":
