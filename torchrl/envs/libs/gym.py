@@ -189,11 +189,11 @@ def _gym_to_torchrl_spec_transform(
 
     Args:
         spec: the gym space to transform
-        dtype: a dtype to use for the spec. `defaults to spec.dtype`
-        device: the device for the spec. Defaults to "cpu"
-        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.\
-            Defaults to one-hot
-        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true
+        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
+        device: the device for the spec. Defaults to "cpu".
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
     gym = gym_backend()
