@@ -94,8 +94,8 @@ conda deactivate
 conda activate "${env_dir}"
 
 echo "installing gymnasium"
-pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
-pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
+python3 -m pip install "gymnasium[atari,ale-py,accept-rom-license]"
+python3 -m pip install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
 # sanity check: remove?
 python3 -c """
@@ -128,19 +128,19 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    python3 -m pip install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+    python3 -m pip install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
 fi
 
-# smoke test
-python3 -c "import functorch"
+## smoke test
+#python3 -c "import functorch"
 
 # install snapshot
-pip3 install git+https://github.com/pytorch/torchsnapshot
+python3 -m pip install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-pip3 install git+https://github.com/pytorch-labs/tensordict.git
+python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
 python3 setup.py develop
