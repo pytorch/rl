@@ -468,11 +468,17 @@ class QValueModule(TensorDictModuleBase):
     def _categorical(value: torch.Tensor) -> torch.Tensor:
         return torch.argmax(value, dim=-1).to(torch.long)
 
-    def _mult_one_hot(self, value: torch.Tensor, support: torch.Tensor) -> torch.Tensor:
+    def _mult_one_hot(
+        self, value: torch.Tensor, support: torch.Tensor = None
+    ) -> torch.Tensor:
+        if self.var_nums is None:
+            raise ValueError(
+                "var_nums must be provided to the constructor for multi one-hot action spaces."
+            )
         values = value.split(self.var_nums, dim=-1)
         return torch.cat(
             [
-                QValueHook._one_hot(
+                self._one_hot(
                     _value,
                 )
                 for _value in values
