@@ -50,18 +50,20 @@ def dense_stack_tds(
     """Densely stack a list of TensorDictBase objects (or a LazyStackedTensorDict) given that they have the same structure.
 
     This must be used when some of the tds involved can have LazyTds among keys (or keys of keys, recursively).
-    In those cases, calling `torch.stack(td_list).to_tensordict()` is infeasible.
+    In those cases, calling ``torch.stack(td_list).to_tensordict()`` is infeasible.
     Thus, this function provides an alternative for densifying the list provided.
 
     Args:
         td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack.
         stack_dim (int, optional): the dimension to stack them.
             If td_list is a LazyStackedTensorDict, it will be retrieved automatically.
+
+
     """
     if isinstance(td_list, LazyStackedTensorDict):
         stack_dim = td_list.stack_dim
         td_list = td_list.tensordicts
-    if stack_dim is None:
+    elif stack_dim is None:
         raise ValueError(
             "If a list of tensordicts is provided, stack_dim must not be None"
         )
