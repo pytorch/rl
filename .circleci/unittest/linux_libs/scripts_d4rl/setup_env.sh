@@ -6,6 +6,7 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -38,10 +39,10 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
-# get rid of cython however we can
-pip3 uninstall cython -y
-pip uninstall cython -y
-conda uninstall cython -y
+
+#pip3 uninstall cython -y
+#pip uninstall cython -y
+#conda uninstall cython -y
 pip3 install "cython<3"
 conda install -c anaconda cython="<3.0.0" -y
 
