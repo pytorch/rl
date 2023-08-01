@@ -1386,10 +1386,10 @@ class HeteroCountingEnv(EnvBase):
         camera = BoundedTensorSpec(minimum=0, maximum=200, shape=(7, 7, 3))
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
-        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(8,))
+        lidar = BoundedTensorSpec(minimum=0, maximum=100, shape=(8,))
 
         tensor_0 = UnboundedContinuousTensorSpec(shape=(1,))
-        tensor_1 = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        tensor_1 = BoundedTensorSpec(minimum=0, maximum=150, shape=(1, 2))
         tensor_2 = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
 
         if i == 0:

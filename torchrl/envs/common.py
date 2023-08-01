@@ -89,7 +89,7 @@ class EnvMetaData:
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
     def expand(self, *size: int) -> EnvMetaData:
-        tensordict = self.tensordict.expand(*size).to_tensordict()
+        tensordict = self.tensordict.expand(*size).clone()
         batch_size = torch.Size(list(size))
         return EnvMetaData(
             tensordict,
