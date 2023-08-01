@@ -78,10 +78,11 @@ export SDL_VIDEODRIVER=dummy
 # legacy from bash scripts: remove?
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
-pip3 install pip --upgrade
+python3 -m pip install --upgrade pip
 
 if [[ $OSTYPE == 'darwin'* ]]; then
   echo "Insalling mujoco"
+  # pip fails to install mujoco
   conda install -c conda-forge mujoco-python -y
 fi
 pip3 install virtualenv
