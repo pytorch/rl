@@ -84,9 +84,9 @@ if [[ $OSTYPE == 'darwin'* ]]; then
   echo "Insalling mujoco"
   python3 -m pip uninstall cython -y
   python3 -m pip install "cython<3.0.0"
-  python3 -m pip install mujoco
+#  python3 -m pip install mujoco
   # pip fails to install mujoco
-  # conda install -c conda-forge mujoco-python -y
+  conda install -c conda-forge mujoco-python -y
 fi
 pip3 install virtualenv
 
