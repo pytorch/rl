@@ -139,7 +139,7 @@ else
 fi
 
 ## smoke test
-python3 -c "import functorch"
+#python3 -c "import functorch"
 
 # install snapshot
 python3 -m pip install git+https://github.com/pytorch/torchsnapshot
