@@ -72,24 +72,21 @@ else
   export MUJOCO_GL=egl
 fi
 
-export DISPLAY=:0
-export SDL_VIDEODRIVER=dummy
-
 # legacy from bash scripts: remove?
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  echo "Insalling mujoco"
-  python3 -m pip uninstall cython -y
-  python3 -m pip install "cython<3.0.0"
-#  python3 -m pip install mujoco
-  # pip fails to install mujoco
-  conda install -c conda-forge mujoco-python -y
-  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
-  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
-else
-  python3 -m pip install --upgrade pip
-fi
+python3 -m pip install --upgrade pip
+
+#if [[ $OSTYPE == 'darwin'* ]]; then
+#  echo "Insalling mujoco"
+#  python3 -m pip uninstall cython -y
+#  python3 -m pip install "cython<3.0.0"
+##  python3 -m pip install mujoco
+#  # pip fails to install mujoco
+#  conda install -c conda-forge mujoco-python -y
+#  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
+#  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
+#fi
 pip3 install virtualenv
 
 conda env update --file "${this_dir}/environment.yml" --prune
