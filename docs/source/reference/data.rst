@@ -255,6 +255,5 @@ Utils
     :template: rl_template.rst
 
     MultiStep
-    dense_stack_tds
     consolidate_spec
     check_no_exclusive_keys

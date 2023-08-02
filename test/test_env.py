@@ -41,6 +41,7 @@ from mocking_classes import (
     NestedCountingEnv,
 )
 from packaging import version
+from tensordict import dense_stack_tds
 from tensordict.nn import TensorDictModuleBase
 from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
 from torch import nn
@@ -51,7 +52,6 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import dense_stack_tds
 from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
