@@ -66,6 +66,7 @@ conda activate "${env_dir}"
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
+conda env update --file "${this_dir}/environment.yml" --prune
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
   export MUJOCO_GL=glfw
@@ -94,7 +95,6 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 fi
 pip3 install virtualenv
 
-conda env update --file "${this_dir}/environment.yml" --prune
 
 echo "installing gymnasium"
 python3 -m pip install "gymnasium[atari,ale-py,accept-rom-license]"
