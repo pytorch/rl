@@ -87,6 +87,8 @@ if [[ $OSTYPE == 'darwin'* ]]; then
 #  python3 -m pip install mujoco
   # pip fails to install mujoco
   conda install -c conda-forge mujoco-python -y
+  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
+  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
 fi
 pip3 install virtualenv
 
@@ -137,7 +139,7 @@ else
 fi
 
 ## smoke test
-#python3 -c "import functorch"
+python3 -c "import functorch"
 
 # install snapshot
 python3 -m pip install git+https://github.com/pytorch/torchsnapshot
