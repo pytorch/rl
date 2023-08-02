@@ -52,6 +52,7 @@ if [ ! -d "${conda_dir}" ]; then
     bash ./miniconda.sh -b -f -p "${conda_dir}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
+conda update -n base -c defaults conda -y
 
 # 2. Create test environment at ./env
 printf "python: ${PYTHON_VERSION}\n"
@@ -75,25 +76,25 @@ fi
 # legacy from bash scripts: remove?
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
 
-python3 -m pip install --upgrade pip
-
-#if [[ $OSTYPE == 'darwin'* ]]; then
-#  echo "Insalling mujoco"
-#  python3 -m pip uninstall cython -y
-#  python3 -m pip install "cython<3.0.0"
-##  python3 -m pip install mujoco
-#  # pip fails to install mujoco
-#  conda install -c conda-forge mujoco-python -y
-#  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
-#  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
-#fi
-pip3 install virtualenv
-
-conda env update --file "${this_dir}/environment.yml" --prune
-
 # Reset conda env variables
 conda deactivate
 conda activate "${env_dir}"
+
+python3 -m pip install --upgrade pip
+
+if [[ $OSTYPE == 'darwin'* ]]; then
+  echo "Insalling mujoco"
+  python3 -m pip uninstall cython -y
+  python3 -m pip install "cython<3.0.0"
+#  python3 -m pip install mujoco
+  # pip fails to install mujoco
+#  conda install -c conda-forge mujoco-python -y
+  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
+  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
+fi
+pip3 install virtualenv
+
+conda env update --file "${this_dir}/environment.yml" --prune
 
 echo "installing gymnasium"
 python3 -m pip install "gymnasium[atari,ale-py,accept-rom-license]"
