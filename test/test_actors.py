@@ -267,6 +267,20 @@ class TestQValue:
         )
 
     @pytest.mark.parametrize(
+        "action_space, var_nums, expected_action",
+        (
+            ("multi_one_hot", [2, 2, 2], [1, 0, 1, 0, 1, 0]),
+            ("multi_one_hot", [2, 4], [1, 0, 1, 0, 0, 0]),
+        ),
+    )
+    def test_qvalue_module_multi_one_hot(self, action_space, var_nums, expected_action):
+        module = QValueModule(action_space=action_space, var_nums=var_nums)
+        in_values = torch.tensor([1.0, 0, 2, 0, 1, 0])
+        action, values, chosen_action_value = module(in_values)
+        assert (torch.tensor(expected_action, dtype=torch.long) == action).all()
+        assert (values == in_values).all()
+
+    @pytest.mark.parametrize(
         "action_space, expected_action",
         (
             ("one_hot", [0, 0, 1, 0, 0]),

@@ -26,3 +26,4 @@ dependencies:
     - av
     - coverage
     - transformers
+    - vmas
