@@ -47,7 +47,7 @@ class IsaacGymWrapper(GymWrapper):
         return envs
 
     def _set_seed(self, seed: int) -> int:
-        self._env = self._make_envs(task=self.task, num_envs=self.num_envs, device=self.device, seed=seed)
+        # as of #665c32170d84b4be66722eea405a1e08b6e7f761 the seed points nowhere in gym.make for IsaacGymEnvs
         return seed
 
     def read_action(self, action):
