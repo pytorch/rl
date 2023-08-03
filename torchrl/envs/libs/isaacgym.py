@@ -17,6 +17,8 @@ class IsaacGymWrapper(GymWrapper):
         super().__init__(env, **kwargs)
         self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
         self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
+        self.observation_spec["obs"] = self.observation_spec["observation"]
+        del self.observation_spec["observation"]
         self.batch_size = torch.Size([num_envs])
         self.__dict__['_device'] = torch.device(self._env.device)
 
