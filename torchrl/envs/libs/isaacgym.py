@@ -39,14 +39,14 @@ class IsaacGymWrapper(GymWrapper):
             seed=seed,
             task=task,
             num_envs=num_envs,
-            sim_device=device,
-            rl_device=device,
+            sim_device=str(device),
+            rl_device=str(device),
             **kwargs,
         )
         return envs
 
     def _set_seed(self, seed: int) -> int:
-        self._env = self._make_envs(task=self.task, num_envs=self.num_envs, device=str(self.device), seed=seed)
+        self._env = self._make_envs(task=self.task, num_envs=self.num_envs, device=self.device, seed=seed)
         return seed
 
     def read_action(self, action):
