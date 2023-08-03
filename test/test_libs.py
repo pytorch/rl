@@ -2,11 +2,15 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from torchrl.envs.libs.isaacgym import IsaacGymEnv, _has_isaac
+import importlib
+
+_has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 if _has_isaac:
     # isaac gym asks to be imported before torch...
+    import isaacgym  # noqa
     import isaacgymenvs  # noqa
+    from torchrl.envs.libs.isaacgym import _has_isaac
 
 import argparse
 import importlib
