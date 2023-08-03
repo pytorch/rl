@@ -27,7 +27,7 @@ class IsaacGymWrapper(GymWrapper):
         del self.observation_spec["observation"]
         self.batch_size = torch.Size([env.num_envs])
         self.__dict__['_device'] = torch.device(self._env.device)
-        if not hash(self, 'task'):
+        if not hasattr(self, 'task'):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
 
