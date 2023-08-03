@@ -1517,7 +1517,7 @@ class TestOpenML:
 "ShadowHand",
 "Trifinger",
 ])
-@pytest.mark.parametrize("num_envs", [1, 2, 10])
+@pytest.mark.parametrize("num_envs", [10, 20])
 @pytest.mark.parametrize("device", get_default_devices())
 class TestIsaacGym:
     def test_env(self, task, num_envs, device):
