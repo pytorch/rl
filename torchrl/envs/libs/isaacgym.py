@@ -32,7 +32,7 @@ class IsaacGymWrapper(GymWrapper):
             self.task = env.__name__
 
     @classmethod
-    def _make_envs(cls, *, task, num_envs, device, seed=None, **kwargs):
+    def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
         import isaacgym  # noqa
         import isaacgymenvs  # noqa
         envs = isaacgymenvs.make(
@@ -41,6 +41,7 @@ class IsaacGymWrapper(GymWrapper):
             num_envs=num_envs,
             sim_device=str(device),
             rl_device=str(device),
+            headless=headless,
             **kwargs,
         )
         return envs
