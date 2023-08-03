@@ -18,6 +18,7 @@ class IsaacGymWrapper(GymWrapper):
         self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
         self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
         self.batch_size = torch.Size([num_envs])
+        self.device = torch.device(self._env.sim_device)
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
@@ -63,7 +64,6 @@ class IsaacGymWrapper(GymWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {key: value for key, value in observations.items()}
             if "state" in observations and "observation" not in observations:
                 # we rename "state" in "observation" as "observation" is the conventional name
                 # for single observation in torchrl.
@@ -73,8 +73,6 @@ class IsaacGymWrapper(GymWrapper):
         if not isinstance(observations, (TensorDictBase, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        for key, val in observations.items():
-            observations[key] = val
-        # observations = self.observation_spec.encode(observations, ignore_device=True)
+        print('observation', TensorDict(observations, []))
         return observations
 
