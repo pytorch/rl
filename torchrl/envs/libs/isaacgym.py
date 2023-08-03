@@ -18,7 +18,7 @@ class IsaacGymWrapper(GymWrapper):
         self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
         self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
         self.batch_size = torch.Size([num_envs])
-        self.device = torch.device(self._env.sim_device)
+        self.device = torch.device(self._env.device)
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
@@ -75,4 +75,3 @@ class IsaacGymWrapper(GymWrapper):
             observations = {key: observations}
         print('observation', TensorDict(observations, []))
         return observations
-
