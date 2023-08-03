@@ -10,7 +10,7 @@ if _has_isaac:
     # isaac gym asks to be imported before torch...
     import isaacgym  # noqa
     import isaacgymenvs  # noqa
-    from torchrl.envs.libs.isaacgym import _has_isaac
+    from torchrl.envs.libs.isaacgym import IsaacGymEnv
 
 import argparse
 import importlib
