@@ -66,7 +66,8 @@ conda activate "${env_dir}"
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
-conda env update --file "${this_dir}/environment.yml" --prune
+conda update pip -y
+conda env update --file "${this_dir}/environment.yml" --prune --use-pip
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
   export MUJOCO_GL=glfw
