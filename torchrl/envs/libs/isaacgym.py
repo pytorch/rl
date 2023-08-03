@@ -13,8 +13,10 @@ from torchrl.envs.libs.gym import GymWrapper
 
 
 class IsaacGymWrapper(GymWrapper):
-    def __init__(self, env, **kwargs):
+    def __init__(self, env, *, num_envs, **kwargs):
         super().__init__(env, **kwargs)
+        self.input_spec = self.input_spec.expand(num_envs, *self.input_spec.shape)
+        self.output_spec = self.output_spec.expand(num_envs, *self.output_spec.shape)
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
