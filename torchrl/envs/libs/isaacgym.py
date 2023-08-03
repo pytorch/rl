@@ -2,8 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
+import warnings
+
 import itertools
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, List
 
 import numpy as np
 import torch
@@ -11,16 +14,40 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.envs.libs.gym import GymWrapper
 
+_has_isaac = importlib.util.find_spec("isaacgym") is not None
+
+num_envs = 2000
 
 class IsaacGymWrapper(GymWrapper):
-    def __init__(self, env, *, num_envs, **kwargs):
+    def __init__(self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs):
         super().__init__(env, **kwargs)
         self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
         self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
-        self.batch_size = torch.Size([num_envs])
+        self.batch_size = torch.Size([env.num_envs])
         self.__dict__['_device'] = torch.device(self._env.device)
+        if not hash(self, 'task'):
+            # by convention in IsaacGymEnvs
+            self.task = env.__name__
+
+    @classmethod
+    def _make_envs(cls, *, task, num_envs, device, seed=None, **kwargs):
+        import isaacgym  # noqa
+        import isaacgymenvs  # noqa
+        envs = isaacgymenvs.make(
+            seed=seed,
+            task=task,
+            num_envs=num_envs,
+            sim_device=device,
+            rl_device=device,
+            **kwargs,
+        )
+        return envs
+
+    def _set_seed(self, seed: int) -> int:
+        self._env = self._make_envs(task=self.task, num_envs=self.num_envs, device=str(self.device), seed=seed)
+        return seed
 
     def read_action(self, action):
         """Reads the action obtained from the input TensorDict and transforms it in the format expected by the contained environment.
@@ -75,6 +102,18 @@ class IsaacGymWrapper(GymWrapper):
         if not isinstance(observations, (TensorDictBase, dict)):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        print('observation', TensorDict(observations, []))
-        print('obs spec', self.observation_spec)
         return observations
+
+class IsaacGymEnv(IsaacGymWrapper):
+    @property
+    def available_envs(cls) -> List[str]:
+        import isaacgymenvs  # noqa
+        return list(isaacgymenvs.tasks.isaacgym_task_map.keys())
+    def __init__(self, task=None, *, env=None, num_envs, device, **kwargs):
+        if env is not None and task is not None:
+            raise RuntimeError("Cannot provide both `task` and `env` arguments.")
+        elif env is not None:
+            task = env
+        envs = self._make_envs(task=task, num_envs=num_envs, device=device, **kwargs)
+        self.task = task
+        super().__init__(envs, **kwargs)
