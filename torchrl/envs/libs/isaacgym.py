@@ -74,4 +74,5 @@ class IsaacGymWrapper(GymWrapper):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         print('observation', TensorDict(observations, []))
+        print('obs spec', self.observation_spec)
         return observations
