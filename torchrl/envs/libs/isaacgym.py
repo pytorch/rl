@@ -16,16 +16,15 @@ from torchrl.envs.libs.gym import GymWrapper
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
-num_envs = 2000
-
 class IsaacGymWrapper(GymWrapper):
     def __init__(self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs):
         super().__init__(env, **kwargs)
+        num_envs = env.num_envs
         self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
         self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
-        self.batch_size = torch.Size([env.num_envs])
+        self.batch_size = torch.Size([num_envs])
         self.__dict__['_device'] = torch.device(self._env.device)
         if not hasattr(self, 'task'):
             # by convention in IsaacGymEnvs
