@@ -2,6 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from torchrl.envs.libs.isaacgym import IsaacGymEnv, _has_isaac
+
+if _has_isaac:
+    # isaac gym asks to be imported before torch...
+    import isaacgymenvs  # noqa
+
 import argparse
 import importlib
 
@@ -49,7 +55,6 @@ from torchrl.envs.libs.gym import (
     MOGymWrapper,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
-from torchrl.envs.libs.isaacgym import IsaacGymEnv, _has_isaac
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
