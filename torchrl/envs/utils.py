@@ -235,6 +235,8 @@ def _set_single_key(source, dest, key, clone=False):
                     val = val.clone()
                 # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
         except RuntimeError as err:
             if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 # this is a het key
@@ -269,6 +271,8 @@ def _set(source, dest, key, total_key, excluded):
                 non_empty = True
                 # dest.set(key, val)
                 dest._set_str(key, val, inplace=False, validated=True)
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
         except RuntimeError as err:
             if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 # this is a het key
