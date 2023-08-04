@@ -27,7 +27,7 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:
         super()._make_specs(env, batch_size=self.batch_size)
-        self.done_spec = self.done_spec.unsqueeze(-1)
+        self.done_spec = self.done_spec.squeeze(-1)
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
