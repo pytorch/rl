@@ -513,8 +513,8 @@ class GymWrapper(GymLikeEnv):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
-        self.action_spec = _gym_to_torchrl_spec_transform(
+    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
@@ -529,18 +529,24 @@ class GymWrapper(GymLikeEnv):
                 observation_spec = CompositeSpec(pixels=observation_spec)
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
-        self.observation_spec = observation_spec
         if hasattr(env, "reward_space") and env.reward_space is not None:
-            self.reward_spec = _gym_to_torchrl_spec_transform(
+            reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
                 device=self.device,
                 categorical_action_encoding=self._categorical_action_encoding,
             )
         else:
-            self.reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = UnboundedContinuousTensorSpec(
                 shape=[1],
                 device=self.device,
             )
+        if batch_size is not None:
+            action_spec = action_spec.expand(*batch_size, *action_spec.shape)
+            reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
+            observation_spec = observation_spec.expand(*batch_size, *observation_spec.shape)
+        self.action_spec = action_spec
+        self.reward_spec = reward_spec
+        self.observation_spec = observation_spec
 
     def _init_env(self):
         self.reset()
