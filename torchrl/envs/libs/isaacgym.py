@@ -12,6 +12,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict, TensorDictBase
+from torchrl.envs import make_composite_from_td
 from torchrl.envs.libs.gym import GymWrapper
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
@@ -29,6 +30,17 @@ class IsaacGymWrapper(GymWrapper):
         if not hasattr(self, 'task'):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
+
+    def _make_specs(self, env: "gym.Env") -> None:
+        super()._make_specs(env)
+        specs = make_composite_from_td(self.rollout(3).get('next')[..., 0])
+        del specs[self.reward_key]
+        del specs[self.done_key]
+        obs_spec = self.observation_spec
+        obs_spec.unlock_()
+        obs_spec.update(specs)
+        obs_spec.lock_()
+        self.__dict__['_observation_spec'] = obs_spec
 
     @classmethod
     def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
