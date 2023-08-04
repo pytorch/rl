@@ -180,6 +180,22 @@ def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
     return True
 
 
+def contains_lazy_spec(spec: TensorSpec) -> bool:
+    """Returns true if a spec contains lazy stacked specs.
+
+    Args:
+        spec (TensorSpec): the spec to check
+
+    """
+    if isinstance(spec, (LazyStackedTensorSpec, LazyStackedCompositeSpec)):
+        return True
+    elif isinstance(spec, CompositeSpec):
+        for inner_spec in spec.values():
+            if contains_lazy_spec(inner_spec):
+                return True
+    return False
+
+
 class CloudpickleWrapper(object):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
