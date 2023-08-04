@@ -7,7 +7,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import expand_right, NestedKey
 
 from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -1290,3 +1290,148 @@ class CountingBatchedEnv(EnvBase):
             device=self.device,
         )
         return tensordict.select().set("next", tensordict)
+
+
+class MultiKeyCountingEnv(EnvBase):
+    def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_steps = max_steps
+        self.start_val = start_val
+        self.nested_dim_1 = 3
+        self.nested_dim_2 = 2
+
+        count = torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int)
+        count[:] = self.start_val
+
+        self.register_buffer("count", count)
+
+        self.action_spec = self.unbatched_action_spec.expand(
+            *self.batch_size, *self.unbatched_action_spec.shape
+        )
+        self.observation_spec = self.unbatched_observation_spec.expand(
+            *self.batch_size, *self.unbatched_observation_spec.shape
+        )
+        self.reward_spec = self.unbatched_reward_spec.expand(
+            *self.batch_size, *self.unbatched_reward_spec.shape
+        )
+        self.done_spec = self.unbatched_done_spec.expand(
+            *self.batch_size, *self.unbatched_done_spec.shape
+        )
+
+    def make_specs(self):
+        self.unbatched_observation_spec = CompositeSpec(
+            nested_1=CompositeSpec(
+                observation=BoundedTensorSpec(
+                    minimum=0, maximum=20, shape=(self.nested_dim_1, 3)
+                ),
+                shape=(self.nested_dim_1,),
+            ),
+            nested_2=CompositeSpec(
+                observation=UnboundedContinuousTensorSpec(shape=(self.nested_dim_2, 2)),
+                shape=(self.nested_dim_2,),
+            ),
+            observation=UnboundedContinuousTensorSpec(
+                shape=(
+                    32,
+                    32,
+                    3,
+                )
+            ),
+        )
+
+        self.unbatched_action_spec = CompositeSpec(
+            nested_1=CompositeSpec(
+                action=DiscreteTensorSpec(n=3, shape=(self.nested_dim_1,)),
+                shape=(self.nested_dim_1,),
+            ),
+            nested_2=CompositeSpec(
+                azione=BoundedTensorSpec(
+                    minimum=0, maximum=5, shape=(self.nested_dim_2, 2)
+                ),
+                shape=(self.nested_dim_2,),
+            ),
+            action=OneHotDiscreteTensorSpec(n=4),
+        )
+
+        self.unbatched_reward = CompositeSpec(
+            nested_1=CompositeSpec(
+                gift=UnboundedContinuousTensorSpec(shape=(self.nested_dim_1, 1)),
+                shape=(self.nested_dim_1,),
+            ),
+            nested_2=CompositeSpec(
+                reward=UnboundedContinuousTensorSpec(shape=(self.nested_dim_2, 1)),
+                shape=(self.nested_dim_2,),
+            ),
+            reward=UnboundedContinuousTensorSpec(shape=(1,)),
+        )
+
+        self.unbatched_done_spec = CompositeSpec(
+            nested_1=CompositeSpec(
+                done=DiscreteTensorSpec(
+                    n=2,
+                    shape=(self.nested_dim_1, 1),
+                    dtype=torch.bool,
+                ),
+                shape=(self.nested_dim_1,),
+            ),
+            nested_2=CompositeSpec(
+                finish=DiscreteTensorSpec(
+                    n=2,
+                    shape=(self.nested_dim_2, 1),
+                    dtype=torch.bool,
+                ),
+                shape=(self.nested_dim_2,),
+            ),
+            done=DiscreteTensorSpec(
+                n=2,
+                shape=(1,),
+                dtype=torch.bool,
+            ),
+        )
+
+    def _reset(
+        self,
+        tensordict: TensorDictBase = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        if tensordict is not None and "_reset" in tensordict.keys():
+            _reset = tensordict.get("_reset").squeeze(-1).any(-1)
+            self.count[_reset] = self.start_val
+        else:
+            self.count[:] = self.start_val
+
+        reset_td = self.observation_spec.zero()
+        reset_td.apply_(lambda x: x + expand_right(self.count, x.shape))
+        reset_td.update(self.output_spec["_done_spec"].zero())
+
+        assert reset_td.batch_size == self.batch_size
+
+        return reset_td
+
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        actions = torch.zeros_like(self.count.squeeze(-1), dtype=torch.bool)
+        for i in range(self.n_nested_dim):
+            action = tensordict["lazy"][..., i]["action"]
+            action = action[..., 0].to(torch.bool)
+            actions += action
+
+        self.count += actions.unsqueeze(-1).to(torch.int)
+
+        td = self.observation_spec.zero()
+        td.apply_(lambda x: x + expand_right(self.count, x.shape))
+        td.update(self.output_spec["_done_spec"].zero())
+        td.update(self.output_spec["_reward_spec"].zero())
+
+        assert td.batch_size == self.batch_size
+        td[self.done_key] = expand_right(
+            self.count > self.max_steps, self.done_spec.shape
+        )
+
+        return td.select().set("next", td)
+
+    def _set_seed(self, seed: Optional[int]):
+        torch.manual_seed(seed)
