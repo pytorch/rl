@@ -27,10 +27,6 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:
         super()._make_specs(env, batch_size=self.batch_size)
-        num_envs = self._env.num_envs
-        print("self.__dict__['_input_spec']", self.__dict__['_input_spec'])
-        self.__dict__['_input_spec'] = self.input_spec.expand(num_envs, *self.input_spec.shape)
-        self.__dict__['_output_spec'] = self.output_spec.expand(num_envs, *self.output_spec.shape)
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
