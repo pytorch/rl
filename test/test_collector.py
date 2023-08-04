@@ -1501,7 +1501,7 @@ class TestHetEnvsCollector:
                 ).all()  # Check reset worked
             assert (_td["lazy"][..., i]["action"] == 1).all()
 
-    def test_multi_collector_nested_env_consistency(
+    def test_multi_collector_het_env_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
     ):
         env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
