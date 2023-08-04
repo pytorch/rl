@@ -19,10 +19,8 @@ _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 class IsaacGymWrapper(GymWrapper):
     def __init__(self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs):
-        super().__init__(env, **kwargs)
         num_envs = env.num_envs
-        self.batch_size = torch.Size([num_envs])
-        self.__dict__['_device'] = torch.device(self._env.device)
+        super().__init__(env, torch.device(self._env.device), batch_size = torch.Size([num_envs]), **kwargs)
         if not hasattr(self, 'task'):
             # by convention in IsaacGymEnvs
             self.task = env.__name__
