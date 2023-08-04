@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
-from tensordict import LazyStackedTensorDict, TensorDictBase
+
 from torch import Tensor
 
 from torchrl.data.tensor_specs import (
@@ -41,36 +41,6 @@ else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
-
-
-def dense_stack_tds(
-    td_list: Union[typing.Sequence[TensorDictBase], LazyStackedTensorDict],
-    stack_dim: int = None,
-) -> TensorDictBase:
-    """Densely stack a list of TensorDictBase objects (or a LazyStackedTensorDict) given that they have the same structure.
-
-    This must be used when some of the tds involved can have LazyTds among keys (or keys of keys, recursively).
-    In those cases, calling `torch.stack(td_list).to_tensordict()` is infeasible.
-    Thus, this function provides an alternative for densifying the list provided.
-
-    Args:
-        td_list (List of TensorDictBase or LazyStackedTensorDict): the tds to stack.
-        stack_dim (int, optional): the dimension to stack them.
-            If td_list is a LazyStackedTensorDict, it will be retrieved automatically.
-    """
-    if isinstance(td_list, LazyStackedTensorDict):
-        stack_dim = td_list.stack_dim
-        td_list = td_list.tensordicts
-    if stack_dim is None:
-        raise ValueError(
-            "If a list of tensordicts is provided, stack_dim must not be None"
-        )
-
-    shape = list(td_list[0].shape)
-    shape.insert(stack_dim, len(td_list))
-
-    out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-    return torch.stack(td_list, dim=stack_dim, out=out)
 
 
 def consolidate_spec(
