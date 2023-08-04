@@ -81,7 +81,7 @@ conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISP
 pip3 install pip --upgrade
 pip install virtualenv
 
-pip3 install mujoco
+pip3 install mujoco -v -v -v
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
