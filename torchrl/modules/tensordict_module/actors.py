@@ -1778,7 +1778,9 @@ class DecisionTransformerInferenceWrapper(TensorDictModuleWrapper):
         self._check_tensor_dims(return_to_go, observation, action)
 
         observation[..., : -self.inference_context, :] = 0
-        action[..., : -self.inference_context, :] = 0
+        action[
+            ..., : -(self.inference_context - 1), :
+        ] = 0  # as we add zeros to the end of the action
         action = torch.cat(
             [
                 action[..., 1:, :],

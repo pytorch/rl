@@ -176,14 +176,6 @@ def make_collector(cfg, policy):
     return collector
 
 
-def get_loc_std(env_name):
-    buffer = D4RLExperienceReplay(env_name, 1024)
-    full_data = buffer._get_dataset_from_env(env_name, {})
-    loc = full_data["observation"].mean(axis=0).float()
-    std = full_data["observation"].std(axis=0).float()
-    return loc, std
-
-
 def make_offline_replay_buffer(rb_cfg, reward_scaling):
     r2g = Reward2GoTransform(gamma=1.0, in_keys=["reward"], out_keys=["return_to_go"])
     reward_scale = RewardScaling(
@@ -200,10 +192,6 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     d2f = DoubleToFloat(
         in_keys=["observation", ("next", "observation")],
         in_keys_inv=[],
-    )
-    loc, std = get_loc_std(rb_cfg.dataset)
-    obsnorm = ObservationNorm(
-        loc=loc, scale=std, in_keys="observation", standard_normal=True
     )
     exclude = ExcludeTransform(
         "next_observations",
@@ -224,7 +212,6 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         reward_scale,
         d2f,
         exclude,
-        obsnorm,
     )
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
@@ -233,8 +220,13 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
         sampler=SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
     )
-    # TODO: add obsnorm here
-
+    full_data = data._get_dataset_from_env(rb_cfg.dataset, {})
+    loc = full_data["observation"].mean(axis=0).float()
+    std = full_data["observation"].std(axis=0).float()
+    obsnorm = ObservationNorm(
+        loc=loc, scale=std, in_keys="observation", standard_normal=True
+    )
+    data.append_transform(obsnorm)
     return data, loc, std
 
 
