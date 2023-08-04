@@ -1528,6 +1528,7 @@ class TestIsaacGym:
             q.put(("succeeded!", None))
         except Exception as err:
             q.put(("failed!", err))
+            raise err
 
     def test_env(self, task, num_envs, device):
         from torch import multiprocessing as mp
