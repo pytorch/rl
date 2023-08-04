@@ -7,7 +7,7 @@ import importlib
 
 import time
 from sys import platform
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 import pytest
@@ -28,7 +28,6 @@ from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
 from torchrl.collectors.collectors import RandomPolicy, SyncDataCollector
-from torchrl.data import DEVICE_TYPING
 from torchrl.data.datasets.d4rl import D4RLExperienceReplay
 from torchrl.data.datasets.openml import OpenMLExperienceReplay
 from torchrl.data.replay_buffers import SamplerWithoutReplacement
@@ -1031,45 +1030,6 @@ class TestBrax:
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 class TestVmas:
-    from tensordict.nn import TensorDictModule
-
-    class HeteroPolicyVmas(TensorDictModule):
-        def __init__(
-            self,
-            n_agents: int,
-            n_agent_inputs: Union[List[int], int],
-            n_agent_outputs: Union[List[int], int],
-            device: Optional[DEVICE_TYPING] = (None,),
-            **kwargs,
-        ):
-            super().__init__(nn.Linear(1, 1), in_keys=["agents"], out_keys=["agents"])
-            self.n_agents = n_agents
-            self.n_agent_inputs = n_agent_inputs
-            self.n_agent_outputs = n_agent_outputs
-
-            self.agent_networks = nn.ModuleList(
-                [
-                    MLP(
-                        in_features=self.n_agent_inputs
-                        if isinstance(self.n_agent_inputs, int)
-                        else self.n_agent_inputs[i],
-                        out_features=self.n_agent_outputs
-                        if isinstance(self.n_agent_outputs, int)
-                        else self.n_agent_outputs[i],
-                        device=device,
-                        **kwargs,
-                    )
-                    for i in range(self.n_agents)
-                ]
-            )
-
-        def forward(self, td: TensorDict):
-            for i, net in enumerate(self.agent_networks):
-                out = net(td["agents"][..., i]["observation"])
-                out[:] = 0
-                td["agents"][..., i].set("action", out)
-            return td
-
     @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
@@ -1423,16 +1383,9 @@ class TestVmas:
                 env.input_spec["_action_spec"]["agents"][..., i]["action"].shape[-1]
             )
 
-        policy = TestVmas.HeteroPolicyVmas(
-            n_agents=env.n_agents,
-            n_agent_inputs=n_obs_per_agent,
-            n_agent_outputs=n_actions_per_agent,
-            device="cpu",
-        )
-
         ccollector = SyncDataCollector(
             create_env_fn=env,
-            policy=policy,
+            policy=None,
             frames_per_batch=frames_per_batch,
             total_frames=1000,
             device="cpu",
