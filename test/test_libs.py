@@ -1373,16 +1373,6 @@ class TestVmas:
         )
         torch.manual_seed(1)
 
-        n_obs_per_agent = []
-        n_actions_per_agent = []
-        for i in range(env.n_agents):
-            n_obs_per_agent.append(
-                env.observation_spec["agents"][..., i]["observation"].shape[-1]
-            )
-            n_actions_per_agent.append(
-                env.input_spec["_action_spec"]["agents"][..., i]["action"].shape[-1]
-            )
-
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=None,
