@@ -1754,6 +1754,7 @@ class TestNestedSpecs:
 class TestMultiKeyEnvs:
     def test_mult_key_env(self):
         env = MultiKeyCountingEnv()
+        print(env.action_key)
         print()
 
 

@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDictBase
-
+from tensordict.utils import NestedKey
 from torchrl._utils import prod, seed_generator
 
 from torchrl.data.tensor_specs import (
@@ -436,10 +436,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return keys
 
     @property
-    def action_keys(self):
+    def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
-        By default, non-nested keys are stored in the 'action' key.
+        By default, there will only be one key named "actipn"
 
         If the action is in a nested tensordict, this property will return its
         location.
@@ -459,7 +459,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         location.
         """
         if len(self.action_keys) > 1:
-            raise AttributeError(
+            raise KeyError(
                 "action_key requested but more than one key present in the environment"
             )
         return self.action_keys[0]
@@ -481,17 +481,21 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             action_spec = self.input_spec["_action_spec"]
         except (KeyError, AttributeError):
             raise KeyError("Failed to find the action_spec.")
-        try:
-            out = action_spec[self.action_key]
-        except KeyError:
-            # the key may have changed
-            raise KeyError(
-                "The action_key attribute seems to have changed. "
-                "This occurs when a action_spec is updated without "
-                "calling `env.action_spec = new_spec`. "
-                "Make sure you rely on this  type of command "
-                "to set the action and other specs."
-            )
+
+        if len(self.action_keys) > 1:
+            out = action_spec
+        else:
+            try:
+                out = action_spec[self.action_key]
+            except KeyError:
+                # the key may have changed
+                raise KeyError(
+                    "The action_key attribute seems to have changed. "
+                    "This occurs when a action_spec is updated without "
+                    "calling `env.action_spec = new_spec`. "
+                    "Make sure you rely on this  type of command "
+                    "to set the action and other specs."
+                )
 
         return out
 
