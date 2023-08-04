@@ -164,12 +164,14 @@ class VmasWrapper(_EnvWrapper):
                     self.action_space[agent_index],
                     categorical_action_encoding=True,
                     device=self.device,
+                    remap_state_to_observation=False,
                 )
             )  # shape = (n_actions_per_agent,)
             observation_specs.append(
                 _gym_to_torchrl_spec_transform(
                     self.observation_space[agent_index],
                     device=self.device,
+                    remap_state_to_observation=False,
                 )
             )  # shape = (n_obs_per_agent,)
             reward_specs.append(
