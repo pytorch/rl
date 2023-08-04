@@ -52,7 +52,6 @@ if [ ! -d "${conda_dir}" ]; then
     bash ./miniconda.sh -b -f -p "${conda_dir}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
-conda update -n base -c defaults conda -y
 
 # 2. Create test environment at ./env
 printf "python: ${PYTHON_VERSION}\n"
@@ -66,8 +65,6 @@ conda activate "${env_dir}"
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
-conda update pip -y
-conda env update --file "${this_dir}/environment.yml" --prune
 
 if [ "${CU_VERSION:-}" == cpu ] ; then
   export MUJOCO_GL=glfw
@@ -75,31 +72,26 @@ else
   export MUJOCO_GL=egl
 fi
 
+export DISPLAY=:0
+export SDL_VIDEODRIVER=dummy
+
 # legacy from bash scripts: remove?
 conda env config vars set MUJOCO_GL=$MUJOCO_GL PYOPENGL_PLATFORM=$MUJOCO_GL DISPLAY=:0 SDL_VIDEODRIVER=dummy
+
+pip3 install pip --upgrade
+pip install virtualenv
+
+pip3 install mujoco
+
+conda env update --file "${this_dir}/environment.yml" --prune
 
 # Reset conda env variables
 conda deactivate
 conda activate "${env_dir}"
 
-python3 -m pip install --upgrade pip
-
-if [[ $OSTYPE == 'darwin'* ]]; then
-  echo "Insalling mujoco"
-  python3 -m pip uninstall cython -y
-  python3 -m pip install "cython<3.0.0"
-#  python3 -m pip install mujoco
-  # pip fails to install mujoco
-#  conda install -c conda-forge mujoco-python -y
-  # https://stackoverflow.com/questions/53014306/error-15-initializing-libiomp5-dylib-but-found-libiomp5-dylib-already-initial
-  conda env config vars set KMP_DUPLICATE_LIB_OK='True'
-fi
-pip3 install virtualenv
-
-
 echo "installing gymnasium"
-python3 -m pip install "gymnasium[atari,ale-py,accept-rom-license]"
-python3 -m pip install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
+pip3 install "gymnasium[atari,ale-py,accept-rom-license]"
+pip3 install mo-gymnasium[mujoco]  # requires here bc needs mujoco-py
 
 # sanity check: remove?
 python3 -c """
@@ -124,7 +116,7 @@ else
         CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
     fi
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-    version="$(python3 -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
+    version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
 fi
 
 # submodules
@@ -132,22 +124,22 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    python3 -m pip install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    python3 -m pip install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+    pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
 fi
 
-## smoke test
-#python3 -c "import functorch"
+# smoke test
+python -c "import functorch"
 
 # install snapshot
-python3 -m pip install git+https://github.com/pytorch/torchsnapshot
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # install tensordict
-python3 -m pip install git+https://github.com/pytorch-labs/tensordict.git
+pip3 install git+https://github.com/pytorch-labs/tensordict.git
 
 printf "* Installing torchrl\n"
-python3 setup.py develop -v
+python setup.py develop
 
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
@@ -169,7 +161,7 @@ fi
 
 
 export PYTORCH_TEST_WITH_SLOW='1'
-python3 -m torch.utils.collect_env
+python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 
 # solves ImportError: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.21' not found
@@ -181,10 +173,10 @@ export CKPT_BACKEND=torch
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
 if [ "${CU_VERSION:-}" != cpu ] ; then
-  python3 .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 --ignore test/test_rlhf.py
 else
-  python3 .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
+  python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test \
     --instafail --durations 200 --ignore test/test_rlhf.py --ignore test/test_distributed.py
 fi
 
