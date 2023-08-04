@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"]]
         cuda_support: [["", "cpu", "cpu"]]
     container: pytorch/manylinux-cuda116
     steps:
@@ -73,7 +73,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -106,7 +106,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"]]
         cuda_support: [["", "cpu", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
@@ -189,7 +189,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2
@@ -217,7 +217,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
+        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"]]
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
@@ -279,7 +279,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -312,7 +312,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -369,7 +369,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
+        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2

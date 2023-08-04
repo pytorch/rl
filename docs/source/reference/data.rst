@@ -215,6 +215,8 @@ Check the :obj:`torchrl.envs.utils.check_env_specs` method for a sanity check.
     OneHotDiscreteTensorSpec
     UnboundedContinuousTensorSpec
     UnboundedDiscreteTensorSpec
+    LazyStackedTensorSpec
+    LazyStackedCompositeSpec
 
 Reinforcement Learning From Human Feedback (RLHF)
 -------------------------------------------------
@@ -253,3 +255,5 @@ Utils
     :template: rl_template.rst
 
     MultiStep
+    consolidate_spec
+    check_no_exclusive_keys
