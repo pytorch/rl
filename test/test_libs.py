@@ -1533,10 +1533,14 @@ class TestIsaacGym:
         from torch import multiprocessing as mp
         q = mp.Queue(1)
         proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
-        proc.start()
-        msg, error = q.get()
-        if msg != "succeeded!":
-            raise error
+        try:
+            proc.start()
+            msg, error = q.get()
+            if msg != "succeeded!":
+                raise error
+        finally:
+            q.close()
+            proc.join()
     #
     # def test_collector(self, task, num_envs, device):
     #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
