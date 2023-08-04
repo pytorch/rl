@@ -320,6 +320,19 @@ class TestSplits:
             == split_trajs.get(("collector", "traj_ids")).max() + 1
         )
 
+    @pytest.mark.parametrize("num_workers", range(3, 34, 3))
+    @pytest.mark.parametrize("traj_len", [10, 17, 50, 97])
+    def test_splits_notraj(self, num_workers, traj_len):
+
+        trajs = TestSplits.create_fake_trajs(num_workers, traj_len)
+        trajs_pop = trajs.clone()
+        del trajs_pop[("collector", "traj_ids")]
+        split_trajs = split_trajectories(trajs, prefix="collector")
+        split_trajs_pop = split_trajectories(trajs_pop, prefix="collector")
+        del split_trajs[("collector", "traj_ids")]
+        del split_trajs_pop[("collector", "traj_ids")]
+        assert (split_trajs == split_trajs_pop).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

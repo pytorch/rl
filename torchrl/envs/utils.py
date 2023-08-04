@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 
 import torch
 
@@ -219,8 +220,7 @@ def _set_single_key(source, dest, key, clone=False):
     if isinstance(key, str):
         key = (key,)
     for k in key:
-        shape = source.get_item_shape(k)
-        if -1 not in shape:
+        try:
             val = source.get(k)
             if is_tensor_collection(val):
                 new_val = dest.get(k, None)
@@ -235,19 +235,23 @@ def _set_single_key(source, dest, key, clone=False):
                     val = val.clone()
                 # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
-        else:
-            # this is a het key
-            for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                _set_single_key(s_td, d_td, k, clone)
-            break
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                # this is a het key
+                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
+                    _set_single_key(s_td, d_td, k, clone)
+                break
+            else:
+                raise err
 
 
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
     if unravel_key(total_key) not in excluded:
-        shape = source.get_item_shape(key)
-        if -1 not in shape:
+        try:
             val = source.get(key)
             if is_tensor_collection(val):
                 new_val = dest.get(key, None)
@@ -267,14 +271,19 @@ def _set(source, dest, key, total_key, excluded):
                 non_empty = True
                 # dest.set(key, val)
                 dest._set_str(key, val, inplace=False, validated=True)
-        else:
-            # this is a het key
-            non_empty_local = False
-            for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
-                non_empty_local = (
-                    _set(s_td, d_td, key, total_key, excluded) or non_empty_local
-                )
-            non_empty = non_empty_local
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                # this is a het key
+                non_empty_local = False
+                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
+                    non_empty_local = (
+                        _set(s_td, d_td, key, total_key, excluded) or non_empty_local
+                    )
+                non_empty = non_empty_local
+            else:
+                raise err
 
     return non_empty
 

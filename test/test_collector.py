@@ -488,7 +488,7 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
 #         ccollector.shutdown()
 
 
-@pytest.mark.parametrize("num_env", [2])
+@pytest.mark.parametrize("num_env", [1, 2])
 @pytest.mark.parametrize(
     "env_name",
     [
@@ -1292,6 +1292,7 @@ class TestPreemptiveThreshold:
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
+
         frames_per_batch = 800
 
         def env_fn(seed):
@@ -1501,7 +1502,7 @@ class TestHetEnvsCollector:
                 ).all()  # Check reset worked
             assert (_td["lazy"][..., i]["action"] == 1).all()
 
-    def test_multi_collector_nested_env_consistency(
+    def test_multi_collector_het_env_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
     ):
         env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))

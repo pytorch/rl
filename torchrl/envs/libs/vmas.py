@@ -25,24 +25,27 @@ except ImportError as err:
     IMPORT_ERR = err
 
 __all__ = ["VmasWrapper", "VmasEnv"]
-ALL_SCENARIOS = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
-HETEROGENEOUS_SPACES_SCENARIOS = [
-    "simple_adversary",
-    "simple_crypto",
-    "simple_push",
-    "simple_speaker_listener",
-    "simple_tag",
-    "simple_world_comm",
-]
 
 
 def _get_envs() -> List:
     if not _has_vmas:
         return []
+    all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
+    # TODO heterogenous spaces
+    # For now torchrl does not support heterogenous spaces (Tple(Box)) so many OpenAI MPE scenarios do not work
+    heterogenous_spaces_scenarios = [
+        "simple_adversary",
+        "simple_crypto",
+        "simple_push",
+        "simple_speaker_listener",
+        "simple_tag",
+        "simple_world_comm",
+    ]
+
     return [
         scenario
-        for scenario in ALL_SCENARIOS
-        if scenario not in HETEROGENEOUS_SPACES_SCENARIOS
+        for scenario in all_scenarios
+        if scenario not in heterogenous_spaces_scenarios
     ]
 
 
@@ -164,6 +167,7 @@ class VmasWrapper(_EnvWrapper):
                             self.action_space[agent_index],
                             categorical_action_encoding=True,
                             device=self.device,
+                            remap_state_to_observation=False,
                         )  # shape = (n_actions_per_agent,)
                     },
                 )
@@ -174,6 +178,7 @@ class VmasWrapper(_EnvWrapper):
                         "observation": _gym_to_torchrl_spec_transform(
                             self.observation_space[agent_index],
                             device=self.device,
+                            remap_state_to_observation=False,
                         )  # shape = (n_obs_per_agent,)
                     },
                 )
