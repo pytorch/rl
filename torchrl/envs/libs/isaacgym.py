@@ -27,16 +27,14 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:
         super()._make_specs(env, batch_size=self.batch_size)
+        self.done_spec = self.done_spec.unsqueeze(-1)
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
         data = self.rollout(3).get('next')[..., 0]
         del data[self.reward_key]
-        # del data[self.done_key]
+        del data[self.done_key]
         specs = make_composite_from_td(data)
-        done_spec = specs[self.done_key]
-        self.done_spec = done_spec
-        del specs[self.done_key]
 
         print('specs', specs)
         obs_spec = self.observation_spec
