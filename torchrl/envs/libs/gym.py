@@ -543,7 +543,9 @@ class GymWrapper(GymLikeEnv):
         if batch_size is not None:
             action_spec = action_spec.expand(*batch_size, *action_spec.shape)
             reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
-            observation_spec = observation_spec.expand(*batch_size, *observation_spec.shape)
+            observation_spec = observation_spec.expand(
+                *batch_size, *observation_spec.shape
+            )
         self.action_spec = action_spec
         self.reward_spec = reward_spec
         self.observation_spec = observation_spec

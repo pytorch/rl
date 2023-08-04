@@ -1493,30 +1493,34 @@ class TestOpenML:
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
-@pytest.mark.parametrize("task", ["AllegroHand",
-# "AllegroKuka",
-# "AllegroKukaTwoArms",
-# "AllegroHandManualDR",
-# "AllegroHandADR",
-"Ant",
-# "Anymal",
-# "AnymalTerrain",
-# "BallBalance",
-# "Cartpole",
-# "FactoryTaskGears",
-# "FactoryTaskInsertion",
-# "FactoryTaskNutBoltPick",
-# "FactoryTaskNutBoltPlace",
-# "FactoryTaskNutBoltScrew",
-# "FrankaCabinet",
-# "FrankaCubeStack",
-"Humanoid",
-# "HumanoidAMP",
-# "Ingenuity",
-# "Quadcopter",
-# "ShadowHand",
-"Trifinger",
-])
+@pytest.mark.parametrize(
+    "task",
+    [
+        "AllegroHand",
+        # "AllegroKuka",
+        # "AllegroKukaTwoArms",
+        # "AllegroHandManualDR",
+        # "AllegroHandADR",
+        "Ant",
+        # "Anymal",
+        # "AnymalTerrain",
+        # "BallBalance",
+        # "Cartpole",
+        # "FactoryTaskGears",
+        # "FactoryTaskInsertion",
+        # "FactoryTaskNutBoltPick",
+        # "FactoryTaskNutBoltPlace",
+        # "FactoryTaskNutBoltScrew",
+        # "FrankaCabinet",
+        # "FrankaCubeStack",
+        "Humanoid",
+        # "HumanoidAMP",
+        # "Ingenuity",
+        # "Quadcopter",
+        # "ShadowHand",
+        "Trifinger",
+    ],
+)
 @pytest.mark.parametrize("num_envs", [10, 20])
 @pytest.mark.parametrize("device", get_default_devices())
 class TestIsaacGym:
@@ -1532,6 +1536,7 @@ class TestIsaacGym:
 
     def test_env(self, task, num_envs, device):
         from torch import multiprocessing as mp
+
         q = mp.Queue(1)
         proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
         try:
@@ -1542,6 +1547,7 @@ class TestIsaacGym:
         finally:
             q.close()
             proc.join()
+
     #
     # def test_collector(self, task, num_envs, device):
     #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
@@ -1554,6 +1560,7 @@ class TestIsaacGym:
     #     for c in collector:
     #         assert c.shape == torch.Size([num_envs, 20])
     #         break
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
