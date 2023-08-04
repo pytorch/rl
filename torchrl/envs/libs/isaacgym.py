@@ -32,8 +32,12 @@ class IsaacGymWrapper(GymWrapper):
 
         data = self.rollout(3).get('next')[..., 0]
         del data[self.reward_key]
-        del data[self.done_key]
+        # del data[self.done_key]
         specs = make_composite_from_td(data)
+        done_spec = specs[self.done_key]
+        self.done_spec = done_spec
+        del specs[self.done_key]
+
         print('specs', specs)
         obs_spec = self.observation_spec
         obs_spec.unlock_()
