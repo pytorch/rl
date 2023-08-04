@@ -1305,6 +1305,7 @@ class MultiKeyCountingEnv(EnvBase):
         count[:] = self.start_val
 
         self.register_buffer("count", count)
+        self.make_specs()
 
         self.action_spec = self.unbatched_action_spec.expand(
             *self.batch_size, *self.unbatched_action_spec.shape
@@ -1354,7 +1355,7 @@ class MultiKeyCountingEnv(EnvBase):
             action=OneHotDiscreteTensorSpec(n=4),
         )
 
-        self.unbatched_reward = CompositeSpec(
+        self.unbatched_reward_spec = CompositeSpec(
             nested_1=CompositeSpec(
                 gift=UnboundedContinuousTensorSpec(shape=(self.nested_dim_1, 1)),
                 shape=(self.nested_dim_1,),

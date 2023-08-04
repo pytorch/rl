@@ -36,6 +36,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MockSerialEnv,
+    MultiKeyCountingEnv,
     NestedCountingEnv,
 )
 from packaging import version
@@ -1748,6 +1749,12 @@ class TestNestedSpecs:
             rollout_length,
             nested_dim,
         )
+
+
+class TestMultiKeyEnvs:
+    def test_mult_key_env(self):
+        env = MultiKeyCountingEnv()
+        print()
 
 
 @pytest.mark.parametrize(

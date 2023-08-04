@@ -269,9 +269,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
-        self.__dict__["_done_key"] = None
-        self.__dict__["_reward_key"] = None
-        self.__dict__["_action_key"] = None
+        self.__dict__["_done_keys"] = None
+        self.__dict__["_reward_keys"] = None
+        self.__dict__["_action_keys"] = None
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -428,17 +428,26 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise RuntimeError("output_spec is protected.")
 
     # Action spec
-    def _get_action_key(self):
+    def _get_action_keys(self):
         keys = self.input_spec["_action_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the action
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
+        if not len(keys):
             raise AttributeError("Could not find action spec")
-        self.__dict__["_action_key"] = key
-        return key
+        self.__dict__["_action_keys"] = keys
+        return keys
+
+    @property
+    def action_keys(self):
+        """The action keys of an environment.
+
+        By default, non-nested keys are stored in the 'action' key.
+
+        If the action is in a nested tensordict, this property will return its
+        location.
+        """
+        out = self._action_keys
+        if out is None:
+            out = self._get_action_keys()
+        return out
 
     @property
     def action_key(self):
@@ -449,10 +458,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the action is in a nested tensordict, this property will return its
         location.
         """
-        out = self._action_key
-        if out is None:
-            out = self._get_action_key()
-        return out
+        if len(self.action_keys) > 1:
+            raise AttributeError(
+                "action_key requested but more than one key present in the environment"
+            )
+        return self.action_keys[0]
 
     # Action spec: action specs belong to input_spec
     @property
@@ -491,7 +501,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.unlock_()
             device = self.input_spec.device
             try:
-                delattr(self, "_action_key")
+                delattr(self, "_action_keys")
             except AttributeError:
                 pass
 
@@ -509,7 +519,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
 
             self.input_spec["_action_spec"] = value.to(device)
-            self._get_action_key()
+            self._get_action_keys()
         finally:
             self.input_spec.lock_()
 
