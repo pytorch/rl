@@ -282,7 +282,7 @@ class JumanjiWrapper(GymLikeEnv):
         tensordict_out.set("done", done)
         tensordict_out["state"] = state_dict
 
-        return tensordict_out
+        return tensordict_out.select().set("next", tensordict_out)
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
