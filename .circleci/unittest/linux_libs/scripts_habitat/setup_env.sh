@@ -39,11 +39,6 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
-#pip3 uninstall cython -y
-#pip uninstall cython -y
-#conda uninstall cython -y
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
 
 
 # 3. Install Conda dependencies

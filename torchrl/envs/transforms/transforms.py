@@ -240,8 +240,7 @@ class Transform(nn.Module):
         """
         next_tensordict = tensordict.get("next")
         next_tensordict = self._call(next_tensordict)
-        tensordict.set("next", next_tensordict)
-        return tensordict
+        return next_tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -2733,11 +2732,11 @@ class FrameSkipTransform(Transform):
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
         reward_key = parent.reward_key
-        reward = tensordict.get(("next", reward_key))
+        reward = tensordict.get(reward_key)
         for _ in range(self.frame_skip - 1):
             tensordict = parent._step(tensordict)
-            reward = reward + tensordict.get(("next", reward_key))
-        return tensordict.set(("next", reward_key), reward)
+            reward = reward + tensordict.get(reward_key)
+        return tensordict.set(reward_key, reward)
 
     def forward(self, tensordict):
         raise RuntimeError(

@@ -331,10 +331,10 @@ class _BatchedEnv(EnvBase):
             self.env_output_keys = []
             self.env_obs_keys = []
             for key in self.output_spec["_observation_spec"].keys(True, True):
-                self.env_output_keys.append(unravel_key(("next", key)))
+                self.env_output_keys.append(key)
                 self.env_obs_keys.append(key)
-            self.env_output_keys.append(unravel_key(("next", self.reward_key)))
-            self.env_output_keys.append(unravel_key(("next", self.done_key)))
+            self.env_output_keys.append(self.reward_key)
+            self.env_output_keys.append(self.done_key)
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -355,15 +355,15 @@ class _BatchedEnv(EnvBase):
                     )
                 )
                 env_output_keys = env_output_keys.union(
-                    unravel_key(("next", key))
+                    key
                     for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
                         True, True
                     )
                 )
             env_output_keys = env_output_keys.union(
                 {
-                    unravel_key(("next", self.reward_key)),
-                    unravel_key(("next", self.done_key)),
+                    self.reward_key,
+                    self.done_key,
                 }
             )
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
@@ -383,14 +383,14 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
-                *self._selected_keys,
+                *self._selected_keys, "next",
                 strict=False,
             )
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
-                tensordict.select(*self._selected_keys, strict=False).to(self.device)
+                tensordict.select(*self._selected_keys, "next", strict=False).to(self.device)
                 for tensordict in shared_tensordict_parent
             ]
             shared_tensordict_parent = torch.stack(
@@ -538,23 +538,24 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
+        next_td = self.shared_tensordict_parent.get("next")
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
             out_td.update(tensordict_in[i].select(*self.env_input_keys))
-            self.shared_tensordicts[i].update_(
-                out_td.select(*self.env_input_keys, *self.env_output_keys)
+            next_td[i].update_(
+                out_td.select(*self.env_output_keys)
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
-                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(next_td, out, key, clone=True)
         else:
             # strict=False ensures that non-homogeneous keys are still there
-            out = self.shared_tensordict_parent.select(
+            out = next_td.select(
                 *self._selected_step_keys, strict=False
             ).clone()
         return out
@@ -601,7 +602,7 @@ class SerialEnv(_BatchedEnv):
                 # step at the root (since the shared_tensordict did not go through
                 # step_mdp).
                 self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]["next"].select(
+                    self.shared_tensordicts[i].get("next").select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
@@ -617,7 +618,7 @@ class SerialEnv(_BatchedEnv):
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_reset_keys:
                 if key != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
@@ -796,7 +797,7 @@ class ParallelEnv(_BatchedEnv):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
                 _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
         else:
@@ -836,7 +837,7 @@ class ParallelEnv(_BatchedEnv):
                 # step at the root (since the shared_tensordict did not go through
                 # step_mdp).
                 self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]["next"].select(
+                    self.shared_tensordicts[i].get("next").select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
@@ -858,7 +859,7 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_reset_keys:
                 if key != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
@@ -1034,6 +1035,9 @@ def _run_worker_pipe_shared_mem(
             i = 0
             shared_tensordict = data
             next_shared_tensordict = shared_tensordict.get("next")
+            shared_tensordict = shared_tensordict.clone(False)
+            del shared_tensordict["next"]
+
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -1075,11 +1079,11 @@ def _run_worker_pipe_shared_mem(
                     )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
-            local_tensordict = env._step(local_tensordict)
+            next_td = env._step(local_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            next_shared_tensordict.update_(local_tensordict.get("next"))
+            next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1207,7 +1211,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _get_action_spec(self) -> TensorSpec:
         # local import to avoid importing gym in the script
@@ -1296,7 +1300,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         else:
             # All workers were reset - rewrite the whole observation buffer
             self.obs = TensorDict(
-                self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size
+                self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size, device=self.device
             )
 
         obs = self.obs.clone(False)

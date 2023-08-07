@@ -6,7 +6,6 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
-set -v
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -40,12 +39,6 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-#pip3 uninstall cython -y
-#pip uninstall cython -y
-#conda uninstall cython -y
-pip3 install "cython<3"
-conda install -c anaconda cython="<3.0.0" -y
-
 
 # 3. Install mujoco
 printf "* Installing mujoco and related\n"
@@ -60,9 +53,6 @@ wget https://www.roboti.us/file/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
 # install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
-cd mujoco-py
-git checkout v2.0.2.1
-pip install -e .
 cd $this_dir
 
 # 4. Install Conda dependencies
@@ -70,7 +60,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-pip3 install pip --upgrade
+pip install pip --upgrade
 
 # 5. env variables
 if [[ $OSTYPE == 'darwin'* ]]; then
