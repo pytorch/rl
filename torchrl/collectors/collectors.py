@@ -857,14 +857,13 @@ class SyncDataCollector(DataCollectorBase):
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    self.env.rand_step(self._tensordict)
+                    self.env.rand_step_and_maybe_reset(self._tensordict)
                 else:
                     self.policy(self._tensordict)
-                    self.env.step(self._tensordict)
+                    current_data, next_data = self.env.step_and_maybe_reset(self._tensordict)
                 # we must clone all the values, since the step / traj_id updates are done in-place
                 tensordicts.append(self._tensordict.to(self.storing_device))
 
-                self._step_and_maybe_reset()
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
@@ -883,6 +882,9 @@ class SyncDataCollector(DataCollectorBase):
                                 out=self._tensordict_out[: t + 1],
                             )
                     break
+                tensordict, done = self._step_mdp(current_data, next_data)
+                self._tensordict = tensordict
+
             else:
                 try:
                     self._tensordict_out = torch.stack(

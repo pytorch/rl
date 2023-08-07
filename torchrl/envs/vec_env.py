@@ -331,10 +331,10 @@ class _BatchedEnv(EnvBase):
             self.env_output_keys = []
             self.env_obs_keys = []
             for key in self.output_spec["_observation_spec"].keys(True, True):
-                self.env_output_keys.append(unravel_key(("next", key)))
+                self.env_output_keys.append(key)
                 self.env_obs_keys.append(key)
-            self.env_output_keys.append(unravel_key(("next", self.reward_key)))
-            self.env_output_keys.append(unravel_key(("next", self.done_key)))
+            self.env_output_keys.append(self.reward_key)
+            self.env_output_keys.append(self.done_key)
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -355,15 +355,15 @@ class _BatchedEnv(EnvBase):
                     )
                 )
                 env_output_keys = env_output_keys.union(
-                    unravel_key(("next", key))
+                    key
                     for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
                         True, True
                     )
                 )
             env_output_keys = env_output_keys.union(
                 {
-                    unravel_key(("next", self.reward_key)),
-                    unravel_key(("next", self.done_key)),
+                    self.reward_key,
+                    self.done_key,
                 }
             )
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
@@ -548,13 +548,14 @@ class SerialEnv(_BatchedEnv):
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
+        next_td = self.shared_tensordict_parent.get("next")
         if self._single_task:
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
-                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(next_td, out, key, clone=True)
         else:
             # strict=False ensures that non-homogeneous keys are still there
-            out = self.shared_tensordict_parent.select(
+            out = next_td.select(
                 *self._selected_step_keys, strict=False
             ).clone()
         return out
@@ -758,7 +759,7 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        self._assert_tensordict_shape(tensordict)
+        # self._assert_tensordict_shape(tensordict)
         if self._single_task:
             # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
@@ -795,13 +796,14 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
+        next_td = self.shared_tensordict_parent.get("next")
         if self._single_task:
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
-                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(next_td, out, key, clone=True)
         else:
             # strict=False ensures that non-homogeneous keys are still there
-            out = self.shared_tensordict_parent.select(
+            out = next_td.select(
                 *self._selected_step_keys, strict=False
             ).clone()
         return out
@@ -1207,7 +1209,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         action = action.to(torch.device("cpu"))
         step_output = self._env.step(action.numpy())
         tensordict_out = self._transform_step_output(step_output)
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _get_action_spec(self) -> TensorSpec:
         # local import to avoid importing gym in the script

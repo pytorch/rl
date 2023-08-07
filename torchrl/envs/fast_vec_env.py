@@ -88,7 +88,7 @@ class FastParallelEnv(ParallelEnv):
             out = self.shared_tensordict_parent.select(
                 *self._selected_step_keys, strict=False
             ).clone()
-        return out.get('next')
+        return out
 
 
     def _split_step(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:

@@ -886,22 +886,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict_out = self._step(tensordict)
-        # this tensordict should contain a "next" key
-        try:
-            next_tensordict_out = tensordict_out.get("next")
-        except KeyError:
-            raise RuntimeError(
-                "The value returned by env._step must be a tensordict where the "
-                "values at t+1 have been written under a 'next' entry. This "
-                f"tensordict couldn't be found in the output, got: {tensordict_out}."
-            )
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
+        next_tensordict_out = self._step(tensordict)
 
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
@@ -931,11 +916,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
             next_tensordict_out.set(self.done_key, done)
-        tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
-            for key in self._select_observation_keys(tensordict_out):
-                obs = tensordict_out.get(key)
+            # TODO: check these errors
+            for key in self._select_observation_keys(next_tensordict_out):
+                obs = next_tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
             if (
@@ -944,16 +929,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             ):
                 raise TypeError(
                     f"expected reward.dtype to be {self.reward_spec.dtype} "
-                    f"but got {tensordict_out.get(self.reward_key).dtype}"
+                    f"but got {next_tensordict_out.get(self.reward_key).dtype}"
                 )
 
             if next_tensordict_out.get(self.done_key).dtype is not self.done_spec.dtype:
                 raise TypeError(
-                    f"expected done.dtype to be torch.bool but got {tensordict_out.get(self.done_key).dtype}"
+                    f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(self.done_key).dtype}"
                 )
         # tensordict could already have a "next" key
-        tensordict.update(tensordict_out)
-
+        tensordict.set("next", next_tensordict_out)
         return tensordict
 
     def _get_in_keys_to_exclude(self, tensordict):
@@ -1128,6 +1112,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             be stored with the "action" key.
 
         """
+        tensordict = self.rand_action(tensordict)
+        return self.step(tensordict)
+
+    def rand_step_and_maybe_reset(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
@@ -1553,16 +1541,12 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
         batch_size: Optional[torch.Size] = None,
-        fast_step: bool = True,
-        auto_reset: bool = True,
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
             batch_size=batch_size,
-            auto_reset=auto_reset,
-            fast_step=fast_step,
         )
         if len(args):
             raise ValueError(
