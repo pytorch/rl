@@ -863,9 +863,9 @@ class ParallelEnv(_BatchedEnv):
             done = done | truncated
         if done.any():
             tensordict = torch.where(
-                done.view(tensordict.shape),
-                self.shared_tensordict_parent.exclude("next", "_reset"),
+                ~done.view(tensordict.shape),
                 tensordict,
+                self.shared_tensordict_parent.exclude("next", "_reset"),
             )
         return tensordict, next_tensordict
 
