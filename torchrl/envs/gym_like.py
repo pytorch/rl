@@ -228,10 +228,8 @@ class GymLikeEnv(_EnvWrapper):
 
         if reward is None:
             reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
-        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        # done = self._to_tensor(done, dtype=torch.bool)
-        obs_dict["reward"] = reward
-        obs_dict["done"] = done
+        obs_dict[self.reward_key] = reward
+        obs_dict[self.done_key] = done
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device

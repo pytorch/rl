@@ -383,14 +383,14 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
-                *self._selected_keys,
+                *self._selected_keys, "next",
                 strict=False,
             )
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
-                tensordict.select(*self._selected_keys, strict=False).to(self.device)
+                tensordict.select(*self._selected_keys, "next", strict=False).to(self.device)
                 for tensordict in shared_tensordict_parent
             ]
             shared_tensordict_parent = torch.stack(
@@ -538,17 +538,17 @@ class SerialEnv(_BatchedEnv):
     ) -> TensorDict:
         self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
+        next_td = self.shared_tensordict_parent.get("next")
         for i in range(self.num_workers):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
             out_td.update(tensordict_in[i].select(*self.env_input_keys))
-            self.shared_tensordicts[i].update_(
-                out_td.select(*self.env_input_keys, *self.env_output_keys)
+            next_td[i].update_(
+                out_td.select(*self.env_output_keys)
             )
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
-        next_td = self.shared_tensordict_parent.get("next")
         if self._single_task:
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
@@ -602,7 +602,7 @@ class SerialEnv(_BatchedEnv):
                 # step at the root (since the shared_tensordict did not go through
                 # step_mdp).
                 self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]["next"].select(
+                    self.shared_tensordicts[i].get("next").select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
@@ -838,7 +838,7 @@ class ParallelEnv(_BatchedEnv):
                 # step at the root (since the shared_tensordict did not go through
                 # step_mdp).
                 self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]["next"].select(
+                    self.shared_tensordicts[i].get("next").select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
@@ -1036,6 +1036,9 @@ def _run_worker_pipe_shared_mem(
             i = 0
             shared_tensordict = data
             next_shared_tensordict = shared_tensordict.get("next")
+            shared_tensordict = shared_tensordict.clone(False)
+            del shared_tensordict["next"]
+
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(
                     "tensordict must be placed in shared memory (share_memory_() or memmap_())"
@@ -1077,11 +1080,11 @@ def _run_worker_pipe_shared_mem(
                     )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
-            local_tensordict = env._step(local_tensordict)
+            next_td = env._step(local_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            next_shared_tensordict.update_(local_tensordict.get("next"))
+            next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()

@@ -262,9 +262,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     """
 
-    _fast_step: bool
-    _auto_reset: bool
-
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
@@ -805,8 +802,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.lock_()
 
     def step_and_maybe_reset(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
-        if auto_reset is None:
-            auto_reset = self._auto_reset
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
@@ -859,7 +854,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {next_tensordict.get(self.done_key).dtype}"
                 )
-        if auto_reset and done.any():
+
+        truncated = next_tensordict.get("truncated", None)
+        if truncated is not None:
+            done = done | truncated
+        if done.any():
             reset_td = next_tensordict.exclude(self.reward_key)
             if done.numel() > 1:
                 _reset = done
@@ -1117,7 +1116,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def rand_step_and_maybe_reset(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         tensordict = self.rand_action(tensordict)
-        return self.step(tensordict)
+        return self.step_and_maybe_reset(tensordict)
 
     @property
     def specs(self) -> CompositeSpec:
@@ -1239,7 +1238,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
-            tensordict, next_tensordict = self.step(tensordict)
+            tensordict, next_tensordict = self.step_and_maybe_reset(tensordict)
 
             tensordicts.append((tensordict, next_tensordict))
             tensordict, done = self._step_mdp(tensordict, next_tensordict)
