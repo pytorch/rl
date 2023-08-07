@@ -271,15 +271,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
-        # TODO: turn to False
-        fast_step: bool = True,
-        auto_reset: bool = True,
     ):
         self.__dict__["_done_key"] = None
         self.__dict__["_reward_key"] = None
         self.__dict__["_action_key"] = None
-        self._fast_step = fast_step
-        self._auto_reset = auto_reset
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -809,15 +804,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
-    def step(self, tensordict, fast_step: bool=None, auto_reset: bool=None):
-        if fast_step is None:
-            fast_step = self._fast_step
-        if fast_step:
-            return self._split_step(tensordict, auto_reset=auto_reset)
-        else:
-            return self._single_step(tensordict)
-
-    def _split_step(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
+    def step_and_maybe_reset(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
         if auto_reset is None:
             auto_reset = self._auto_reset
         # sanity check
@@ -881,7 +868,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return tensordict, next_tensordict
 
 
-    def _single_step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
@@ -1159,8 +1146,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         ).lock_()
 
     def _step_mdp(self, cur_data, next_data):
-        if not self._fast_step:
-            raise ValueError
         done = next_data.get(self.done_key)
         truncated = next_data.get(
             "truncated",
@@ -1201,7 +1186,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                        return_contiguous: bool = True,
                        tensordict: Optional[TensorDictBase] = None,
                        ):
-        if self._fast_step:
+        if not break_when_any_done:
+            # rollout will use step_and_maybe_reset
             return self._split_rollout(
                 max_steps=max_steps,
                 policy=policy,
@@ -1213,6 +1199,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 tensordict=tensordict
             )
         else:
+            # rollout will use step
             return self._single_rollout(
                 max_steps=max_steps,
                 policy=policy,

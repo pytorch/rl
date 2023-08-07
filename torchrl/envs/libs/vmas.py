@@ -352,7 +352,7 @@ class VmasWrapper(_EnvWrapper):
         tensordict_out.batch_size = self.batch_size
         tensordict_out.set("done", dones)
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def read_obs(
         self, observations: Union[Dict, torch.Tensor]
