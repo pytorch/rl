@@ -576,15 +576,16 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict.keys():
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        else:
-            _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
+        _reset = None
+        if tensordict is not None:
+            # self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset", None)
+            # if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+            #     raise RuntimeError(
+            #         "_reset flag in tensordict should follow env.done_spec"
+            #     )
+        if _reset is None:
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -809,18 +810,18 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        if tensordict is not None and "_reset" in tensordict.keys():
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        else:
-            _reset = torch.ones(
-                self.done_spec.shape, dtype=torch.bool, device=self.device
-            )
 
+        _reset = None
+        if tensordict is not None:
+            # self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset", None)
+            # if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+            #     raise RuntimeError(
+            #         "_reset flag in tensordict should follow env.done_spec"
+            #     )
+        if _reset is None:
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
+        selected = []
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -835,8 +836,9 @@ class ParallelEnv(_BatchedEnv):
                 # will be that the env will have the data from the previous
                 # step at the root (since the shared_tensordict did not go through
                 # step_mdp).
-                self.shared_tensordicts[i].update_(
-                    self.shared_tensordicts[i]["next"].select(
+                local_shared = self.shared_tensordicts[i]
+                local_shared.update_(
+                    local_shared.get("next").select(
                         *self._selected_reset_keys, strict=False
                     )
                 )
@@ -845,12 +847,12 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
+            selected.append(i)
             out = (cmd_out, tensordict_)
             channel.send(out)
 
-        for i, channel in enumerate(self.parent_channels):
-            if not _reset[i].any():
-                continue
+        for i in selected:
+            channel = self.parent_channels[i]
             cmd_in, data = channel.recv()
             if cmd_in != "reset_obs":
                 raise RuntimeError(f"received cmd {cmd_in} instead of reset_obs")
