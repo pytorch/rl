@@ -55,6 +55,8 @@ if [[ $OSTYPE != 'darwin'* ]]; then
       bash ./miniconda.sh -b -f -p "${conda_dir}"
   fi
   eval "$(${conda_dir}/bin/conda shell.bash hook)"
+else
+  conda init bash
 fi
 
 # 2. Create test environment at ./env
