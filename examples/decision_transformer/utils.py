@@ -16,6 +16,7 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    RandomCropTensorDict,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
@@ -181,13 +182,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     reward_scale = RewardScaling(
         loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
     )
-    catframes = CatFrames(
-        in_keys=["action", "observation", "return_to_go"],
-        N=rb_cfg.stacked_frames,
-        dim=-2,
-        padding="zeros",
-        as_inverse=True,
-    )
+    crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
 
     d2f = DoubleToFloat(
         in_keys=["observation", ("next", "observation")],
@@ -195,7 +190,7 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     )
     exclude = ExcludeTransform(
         "next_observations",
-        "timeout",
+        # "timeout",
         "terminal",
         "info",
         ("next", "timeout"),
@@ -205,20 +200,19 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
     )
 
     transforms = Compose(
-        # inverse transforms are called reversed
-        # therefore catframes before r2g
-        catframes,
         r2g,
+        crop_seq,
         reward_scale,
         d2f,
         exclude,
     )
     data = D4RLExperienceReplay(
         rb_cfg.dataset,
-        split_trajs=False,
+        split_trajs=True,
         batch_size=rb_cfg.batch_size,
         sampler=SamplerWithoutReplacement(drop_last=False),
         transform=transforms,
+        use_timeout_as_done=True,
     )
     full_data = data._get_dataset_from_env(rb_cfg.dataset, {})
     loc = full_data["observation"].mean(axis=0).float()
