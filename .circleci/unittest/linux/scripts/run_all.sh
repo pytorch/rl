@@ -55,17 +55,16 @@ if [[ $OSTYPE != 'darwin'* ]]; then
       bash ./miniconda.sh -b -f -p "${conda_dir}"
   fi
   eval "$(${conda_dir}/bin/conda shell.bash hook)"
-else
-  conda shell.bash hook
-fi
 
-# 2. Create test environment at ./env
-printf "python: ${PYTHON_VERSION}\n"
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+  # 2. Create test environment at ./env
+  printf "python: ${PYTHON_VERSION}\n"
+  if [ ! -d "${env_dir}" ]; then
+      printf "* Creating a test environment\n"
+      conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+  fi
+  conda activate "${env_dir}"
+
 fi
-conda activate "${env_dir}"
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
