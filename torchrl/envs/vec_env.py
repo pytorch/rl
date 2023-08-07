@@ -560,6 +560,7 @@ class SerialEnv(_BatchedEnv):
             ).clone()
         return out
 
+
     def _shutdown_workers(self) -> None:
         if not self.is_closed:
             for env in self._envs:
@@ -759,15 +760,9 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # self._assert_tensordict_shape(tensordict)
         if self._single_task:
             # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
-                # self.shared_tensordict_parent.set(
-                #     key,
-                #     tensordict.get(key),
-                #     inplace=True,
-                # )
                 key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
                     key,
@@ -807,6 +802,72 @@ class ParallelEnv(_BatchedEnv):
                 *self._selected_step_keys, strict=False
             ).clone()
         return out
+
+
+    def step_and_maybe_reset(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
+        # sanity check
+        # self._assert_tensordict_shape(tensordict)
+
+        tensordict, next_tensordict = self._step_and_maybe_reset(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
+        return tensordict, next_tensordict
+
+
+    @_check_start
+    def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._single_task:
+            # this is faster than update_ but won't work for lazy stacks
+            for key in self.env_input_keys:
+                key = _unravel_key_to_tuple(key)
+                self.shared_tensordict_parent._set_tuple(
+                    key,
+                    tensordict._get_tuple(key, None),
+                    inplace=True,
+                    validated=True,
+                )
+        else:
+            self.shared_tensordict_parent.update_(
+                tensordict.select(*self.env_input_keys, strict=False)
+            )
+        if self.event is not None:
+            self.event.record()
+            self.event.synchronize()
+        for i in range(self.num_workers):
+            self.parent_channels[i].send(("step_and_maybe_reset", None))
+
+        # keys = set()
+        for i in range(self.num_workers):
+            msg, data = self.parent_channels[i].recv()
+            if msg != "step_result":
+                raise RuntimeError(
+                    f"Expected 'step_result' but received {msg} from worker {i}"
+                )
+            if data is not None:
+                self.shared_tensordicts[i].update_(data)
+        # We must pass a clone of the tensordict, as the values of this tensordict
+        # will be modified in-place at further steps
+        next_td_buffer = self.shared_tensordict_parent.get("next")
+        if self._single_task:
+            next_tensordict = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
+            for key in self._selected_step_keys:
+                _set_single_key(next_td_buffer, next_tensordict, key, clone=True)
+        else:
+            # strict=False ensures that non-homogeneous keys are still there
+            next_tensordict = next_td_buffer.select(
+                *self._selected_step_keys, strict=False
+            ).clone()
+
+        done = next_tensordict.get(self.done_key)
+        truncated = next_tensordict.get("truncated", None)
+        if truncated is not None:
+            done = done | truncated
+        if done.any():
+            tensordict = torch.where(
+                done.view(tensordict.shape),
+                self.shared_tensordict_parent.exclude("next", "_reset"),
+                tensordict,
+            )
+        return tensordict, next_tensordict
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
@@ -1085,6 +1146,38 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             next_shared_tensordict.update_(next_td)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            out = (msg, None)
+            child_pipe.send(out)
+
+        elif cmd == "step_and_maybe_reset":
+            if not initialized:
+                raise RuntimeError("called 'init' before step")
+            i += 1
+            if local_tensordict is not None:
+                for key in env_input_keys:
+                    # local_tensordict.set(key, shared_tensordict.get(key))
+                    key = _unravel_key_to_tuple(key)
+                    local_tensordict._set_tuple(
+                        key,
+                        shared_tensordict._get_tuple(key, None),
+                        inplace=False,
+                        validated=True,
+                    )
+            else:
+                local_tensordict = shared_tensordict.clone(recurse=False)
+            cur_td, next_td = env.step_and_maybe_reset(local_tensordict)
+            if pin_memory:
+                local_tensordict.pin_memory()
+            msg = "step_result"
+            next_shared_tensordict.update_(next_td)
+            # TODO: avoid this check which is already done in maybe_reset
+            done = next_td.get(env.done_key)
+            truncated = next_td.get("truncated", torch.zeros((), dtype=torch.bool, device=env.device))
+            if done | truncated:
+                shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()
                 event.synchronize()

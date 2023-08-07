@@ -803,58 +803,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def step_and_maybe_reset(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
         # sanity check
-        self._assert_tensordict_shape(tensordict)
+        # self._assert_tensordict_shape(tensordict)
 
         next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
 
-        # TODO: Refactor this using reward spec
-        reward = next_tensordict.get(self.reward_key)
-        # unsqueeze rewards if needed
-        # the input tensordict may have more leading dimensions than the batch_size
-        # e.g. in model-based contexts.
-        batch_size = self.batch_size
-        dims = len(batch_size)
-        leading_batch_size = (
-            next_tensordict.batch_size[:-dims]
-            if dims
-            else next_tensordict.shape
-        )
-        expected_reward_shape = torch.Size(
-            [*leading_batch_size, *self.reward_spec.shape]
-        )
-        actual_reward_shape = reward.shape
-        if actual_reward_shape != expected_reward_shape:
-            reward = reward.view(expected_reward_shape)
-            next_tensordict.set(self.reward_key, reward)
-
-        # TODO: Refactor this using done spec
         done = next_tensordict.get(self.done_key)
-        # unsqueeze done if needed
-        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
-        actual_done_shape = done.shape
-        if actual_done_shape != expected_done_shape:
-            done = done.view(expected_done_shape)
-            next_tensordict.set(self.done_key, done)
-
-        if self.run_type_checks:
-            for key in self._select_observation_keys(next_tensordict):
-                obs = next_tensordict.get(key)
-                self.observation_spec.type_check(obs, key)
-
-            if (
-                next_tensordict.get(self.reward_key).dtype
-                is not self.reward_spec.dtype
-            ):
-                raise TypeError(
-                    f"expected reward.dtype to be {self.reward_spec.dtype} "
-                    f"but got {next_tensordict.get(self.reward_key).dtype}"
-                )
-
-            if next_tensordict.get(self.done_key).dtype is not self.done_spec.dtype:
-                raise TypeError(
-                    f"expected done.dtype to be torch.bool but got {next_tensordict.get(self.done_key).dtype}"
-                )
-
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
             done = done | truncated
@@ -883,10 +837,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         # sanity check
-        self._assert_tensordict_shape(tensordict)
+        # self._assert_tensordict_shape(tensordict)
 
-        next_tensordict_out = self._step(tensordict)
+        next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
+        # tensordict could already have a "next" key
+        tensordict.set("next", next_tensordict)
+        return tensordict
 
+    def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
         # unsqueeze rewards if needed
@@ -935,9 +894,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise TypeError(
                     f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(self.done_key).dtype}"
                 )
-        # tensordict could already have a "next" key
-        tensordict.set("next", next_tensordict_out)
-        return tensordict
+        return next_tensordict_out
 
     def _get_in_keys_to_exclude(self, tensordict):
         if self._cache_in_keys is None:
@@ -1139,16 +1096,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             default=torch.zeros((), device=done.device, dtype=torch.bool),
         )
         done = done | truncated
-        if not self._auto_reset:
-            return step_mdp(
-                cur_data.set("next", next_data),
-                keep_other=True,
-                exclude_action=True,
-                exclude_reward=True,
-                reward_key=self.reward_key,
-                action_key=self.action_key,
-                done_key=self.done_key,
-            ), done
         cur_data = cur_data.exclude(self.action_key)
         if done.all():
             return cur_data, done
