@@ -262,9 +262,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     """
 
-    _fast_step: bool
-    _auto_reset: bool
-
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
