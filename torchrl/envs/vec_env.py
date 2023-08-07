@@ -549,7 +549,7 @@ class SerialEnv(_BatchedEnv):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
                 _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
         else:
@@ -617,7 +617,7 @@ class SerialEnv(_BatchedEnv):
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_reset_keys:
                 if key != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
@@ -796,7 +796,7 @@ class ParallelEnv(_BatchedEnv):
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_step_keys:
                 _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
         else:
@@ -858,7 +858,7 @@ class ParallelEnv(_BatchedEnv):
                 self.shared_tensordicts[i].update_(data)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
-            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
+            out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape, device=self.device)
             for key in self._selected_reset_keys:
                 if key != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
@@ -1296,7 +1296,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         else:
             # All workers were reset - rewrite the whole observation buffer
             self.obs = TensorDict(
-                self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size
+                self._treevalue_or_numpy_to_tensor_or_dict(observation), self.batch_size, device=self.device
             )
 
         obs = self.obs.clone(False)

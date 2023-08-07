@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterator, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -262,16 +262,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     """
 
+    _fast_step: bool
+    _auto_reset: bool
+
     def __init__(
         self,
         device: DEVICE_TYPING = "cpu",
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
+        # TODO: turn to False
+        fast_step: bool = True,
+        auto_reset: bool = True,
     ):
         self.__dict__["_done_key"] = None
         self.__dict__["_reward_key"] = None
         self.__dict__["_action_key"] = None
+        self._fast_step = fast_step
+        self._auto_reset = auto_reset
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -801,7 +809,79 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
-    def step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def step(self, tensordict, fast_step: bool=None, auto_reset: bool=None):
+        if fast_step is None:
+            fast_step = self._fast_step
+        if fast_step:
+            return self._split_step(tensordict, auto_reset=auto_reset)
+        else:
+            return self._single_step(tensordict)
+
+    def _split_step(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
+        if auto_reset is None:
+            auto_reset = self._auto_reset
+        # sanity check
+        self._assert_tensordict_shape(tensordict)
+
+        next_tensordict = self._step(tensordict)
+
+        # TODO: Refactor this using reward spec
+        reward = next_tensordict.get(self.reward_key)
+        # unsqueeze rewards if needed
+        # the input tensordict may have more leading dimensions than the batch_size
+        # e.g. in model-based contexts.
+        batch_size = self.batch_size
+        dims = len(batch_size)
+        leading_batch_size = (
+            next_tensordict.batch_size[:-dims]
+            if dims
+            else next_tensordict.shape
+        )
+        expected_reward_shape = torch.Size(
+            [*leading_batch_size, *self.reward_spec.shape]
+        )
+        actual_reward_shape = reward.shape
+        if actual_reward_shape != expected_reward_shape:
+            reward = reward.view(expected_reward_shape)
+            next_tensordict.set(self.reward_key, reward)
+
+        # TODO: Refactor this using done spec
+        done = next_tensordict.get(self.done_key)
+        # unsqueeze done if needed
+        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
+        actual_done_shape = done.shape
+        if actual_done_shape != expected_done_shape:
+            done = done.view(expected_done_shape)
+            next_tensordict.set(self.done_key, done)
+
+        if self.run_type_checks:
+            for key in self._select_observation_keys(next_tensordict):
+                obs = next_tensordict.get(key)
+                self.observation_spec.type_check(obs, key)
+
+            if (
+                next_tensordict.get(self.reward_key).dtype
+                is not self.reward_spec.dtype
+            ):
+                raise TypeError(
+                    f"expected reward.dtype to be {self.reward_spec.dtype} "
+                    f"but got {next_tensordict.get(self.reward_key).dtype}"
+                )
+
+            if next_tensordict.get(self.done_key).dtype is not self.done_spec.dtype:
+                raise TypeError(
+                    f"expected done.dtype to be torch.bool but got {next_tensordict.get(self.done_key).dtype}"
+                )
+        if auto_reset and done.any():
+            reset_td = next_tensordict.exclude(self.reward_key)
+            if done.numel() > 1:
+                _reset = done
+                reset_td.set("_reset", _reset)
+            tensordict = self.reset(reset_td)
+        return tensordict, next_tensordict
+
+
+    def _single_step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
         Step accepts a single argument, tensordict, which usually carries an 'action' key which indicates the action
@@ -1078,7 +1158,131 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             shape=self.batch_size,
         ).lock_()
 
-    def rollout(
+    def _step_mdp(self, cur_data, next_data):
+        if not self._fast_step:
+            raise ValueError
+        done = next_data.get(self.done_key)
+        truncated = next_data.get(
+            "truncated",
+            default=torch.zeros((), device=done.device, dtype=torch.bool),
+        )
+        done = done | truncated
+        if not self._auto_reset:
+            return step_mdp(
+                cur_data.set("next", next_data),
+                keep_other=True,
+                exclude_action=True,
+                exclude_reward=True,
+                reward_key=self.reward_key,
+                action_key=self.action_key,
+                done_key=self.done_key,
+            ), done
+        cur_data = cur_data.exclude(self.action_key)
+        if done.all():
+            return cur_data, done
+        data = next_data.exclude(self.reward_key)
+        # we must copy the entries from cur_data that are missing in next
+        for key in cur_data.keys(True, True):
+            if key not in data.keys(True, True):
+                data.set(key, cur_data.get(key))
+        if done.any():
+            data = torch.where(done.reshape(self.batch_size), cur_data, data)
+        return data, done
+
+    def rollout(self,
+                       max_steps: int,
+                       policy: Optional[
+                           Callable[[TensorDictBase], TensorDictBase]] = None,
+                       callback: Optional[Callable[
+                           [TensorDictBase, ...], TensorDictBase]] = None,
+                       auto_reset: bool = True,
+                       auto_cast_to_device: bool = False,
+                       break_when_any_done: bool = True,
+                       return_contiguous: bool = True,
+                       tensordict: Optional[TensorDictBase] = None,
+                       ):
+        if self._fast_step:
+            return self._split_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                break_when_any_done=break_when_any_done,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict
+            )
+        else:
+            return self._single_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                break_when_any_done=break_when_any_done,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict
+            )
+
+    def _split_rollout(self,
+                       max_steps: int,
+                       policy: Optional[
+                           Callable[[TensorDictBase], TensorDictBase]] = None,
+                       callback: Optional[Callable[
+                           [TensorDictBase, ...], TensorDictBase]] = None,
+                       auto_reset: bool = True,
+                       auto_cast_to_device: bool = False,
+                       break_when_any_done: bool = True,
+                       return_contiguous: bool = True,
+                       tensordict: Optional[TensorDictBase] = None,
+                       ):
+        try:
+            policy_device = next(policy.parameters()).device
+        except (StopIteration, AttributeError):
+            policy_device = self.device
+
+        env_device = self.device
+
+        if auto_reset:
+            if tensordict is not None:
+                raise RuntimeError(
+                    "tensordict cannot be provided when auto_reset is True"
+                )
+            tensordict = self.reset()
+        elif tensordict is None:
+            raise RuntimeError("tensordict must be provided when auto_reset is False")
+        if policy is None:
+
+            def policy(td):
+                self.rand_action(td)
+                return td
+
+        tensordicts = []
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict = tensordict.to(policy_device, non_blocking=True)
+            tensordict = policy(tensordict)
+            if auto_cast_to_device:
+                tensordict = tensordict.to(env_device, non_blocking=True)
+            tensordict, next_tensordict = self.step(tensordict)
+
+            tensordicts.append((tensordict, next_tensordict))
+            tensordict, done = self._step_mdp(tensordict, next_tensordict)
+            if (break_when_any_done and done.any()) or i == max_steps - 1:
+                break
+            if callback is not None:
+                callback(self, tensordict)
+
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        data, next_data = [torch.stack(_data, len(batch_size)) for _data in zip(*tensordicts)]
+        data.set("next", next_data)
+        if return_contiguous:
+            data = data.contiguous()
+        data.refine_names(..., "time")
+        return data
+
+    def _single_rollout(
         self,
         max_steps: int,
         policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
@@ -1362,12 +1566,16 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
         batch_size: Optional[torch.Size] = None,
+        fast_step: bool = True,
+        auto_reset: bool = True,
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
             batch_size=batch_size,
+            auto_reset=auto_reset,
+            fast_step=fast_step,
         )
         if len(args):
             raise ValueError(

@@ -232,14 +232,18 @@ class GymLikeEnv(_EnvWrapper):
         # done = self._to_tensor(done, dtype=torch.bool)
         obs_dict["reward"] = reward
         obs_dict["done"] = done
-        obs_dict = {("next", key): val for key, val in obs_dict.items()}
+        if not self._fast_step:
+            obs_dict = {("next", key): val for key, val in obs_dict.items()}
 
         tensordict_out = TensorDict(
             obs_dict, batch_size=tensordict.batch_size, device=self.device
         )
 
         if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out.get("next"))
+            if not self._fast_step:
+                self.info_dict_reader(info, tensordict_out.get("next"))
+            else:
+                self.info_dict_reader(info, tensordict_out)
 
         return tensordict_out
 
