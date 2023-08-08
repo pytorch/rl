@@ -842,7 +842,7 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        with timeit("_step.1 update"):
+        with timeit("smr.1 update"):
             # this is faster than update_ but won't work for lazy stacks
             if self._single_task:
                 for key in self.env_input_keys:
@@ -859,10 +859,10 @@ class ParallelEnv(_BatchedEnv):
             if self.event is not None:
                 self.event.record()
                 self.event.synchronize()
-        with timeit("_step.2 send"):
+        with timeit("smr.2 send"):
             for i in range(self.num_workers):
                 self.parent_channels[i].send(("step_and_maybe_reset", None))
-        with timeit("_step.3 recv"):
+        with timeit("smr.3 recv"):
             completed = set()
             while len(completed) < self.num_workers:
                 for i, channel in enumerate(self.parent_channels):
@@ -886,7 +886,7 @@ class ParallelEnv(_BatchedEnv):
             #     if data is not None:
             #         self.shared_tensordicts[i].update_(data)
 
-        with timeit("_step.4 post"):
+        with timeit("smr.4 post"):
             # We must pass a clone of the tensordict, as the values of this tensordict
             # will be modified in-place at further steps
             next_td_buffer = self.shared_tensordict_parent.get("next")
