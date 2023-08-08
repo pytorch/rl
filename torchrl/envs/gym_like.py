@@ -241,16 +241,7 @@ class GymLikeEnv(_EnvWrapper):
             obs_dict[self.done_key] = done
 
             tensordict_out = tensordict.empty()
-            for key, val in obs_dict.items():
-                if isinstance(key, str):
-                    tensordict_out._set_str(
-                        key,
-                        val,
-                        inplace=False,
-                        validated=True
-                        )
-                else:
-                    tensordict_out._set_tuple(key, val, inplace=False, validated=True)
+            tensordict_out.update(obs_dict)
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
