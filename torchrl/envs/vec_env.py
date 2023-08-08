@@ -1178,9 +1178,9 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             next_shared_tensordict.update_(next_td)
-            # if event is not None:
-            #     event.record()
-            #     event.synchronize()
+            if event is not None:
+                event.record()
+                event.synchronize()
             out = (msg, None)
             child_pipe.send(out)
 
@@ -1208,9 +1208,9 @@ def _run_worker_pipe_shared_mem(
                     del cur_td["_reset"]
                     shared_tensordict.update_(cur_td)
 
-            if event is not None:
-                event.record()
-                event.synchronize()
+            # if event is not None:
+            #     event.record()
+            #     event.synchronize()
             child_pipe.send(msg)
 
         elif cmd == "close":
