@@ -578,12 +578,12 @@ class SerialEnv(_BatchedEnv):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         _reset = None
         if tensordict is not None:
-            # self._assert_tensordict_shape(tensordict)
+            self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset", None)
-            # if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-            #     raise RuntimeError(
-            #         "_reset flag in tensordict should follow env.done_spec"
-            #     )
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         if _reset is None:
             _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
 
@@ -813,12 +813,12 @@ class ParallelEnv(_BatchedEnv):
 
         _reset = None
         if tensordict is not None:
-            # self._assert_tensordict_shape(tensordict)
+            self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset", None)
-            # if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-            #     raise RuntimeError(
-            #         "_reset flag in tensordict should follow env.done_spec"
-            #     )
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
         if _reset is None:
             _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
         selected = []
@@ -1077,11 +1077,11 @@ def _run_worker_pipe_shared_mem(
                     )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
-            local_tensordict = env._step(local_tensordict)
+            next_tensordict = env._step(local_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             msg = "step_result"
-            next_shared_tensordict.update_(local_tensordict.get("next"))
+            next_shared_tensordict.update_(next_tensordict)
             if event is not None:
                 event.record()
                 event.synchronize()

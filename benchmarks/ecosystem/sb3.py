@@ -105,7 +105,7 @@ if __name__ == "__main__":
         fpb = fpb//env.batch_size.numel()
         i = 0
         while frames < total_frames:
-            data = env.rollout(fpb, actor)
+            data = env.rollout(fpb, actor, break_when_any_done=False)
             frames += data.numel()
             cur += data.numel()
             if i % 20 == 0:
