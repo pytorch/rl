@@ -34,6 +34,7 @@ __all__ = [
     "make_composite_from_td",
 ]
 
+from torchrl._utils import timeit
 
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
@@ -551,7 +552,8 @@ def make_composite_from_td(data):
     )
     return composite
 
-def _fuse_tensordicts(*tds, excluded=None):
+@timeit("_fuse_tensordict")
+def _fuse_tensordicts(*tds, excluded, total=None):
     """Fuses tensordicts with rank-wise priority.
 
     The first tensordicts of the list will have a higher priority than those
@@ -583,9 +585,10 @@ def _fuse_tensordicts(*tds, excluded=None):
 
     """
     out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
-    if excluded is None:
-        excluded = []
-    keys = set(excluded)
+    if total is None:
+        total = ()
+
+    keys = set()
     for i, td in enumerate(tds):
         if td is None:
             continue
@@ -593,8 +596,11 @@ def _fuse_tensordicts(*tds, excluded=None):
             if key in keys:
                 continue
             keys.add(key)
+            cur_total = total + (key,)
+            if cur_total in excluded:
+                continue
             val = td._get_str(key, None)
             if is_tensor_collection(val):
-                val = _fuse_tensordicts(val, *[_td._get_str(key, None) for _td in tds[i + 1:]])
+                val = _fuse_tensordicts(val, *[_td._get_str(key, None) for _td in tds[i + 1:]], total=cur_total, excluded=excluded)
             out._set_str(key, val, validated=True, inplace=False)
     return out

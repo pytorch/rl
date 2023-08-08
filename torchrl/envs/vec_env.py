@@ -820,12 +820,12 @@ class ParallelEnv(_BatchedEnv):
                 done = done | truncated
             if done.all():
                 # if all are done, then the next td to be used is simply the root td
-                cur_td = _fuse_tensordicts(self.shared_tensordict_parent, excluded=("next", "_reset"))
+                cur_td = _fuse_tensordicts(self.shared_tensordict_parent, excluded=(("next",), ("_reset",)))
             elif done.any():
                 # if not all are done, we need to update the next_td with those
                 # spawn envs which have been reset
-                reset_td = _fuse_tensordicts(self.shared_tensordict_parent, tensordict, exclude=("next", "_reset"))
-                cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(self.reward_key,))
+                reset_td = _fuse_tensordicts(self.shared_tensordict_parent, tensordict, excluded=(("next",), ("_reset",)))
+                cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(_unravel_key_to_tuple(self.reward_key),))
                 cur_td = torch.where(
                     ~done.view(tensordict.shape),
                     cur_td,
@@ -834,7 +834,7 @@ class ParallelEnv(_BatchedEnv):
             else:
                 # if none is done, then the next td to use is simply the one
                 # we got from the procs, filtered.
-                cur_td = _fuse_tensordicts(next_tensordict, tensordict, exclude=(self.reward_key,))
+                cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(_unravel_key_to_tuple(self.reward_key),))
 
         with timeit("run.4"):
             tensordict.set("next", next_tensordict)
@@ -1188,8 +1188,7 @@ def _run_worker_pipe_shared_mem(
                 done = done | truncated
             if done.any():
                 # we'll need to call reset
-                cur_td = _fuse_tensordicts(next_td, local_tensordict)
-                del cur_td[env.reward_key]
+                cur_td = _fuse_tensordicts(next_td, local_tensordict, excluded=(_unravel_key_to_tuple(env.reward_key),))
                 if done.all():
                     cur_td = env.reset(cur_td)
                     shared_tensordict.update_(cur_td)
