@@ -45,6 +45,7 @@ if __name__ == "__main__":
     fpb = log_sep * n_envs
     total_frames = args.total_frames
     run = args.run
+    device = torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda")
 
     if run == 'sb3':
         vec_env = make_vec_env(env_name, n_envs=n_envs)
@@ -95,10 +96,10 @@ if __name__ == "__main__":
 
     elif run == 'penv':
         # reproduce the actor
-        module = TensorDictModule(MLP(in_features=in_features, out_features=out_features, depth=2, num_cells=64, activation_class=nn.Tanh), in_keys=['observation'], out_keys=['logits'])
+        module = TensorDictModule(MLP(in_features=in_features, out_features=out_features, depth=2, num_cells=64, activation_class=nn.Tanh, device=device), in_keys=['observation'], out_keys=['logits'])
         actor = ProbabilisticActor(module, in_keys=["logits"], distribution_class=Categorical)
         def make_env():
-            return GymEnv(env_name, categorical_action_encoding=True)
+            return GymEnv(env_name, categorical_action_encoding=True, device=device)
         env = ParallelEnv(n_envs, EnvCreator(make_env))
 
         logger = WandbLogger(exp_name=f"torchrl-penv-{env_name}", project="benchmark")
@@ -124,9 +125,9 @@ if __name__ == "__main__":
         del env
 
     elif run == 'collector':
-        module = TensorDictModule(MLP(in_features=in_features, out_features=out_features, depth=2, num_cells=64, activation_class=nn.Tanh), in_keys=['observation'], out_keys=['logits'])
+        module = TensorDictModule(MLP(in_features=in_features, out_features=out_features, depth=2, num_cells=64, activation_class=nn.Tanh, device=device), in_keys=['observation'], out_keys=['logits'])
         actor = ProbabilisticActor(module, in_keys=["logits"], distribution_class=Categorical)
-        collector = MultiaSyncDataCollector(n_envs * [lambda: GymEnv(env_name, categorical_action_encoding=True)], actor, total_frames=total_frames, frames_per_batch=fpb)
+        collector = MultiaSyncDataCollector(n_envs * [lambda: GymEnv(env_name, categorical_action_encoding=True, device=device)], actor, total_frames=total_frames, frames_per_batch=fpb)
 
         logger = WandbLogger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
 
