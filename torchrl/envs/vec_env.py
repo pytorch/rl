@@ -863,26 +863,24 @@ class ParallelEnv(_BatchedEnv):
             for i in range(self.num_workers):
                 self.parent_channels[i].send(("step_and_maybe_reset", None))
         with timeit("smr.3 recv"):
-            # completed = set()
-            # while len(completed) < self.num_workers:
-            #     for i, channel in enumerate(self.parent_channels):
-            #         if i in completed or not channel.poll():
-            #             continue
-            #         msg, data = self.parent_channels[i].recv()
-            #         if msg != "step_result":
-            #             raise RuntimeError(
-            #                 f"Expected 'step_result' but received {msg} from worker {i}"
-            #             )
-            #         if data is not None:
-            #             self.shared_tensordicts[i].update_(data)
-            #         completed.add(i)
+            completed = set()
+            while len(completed) < self.num_workers:
+                for i, channel in enumerate(self.parent_channels):
+                    if i in completed or not channel.poll():
+                        continue
+                    msg = self.parent_channels[i].recv()
+                    if msg != "step_result":
+                        raise RuntimeError(
+                            f"Expected 'step_result' but received {msg} from worker {i}"
+                        )
+                    completed.add(i)
             # alternative:
-            for i, channel in enumerate(self.parent_channels):
-                msg = self.parent_channels[i].recv()
-                if msg != "step_result":
-                    raise RuntimeError(
-                        f"Expected 'step_result' but received {msg} from worker {i}"
-                    )
+            # for i, channel in enumerate(self.parent_channels):
+            #     msg = self.parent_channels[i].recv()
+            #     if msg != "step_result":
+            #         raise RuntimeError(
+            #             f"Expected 'step_result' but received {msg} from worker {i}"
+            #         )
 
         with timeit("smr.4 post"):
             # We must pass a clone of the tensordict, as the values of this tensordict
@@ -1180,9 +1178,9 @@ def _run_worker_pipe_shared_mem(
                 local_tensordict.pin_memory()
             msg = "step_result"
             next_shared_tensordict.update_(next_td)
-            if event is not None:
-                event.record()
-                event.synchronize()
+            # if event is not None:
+            #     event.record()
+            #     event.synchronize()
             out = (msg, None)
             child_pipe.send(out)
 
