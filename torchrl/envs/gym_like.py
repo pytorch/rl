@@ -156,7 +156,7 @@ class GymLikeEnv(_EnvWrapper):
             step_reward (reward in the format provided by the inner env): reward of this particular step
 
         """
-        return total_reward + self.reward_spec.encode(step_reward, ignore_device=True)
+        return total_reward + step_reward  # self.reward_spec.encode(step_reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
