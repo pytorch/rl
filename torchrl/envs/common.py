@@ -1390,6 +1390,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 _reset = done.clone()
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)
+                del tensordict["_reset"]
 
             if callback is not None:
                 callback(self, tensordict)
