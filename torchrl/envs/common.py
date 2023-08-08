@@ -1119,98 +1119,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
     ):
-        if not break_when_any_done:
-            # rollout will use step_and_maybe_reset
-            return self._split_rollout(
-                max_steps=max_steps,
-                policy=policy,
-                callback=callback,
-                auto_reset=auto_reset,
-                auto_cast_to_device=auto_cast_to_device,
-                break_when_any_done=break_when_any_done,
-                return_contiguous=return_contiguous,
-                tensordict=tensordict,
-            )
-        else:
-            # rollout will use step
-            return self._single_rollout(
-                max_steps=max_steps,
-                policy=policy,
-                callback=callback,
-                auto_reset=auto_reset,
-                auto_cast_to_device=auto_cast_to_device,
-                break_when_any_done=break_when_any_done,
-                return_contiguous=return_contiguous,
-                tensordict=tensordict,
-            )
-
-    def _split_rollout(
-        self,
-        max_steps: int,
-        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
-        auto_reset: bool = True,
-        auto_cast_to_device: bool = False,
-        break_when_any_done: bool = True,
-        return_contiguous: bool = True,
-        tensordict: Optional[TensorDictBase] = None,
-    ):
-        try:
-            policy_device = next(policy.parameters()).device
-        except (StopIteration, AttributeError):
-            policy_device = self.device
-
-        env_device = self.device
-
-        if auto_reset:
-            if tensordict is not None:
-                raise RuntimeError(
-                    "tensordict cannot be provided when auto_reset is True"
-                )
-            tensordict = self.reset()
-        elif tensordict is None:
-            raise RuntimeError("tensordict must be provided when auto_reset is False")
-        if policy is None:
-
-            def policy(td):
-                self.rand_action(td)
-                return td
-
-        tensordicts = []
-        for i in range(max_steps):
-            if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device, non_blocking=True)
-            tensordict = policy(tensordict)
-            if auto_cast_to_device:
-                tensordict = tensordict.to(env_device, non_blocking=True)
-            cur_td, tensordict = self.step_and_maybe_reset(tensordict)
-
-            tensordicts.append(tensordict)
-            tensordict = cur_td
-            if i == max_steps - 1:
-                break
-            if callback is not None:
-                callback(self, tensordict)
-
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-
-        data = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            data = data.contiguous()
-        data.refine_names(..., "time")
-        return data
-
-    def _single_rollout(
-        self,
-        max_steps: int,
-        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
-        auto_reset: bool = True,
-        auto_cast_to_device: bool = False,
-        break_when_any_done: bool = True,
-        return_contiguous: bool = True,
-        tensordict: Optional[TensorDictBase] = None,
-    ) -> TensorDictBase:
         """Executes a rollout in the environment.
 
         The function will stop as soon as one of the contained environments
@@ -1329,6 +1237,97 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
+
+        if not break_when_any_done:
+            # rollout will use step_and_maybe_reset
+            return self._split_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict,
+            )
+        else:
+            # rollout will use step
+            return self._single_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                break_when_any_done=break_when_any_done,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict,
+            )
+
+    def _split_rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ):
+        try:
+            policy_device = next(policy.parameters()).device
+        except (StopIteration, AttributeError):
+            policy_device = self.device
+
+        env_device = self.device
+
+        if auto_reset:
+            if tensordict is not None:
+                raise RuntimeError(
+                    "tensordict cannot be provided when auto_reset is True"
+                )
+            tensordict = self.reset()
+        elif tensordict is None:
+            raise RuntimeError("tensordict must be provided when auto_reset is False")
+        if policy is None:
+
+            def policy(td):
+                self.rand_action(td)
+                return td
+
+        tensordicts = []
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict = tensordict.to(policy_device, non_blocking=True)
+            tensordict = policy(tensordict)
+            if auto_cast_to_device:
+                tensordict = tensordict.to(env_device, non_blocking=True)
+            cur_td, tensordict = self.step_and_maybe_reset(tensordict)
+
+            tensordicts.append(tensordict)
+            tensordict = cur_td
+            if i == max_steps - 1:
+                break
+            if callback is not None:
+                callback(self, tensordict)
+
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        data = torch.stack(tensordicts, len(batch_size))
+        if return_contiguous:
+            data = data.contiguous()
+        data.refine_names(..., "time")
+        return data
+
+    def _single_rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,  # kept for testing
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ) -> TensorDictBase:
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):
