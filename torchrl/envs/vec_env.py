@@ -842,61 +842,65 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # this is faster than update_ but won't work for lazy stacks
-        if self._single_task:
-            for key in self.env_input_keys:
-                key = _unravel_key_to_tuple(key)
-                self.shared_tensordict_parent._set_tuple(
-                    key,
-                    tensordict._get_tuple(key, None),
-                    inplace=True,
-                    validated=True,
-                )
-        else:
-            # TODO: make this faster
-            self.shared_tensordict_parent.update_(tensordict)
-        if self.event is not None:
-            self.event.record()
-            self.event.synchronize()
-        for i in range(self.num_workers):
-            self.parent_channels[i].send(("step_and_maybe_reset", None))
-        completed = set()
-        while len(completed) < self.num_workers:
-            for i, channel in enumerate(self.parent_channels):
-                if i in completed or not channel.poll():
-                    continue
-                msg, data = self.parent_channels[i].recv()
-                if msg != "step_result":
-                    raise RuntimeError(
-                        f"Expected 'step_result' but received {msg} from worker {i}"
+        with timeit("_step.1 update"):
+            # this is faster than update_ but won't work for lazy stacks
+            if self._single_task:
+                for key in self.env_input_keys:
+                    key = _unravel_key_to_tuple(key)
+                    self.shared_tensordict_parent._set_tuple(
+                        key,
+                        tensordict._get_tuple(key, None),
+                        inplace=True,
+                        validated=True,
                     )
-                if data is not None:
-                    self.shared_tensordicts[i].update_(data)
-                completed.add(i)
-        # alternative:
-        # for i, channel in enumerate(self.parent_channels):
-        #     msg, data = self.parent_channels[i].recv()
-        #     if msg != "step_result":
-        #         raise RuntimeError(
-        #             f"Expected 'step_result' but received {msg} from worker {i}"
-        #         )
-        #     if data is not None:
-        #         self.shared_tensordicts[i].update_(data)
+            else:
+                # TODO: make this faster
+                self.shared_tensordict_parent.update_(tensordict)
+            if self.event is not None:
+                self.event.record()
+                self.event.synchronize()
+        with timeit("_step.2 send"):
+            for i in range(self.num_workers):
+                self.parent_channels[i].send(("step_and_maybe_reset", None))
+        with timeit("_step.3 recv"):
+            completed = set()
+            while len(completed) < self.num_workers:
+                for i, channel in enumerate(self.parent_channels):
+                    if i in completed or not channel.poll():
+                        continue
+                    msg, data = self.parent_channels[i].recv()
+                    if msg != "step_result":
+                        raise RuntimeError(
+                            f"Expected 'step_result' but received {msg} from worker {i}"
+                        )
+                    if data is not None:
+                        self.shared_tensordicts[i].update_(data)
+                    completed.add(i)
+            # alternative:
+            # for i, channel in enumerate(self.parent_channels):
+            #     msg, data = self.parent_channels[i].recv()
+            #     if msg != "step_result":
+            #         raise RuntimeError(
+            #             f"Expected 'step_result' but received {msg} from worker {i}"
+            #         )
+            #     if data is not None:
+            #         self.shared_tensordicts[i].update_(data)
 
-        # We must pass a clone of the tensordict, as the values of this tensordict
-        # will be modified in-place at further steps
-        next_td_buffer = self.shared_tensordict_parent.get("next")
-        if self._single_task:
-            next_tensordict = TensorDict(
-                {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
-            )
-            for key in self._selected_step_keys:
-                _set_single_key(next_td_buffer, next_tensordict, key, clone=True)
-        else:
-            # strict=False ensures that non-homogeneous keys are still there
-            next_tensordict = next_td_buffer.select(
-                *self._selected_step_keys, strict=False
-            ).clone()
+        with timeit("_step.4 post"):
+            # We must pass a clone of the tensordict, as the values of this tensordict
+            # will be modified in-place at further steps
+            next_td_buffer = self.shared_tensordict_parent.get("next")
+            if self._single_task:
+                next_tensordict = TensorDict(
+                    {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+                )
+                for key in self._selected_step_keys:
+                    _set_single_key(next_td_buffer, next_tensordict, key, clone=True)
+            else:
+                # strict=False ensures that non-homogeneous keys are still there
+                next_tensordict = next_td_buffer.select(
+                    *self._selected_step_keys, strict=False
+                ).clone()
 
         return next_tensordict
 
