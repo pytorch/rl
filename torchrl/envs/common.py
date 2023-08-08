@@ -807,7 +807,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         # self._assert_tensordict_shape(tensordict)
 
-        next_tensordict = self._step_and_maybe_reset(tensordict)
+        tensordict, next_tensordict = self._step_and_maybe_reset(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
 
         done = next_tensordict.get(self.done_key)
@@ -822,15 +822,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.reset(reset_td)
         return tensordict, next_tensordict
 
-    @property
-    def _step_and_maybe_reset(self):
-        # This will *not* reset but it's the version of _step for
-        # step_and_maybe_reset, hence the name.
-        #
-        # some classes may need to overwrite this, eg. ParallelEnv
-        # but we can't just do _step_and_maybe_reset = _step
-        # as any subclassing would loose the sync between the two.
-        return self._step
+    def _step_and_maybe_reset(self, tensordict):
+        return tensordict, self._step(tensordict)
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
