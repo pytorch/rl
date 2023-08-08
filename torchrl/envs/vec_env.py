@@ -873,6 +873,16 @@ class ParallelEnv(_BatchedEnv):
                 if data is not None:
                     self.shared_tensordicts[i].update_(data)
                 completed.add(i)
+        # alternative:
+        # for i, channel in enumerate(self.parent_channels):
+        #     msg, data = self.parent_channels[i].recv()
+        #     if msg != "step_result":
+        #         raise RuntimeError(
+        #             f"Expected 'step_result' but received {msg} from worker {i}"
+        #         )
+        #     if data is not None:
+        #         self.shared_tensordicts[i].update_(data)
+
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         next_td_buffer = self.shared_tensordict_parent.get("next")
