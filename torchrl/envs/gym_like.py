@@ -184,14 +184,14 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         action_np = self.read_action(action)
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
-                self._env.step(action_np)
-            )
+                    self._env.step(action_np)
+                )
             if isinstance(obs, list) and len(obs) == 1:
                 # Until gym 0.25.2 we had rendered frames returned in lists of length 1
                 obs = obs[0]
@@ -232,8 +232,8 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict[self.done_key] = done
 
         tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
+                obs_dict, batch_size=tensordict.batch_size, device=self.device
+            )
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)

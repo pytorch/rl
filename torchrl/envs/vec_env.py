@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
@@ -576,14 +576,16 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict.keys():
-            _reset = tensordict.get("_reset")
+        _reset = None
+        if tensordict is not None:
+            self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset", None)
             if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
                 raise RuntimeError(
                     "_reset flag in tensordict should follow env.done_spec"
                 )
-        else:
-            _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
+        if _reset is None:
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -840,8 +842,8 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # this is faster than update_ but won't work for lazy stacks
         if self._single_task:
-            # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
                 key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
@@ -851,24 +853,26 @@ class ParallelEnv(_BatchedEnv):
                     validated=True,
                 )
         else:
-            self.shared_tensordict_parent.update_(
-                tensordict.select(*self.env_input_keys, strict=False)
-            )
+            # TODO: make this faster
+            self.shared_tensordict_parent.update_(tensordict)
         if self.event is not None:
             self.event.record()
             self.event.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
-
-        # keys = set()
-        for i in range(self.num_workers):
-            msg, data = self.parent_channels[i].recv()
-            if msg != "step_result":
-                raise RuntimeError(
-                    f"Expected 'step_result' but received {msg} from worker {i}"
-                )
-            if data is not None:
-                self.shared_tensordicts[i].update_(data)
+        completed = set()
+        while len(completed) < self.num_workers:
+            for i, channel in enumerate(self.parent_channels):
+                if i in completed or not channel.poll():
+                    continue
+                msg, data = self.parent_channels[i].recv()
+                if msg != "step_result":
+                    raise RuntimeError(
+                        f"Expected 'step_result' but received {msg} from worker {i}"
+                    )
+                if data is not None:
+                    self.shared_tensordicts[i].update_(data)
+                completed.add(i)
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         next_td_buffer = self.shared_tensordict_parent.get("next")
@@ -889,18 +893,17 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        if tensordict is not None and "_reset" in tensordict.keys():
+
+        _reset = None
+        if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
+            _reset = tensordict.get("_reset", None)
             if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
                 raise RuntimeError(
                     "_reset flag in tensordict should follow env.done_spec"
                 )
-        else:
-            _reset = torch.ones(
-                self.done_spec.shape, dtype=torch.bool, device=self.device
-            )
-
+        if _reset is None:
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -1175,19 +1178,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if local_tensordict is not None:
-                for key in env_input_keys:
-                    # local_tensordict.set(key, shared_tensordict.get(key))
-                    key = _unravel_key_to_tuple(key)
-                    local_tensordict._set_tuple(
-                        key,
-                        shared_tensordict._get_tuple(key, None),
-                        inplace=False,
-                        validated=True,
-                    )
-            else:
-                local_tensordict = shared_tensordict.clone(recurse=False)
-            next_td = env._step(local_tensordict)
+            next_td = env._step(shared_tensordict)
             msg = "step_result"
             next_shared_tensordict.update_(next_td)
 

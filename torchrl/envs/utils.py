@@ -222,19 +222,17 @@ def _set_single_key(source, dest, key, clone=False):
         key = (key,)
     for k in key:
         try:
-            val = source.get(k)
+            val = source._get_str(k, None)
             if is_tensor_collection(val):
-                new_val = dest.get(k, None)
+                new_val = dest._get_str(k, None)
                 if new_val is None:
                     new_val = val.empty()
-                    # dest.set(k, new_val)
                     dest._set_str(k, new_val, inplace=False, validated=True)
                 source = val
                 dest = new_val
             else:
                 if clone:
                     val = val.clone()
-                # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
