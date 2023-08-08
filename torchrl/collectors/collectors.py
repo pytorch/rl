@@ -857,14 +857,20 @@ class SyncDataCollector(DataCollectorBase):
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    current_td, next_td = self.env.rand_step_and_maybe_reset(self._tensordict)
+                    current_td, next_td = self.env.rand_step_and_maybe_reset(
+                        self._tensordict
+                    )
                 else:
                     self.policy(self._tensordict)
-                    current_td, next_td = self.env.step_and_maybe_reset(self._tensordict)
+                    current_td, next_td = self.env.step_and_maybe_reset(
+                        self._tensordict
+                    )
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.set("next", next_td).to(self.storing_device))
-                self._tensordict = self.env._step_mdp(current_td, next_td)
+                tensordicts.append(
+                    self._tensordict.set("next", next_td).to(self.storing_device)
+                )
+                self._tensordict, _ = self.env._step_mdp(current_td, next_td)
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()

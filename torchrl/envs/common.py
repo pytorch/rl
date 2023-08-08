@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Union, Tuple
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -801,11 +801,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
-    def step_and_maybe_reset(self, tensordict: TensorDictBase, auto_reset=None) -> Tuple[TensorDictBase, TensorDictBase]:
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase, auto_reset=None
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
         # sanity check
         # self._assert_tensordict_shape(tensordict)
 
-        next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_and_maybe_reset(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
 
         done = next_tensordict.get(self.done_key)
@@ -820,6 +822,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.reset(reset_td)
         return tensordict, next_tensordict
 
+    @property
+    def _step_and_maybe_reset(self):
+        # This will *not* reset but it's the version of _step for
+        # step_and_maybe_reset, hence the name.
+        #
+        # some classes may need to overwrite this, eg. ParallelEnv
+        # but we can't just do _step_and_maybe_reset = _step
+        # as any subclassing would loose the sync between the two.
+        return self._step
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -1071,7 +1082,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
-    def rand_step_and_maybe_reset(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
+    def rand_step_and_maybe_reset(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
         tensordict = self.rand_action(tensordict)
         return self.step_and_maybe_reset(tensordict)
 
@@ -1108,18 +1121,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             data = torch.where(done.reshape(self.batch_size), cur_data, data)
         return data, done
 
-    def rollout(self,
-                       max_steps: int,
-                       policy: Optional[
-                           Callable[[TensorDictBase], TensorDictBase]] = None,
-                       callback: Optional[Callable[
-                           [TensorDictBase, ...], TensorDictBase]] = None,
-                       auto_reset: bool = True,
-                       auto_cast_to_device: bool = False,
-                       break_when_any_done: bool = True,
-                       return_contiguous: bool = True,
-                       tensordict: Optional[TensorDictBase] = None,
-                       ):
+    def rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ):
         if not break_when_any_done:
             # rollout will use step_and_maybe_reset
             return self._split_rollout(
@@ -1130,7 +1142,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 auto_cast_to_device=auto_cast_to_device,
                 break_when_any_done=break_when_any_done,
                 return_contiguous=return_contiguous,
-                tensordict=tensordict
+                tensordict=tensordict,
             )
         else:
             # rollout will use step
@@ -1142,21 +1154,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 auto_cast_to_device=auto_cast_to_device,
                 break_when_any_done=break_when_any_done,
                 return_contiguous=return_contiguous,
-                tensordict=tensordict
+                tensordict=tensordict,
             )
 
-    def _split_rollout(self,
-                       max_steps: int,
-                       policy: Optional[
-                           Callable[[TensorDictBase], TensorDictBase]] = None,
-                       callback: Optional[Callable[
-                           [TensorDictBase, ...], TensorDictBase]] = None,
-                       auto_reset: bool = True,
-                       auto_cast_to_device: bool = False,
-                       break_when_any_done: bool = True,
-                       return_contiguous: bool = True,
-                       tensordict: Optional[TensorDictBase] = None,
-                       ):
+    def _split_rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ):
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):
@@ -1196,7 +1207,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
-        data, next_data = [torch.stack(_data, len(batch_size)) for _data in zip(*tensordicts)]
+        data, next_data = [
+            torch.stack(_data, len(batch_size)) for _data in zip(*tensordicts)
+        ]
         data.set("next", next_data)
         if return_contiguous:
             data = data.contiguous()

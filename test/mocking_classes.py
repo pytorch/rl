@@ -202,11 +202,7 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {
-                "next": TensorDict(
-                    {"reward": n, "done": done, "observation": n.clone()}, batch_size=[]
-                )
-            },
+            {"reward": n, "done": done, "observation": n.clone()},
             batch_size=[],
         )
 
@@ -337,13 +333,7 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {
-                "next": TensorDict(
-                    {"reward": n, "done": done, "observation": n},
-                    tensordict.batch_size,
-                    device=self.device,
-                )
-            },
+            {"reward": n, "done": done, "observation": n},
             batch_size=tensordict.batch_size,
             device=self.device,
         )
@@ -500,7 +490,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
@@ -602,7 +592,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = reward = done.unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
     def _obs_step(self, obs, a):
         return obs + a / self.maxstep
@@ -1043,7 +1033,7 @@ class CountingEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
 
 class NestedCountingEnv(CountingEnv):
@@ -1166,7 +1156,7 @@ class NestedCountingEnv(CountingEnv):
             td = td.clone()
             td["data"].batch_size = self.batch_size
             td[self.action_key] = td[self.action_key].max(-2)[0]
-        td_root = super()._step(td)
+        next_td = super()._step(td)
         if self.nested_obs_action:
             td[self.action_key] = (
                 td[self.action_key]
@@ -1175,7 +1165,7 @@ class NestedCountingEnv(CountingEnv):
             )
         if "data" in td.keys():
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        td = td_root["next"]
+        td = next_td
         if self.nested_done:
             td[self.done_key] = (
                 td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
@@ -1195,7 +1185,7 @@ class NestedCountingEnv(CountingEnv):
             del td["reward"]
         if "data" in td.keys():
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td_root
+        return td
 
 
 class CountingBatchedEnv(EnvBase):
@@ -1289,4 +1279,4 @@ class CountingBatchedEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
-        return tensordict.select().set("next", tensordict)
+        return tensordict
