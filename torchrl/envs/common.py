@@ -23,7 +23,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import get_available_libraries, step_mdp
+from torchrl.envs.utils import get_available_libraries, step_mdp, \
+    _fuse_tensordicts
 
 LIBRARIES = get_available_libraries()
 
@@ -825,11 +826,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
             done = done | truncated
-        cur_td = next_tensordict.clone(False).exclude(self.reward_key)
-        # copy missing keys -- could be made faster
-        for key in tensordict.keys(True, True):
-            if key not in cur_td.keys(True, True):
-                cur_td.set(key, tensordict.get(key))
+
+        cur_td = _fuse_tensordicts(next_tensordict, tensordict)
+        del cur_td[self.reward_key]
+
         if done.any():
             if done.numel() > 1:
                 _reset = done
@@ -1107,25 +1107,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             input_spec=self.input_spec,
             shape=self.batch_size,
         ).lock_()
-
-    # def _step_mdp(self, cur_data, next_data):
-    #     done = next_data.get(self.done_key)
-    #     truncated = next_data.get(
-    #         "truncated",
-    #         default=torch.zeros((), device=done.device, dtype=torch.bool),
-    #     )
-    #     done = done | truncated
-    #     cur_data = cur_data.exclude(self.action_key)
-    #     if done.all():
-    #         return cur_data, done
-    #     data = next_data.exclude(self.reward_key)
-    #     # we must copy the entries from cur_data that are missing in next
-    #     for key in cur_data.keys(True, True):
-    #         if key not in data.keys(True, True):
-    #             data.set(key, cur_data.get(key))
-    #     if done.any():
-    #         data = torch.where(done.reshape(self.batch_size), cur_data, data)
-    #     return data, done
 
     def rollout(
         self,

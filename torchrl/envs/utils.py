@@ -20,7 +20,8 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, \
+    TensorDictBase, TensorDict
 
 __all__ = [
     "exploration_mode",
@@ -551,3 +552,47 @@ def make_composite_from_td(data):
         shape=data.shape,
     )
     return composite
+
+def _fuse_tensordicts(*tds):
+    """Fuses tensordicts with rank-wise priority.
+
+    The first tensordicts of the list will have a higher priority than those
+    coming after, in such a way that if a key is present in both the first and
+    second tensordict, the first value is guaranteed to result in the output.
+
+    Examples:
+        >>> td1 = TensorDict({
+        ...     "a": 0,
+        ...     "b": {"c": 0},
+        ... }, [])
+        >>> td2 = TensorDict({
+        ...     "a": 1,
+        ...     "b": {"c": 1, "d": 1},
+        ... }, [])
+        >>> td3 = TensorDict({
+        ...     "a": 2,
+        ...     "b": {"c": 2, "d": 2, "e": {"f": 2}},
+        ...     "g": 2,
+        ... }, [])
+        >>> out = fuse_tensordicts(td1, td2, td3)
+        >>> assert out["a"] == 0
+        >>> assert out["b", "c"] == 0
+        >>> assert out["b", "d"] == 1
+        >>> assert out["b", "e", "f"] == 2
+        >>> assert out["g"] == 2
+
+    """
+    out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
+    keys = set()
+    for i, td in enumerate(tds):
+        if td is None:
+            continue
+        for key in td.keys():
+            if key in keys:
+                continue
+            keys.add(key)
+            val = td._get_str(key, None)
+            if is_tensor_collection(val):
+                val = _fuse_tensordicts(val, *[_td._get_str(key, None) for _td in tds[i + 1:]])
+            out._set_str(key, val, validated=True, inplace=False)
+    return out

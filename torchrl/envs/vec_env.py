@@ -34,7 +34,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _set_single_key, _sort_keys
+from torchrl.envs.utils import _set_single_key, _sort_keys, _fuse_tensordicts
 
 _has_envpool = importlib.util.find_spec("envpool")
 
@@ -1197,11 +1197,8 @@ def _run_worker_pipe_shared_mem(
                 done = done | truncated
             if done.any():
                 # we'll need to call reset
-                cur_td = next_td.exclude(env.reward_key)
-                # copy missing keys -- could be made faster
-                for key in local_tensordict.keys(True, True):
-                    if key not in cur_td.keys(True, True):
-                        cur_td.set(key, local_tensordict.get(key))
+                cur_td = _fuse_tensordicts(next_td, local_tensordict)
+                del cur_td[env.reward_key]
                 if done.all():
                     cur_td = env.reset(cur_td)
                     shared_tensordict.update_(cur_td)
