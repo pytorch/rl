@@ -6,10 +6,12 @@
 # Logs Gym Async env data collection speed with a simple policy.
 #
 import time
+import torch
 from torch import nn
 from torch.distributions import Categorical
 
 from tensordict.nn import TensorDictModule
+from torchrl._utils import timeit
 from torchrl.collectors import SyncDataCollector, MultiaSyncDataCollector
 from torchrl.envs import ParallelEnv, EnvCreator
 from torchrl.envs.libs.gym import GymEnv
@@ -61,11 +63,13 @@ if __name__ == "__main__":
         while frames < total_frames:
             i += 1
 
-            t0 = time.time()
-            action, _states = model.predict(obs)
-            t1 = time.time()
-            obs, rewards, dones, info = vec_env.step(action)
-            t2 = time.time()
+            with timeit("policy"):
+                t0 = time.time()
+                action, _states = model.predict(obs)
+                t1 = time.time()
+            with timeit("step"):
+                obs, rewards, dones, info = vec_env.step(action)
+                t2 = time.time()
 
             frames += len(dones)
             cur_frames += len(dones)
@@ -104,17 +108,19 @@ if __name__ == "__main__":
         cur = 0
         fpb = fpb//env.batch_size.numel()
         i = 0
-        while frames < total_frames:
-            data = env.rollout(fpb, actor, break_when_any_done=False)
-            frames += data.numel()
-            cur += data.numel()
-            if i % 20 == 0:
-                t = time.time()
-                logger.log_scalar("total", cur / (t-prev_t), step=frames)
-                logger.log_scalar('frames', frames)
-                prev_t = t
-                cur = 0
-            i += 1
+        with torch.no_grad():
+            while frames < total_frames:
+                data = env.rollout(fpb, actor, break_when_any_done=False)
+                # data = env._single_rollout(fpb, actor, break_when_any_done=False)
+                frames += data.numel()
+                cur += data.numel()
+                if i % 20 == 0:
+                    t = time.time()
+                    logger.log_scalar("total", cur / (t-prev_t), step=frames)
+                    logger.log_scalar('frames', frames)
+                    prev_t = t
+                    cur = 0
+                i += 1
         del env
 
     elif run == 'collector':
@@ -136,3 +142,5 @@ if __name__ == "__main__":
                 logger.log_scalar('frames', frames)
                 prev_t = t
                 cur = 0
+
+    timeit.print()

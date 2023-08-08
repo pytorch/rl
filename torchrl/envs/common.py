@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from tensordict.tensordict import TensorDictBase
 
-from torchrl._utils import prod, seed_generator
+from torchrl._utils import prod, seed_generator, timeit
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -819,6 +819,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             is the updated tensordict passed as input with the ``"next"`` key.
 
         """
+
         next_tensordict = self._step(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
 
@@ -1297,6 +1298,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         for i in range(max_steps):
             if auto_cast_to_device:
                 tensordict = tensordict.to(policy_device, non_blocking=True)
+
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
