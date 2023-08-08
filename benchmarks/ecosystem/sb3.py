@@ -112,6 +112,8 @@ if __name__ == "__main__":
         i = 0
         with torch.no_grad():
             while frames < total_frames:
+                if i == 1:
+                    timeit.erase()
                 data = env.rollout(fpb, actor, break_when_any_done=False)
                 # data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
