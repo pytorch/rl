@@ -7887,12 +7887,13 @@ class TestKLRewardTransform(TransformBase):
             {
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
-                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
                 "sample_log_prob": torch.randn(*batch),
             },
             batch,
         )
-        tensordict.set("next", t._step(tensordict, tensordict.get("next")))
+        next_td = TensorDict({t.in_keys[0]: torch.zeros(*batch, 1)}, batch)
+        next_td = t._step(tensordict, next_td)
+        tensordict.set("next", next_td)
         assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
 
     def test_transform_compose(self):

@@ -177,6 +177,12 @@ class KLRewardTransform(Transform):
         tensordict.set(("next", *self.out_keys[0]), reward + self.coef * kl)
         return tensordict
 
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        with tensordict.unlock_():
+            return self._call(tensordict.set("next", next_tensordict)).pop("next")
+
     forward = _call
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
