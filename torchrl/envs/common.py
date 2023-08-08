@@ -854,7 +854,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         """
         # sanity check
-        # self._assert_tensordict_shape(tensordict)
+        self._assert_tensordict_shape(tensordict)
 
         next_tensordict = self._step(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
@@ -1038,7 +1038,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if (
-            self.batch_locked or self.batch_size != torch.Size([])
+            self.batch_locked or self.batch_size != ()
         ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "

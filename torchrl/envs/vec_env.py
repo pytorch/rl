@@ -539,7 +539,6 @@ class SerialEnv(_BatchedEnv):
         self,
         tensordict: TensorDict,
     ) -> TensorDict:
-        self._assert_tensordict_shape(tensordict)
         tensordict_in = tensordict.clone(False)
         next_td = self.shared_tensordict_parent.get("next")
         for i in range(self.num_workers):
@@ -578,7 +577,6 @@ class SerialEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None and "_reset" in tensordict.keys():
-            self._assert_tensordict_shape(tensordict)
             _reset = tensordict.get("_reset")
             if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
                 raise RuntimeError(
@@ -1189,18 +1187,31 @@ def _run_worker_pipe_shared_mem(
                     )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
-            cur_td, next_td = env.step_and_maybe_reset(local_tensordict)
-            if pin_memory:
-                local_tensordict.pin_memory()
+            next_td = env._step(local_tensordict)
             msg = "step_result"
             next_shared_tensordict.update_(next_td)
-            # TODO: avoid this check which is already done in maybe_reset
+
             done = next_td.get(env.done_key)
             truncated = next_td.get(
-                "truncated", torch.zeros((), dtype=torch.bool, device=env.device)
-            )
-            if done | truncated:
-                shared_tensordict.update_(cur_td)
+                "truncated", None)
+            if truncated is not None:
+                done = done | truncated
+            if done.any():
+                # we'll need to call reset
+                cur_td = next_td.exclude(env.reward_key)
+                # copy missing keys -- could be made faster
+                for key in local_tensordict.keys(True, True):
+                    if key not in cur_td.keys(True, True):
+                        cur_td.set(key, local_tensordict.get(key))
+                if done.all():
+                    cur_td = env.reset(cur_td)
+                    shared_tensordict.update_(cur_td)
+                else:
+                    cur_td.set("_reset", done)
+                    cur_td = env.reset(cur_td)
+                    mask = done.view(shared_tensordict.shape)
+                    shared_tensordict[mask].update(cur_td[mask])
+
             if event is not None:
                 event.record()
                 event.synchronize()
