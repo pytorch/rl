@@ -7,6 +7,7 @@
 #
 import time
 import torch
+from stable_baselines.common.vec_env import SubprocVecEnv
 from torch import nn
 from torch.distributions import Categorical
 
@@ -48,7 +49,7 @@ if __name__ == "__main__":
     device = torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda")
 
     if run == 'sb3':
-        vec_env = make_vec_env(env_name, n_envs=n_envs)
+        vec_env = make_vec_env(env_name, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
         model = PPO("MlpPolicy", vec_env, verbose=0)
         print("policy", model.policy)
