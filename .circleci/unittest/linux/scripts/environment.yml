@@ -1,20 +1,15 @@
 channels:
   - pytorch
   - defaults
-  - conda-forge
 dependencies:
   - pip
   - protobuf
-  - dm-control
-  - cloudpickle
-  - pygame
-  - moviepy
-  - hypothesis
-  - future
-  - av
-  - wandb
-  - scipy
   - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pygame
+    - moviepy
     - tqdm
     - pytest
     - pytest-cov
@@ -23,9 +18,13 @@ dependencies:
     - pytest-rerunfailures
     - expecttest
     - pyyaml
+    - scipy
     - hydra-core
     - tensorboard
     - imageio==2.26.0
+    - wandb
+    - dm_control
     - mlflow
+    - av
     - coverage
     - ray
