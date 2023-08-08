@@ -825,7 +825,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
             done = done | truncated
-        cur_td = next_tensordict.exclude(self.reward_key)
+        cur_td = next_tensordict.clone(False).exclude(self.reward_key)
         # copy missing keys -- could be made faster
         for key in tensordict.keys(True, True):
             if key not in cur_td.keys(True, True):

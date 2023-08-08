@@ -785,9 +785,19 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames >= self.total_frames:
                     break
 
-    def _step_mdp(self, current_td, next_td) -> None:
-        self._tensordict, _ = self.env._step_mdp(current_td, next_td)
-
+    def _step_mdp(self, data) -> None:
+        next_data = data.get("next")
+        done = next_data.get(self.env.done_key)
+        truncated = next_data.get("truncated", None)
+        if truncated is not None:
+            done = truncated | done
+        done = done.reshape(next_data.shape)
+        traj_ids = self._tensordict.get(("collector", "traj_ids"))
+        traj_ids = traj_ids.clone()
+        traj_ids[done] = traj_ids.max() + torch.arange(
+            1, done.sum() + 1, device=traj_ids.device
+        )
+        self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -811,16 +821,12 @@ class SyncDataCollector(DataCollectorBase):
                     )
                 else:
                     self.policy(self._tensordict)
-                    current_td, data = self.env.step_and_maybe_reset(
-                        self._tensordict
-                    )
+                    current_td, data = self.env.step_and_maybe_reset(self._tensordict)
 
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(
-                    data.to(self.storing_device)
-                )
+                tensordicts.append(data.to(self.storing_device))
                 self._tensordict = current_td
-                # self._step_mdp(current_td, next_td)
+                self._step_mdp(data)
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
@@ -853,6 +859,7 @@ class SyncDataCollector(DataCollectorBase):
                             self._tensordict_out.ndim - 1,
                             out=self._tensordict_out,
                         )
+        print(self._tensordict_out[("collector", "traj_ids")])
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:

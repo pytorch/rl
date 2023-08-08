@@ -1192,8 +1192,7 @@ def _run_worker_pipe_shared_mem(
             next_shared_tensordict.update_(next_td)
 
             done = next_td.get(env.done_key)
-            truncated = next_td.get(
-                "truncated", None)
+            truncated = next_td.get("truncated", None)
             if truncated is not None:
                 done = done | truncated
             if done.any():
