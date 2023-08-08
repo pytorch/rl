@@ -3583,8 +3583,7 @@ class StepCounter(Transform):
         )
         if step_count is None:
             step_count = torch.zeros_like(done, dtype=torch.int64)
-
-        step_count[_reset] = 0
+        step_count = torch.where(~_reset, step_count, 0)
         tensordict.set(
             self.step_count_key,
             step_count,

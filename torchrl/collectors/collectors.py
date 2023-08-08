@@ -792,12 +792,13 @@ class SyncDataCollector(DataCollectorBase):
         if truncated is not None:
             done = truncated | done
         done = done.reshape(next_data.shape)
-        traj_ids = self._tensordict.get(("collector", "traj_ids"))
-        traj_ids = traj_ids.clone()
-        traj_ids[done] = traj_ids.max() + torch.arange(
-            1, done.sum() + 1, device=traj_ids.device
-        )
-        self._tensordict.set(("collector", "traj_ids"), traj_ids)
+        if done.any():
+            traj_ids = self._tensordict.get(("collector", "traj_ids"))
+            traj_ids = traj_ids.clone()
+            traj_ids[done] = traj_ids.max() + torch.arange(
+                1, done.sum() + 1, device=traj_ids.device
+            )
+            self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -859,7 +860,6 @@ class SyncDataCollector(DataCollectorBase):
                             self._tensordict_out.ndim - 1,
                             out=self._tensordict_out,
                         )
-        print(self._tensordict_out[("collector", "traj_ids")])
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
