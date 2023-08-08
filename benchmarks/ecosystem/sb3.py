@@ -7,7 +7,7 @@
 #
 import time
 import torch
-from stable_baselines.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv
 from torch import nn
 from torch.distributions import Categorical
 
