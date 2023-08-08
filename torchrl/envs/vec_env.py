@@ -1208,7 +1208,6 @@ def _run_worker_pipe_shared_mem(
                     cur_td.set("_reset", done)
                     cur_td = env.reset(cur_td)
                     del cur_td["_reset"]
-                    mask = done.view(shared_tensordict.shape)
                     shared_tensordict.update_(cur_td)
 
             if event is not None:
