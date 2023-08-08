@@ -186,12 +186,15 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get(self.action_key)
-        action_np = self.read_action(action)
+        with timeit("_step.1 get(action)"):
+            action = tensordict.get(self.action_key)
+        with timeit("_step.2 read(action)"):
+            action_np = self.read_action(action)
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, done, *info = self._output_transform(
+            with timeit("_step.3 step(action_np)"):
+                obs, _reward, done, *info = self._output_transform(
                     self._env.step(action_np)
                 )
             if isinstance(obs, list) and len(obs) == 1:
@@ -215,25 +218,29 @@ class GymLikeEnv(_EnvWrapper):
             if _reward is None:
                 _reward = self.reward_spec.zero()
 
-            reward = self.read_reward(reward, _reward)
+            with timeit("_step.4 reward"):
+                reward = self.read_reward(reward, _reward)
 
-            if isinstance(done, bool) or (
-                isinstance(done, np.ndarray) and not len(done)
-            ):
-                done = torch.tensor([done])
 
-            done, do_break = self.read_done(done)
+            with timeit("_step.5 done"):
+                if isinstance(done, bool) or (
+                    isinstance(done, np.ndarray) and not len(done)
+                ):
+                    done = torch.tensor([done])
+                done, do_break = self.read_done(done)
             if do_break:
                 break
 
-        obs_dict = self.read_obs(obs)
+        with timeit("_step.6 read_obs"):
+            obs_dict = self.read_obs(obs)
 
-        if reward is None:
-            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
-        obs_dict[self.reward_key] = reward
-        obs_dict[self.done_key] = done
+        with timeit("_step.7 packaging"):
+            if reward is None:
+                reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+            obs_dict[self.reward_key] = reward
+            obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(
+            tensordict_out = TensorDict(
                 obs_dict, batch_size=tensordict.batch_size, device=self.device
             )
 

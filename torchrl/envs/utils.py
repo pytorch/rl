@@ -551,12 +551,14 @@ def make_composite_from_td(data):
     )
     return composite
 
-def _fuse_tensordicts(*tds):
+def _fuse_tensordicts(*tds, excluded=None):
     """Fuses tensordicts with rank-wise priority.
 
     The first tensordicts of the list will have a higher priority than those
     coming after, in such a way that if a key is present in both the first and
     second tensordict, the first value is guaranteed to result in the output.
+
+    excluded should be a list of strings, tuples are currently not supported.
 
     Examples:
         >>> td1 = TensorDict({
@@ -581,7 +583,9 @@ def _fuse_tensordicts(*tds):
 
     """
     out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
-    keys = set()
+    if excluded is None:
+        excluded = []
+    keys = set(excluded)
     for i, td in enumerate(tds):
         if td is None:
             continue
