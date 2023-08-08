@@ -127,7 +127,7 @@ class OpenMLEnv(EnvBase):
             self.batch_size,
             device=self.device,
         )
-        return td.select().set("next", td)
+        return td
 
     def _set_seed(self, seed):
         self.rng = torch.random.manual_seed(seed)

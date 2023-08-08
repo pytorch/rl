@@ -419,9 +419,6 @@ class SyncDataCollector(DataCollectorBase):
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
             Default is ``False``.
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -542,6 +539,8 @@ class SyncDataCollector(DataCollectorBase):
         self.storing_device = torch.device(storing_device)
         self.env: EnvBase = env
         self.closed = False
+        if not reset_when_done:
+            raise ValueError("reset_when_done is deprectated.")
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
@@ -687,10 +686,6 @@ class SyncDataCollector(DataCollectorBase):
 
         if split_trajs is None:
             split_trajs = False
-        elif not self.reset_when_done and split_trajs:
-            raise RuntimeError(
-                "Cannot split trajectories when reset_when_done is False."
-            )
         self.split_trajs = split_trajs
         self._exclude_private_keys = True
         self.interruptor = interruptor
@@ -790,53 +785,18 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames >= self.total_frames:
                     break
 
-    def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", self.env.done_key))
-        truncated = self._tensordict.get(("next", "truncated"), None)
-
-        self._tensordict = step_mdp(
-            self._tensordict,
-            reward_key=self.env.reward_key,
-            done_key=self.env.done_key,
-            action_key=self.env.action_key,
-        )
-
-        if not self.reset_when_done:
-            return
-
-        done_or_terminated = (
-            (done | truncated) if truncated is not None else done.clone()
-        )
-        if done_or_terminated.any():
+    def _step_mdp(self, data) -> None:
+        next_data = data.get("next")
+        done = next_data.get(self.env.done_key)
+        truncated = next_data.get("truncated", None)
+        if truncated is not None:
+            done = truncated | done
+        done = done.reshape(next_data.shape)
+        if done.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            # collectors do not support passing other tensors than `"_reset"`
-            # to `reset()`.
-            _reset = done_or_terminated
-            td_reset = self._tensordict.select().set("_reset", _reset)
-            td_reset = self.env.reset(td_reset)
-            td_reset.del_("_reset")
-            traj_done_or_terminated = done_or_terminated.sum(
-                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
-                dtype=torch.bool,
-            )
-            if td_reset.batch_dims:
-                # better cloning here than when passing the td for stacking
-                # cloning is necessary to avoid modifying dones in-place
-                self._tensordict = self._tensordict.clone()
-                self._tensordict[traj_done_or_terminated] = td_reset[
-                    traj_done_or_terminated
-                ]
-            else:
-                self._tensordict.update(td_reset)
-
-            done = self._tensordict.get(self.env.done_key)
-            if done.any():
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
-            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
-                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
+            traj_ids[done] = traj_ids.max() + torch.arange(
+                1, done.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
@@ -857,14 +817,17 @@ class SyncDataCollector(DataCollectorBase):
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    self.env.rand_step(self._tensordict)
+                    current_td, data = self.env.rand_step_and_maybe_reset(
+                        self._tensordict
+                    )
                 else:
                     self.policy(self._tensordict)
-                    self.env.step(self._tensordict)
-                # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(self._tensordict.to(self.storing_device))
+                    current_td, data = self.env.step_and_maybe_reset(self._tensordict)
 
-                self._step_and_maybe_reset()
+                # we must clone all the values, since the step / traj_id updates are done in-place
+                tensordicts.append(data.to(self.storing_device))
+                self._tensordict = current_td
+                self._step_mdp(data)
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
@@ -902,7 +865,7 @@ class SyncDataCollector(DataCollectorBase):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
-        md = self._tensordict["collector"].clone()
+        md = self._tensordict.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -914,7 +877,7 @@ class SyncDataCollector(DataCollectorBase):
             )
             _reset[index] = 1
             self._tensordict[index].zero_()
-            self._tensordict["_reset"] = _reset
+            self._tensordict.set("_reset", _reset)
         else:
             _reset = None
             self._tensordict.zero_()

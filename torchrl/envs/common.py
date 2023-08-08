@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -23,7 +23,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import get_available_libraries, step_mdp
+from torchrl.envs.utils import get_available_libraries, step_mdp, \
+    _fuse_tensordicts
 
 LIBRARIES = get_available_libraries()
 
@@ -801,6 +802,42 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
+    def step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[TensorDictBase, TensorDictBase]:
+        """Runs a step in tne environment and possibly resets it.
+
+        This method returns the current tensordict updated with the `"next"`
+        value (as with ``step``) alongside the root tensordict of the next
+        step (ie, the result of ``step_mdp``).
+
+        This method will run :meth:`~.reset` on whichever sub-envs that needs
+        to be reset.
+
+        Returns: A ``cur_tensordict`` that will be used at the next step as the
+            root. It may contain data from a partial ``reset``. The second output
+            is the updated tensordict passed as input with the ``"next"`` key.
+
+        """
+        next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
+
+        done = next_tensordict.get(self.done_key)
+        truncated = next_tensordict.get("truncated", None)
+        if truncated is not None:
+            done = done | truncated
+
+        cur_td = _fuse_tensordicts(next_tensordict, tensordict)
+        del cur_td[self.reward_key]
+
+        if done.any():
+            if done.numel() > 1:
+                _reset = done
+                cur_td.set("_reset", _reset)
+            cur_td = self.reset(cur_td)
+        tensordict.set("next", next_tensordict)
+        return cur_td, tensordict
+
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -819,23 +856,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict_out = self._step(tensordict)
-        # this tensordict should contain a "next" key
-        try:
-            next_tensordict_out = tensordict_out.get("next")
-        except KeyError:
-            raise RuntimeError(
-                "The value returned by env._step must be a tensordict where the "
-                "values at t+1 have been written under a 'next' entry. This "
-                f"tensordict couldn't be found in the output, got: {tensordict_out}."
-            )
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
+        next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
+        # tensordict could already have a "next" key
+        tensordict.set("next", next_tensordict)
+        return tensordict
 
+    def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
         # unsqueeze rewards if needed
@@ -864,11 +891,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if actual_done_shape != expected_done_shape:
             done = done.view(expected_done_shape)
             next_tensordict_out.set(self.done_key, done)
-        tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
-            for key in self._select_observation_keys(tensordict_out):
-                obs = tensordict_out.get(key)
+            # TODO: check these errors
+            for key in self._select_observation_keys(next_tensordict_out):
+                obs = next_tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
             if (
@@ -877,17 +904,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             ):
                 raise TypeError(
                     f"expected reward.dtype to be {self.reward_spec.dtype} "
-                    f"but got {tensordict_out.get(self.reward_key).dtype}"
+                    f"but got {next_tensordict_out.get(self.reward_key).dtype}"
                 )
 
             if next_tensordict_out.get(self.done_key).dtype is not self.done_spec.dtype:
                 raise TypeError(
-                    f"expected done.dtype to be torch.bool but got {tensordict_out.get(self.done_key).dtype}"
+                    f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(self.done_key).dtype}"
                 )
-        # tensordict could already have a "next" key
-        tensordict.update(tensordict_out)
-
-        return tensordict
+        return next_tensordict_out
 
     def _get_in_keys_to_exclude(self, tensordict):
         if self._cache_in_keys is None:
@@ -1014,7 +1038,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if (
-            self.batch_locked or self.batch_size != torch.Size([])
+            self.batch_locked or self.batch_size != ()
         ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
@@ -1064,6 +1088,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
+    def rand_step_and_maybe_reset(
+        self, tensordict: Optional[TensorDictBase] = None
+    ) -> TensorDictBase:
+        tensordict = self.rand_action(tensordict)
+        return self.step_and_maybe_reset(tensordict)
+
     @property
     def specs(self) -> CompositeSpec:
         """Returns a Composite container where all the environment are present.
@@ -1088,7 +1118,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
-    ) -> TensorDictBase:
+    ):
         """Executes a rollout in the environment.
 
         The function will stop as soon as one of the contained environments
@@ -1207,6 +1237,97 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
+
+        if not break_when_any_done:
+            # rollout will use step_and_maybe_reset
+            return self._split_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict,
+            )
+        else:
+            # rollout will use step
+            return self._single_rollout(
+                max_steps=max_steps,
+                policy=policy,
+                callback=callback,
+                auto_reset=auto_reset,
+                auto_cast_to_device=auto_cast_to_device,
+                break_when_any_done=break_when_any_done,
+                return_contiguous=return_contiguous,
+                tensordict=tensordict,
+            )
+
+    def _split_rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ):
+        try:
+            policy_device = next(policy.parameters()).device
+        except (StopIteration, AttributeError):
+            policy_device = self.device
+
+        env_device = self.device
+
+        if auto_reset:
+            if tensordict is not None:
+                raise RuntimeError(
+                    "tensordict cannot be provided when auto_reset is True"
+                )
+            tensordict = self.reset()
+        elif tensordict is None:
+            raise RuntimeError("tensordict must be provided when auto_reset is False")
+        if policy is None:
+
+            def policy(td):
+                self.rand_action(td)
+                return td
+
+        tensordicts = []
+        for i in range(max_steps):
+            if auto_cast_to_device:
+                tensordict = tensordict.to(policy_device, non_blocking=True)
+            tensordict = policy(tensordict)
+            if auto_cast_to_device:
+                tensordict = tensordict.to(env_device, non_blocking=True)
+            cur_td, tensordict = self.step_and_maybe_reset(tensordict)
+
+            tensordicts.append(tensordict)
+            tensordict = cur_td
+            if i == max_steps - 1:
+                break
+            if callback is not None:
+                callback(self, tensordict)
+
+        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
+
+        data = torch.stack(tensordicts, len(batch_size))
+        if return_contiguous:
+            data = data.contiguous()
+        data.refine_names(..., "time")
+        return data
+
+    def _single_rollout(
+        self,
+        max_steps: int,
+        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
+        auto_reset: bool = True,
+        auto_cast_to_device: bool = False,
+        break_when_any_done: bool = True,  # kept for testing
+        return_contiguous: bool = True,
+        tensordict: Optional[TensorDictBase] = None,
+    ) -> TensorDictBase:
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):

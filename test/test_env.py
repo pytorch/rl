@@ -5,6 +5,7 @@
 
 import argparse
 import os.path
+import re
 from collections import defaultdict
 from functools import partial
 
@@ -319,7 +320,9 @@ class TestModelBasedEnvBase:
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
-        with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
+        with pytest.raises(
+            RuntimeError, match=re.escape("Expected a tensordict with shape==env.shape")
+        ):
             mb_env.step(td_expanded)
 
         mb_env = DummyModelBasedEnvBase(
@@ -1573,9 +1576,7 @@ def test_batch_unlocked_with_batch_size(device):
     td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
     td = env.step(td)
 
-    with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
-    ):
+    with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
         env.step(td_expanded)
 
 
