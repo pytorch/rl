@@ -638,14 +638,6 @@ but got an object of type {type(transform)}."""
         next_tensordict = self.transform._step(tensordict, next_tensordict)
         return next_tensordict
 
-    def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict = tensordict.clone(False)
-        tensordict_in = self.transform.inv(tensordict)
-        tensordict, next_tensordict = self.base_env._step_and_maybe_reset(tensordict_in)
-        # we want the input entries to remain unchanged
-        next_tensordict = self.transform._step(tensordict, next_tensordict)
-        return tensordict, next_tensordict
-
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
     ) -> Optional[int]:

@@ -807,12 +807,38 @@ class ParallelEnv(_BatchedEnv):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase, auto_reset=None
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        # sanity check
-        # self._assert_tensordict_shape(tensordict)
-
-        tensordict, next_tensordict = self._step_and_maybe_reset(tensordict)
+        # get the current data and next data
+        next_tensordict = self._step_and_maybe_reset(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
-        return tensordict, next_tensordict
+
+        done = next_tensordict.get(self.done_key)
+        truncated = next_tensordict.get("truncated", None)
+        if truncated is not None:
+            done = done | truncated
+        if done.all():
+            # if all are done, then the next td to be used is simply the root td
+            cur_td = self.shared_tensordict_parent.exclude("next", "_reset")
+        elif done.any():
+            # if not all are done, we need to update the next_td with those
+            # spawn envs which have been reset
+            reset_td = self.shared_tensordict_parent.exclude("next", "_reset")
+            cur_td = next_tensordict.exclude(self.reward_key)
+            cur_td = torch.where(
+                ~done.view(tensordict.shape),
+                cur_td,
+                reset_td,
+            )
+        else:
+            # if none is done, then the next td to use is simply the one
+            # we got from the procs, filtered.
+            cur_td = next_tensordict.exclude(self.reward_key)
+
+        # copy missing keys -- could be made faster
+        for key in tensordict.keys(True, True):
+            if key not in cur_td.keys(True, True):
+                cur_td.set(key, tensordict.get(key))
+        tensordict.set("next", next_tensordict)
+        return cur_td, tensordict
 
     @_check_start
     def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -860,17 +886,7 @@ class ParallelEnv(_BatchedEnv):
                 *self._selected_step_keys, strict=False
             ).clone()
 
-        done = next_tensordict.get(self.done_key)
-        truncated = next_tensordict.get("truncated", None)
-        if truncated is not None:
-            done = done | truncated
-        if done.any():
-            tensordict = torch.where(
-                ~done.view(tensordict.shape),
-                tensordict,
-                self.shared_tensordict_parent.exclude("next", "_reset"),
-            )
-        return tensordict, next_tensordict
+        return next_tensordict
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:

@@ -802,28 +802,41 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.lock_()
 
     def step_and_maybe_reset(
-        self, tensordict: TensorDictBase, auto_reset=None
+        self, tensordict: TensorDictBase
     ) -> Tuple[TensorDictBase, TensorDictBase]:
-        # sanity check
-        # self._assert_tensordict_shape(tensordict)
+        """Runs a step in tne environment and possibly resets it.
 
-        tensordict, next_tensordict = self._step_and_maybe_reset(tensordict)
+        This method returns the current tensordict updated with the `"next"`
+        value (as with ``step``) alongside the root tensordict of the next
+        step (ie, the result of ``step_mdp``).
+
+        This method will run :meth:`~.reset` on whichever sub-envs that needs
+        to be reset.
+
+        Returns: A ``cur_tensordict`` that will be used at the next step as the
+            root. It may contain data from a partial ``reset``. The second output
+            is the updated tensordict passed as input with the ``"next"`` key.
+
+        """
+        next_tensordict = self._step(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
 
         done = next_tensordict.get(self.done_key)
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
             done = done | truncated
+        cur_td = next_tensordict.exclude(self.reward_key)
+        # copy missing keys -- could be made faster
+        for key in tensordict.keys(True, True):
+            if key not in cur_td.keys(True, True):
+                cur_td.set(key, tensordict.get(key))
         if done.any():
-            reset_td = next_tensordict.exclude(self.reward_key)
             if done.numel() > 1:
                 _reset = done
-                reset_td.set("_reset", _reset)
-            tensordict = self.reset(reset_td)
-        return tensordict, next_tensordict
-
-    def _step_and_maybe_reset(self, tensordict):
-        return tensordict, self._step(tensordict)
+                cur_td.set("_reset", _reset)
+            cur_td = self.reset(cur_td)
+        tensordict.set("next", next_tensordict)
+        return cur_td, tensordict
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -1095,24 +1108,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             shape=self.batch_size,
         ).lock_()
 
-    def _step_mdp(self, cur_data, next_data):
-        done = next_data.get(self.done_key)
-        truncated = next_data.get(
-            "truncated",
-            default=torch.zeros((), device=done.device, dtype=torch.bool),
-        )
-        done = done | truncated
-        cur_data = cur_data.exclude(self.action_key)
-        if done.all():
-            return cur_data, done
-        data = next_data.exclude(self.reward_key)
-        # we must copy the entries from cur_data that are missing in next
-        for key in cur_data.keys(True, True):
-            if key not in data.keys(True, True):
-                data.set(key, cur_data.get(key))
-        if done.any():
-            data = torch.where(done.reshape(self.batch_size), cur_data, data)
-        return data, done
+    # def _step_mdp(self, cur_data, next_data):
+    #     done = next_data.get(self.done_key)
+    #     truncated = next_data.get(
+    #         "truncated",
+    #         default=torch.zeros((), device=done.device, dtype=torch.bool),
+    #     )
+    #     done = done | truncated
+    #     cur_data = cur_data.exclude(self.action_key)
+    #     if done.all():
+    #         return cur_data, done
+    #     data = next_data.exclude(self.reward_key)
+    #     # we must copy the entries from cur_data that are missing in next
+    #     for key in cur_data.keys(True, True):
+    #         if key not in data.keys(True, True):
+    #             data.set(key, cur_data.get(key))
+    #     if done.any():
+    #         data = torch.where(done.reshape(self.batch_size), cur_data, data)
+    #     return data, done
 
     def rollout(
         self,
@@ -1189,21 +1202,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
-            tensordict, next_tensordict = self.step_and_maybe_reset(tensordict)
+            cur_td, tensordict = self.step_and_maybe_reset(tensordict)
 
-            tensordicts.append((tensordict, next_tensordict))
-            tensordict, done = self._step_mdp(tensordict, next_tensordict)
-            if (break_when_any_done and done.any()) or i == max_steps - 1:
+            tensordicts.append(tensordict)
+            tensordict = cur_td
+            if i == max_steps - 1:
                 break
             if callback is not None:
                 callback(self, tensordict)
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
-        data, next_data = [
-            torch.stack(_data, len(batch_size)) for _data in zip(*tensordicts)
-        ]
-        data.set("next", next_data)
+        data = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             data = data.contiguous()
         data.refine_names(..., "time")
