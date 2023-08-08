@@ -245,7 +245,8 @@ class GymLikeEnv(_EnvWrapper):
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
         if self.device != torch.device("cpu"):
-            return tensordict_out.to(self.device, non_blocking=True)
+            with timeit("_step.8 to device"):
+                tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
