@@ -690,6 +690,7 @@ class ParallelEnv(_BatchedEnv):
 
         self.parent_channels = []
         self._workers = []
+        self._events = []
         if self.device.type == "cuda":
             self.event = torch.cuda.Event()
         else:
@@ -699,6 +700,8 @@ class ParallelEnv(_BatchedEnv):
                 print(f"initiating worker {idx}")
             # No certainty which module multiprocessing_context is
             channel1, channel2 = ctx.Pipe()
+            event = ctx.Event()
+            self._events.append(event)
             env_fun = self.create_env_fn[idx]
             if env_fun.__class__.__name__ != "EnvCreator":
                 env_fun = CloudpickleWrapper(env_fun)
@@ -715,6 +718,7 @@ class ParallelEnv(_BatchedEnv):
                     self.env_input_keys,
                     self.device,
                     self.allow_step_when_done,
+                    event,
                 ),
             )
             w.daemon = True
@@ -866,14 +870,9 @@ class ParallelEnv(_BatchedEnv):
             completed = set()
             while len(completed) < self.num_workers:
                 for i, channel in enumerate(self.parent_channels):
-                    if i in completed or not channel.poll():
-                        continue
-                    msg = self.parent_channels[i].recv()
-                    if msg != "step_result":
-                        raise RuntimeError(
-                            f"Expected 'step_result' but received {msg} from worker {i}"
-                        )
-                    completed.add(i)
+                    if self._events[i].is_set():
+                        completed.add(i)
+                        self._events[i].clear()
             # alternative:
             # for i, channel in enumerate(self.parent_channels):
             #     msg = self.parent_channels[i].recv()
@@ -1078,6 +1077,7 @@ def _run_worker_pipe_shared_mem(
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
+    mp_envent: mp.Event=None,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1208,10 +1208,10 @@ def _run_worker_pipe_shared_mem(
                     del cur_td["_reset"]
                     shared_tensordict.update_(cur_td)
 
-            # if event is not None:
-            #     event.record()
-            #     event.synchronize()
-            child_pipe.send(msg)
+            if event is not None:
+                event.record()
+                event.synchronize()
+            mp_envent.set()
 
         elif cmd == "close":
             del shared_tensordict, local_tensordict, data
