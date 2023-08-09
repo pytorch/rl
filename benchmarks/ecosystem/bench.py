@@ -100,7 +100,6 @@ if __name__ == "__main__":
         import warnings
 
         import gym
-        import numpy as np
 
         from tianshou.data import Batch, ReplayBuffer, to_torch, to_torch_as
         from tianshou.env import SubprocVectorEnv
