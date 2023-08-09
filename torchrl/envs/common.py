@@ -650,7 +650,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         out = self._done_key
         if out is None:
-            self.done_spec  # lazy init
+            self.done_spec  # noqa
             out = self._get_done_key()
         return out
 
