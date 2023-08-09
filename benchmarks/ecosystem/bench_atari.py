@@ -223,7 +223,6 @@ if __name__ == "__main__":
         from torchrl.envs import (
             CatFrames,
             Compose,
-            DoubleToFloat,
             EnvCreator,
             GrayScale,
             ParallelEnv,
