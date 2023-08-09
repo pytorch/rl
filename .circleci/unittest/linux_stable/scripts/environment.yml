@@ -29,4 +29,3 @@ dependencies:
     - av
     - coverage
     - ray
-  - python=3.9

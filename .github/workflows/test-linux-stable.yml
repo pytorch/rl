@@ -25,13 +25,14 @@ jobs:
         export CU_VERSION="cu116"
         export TAR_OPTIONS="--no-same-owner"
         export UPLOAD_CHANNEL="nightly"
-        export docker_image="pytorch/manylinux-cuda116"
 
-        nvidia-smi
-
-        docker run -e PYTHON_VERSION -e UPLOAD_CHANNEL -e CU_VERSION -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda116 .circleci/unittest/linux_stable/scripts/run_all.sh
-
-        # docker run -e PYTHON_VERSION -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda116 .circleci/unittest/linux_stable/scripts/setup_env.sh
-        # docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION pytorch/manylinux-cuda116 .circleci/unittest/linux_stable/scripts/install.sh
-        # bash .circleci/unittest/linux_stable/scripts/run_test.sh
-        # docker run -t --gpus all -v $PWD:$PWD -w $PWD pytorch/manylinux-cuda116 .circleci/unittest/linux_stable/scripts/post_process.sh
+        docker run \
+            -e PYTHON_VERSION \
+            -e UPLOAD_CHANNEL \
+            -e CU_VERSION \
+            -t \
+            --gpus all \
+            -v $PWD:$PWD \
+            -w $PWD \
+            pytorch/manylinux-cuda116 \
+            .circleci/unittest/linux_stable/scripts/run_all.sh

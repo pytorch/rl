@@ -55,14 +55,7 @@ printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
 
-
-# if [[ $OSTYPE == 'darwin'* ]]; then
-#   PRIVATE_MUJOCO_GL=glfw
-# elif [ "${CU_VERSION:-}" == cpu ]; then
-#   PRIVATE_MUJOCO_GL=osmesa
-# else
 PRIVATE_MUJOCO_GL=osmesa
-# fi
 
 export MUJOCO_GL=$PRIVATE_MUJOCO_GL
 echo "MUJOCO_GL"
@@ -77,8 +70,6 @@ conda env config vars set MUJOCO_PY_MUJOCO_PATH=$root_dir/.mujoco/mujoco210 \
 
 # Software rendering requires GLX and OSMesa.
 if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
-  # yum makecache
-  # yum install -y glfw
   yum install -y glew
   yum install -y glfw-devel
   yum install -y mesa-libGL
@@ -88,15 +79,11 @@ if [ $PRIVATE_MUJOCO_GL == 'egl' ] || [ $PRIVATE_MUJOCO_GL == 'osmesa' ] ; then
   yum -y install freeglut
 fi
 
-# rpm -ql glfw
-
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
 if [[ $OSTYPE != 'darwin'* ]]; then
-  # install ale-py: manylinux names are broken for CentOS so we need to manually download and
-  # rename them
   PY_VERSION=$(python --version)
   echo "installing ale-py for ${PY_VERSION}"
   pip install ale-py
@@ -165,13 +152,7 @@ lib_dir="${env_dir}/lib"
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
-# export PYGLFW_LIBRARY="/usr/lib64/libglfw.so.3"
 
-# echo "TESTING GYM REGKEYS"
-# echo "MUJOCO_GL"
-# echo $MUJOCO_GL
-# # python -c "import glfw"
-# python -c "from ale_py import ALEInterface"
 python -c "import ale_py; import shimmy; import gymnasium; print(gymnasium.envs.registration.registry.keys())"
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
