@@ -90,7 +90,7 @@ if __name__ == "__main__":
         from tianshou_atari_wrapper import DQN, DQNPolicy, make_atari_env
 
         warnings.filterwarnings("ignore")
-        net = DQN(12, 84, 84, out_features, device).to(args.device)
+        net = DQN(3, 84, 84, out_features, device).to(args.device)
         optim = torch.optim.Adam(net.parameters(), lr=1e-4)
         # define policy
         policy = DQNPolicy(
@@ -255,7 +255,10 @@ if __name__ == "__main__":
 
         def make_env():
             return GymEnv(
-                env_name, frame_skip=4, categorical_action_encoding=True, device=device,
+                env_name,
+                frame_skip=4,
+                categorical_action_encoding=True,
+                device=device,
             )
 
         env = TransformedEnv(
@@ -280,7 +283,9 @@ if __name__ == "__main__":
                 if i == 1:
                     timeit.erase()
                 data = env.rollout(
-                    fpb, actor, break_when_any_done=False,
+                    fpb,
+                    actor,
+                    break_when_any_done=False,
                 )
                 # data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
