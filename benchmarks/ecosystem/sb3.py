@@ -44,7 +44,7 @@ env_maps = {
     "Pendulum-v1": {
         "in_features": 3,
         "out_features": 2,
-        "distributioin": TanhNormal,
+        "distribution": TanhNormal,
         "key": ["loc", "scale"],
     }
 }
