@@ -22,8 +22,10 @@ parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
+parser.add_argument("--preemptive_threshold", default=0.7, type=float)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--device", default="auto")
+parser.add_argument("--fpb", "--frames-per-batch", "--frames_per_batch", default=200, type=int)
 parser.add_argument(
     "--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv"
 )
@@ -53,7 +55,7 @@ if __name__ == "__main__":
     dist_class = env_maps[env_name]["distribution"]
     dist_key = env_maps[env_name]["key"]
     log_sep = args.log_sep
-    fpb = log_sep * n_envs
+    fpb = args.fpb
     total_frames = args.total_frames
     run = args.run
     if args.device == "auto":
@@ -342,6 +344,8 @@ if __name__ == "__main__":
         actor = ProbabilisticActor(
             module, in_keys=dist_key, distribution_class=dist_class
         )
+        # round up fpb
+        fpb = -(fpb // -n_envs) * n_envs
         collector = MultiaSyncDataCollector(
             n_envs
             * [
@@ -356,6 +360,135 @@ if __name__ == "__main__":
             frames_per_batch=fpb,
             storing_device=device,
             device=device,
+        )
+
+        logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
+
+        prev_t = time.time()
+        frames = 0
+        cur = 0
+        for i, data in enumerate(collector):
+            frames += data.numel()
+            cur += data.numel()
+            if i % 20 == 0:
+                t = time.time()
+                fps = cur / (t - prev_t)
+                logger.log_scalar("total", fps, step=frames)
+                logger.log_scalar("frames", frames)
+                prev_t = t
+                cur = 0
+
+        if args.logger == "wandb":
+            logger.experiment.finish()
+        collector.shutdown()
+        del collector, actor, logger, module, backbone
+
+    elif run == "collector":
+        from torchrl.collectors import MultiaSyncDataCollector
+        from torchrl.envs import EnvCreator
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
+        # reproduce the actor
+        backbone = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            depth=2,
+            num_cells=64,
+            activation_class=nn.Tanh,
+            device=device,
+        )
+        if dist_class is TanhNormal:
+            backbone = nn.Sequential(backbone, NormalParamExtractor())
+        module = TensorDictModule(
+            backbone,
+            in_keys=["observation"],
+            out_keys=dist_key,
+        )
+        actor = ProbabilisticActor(
+            module, in_keys=dist_key, distribution_class=dist_class
+        )
+        # round up fpb
+        fpb = -(fpb // -n_envs) * n_envs
+        collector = MultiaSyncDataCollector(
+            n_envs
+            * [
+                lambda: GymEnv(
+                    env_name,
+                    categorical_action_encoding=True,
+                    device=device,
+                )
+            ],
+            actor,
+            total_frames=total_frames,
+            frames_per_batch=fpb,
+            storing_device=device,
+            device=device,
+        )
+
+        logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
+
+        prev_t = time.time()
+        frames = 0
+        cur = 0
+        for i, data in enumerate(collector):
+            frames += data.numel()
+            cur += data.numel()
+            if i % 20 == 0:
+                t = time.time()
+                fps = cur / (t - prev_t)
+                logger.log_scalar("total", fps, step=frames)
+                logger.log_scalar("frames", frames)
+                prev_t = t
+                cur = 0
+
+        if args.logger == "wandb":
+            logger.experiment.finish()
+        collector.shutdown()
+        del collector, actor, logger, module, backbone
+
+    elif run == "collector_preempt":
+        from torchrl.collectors import MultiSyncDataCollector
+        from torchrl.envs import EnvCreator
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
+        # reproduce the actor
+        backbone = MLP(
+            in_features=in_features,
+            out_features=out_features,
+            depth=2,
+            num_cells=64,
+            activation_class=nn.Tanh,
+            device=device,
+        )
+        if dist_class is TanhNormal:
+            backbone = nn.Sequential(backbone, NormalParamExtractor())
+        module = TensorDictModule(
+            backbone,
+            in_keys=["observation"],
+            out_keys=dist_key,
+        )
+        actor = ProbabilisticActor(
+            module, in_keys=dist_key, distribution_class=dist_class
+        )
+        # round up fpb
+        fpb = -(fpb // -n_envs) * n_envs
+        collector = MultiSyncDataCollector(
+            n_envs
+            * [
+                lambda: GymEnv(
+                    env_name,
+                    categorical_action_encoding=True,
+                    device=device,
+                )
+            ],
+            actor,
+            total_frames=total_frames,
+            frames_per_batch=fpb,
+            storing_device=device,
+            device=device,
+            preemptive_threshold=args.preemptive_threshold,
         )
 
         logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
