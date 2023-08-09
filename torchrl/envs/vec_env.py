@@ -1121,14 +1121,13 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            local_tensordict = data
-            local_tensordict = env._reset(tensordict=local_tensordict)
+            cur_td = env._reset(tensordict=data)
 
-            if "_reset" in local_tensordict.keys():
-                local_tensordict.del_("_reset")
+            if "_reset" in cur_td.keys():
+                cur_td.del_("_reset")
             if pin_memory:
-                local_tensordict.pin_memory()
-            shared_tensordict.update_(local_tensordict)
+                cur_td.pin_memory()
+            shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()
                 event.synchronize()
