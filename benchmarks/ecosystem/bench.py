@@ -101,8 +101,10 @@ if __name__ == "__main__":
                     "model step fps", cur_frames / model_time, step=frames
                 )
                 logger.log_scalar("env step", cur_frames / env_time, step=frames)
+
+                fps = cur_frames / (env_time + model_time)
                 logger.log_scalar(
-                    "total", cur_frames / (env_time + model_time), step=frames
+                    "total", fps, step=frames
                 )
                 logger.log_scalar("frames", frames)
                 env_time = 0
@@ -159,7 +161,8 @@ if __name__ == "__main__":
                 cur += data.numel()
                 if i % 20 == 0:
                     t = time.time()
-                    logger.log_scalar("total", cur / (t - prev_t), step=frames)
+                    fps = cur / (t - prev_t)
+                    logger.log_scalar("total", fps, step=frames)
                     logger.log_scalar("frames", frames)
                     prev_t = t
                     cur = 0
@@ -212,9 +215,11 @@ if __name__ == "__main__":
             cur += data.numel()
             if i % 20 == 0:
                 t = time.time()
-                logger.log_scalar("total", cur / (t - prev_t), step=frames)
+                fps = cur / (t - prev_t)
+                logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 prev_t = t
                 cur = 0
 
+    print("\n\n", "=" * 20, "\n" + "fps:", fps)
     timeit.print()
