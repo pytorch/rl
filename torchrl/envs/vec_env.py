@@ -1052,7 +1052,7 @@ def _run_worker_pipe_shared_mem(
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
-    mp_envent: mp.Event = None,
+    mp_event: mp.Event = None,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1129,7 +1129,7 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_envent.set()
+            mp_event.set()
 
         elif cmd == "step":
             if not initialized:
@@ -1154,7 +1154,7 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_envent.set()
+            mp_event.set()
 
         elif cmd == "step_and_maybe_reset":
             if not initialized:
@@ -1186,7 +1186,7 @@ def _run_worker_pipe_shared_mem(
             if event is not None:
                 event.record()
                 event.synchronize()
-            mp_envent.set()
+            mp_event.set()
 
         elif cmd == "close":
             del shared_tensordict, local_tensordict, data
@@ -1195,7 +1195,7 @@ def _run_worker_pipe_shared_mem(
             env.close()
             del env
 
-            mp_envent.set()
+            mp_event.set()
             child_pipe.close()
             if verbose:
                 print(f"{pid} closed")
@@ -1203,7 +1203,7 @@ def _run_worker_pipe_shared_mem(
 
         elif cmd == "load_state_dict":
             env.load_state_dict(data)
-            mp_envent.set()
+            mp_event.set()
 
         elif cmd == "state_dict":
             state_dict = _recursively_strip_locks_from_state_dict(env.state_dict())
