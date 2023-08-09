@@ -17,8 +17,8 @@ from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
-# from torchrl.record.loggers.wandb import WandbLogger as Logger
-from torchrl.record.loggers.tensorboard import TensorboardLogger as Logger
+from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.record.loggers.tensorboard import TensorboardLogger
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
@@ -29,6 +29,7 @@ parser.add_argument("--device", default="auto")
 parser.add_argument(
     "--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv"
 )
+parser.add_argument("--logger", default="wandb", choices=["wandb", "tensorboard", "tb"])
 
 env_maps = {
     "CartPole-v1": {
@@ -65,6 +66,12 @@ if __name__ == "__main__":
         )
     else:
         device = torch.device(args.device)
+    if args.logger == "wandb":
+        Logger = WandbLogger
+        logger_kwargs = {"project": "benchmark"}
+    elif args.logger in ("tensorboard", "tb"):
+        Logger = TensorboardLogger
+        logger_kwargs = {}
 
     if run == "tianshou":
         import warnings
@@ -148,7 +155,7 @@ if __name__ == "__main__":
 
         env = SubprocVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)])
 
-        logger = Logger(exp_name=f"tianshou-{env_name}", )#project="benchmark")
+        logger = Logger(exp_name=f"tianshou-{env_name}", **logger_kwargs)
 
         obs, _ = env.reset()
         i = 0
@@ -188,8 +195,8 @@ if __name__ == "__main__":
                 cur_frames = 0
 
             # vec_env.render("human")
-
-        logger.experiment.finish()
+        if args.logger == "wandb":
+            logger.experiment.finish()
         env.close()
         del env
         del actor, policy
@@ -205,7 +212,7 @@ if __name__ == "__main__":
         model = PPO("MlpPolicy", vec_env, verbose=0)
         print("policy", model.policy)
 
-        logger = Logger(exp_name=f"sb3-{env_name}", )#project="benchmark")
+        logger = Logger(exp_name=f"sb3-{env_name}", **logger_kwargs)
 
         obs = vec_env.reset()
         i = 0
@@ -245,7 +252,8 @@ if __name__ == "__main__":
 
             # vec_env.render("human")
 
-        logger.experiment.finish()
+        if args.logger == "wandb":
+            logger.experiment.finish()
         vec_env.close()
         del vec_env
         del model
@@ -280,7 +288,7 @@ if __name__ == "__main__":
 
         env = ParallelEnv(n_envs, EnvCreator(make_env))
 
-        logger = Logger(exp_name=f"torchrl-penv-{env_name}", )#project="benchmark")
+        logger = Logger(exp_name=f"torchrl-penv-{env_name}", **logger_kwargs)
 
         prev_t = time.time()
         frames = 0
@@ -303,7 +311,8 @@ if __name__ == "__main__":
                     prev_t = t
                     cur = 0
                 i += 1
-        logger.experiment.finish()
+        if args.logger == "wandb":
+            logger.experiment.finish()
         del env, actor, logger, module, backbone
 
     elif run == "collector":
@@ -347,7 +356,7 @@ if __name__ == "__main__":
             device=device,
         )
 
-        logger = Logger(exp_name=f"torchrl-async-{env_name}", )#project="benchmark")
+        logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
 
         prev_t = time.time()
         frames = 0
@@ -363,7 +372,8 @@ if __name__ == "__main__":
                 prev_t = t
                 cur = 0
 
-        logger.experiment.finish()
+        if args.logger == "wandb":
+            logger.experiment.finish()
         collector.shutdown()
         del collector, actor, logger, module, backbone
 
