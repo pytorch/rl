@@ -1177,9 +1177,9 @@ def _run_worker_pipe_shared_mem(
                 shared_tensordict.update_(cur_td)
             next_shared_tensordict.update_(next_td)
 
-            # if event is not None:
-            #     event.record()
-            #     event.synchronize()
+            if event is not None:
+                event.record()
+                event.synchronize()
             mp_event.set()
 
         elif cmd == "close":
