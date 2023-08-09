@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
         def make_env():
             return GymEnv(
-                env_name, frame_skip=4, categorical_action_encoding=True, device="cpu"
+                env_name, frame_skip=4, categorical_action_encoding=True, device=device,
             )
 
         env = TransformedEnv(
@@ -280,7 +280,7 @@ if __name__ == "__main__":
                 if i == 1:
                     timeit.erase()
                 data = env.rollout(
-                    fpb, actor, break_when_any_done=False, auto_cast_to_device=True
+                    fpb, actor, break_when_any_done=False,
                 )
                 # data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
@@ -357,8 +357,8 @@ if __name__ == "__main__":
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
-            device="cuda:0" if torch.cuda.device_count() else "cpu",
-            storing_device="cpu",
+            device=device,
+            storing_device=device,
         )
 
         logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
@@ -442,8 +442,8 @@ if __name__ == "__main__":
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
-            device="cuda:0" if torch.cuda.device_count() else "cpu",
-            storing_device="cpu",
+            device=device,
+            storing_device=device,
             preemptive_threshold=args.preemptive_threshold,
         )
 
