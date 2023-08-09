@@ -791,6 +791,8 @@ class ParallelEnv(_BatchedEnv):
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
+                if i in completed:
+                    continue
                 if event.is_set():
                     completed.add(i)
                     event.clear()
@@ -869,6 +871,8 @@ class ParallelEnv(_BatchedEnv):
             completed = set()
             while len(completed) < self.num_workers:
                 for i, event in enumerate(self._events):
+                    if i in completed:
+                        continue
                     if event.is_set():
                         completed.add(i)
                         event.clear()
@@ -937,6 +941,8 @@ class ParallelEnv(_BatchedEnv):
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
+                if i in completed:
+                    continue
                 if event.is_set():
                     completed.add(i)
                     event.clear()
