@@ -165,7 +165,7 @@ if __name__ == "__main__":
         from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
 
         vec_env = make_atari_env(
-            "PongNoFrameskip-v4", n_envs=4, seed=0, vec_env_cls=SubprocVecEnv
+            "PongNoFrameskip-v4", n_envs=n_envs, seed=0, vec_env_cls=SubprocVecEnv
         )
         vec_env = VecFrameStack(vec_env, n_stack=4)
 
