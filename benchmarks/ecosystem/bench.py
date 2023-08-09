@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+len(workers)# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -17,7 +17,8 @@ from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
-from torchrl.record.loggers.wandb import WandbLogger
+# from torchrl.record.loggers.wandb import WandbLogger as Logger
+from torchrl.record.loggers.tensorboard import TensorboardLogger as Logger
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
@@ -147,7 +148,7 @@ if __name__ == "__main__":
 
         env = SubprocVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)])
 
-        logger = WandbLogger(exp_name=f"tianshou-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"tianshou-{env_name}", project="benchmark")
 
         obs, _ = env.reset()
         i = 0
@@ -204,7 +205,7 @@ if __name__ == "__main__":
         model = PPO("MlpPolicy", vec_env, verbose=0)
         print("policy", model.policy)
 
-        logger = WandbLogger(exp_name=f"sb3-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"sb3-{env_name}", project="benchmark")
 
         obs = vec_env.reset()
         i = 0
@@ -279,7 +280,7 @@ if __name__ == "__main__":
 
         env = ParallelEnv(n_envs, EnvCreator(make_env))
 
-        logger = WandbLogger(exp_name=f"torchrl-penv-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"torchrl-penv-{env_name}", project="benchmark")
 
         prev_t = time.time()
         frames = 0
@@ -290,8 +291,8 @@ if __name__ == "__main__":
             while frames < total_frames:
                 if i == 1:
                     timeit.erase()
-                # data = env.rollout(fpb, actor, break_when_any_done=False)
-                data = env._single_rollout(fpb, actor, break_when_any_done=False)
+                data = env.rollout(fpb, actor, break_when_any_done=False)
+                # data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
                 cur += data.numel()
                 if i % 20 == 0:
@@ -346,7 +347,7 @@ if __name__ == "__main__":
             device=device,
         )
 
-        logger = WandbLogger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
 
         prev_t = time.time()
         frames = 0
