@@ -855,6 +855,7 @@ class ParallelEnv(_BatchedEnv):
             self.event.synchronize()
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
+        torch.cuda.synchronize(self.device)
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
@@ -1189,9 +1190,9 @@ def _run_worker_pipe_shared_mem(
                 shared_tensordict.update_(cur_td)
             next_shared_tensordict.update_(next_td)
 
-            if event is not None:
-                event.record()
-                event.synchronize()
+            # if event is not None:
+            #     event.record()
+            #     event.synchronize()
             mp_event.set()
 
         elif cmd == "close":

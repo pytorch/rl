@@ -60,7 +60,9 @@ if __name__ == "__main__":
     total_frames = args.total_frames
     run = args.run
     device = (
-        torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
+        torch.device("cpu")
+        if torch.cuda.device_count() == 0
+        else torch.device("cuda:0")
     )
 
     if run == "sb3":
@@ -188,7 +190,8 @@ if __name__ == "__main__":
             n_envs
             * [
                 lambda: GymEnv(
-                    env_name, categorical_action_encoding=True,
+                    env_name,
+                    categorical_action_encoding=True,
                     device=device,
                 )
             ],
