@@ -91,9 +91,7 @@ if __name__ == "__main__":
         from tianshou_atari_wrapper import DQN, DQNPolicy, make_atari_env
 
         warnings.filterwarnings("ignore")
-        net = DQN(*args.state_shape, args.action_shape, args.device).to(
-            args.device
-            )
+        net = DQN(*args.state_shape, args.action_shape, args.device).to(args.device)
         optim = torch.optim.Adam(net.parameters(), lr=args.lr)
         # define policy
         policy = DQNPolicy(
@@ -101,15 +99,15 @@ if __name__ == "__main__":
             optim,
             args.gamma,
             args.n_step,
-            target_update_freq=args.target_update_freq
+            target_update_freq=args.target_update_freq,
         )
 
         env = make_atari_env(
-        env_name,
-        num_envs=n_envs,
-        scale=0,
-        frame_stack=4,
-    )
+            env_name,
+            num_envs=n_envs,
+            scale=0,
+            frame_stack=4,
+        )
 
         logger = Logger(exp_name=f"tianshou-{env_name}", **logger_kwargs)
 
@@ -164,10 +162,11 @@ if __name__ == "__main__":
 
         from stable_baselines3 import A2C
         from stable_baselines3.common.env_util import make_atari_env
-        from stable_baselines3.common.vec_env import VecFrameStack
-        from stable_baselines3.common.vec_env import SubprocVecEnv
+        from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
 
-        vec_env = make_atari_env("PongNoFrameskip-v4", n_envs=4, seed=0, vec_env_cls=SubprocVecEnv)
+        vec_env = make_atari_env(
+            "PongNoFrameskip-v4", n_envs=4, seed=0, vec_env_cls=SubprocVecEnv
+        )
         vec_env = VecFrameStack(vec_env, n_stack=4)
 
         model = A2C("CnnPolicy", vec_env, verbose=0)
@@ -222,19 +221,30 @@ if __name__ == "__main__":
         del model
 
     elif run == "penv":
-        from torchrl.envs import DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv, Compose,GrayScale, ToTensorImage, CatFrames, Resize
+        from torchrl.envs import (
+            CatFrames,
+            Compose,
+            DoubleToFloat,
+            EnvCreator,
+            GrayScale,
+            ParallelEnv,
+            Resize,
+            ToTensorImage,
+            TransformedEnv,
+        )
         from torchrl.envs.libs.gym import GymEnv
-        from torchrl.modules import ConvNet, ProbabilisticActor, TanhNormal, MLP
+        from torchrl.modules import ConvNet, MLP, ProbabilisticActor, TanhNormal
 
         # reproduce the actor
-        backbone = nn.Sequential(ConvNet(
-            kernel_sizes=[8, 4, 3],
-            strides=[4, 2, 1],
-            activation_class=nn.ReLU,
-            num_cells=[32, 64, 64],
-            device=device,
-        ),
-            MLP(out_features=out_features, num_cells=[512])
+        backbone = nn.Sequential(
+            ConvNet(
+                kernel_sizes=[8, 4, 3],
+                strides=[4, 2, 1],
+                activation_class=nn.ReLU,
+                num_cells=[32, 64, 64],
+                device=device,
+            ),
+            MLP(out_features=out_features, num_cells=[512]),
         )
         module = TensorDictModule(
             backbone,
@@ -243,10 +253,12 @@ if __name__ == "__main__":
         )
         actor = ProbabilisticActor(
             module, in_keys=dist_key, distribution_class=dist_class
-        )
+        ).to(device)
 
         def make_env():
-            return GymEnv(env_name, frame_skip=4, categorical_action_encoding=True, device=device)
+            return GymEnv(
+                env_name, frame_skip=4, categorical_action_encoding=True, device=device
+            )
 
         env = TransformedEnv(
             ParallelEnv(n_envs, EnvCreator(make_env)),
@@ -254,8 +266,8 @@ if __name__ == "__main__":
                 ToTensorImage(),
                 Resize(84, 84),
                 GrayScale(),
-                CatFrames(N=4, dim=-3, in_keys=["pixels"])
-            )
+                CatFrames(N=4, dim=-3, in_keys=["pixels"]),
+            ),
         )
 
         logger = Logger(exp_name=f"torchrl-penv-{env_name}", **logger_kwargs)
@@ -288,20 +300,31 @@ if __name__ == "__main__":
         del env, actor, logger, module, backbone
 
     elif run == "collector":
-        from torchrl.envs import DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv, Compose,GrayScale, ToTensorImage, CatFrames, Resize
-        from torchrl.envs.libs.gym import GymEnv
-        from torchrl.modules import ConvNet, ProbabilisticActor, MLP
         from torchrl.collectors import MultiaSyncDataCollector
+        from torchrl.envs import (
+            CatFrames,
+            Compose,
+            DoubleToFloat,
+            EnvCreator,
+            GrayScale,
+            ParallelEnv,
+            Resize,
+            ToTensorImage,
+            TransformedEnv,
+        )
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import ConvNet, MLP, ProbabilisticActor
 
         # reproduce the actor
-        backbone = nn.Sequential(ConvNet(
-            kernel_sizes=[8, 4, 3],
-            strides=[4, 2, 1],
-            activation_class=nn.ReLU,
-            num_cells=[32, 64, 64],
-            device=device,
-        ),
-            MLP(out_features=out_features, num_cells=[512])
+        backbone = nn.Sequential(
+            ConvNet(
+                kernel_sizes=[8, 4, 3],
+                strides=[4, 2, 1],
+                activation_class=nn.ReLU,
+                num_cells=[32, 64, 64],
+                device=device,
+            ),
+            MLP(out_features=out_features, num_cells=[512]),
         )
         module = TensorDictModule(
             backbone,
@@ -314,13 +337,18 @@ if __name__ == "__main__":
 
         def make_env():
             return TransformedEnv(
-                GymEnv(env_name, frame_skip=4, categorical_action_encoding=True, device=device),
+                GymEnv(
+                    env_name,
+                    frame_skip=4,
+                    categorical_action_encoding=True,
+                    device=device,
+                ),
                 Compose(
                     ToTensorImage(),
                     Resize(84, 84),
                     GrayScale(),
-                    CatFrames(N=4, dim=-3, in_keys=["pixels"])
-                )
+                    CatFrames(N=4, dim=-3, in_keys=["pixels"]),
+                ),
             )
 
         # round up fpb
@@ -358,13 +386,19 @@ if __name__ == "__main__":
         del collector, actor, logger, module, backbone
 
     elif run == "collector_preempt":
-        from torchrl.envs import EnvCreator, ParallelEnv, \
-            TransformedEnv, Compose, GrayScale, ToTensorImage, CatFrames, \
-            Resize
-        from torchrl.envs.libs.gym import GymEnv
-        from torchrl.modules import ConvNet, ProbabilisticActor, \
-            MLP
         from torchrl.collectors import MultiSyncDataCollector
+        from torchrl.envs import (
+            CatFrames,
+            Compose,
+            EnvCreator,
+            GrayScale,
+            ParallelEnv,
+            Resize,
+            ToTensorImage,
+            TransformedEnv,
+        )
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import ConvNet, MLP, ProbabilisticActor
 
         # reproduce the actor
         backbone = nn.Sequential(
@@ -375,7 +409,7 @@ if __name__ == "__main__":
                 num_cells=[32, 64, 64],
                 device=device,
             ),
-            MLP(out_features=out_features, num_cells=[512])
+            MLP(out_features=out_features, num_cells=[512]),
         )
         module = TensorDictModule(
             backbone,
@@ -386,23 +420,21 @@ if __name__ == "__main__":
             module, in_keys=dist_key, distribution_class=dist_class
         )
 
-
         def make_env():
             return TransformedEnv(
                 GymEnv(
                     env_name,
                     frame_skip=4,
                     categorical_action_encoding=True,
-                    device=device
-                    ),
+                    device=device,
+                ),
                 Compose(
                     ToTensorImage(),
                     Resize(84, 84),
                     GrayScale(),
-                    CatFrames(N=4, dim=-3, in_keys=["pixels"])
-                )
+                    CatFrames(N=4, dim=-3, in_keys=["pixels"]),
+                ),
             )
-
 
         # round up fpb
         fpb = -(fpb // -n_envs) * n_envs
