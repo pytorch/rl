@@ -173,7 +173,7 @@ if __name__ == "__main__":
         optim = torch.optim.Adam(actor.parameters(), lr=0.0003)
         policy = REINFORCEPolicy(actor, optim)
 
-        env = SubprocVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)])
+        env = SubprocVectorEnv([lambda: gym.make(env_name) for _ in range(n_envs)])
 
         logger = Logger(exp_name=f"tianshou-{env_name}", **logger_kwargs)
 
