@@ -90,7 +90,7 @@ if __name__ == "__main__":
         from tianshou_atari_wrapper import DQN, DQNPolicy, make_atari_env
 
         warnings.filterwarnings("ignore")
-        net = DQN(3, 84, 84, out_features, device).to(args.device)
+        net = DQN(4, 84, 84, out_features, device).to(args.device)
         optim = torch.optim.Adam(net.parameters(), lr=1e-4)
         # define policy
         policy = DQNPolicy(
