@@ -28,8 +28,6 @@ from torchrl.record.loggers.wandb import WandbLogger
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
-# parser.add_argument("--in_features", default=4, type=int)
-# parser.add_argument("--out_features", default=2, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--run", choices=["collector", "sb3", "penv"], default="penv")
@@ -174,7 +172,6 @@ if __name__ == "__main__":
             depth=2,
             num_cells=64,
             activation_class=nn.Tanh,
-            device=device,
         )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
@@ -190,12 +187,13 @@ if __name__ == "__main__":
             n_envs
             * [
                 lambda: GymEnv(
-                    env_name, categorical_action_encoding=True, device=device
+                    env_name, categorical_action_encoding=True,
                 )
             ],
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
+            storing_device=device,
         )
 
         logger = WandbLogger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
