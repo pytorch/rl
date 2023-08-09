@@ -32,6 +32,7 @@ jobs:
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
+        export SYSTEM_VERSION_COMPAT=0
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
