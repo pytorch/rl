@@ -692,10 +692,10 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         self._events = []
-        if self.device.type == "cuda":
-            self.event = torch.cuda.Event()
-        else:
-            self.event = None
+        # if self.device.type == "cuda":
+        #     self.event = torch.cuda.Event()
+        # else:
+        self.event = None
         for idx in range(_num_workers):
             if self._verbose:
                 print(f"initiating worker {idx}")
@@ -1062,10 +1062,10 @@ def _run_worker_pipe_shared_mem(
 ) -> None:
     if device is None:
         device = torch.device("cpu")
-    if device.type == "cuda":
-        event = torch.cuda.Event()
-    else:
-        event = None
+    # if device.type == "cuda":
+    #     event = torch.cuda.Event()
+    # else:
+    event = None
 
     parent_pipe.close()
     pid = os.getpid()
