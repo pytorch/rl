@@ -925,7 +925,7 @@ class ParallelEnv(_BatchedEnv):
             workers.append(i)
 
         completed = set()
-        while len(completed) < self.num_workers:
+        while len(completed) < len(workers):
             for i in workers:
                 event = self._events[i]
                 if i in completed:
