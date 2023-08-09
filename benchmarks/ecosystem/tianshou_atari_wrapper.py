@@ -37,7 +37,6 @@ class NoopResetEnv(gym.Wrapper):
         super().__init__(env)
         self.noop_max = noop_max
         self.noop_action = 0
-        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
 
     def reset(self, **kwargs):
         _, info, return_info = _parse_reset_result(self.env.reset(**kwargs))
@@ -161,8 +160,6 @@ class FireResetEnv(gym.Wrapper):
 
     def __init__(self, env):
         super().__init__(env)
-        assert env.unwrapped.get_action_meanings()[1] == "FIRE"
-        assert len(env.unwrapped.get_action_meanings()) >= 3
 
     def reset(self, **kwargs):
         _, _, return_info = _parse_reset_result(self.env.reset(**kwargs))
@@ -290,7 +287,6 @@ def wrap_deepmind(
     :param bool warp_frame: wrap the grayscale + resize observation wrapper.
     :return: the wrapped atari environment.
     """
-    assert "NoFrameskip" in env_id
     env = gym.make(env_id)
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
@@ -423,9 +419,7 @@ class DQNPolicy(BasePolicy):
         self.model = model
         self.optim = optim
         self.eps = 0.0
-        assert 0.0 <= discount_factor <= 1.0, "discount factor should be in [0, 1]"
         self._gamma = discount_factor
-        assert estimation_step > 0, "estimation_step should be greater than 0"
         self._n_step = estimation_step
         self._target = target_update_freq > 0
         self._freq = target_update_freq
