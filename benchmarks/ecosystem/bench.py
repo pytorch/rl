@@ -64,6 +64,10 @@ if __name__ == "__main__":
             if torch.cuda.device_count() == 0
             else torch.device("cuda:0")
         )
+    elif "," in args.device:
+        # cuda:0,cuda:1 is interpreted as ["cuda:0", "cuda:1"]
+        devices = args.device.split(",")
+        device = [torch.device(device) for device in devices]
     else:
         device = torch.device(args.device)
     if args.logger == "wandb":
@@ -332,7 +336,6 @@ if __name__ == "__main__":
             depth=2,
             num_cells=64,
             activation_class=nn.Tanh,
-            device=device,
         )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
@@ -352,13 +355,11 @@ if __name__ == "__main__":
                 lambda: GymEnv(
                     env_name,
                     categorical_action_encoding=True,
-                    device=device,
                 )
             ],
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
-            storing_device=device,
             device=device,
         )
 
@@ -396,7 +397,6 @@ if __name__ == "__main__":
             depth=2,
             num_cells=64,
             activation_class=nn.Tanh,
-            device=device,
         )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
@@ -416,17 +416,15 @@ if __name__ == "__main__":
                 lambda: GymEnv(
                     env_name,
                     categorical_action_encoding=True,
-                    device=device,
                 )
             ],
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
-            storing_device=device,
             device=device,
         )
 
-        logger = Logger(exp_name=f"torchrl-async-{env_name}", **logger_kwargs)
+        logger = Logger(exp_name=f"torchrl-preemptive-{env_name}", **logger_kwargs)
 
         prev_t = time.time()
         frames = 0
