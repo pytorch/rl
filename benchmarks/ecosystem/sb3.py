@@ -15,32 +15,48 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, NormalParamExtractor
 from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.modules import MLP, ProbabilisticActor
+from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 from torchrl.record.loggers.wandb import WandbLogger
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
-parser.add_argument("--in_features", default=4, type=int)
-parser.add_argument("--out_features", default=2, type=int)
+# parser.add_argument("--in_features", default=4, type=int)
+# parser.add_argument("--out_features", default=2, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--run", choices=["collector", "sb3", "penv"], default="penv")
 
+env_maps = {
+    "CartPole-v1": {
+        "in_features": 4,
+        "out_features": 2,
+        "distribution": Categorical,
+        "key": ["logits"],
+    },
+    "Pendulum-v1": {
+        "in_features": 3,
+        "out_features": 2,
+        "distributioin": TanhNormal,
+        "key": ["loc", "scale"],
+    }
+}
 if __name__ == "__main__":
     # Parallel environments
     args = parser.parse_args()
     env_name = args.env_name
     n_envs = args.n_envs
-    in_features = args.in_features
-    out_features = args.out_features
+    in_features = env_maps[env_name]["in_features"]
+    out_features = env_maps[env_name]["out_features"]
+    dist_class = env_maps[env_name]["distribution"]
+    dist_key = env_maps[env_name]["key"]
     log_sep = args.log_sep
     fpb = log_sep * n_envs
     total_frames = args.total_frames
@@ -102,20 +118,23 @@ if __name__ == "__main__":
 
     elif run == "penv":
         # reproduce the actor
-        module = TensorDictModule(
-            MLP(
+        backbone = MLP(
                 in_features=in_features,
                 out_features=out_features,
                 depth=2,
                 num_cells=64,
                 activation_class=nn.Tanh,
                 device=device,
-            ),
+            )
+        if dist_class is TanhNormal:
+            backbone = nn.Sequential(backbone, NormalParamExtractor())
+        module = TensorDictModule(
+            backbone,
             in_keys=["observation"],
-            out_keys=["logits"],
+            out_keys=dist_key,
         )
         actor = ProbabilisticActor(
-            module, in_keys=["logits"], distribution_class=Categorical
+            module, in_keys=dist_key, distribution_class=dist_class
         )
 
         def make_env():
@@ -148,20 +167,24 @@ if __name__ == "__main__":
         del env
 
     elif run == "collector":
-        module = TensorDictModule(
-            MLP(
+        # reproduce the actor
+        backbone = MLP(
                 in_features=in_features,
                 out_features=out_features,
                 depth=2,
                 num_cells=64,
                 activation_class=nn.Tanh,
                 device=device,
-            ),
+            )
+        if dist_class is TanhNormal:
+            backbone = nn.Sequential(backbone, NormalParamExtractor())
+        module = TensorDictModule(
+            backbone,
             in_keys=["observation"],
-            out_keys=["logits"],
+            out_keys=dist_key,
         )
         actor = ProbabilisticActor(
-            module, in_keys=["logits"], distribution_class=Categorical
+            module, in_keys=dist_key, distribution_class=dist_class
         )
         collector = MultiaSyncDataCollector(
             n_envs
