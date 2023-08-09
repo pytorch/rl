@@ -194,6 +194,7 @@ if __name__ == "__main__":
             total_frames=total_frames,
             frames_per_batch=fpb,
             storing_device=device,
+            device=device,
         )
 
         logger = WandbLogger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
