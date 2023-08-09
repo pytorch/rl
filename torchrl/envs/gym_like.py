@@ -154,7 +154,9 @@ class GymLikeEnv(_EnvWrapper):
             step_reward (reward in the format provided by the inner env): reward of this particular step
 
         """
-        return total_reward + step_reward  # self.reward_spec.encode(step_reward, ignore_device=True)
+        return (
+            total_reward + step_reward
+        )  # self.reward_spec.encode(step_reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -190,8 +192,8 @@ class GymLikeEnv(_EnvWrapper):
         reward = 0
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
-                    self._env.step(action_np)
-                )
+                self._env.step(action_np)
+            )
             if isinstance(obs, list) and len(obs) == 1:
                 # Until gym 0.25.2 we had rendered frames returned in lists of length 1
                 obs = obs[0]
@@ -215,8 +217,9 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-
-            if isinstance(done, bool) or (isinstance(done, np.ndarray) and not len(done)):
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
                 done = torch.tensor([done])
             done, do_break = self.read_done(done)
             if do_break:

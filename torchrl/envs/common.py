@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import TensorDictBase
 
 from torchrl._utils import prod, seed_generator
@@ -23,9 +24,8 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import get_available_libraries, step_mdp, \
-    _fuse_tensordicts
-from tensordict._tensordict import _unravel_key_to_tuple
+from torchrl.envs.utils import _fuse_tensordicts, get_available_libraries, step_mdp
+
 LIBRARIES = get_available_libraries()
 
 
@@ -827,7 +827,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if truncated is not None:
             done = done | truncated
 
-        cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(_unravel_key_to_tuple(self.reward_key)))
+        cur_td = _fuse_tensordicts(
+            next_tensordict,
+            tensordict,
+            excluded=(_unravel_key_to_tuple(self.reward_key)),
+        )
 
         if done.any():
             if done.numel() > 1:
@@ -1236,7 +1240,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
-
         if not break_when_any_done:
             # rollout will use step_and_maybe_reset
             return self._split_rollout(

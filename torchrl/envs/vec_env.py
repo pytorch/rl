@@ -8,7 +8,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from copy import deepcopy
 from functools import wraps
 from multiprocessing import connection
@@ -34,7 +34,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _set_single_key, _sort_keys, _fuse_tensordicts
+from torchrl.envs.utils import _fuse_tensordicts, _set_single_key, _sort_keys
 
 _has_envpool = importlib.util.find_spec("envpool")
 
@@ -585,7 +585,9 @@ class SerialEnv(_BatchedEnv):
                     "_reset flag in tensordict should follow env.done_spec"
                 )
         if _reset is None:
-            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
+                self.done_spec.shape
+            )
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -786,10 +788,10 @@ class ParallelEnv(_BatchedEnv):
 
         completed = set()
         while len(completed) < self.num_workers:
-            for i, channel in enumerate(self.parent_channels):
-                if self._events[i].is_set():
+            for i, event in enumerate(self._events):
+                if event.is_set():
                     completed.add(i)
-                    self._events[i].clear()
+                    event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -818,11 +820,17 @@ class ParallelEnv(_BatchedEnv):
             done = done | truncated
         if done.any():
             # if all are done, then the next td to be used is simply the root td
-            cur_td = _fuse_tensordicts(self.shared_tensordict_parent, excluded=(("next",), ("_reset",)))
+            cur_td = _fuse_tensordicts(
+                self.shared_tensordict_parent, excluded=(("next",), ("_reset",))
+            )
         else:
             # if none is done, then the next td to use is simply the one
             # we got from the procs, filtered.
-            cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(_unravel_key_to_tuple(self.reward_key),))
+            cur_td = _fuse_tensordicts(
+                next_tensordict,
+                tensordict,
+                excluded=(_unravel_key_to_tuple(self.reward_key),),
+            )
 
         tensordict.set("next", next_tensordict)
         return cur_td, tensordict
@@ -849,10 +857,10 @@ class ParallelEnv(_BatchedEnv):
             self.parent_channels[i].send(("step_and_maybe_reset", None))
         completed = set()
         while len(completed) < self.num_workers:
-            for i, channel in enumerate(self.parent_channels):
-                if self._events[i].is_set():
+            for i, event in enumerate(self._events):
+                if event.is_set():
                     completed.add(i)
-                    self._events[i].clear()
+                    event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -884,7 +892,9 @@ class ParallelEnv(_BatchedEnv):
                     "_reset flag in tensordict should follow env.done_spec"
                 )
         if _reset is None:
-            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(self.done_spec.shape)
+            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
+                self.done_spec.shape
+            )
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -914,10 +924,10 @@ class ParallelEnv(_BatchedEnv):
 
         completed = set()
         while len(completed) < self.num_workers:
-            for i, channel in enumerate(self.parent_channels):
-                if self._events[i].is_set():
+            for i, event in enumerate(self._events):
+                if event.is_set():
                     completed.add(i)
-                    self._events[i].clear()
+                    event.clear()
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
@@ -1042,7 +1052,7 @@ def _run_worker_pipe_shared_mem(
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
-    mp_envent: mp.Event=None,
+    mp_envent: mp.Event = None,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1159,7 +1169,11 @@ def _run_worker_pipe_shared_mem(
                 done = done | truncated
             if done.any():
                 # we'll need to call reset
-                cur_td = _fuse_tensordicts(next_td, local_tensordict, excluded=(_unravel_key_to_tuple(env.reward_key),))
+                cur_td = _fuse_tensordicts(
+                    next_td,
+                    local_tensordict,
+                    excluded=(_unravel_key_to_tuple(env.reward_key),),
+                )
                 if done.all():
                     cur_td = env.reset(cur_td)
                     shared_tensordict.update_(cur_td)

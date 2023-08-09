@@ -44,7 +44,6 @@ from torchrl.envs.utils import (
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
-    step_mdp,
 )
 from torchrl.envs.vec_env import _BatchedEnv
 
