@@ -23,7 +23,7 @@ from tensordict import TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process, VERBOSE, timeit
+from torchrl._utils import _check_for_faulty_process, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -1185,7 +1185,6 @@ def _run_worker_pipe_shared_mem(
             child_pipe.close()
             if verbose:
                 print(f"{pid} closed")
-            timeit.print()
             break
 
         elif cmd == "load_state_dict":

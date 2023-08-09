@@ -34,7 +34,6 @@ __all__ = [
     "make_composite_from_td",
 ]
 
-from torchrl._utils import timeit
 
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
@@ -552,7 +551,6 @@ def make_composite_from_td(data):
     )
     return composite
 
-@timeit("_fuse_tensordict")
 def _fuse_tensordicts(*tds, excluded, total=None):
     """Fuses tensordicts with rank-wise priority.
 
@@ -560,7 +558,11 @@ def _fuse_tensordicts(*tds, excluded, total=None):
     coming after, in such a way that if a key is present in both the first and
     second tensordict, the first value is guaranteed to result in the output.
 
-    excluded should be a list of strings, tuples are currently not supported.
+    Args:
+        tds (sequence of TensorDictBase): tensordicts to fuse.
+        excluded (sequence of tuples): keys to ignore. Must be tuples, no string
+            allowed.
+        total (tuple): the root key of the tds. Used for recursive calls.
 
     Examples:
         >>> td1 = TensorDict({
@@ -575,13 +577,15 @@ def _fuse_tensordicts(*tds, excluded, total=None):
         ...     "a": 2,
         ...     "b": {"c": 2, "d": 2, "e": {"f": 2}},
         ...     "g": 2,
+        ...     "h": {"i": 2},
         ... }, [])
-        >>> out = fuse_tensordicts(td1, td2, td3)
+        >>> out = fuse_tensordicts(td1, td2, td3, excluded=("h", "i"))
         >>> assert out["a"] == 0
         >>> assert out["b", "c"] == 0
         >>> assert out["b", "d"] == 1
         >>> assert out["b", "e", "f"] == 2
         >>> assert out["g"] == 2
+        >>> assert ("h", "i") not in out.keys(True, True)
 
     """
     out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
