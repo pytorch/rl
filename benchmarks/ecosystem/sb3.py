@@ -172,6 +172,7 @@ if __name__ == "__main__":
             depth=2,
             num_cells=64,
             activation_class=nn.Tanh,
+            device=device,
         )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
@@ -188,6 +189,7 @@ if __name__ == "__main__":
             * [
                 lambda: GymEnv(
                     env_name, categorical_action_encoding=True,
+                    device=device,
                 )
             ],
             actor,
