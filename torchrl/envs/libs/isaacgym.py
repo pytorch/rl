@@ -5,6 +5,7 @@
 import importlib.util
 
 import itertools
+import warnings
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -33,7 +34,13 @@ class IsaacGymWrapper(GymWrapper):
         has GPUs available and the required setup for IsaacGym (eg, Ubuntu 20.04).
 
     """
-    def __init__(self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs):  # noqa: F821
+
+    def __init__(
+        self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs
+    ):  # noqa: F821
+        warnings.warn(
+            "IsaacGym environment support is an experimental feature that may change in the future."
+        )
         num_envs = env.num_envs
         super().__init__(
             env, torch.device(env.device), batch_size=torch.Size([num_envs]), **kwargs
@@ -146,6 +153,7 @@ class IsaacGymEnv(IsaacGymWrapper):
         >>> assert env.batch_size == (2000,)
 
     """
+
     @property
     def available_envs(cls) -> List[str]:
         import isaacgymenvs  # noqa
