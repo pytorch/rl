@@ -316,20 +316,14 @@ class LossModule(TensorDictModuleBase):
         setattr(self, module_name, functional_module)
 
         name_params_target = "target_" + module_name
-        if create_target_params:
-            # we create a TensorDictParams to keep the target params as Buffer instances
-            target_params = TensorDictParams(
-                params_and_buffers.apply(_make_target_param(clone=True)),
+        # if create_target_params:
+        # we create a TensorDictParams to keep the target params as Buffer instances
+        target_params = TensorDictParams(
+                params_and_buffers.apply(_make_target_param(clone=create_target_params)),
                 no_convert=True,
             )
-            setattr(self, name_params_target + "_params", target_params)
-            self._has_update_associated[module_name] = False
-        else:
-            t_params = TensorDictParams(params_and_buffers, no_convert=True)
-            # the hook makes sure that any get operation will be followed by a .data call
-            t_params.register_get_post_hook(lambda self, x: x.data)
-            setattr(self, name_params_target + "_params", t_params)
-            self._has_update_associated[module_name] = True
+        setattr(self, name_params_target + "_params", target_params)
+        self._has_update_associated[module_name] = not create_target_params
 
     def _apply(self, fn):
         # any call to apply erases the cache: the reason is that detached
@@ -346,12 +340,6 @@ class LossModule(TensorDictModuleBase):
         for item in self.__dir__():
             if isinstance(item, nn.Module):
                 yield item
-
-    # def register_buffer(
-    #     self, name: str, tensor: Optional[Tensor], persistent: bool = True
-    # ) -> None:
-    # tensor = tensor.to(self.device)
-    # return super().register_buffer(name, tensor, persistent)
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         for _, param in self.named_parameters(recurse=recurse):

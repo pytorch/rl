@@ -146,10 +146,11 @@ class TargetNetUpdater:
             loss_module._has_update_associated[k] = True
         try:
             _target_names = []
-            for name in loss_module.__dict__:
+            for name, _ in loss_module.named_children():
+                # the TensorDictParams is a nn.Module instance
                 if (
                     name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
+                    and name.endswith("params")
                     and (getattr(loss_module, name) is not None)
                 ):
                     _target_names.append(name)
