@@ -257,7 +257,7 @@ if __name__ == "__main__":
 
         def make_env():
             return GymEnv(
-                env_name, frame_skip=4, categorical_action_encoding=True, device=device
+                env_name, frame_skip=4, categorical_action_encoding=True, device="cpu"
             )
 
         env = TransformedEnv(
@@ -281,7 +281,7 @@ if __name__ == "__main__":
             while frames < total_frames:
                 if i == 1:
                     timeit.erase()
-                data = env.rollout(fpb, actor, break_when_any_done=False)
+                data = env.rollout(fpb, actor, break_when_any_done=False, auto_cast_to_device=True)
                 # data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
                 cur += data.numel()
