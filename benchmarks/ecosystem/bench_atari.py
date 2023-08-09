@@ -97,9 +97,9 @@ if __name__ == "__main__":
         policy = DQNPolicy(
             net,
             optim,
-            args.gamma,
-            args.n_step,
-            target_update_freq=args.target_update_freq,
+            0.99,
+            10,
+            target_update_freq=1000,
         )
 
         env = make_atari_env(
