@@ -17,6 +17,7 @@ from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
+import numpy as np
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", choices=["Pendulum-v1", "CartPole-v1", "HalfCheetah-v4", "LunarLander-v2"], default="CartPole-v1")
