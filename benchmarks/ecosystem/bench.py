@@ -10,6 +10,8 @@ import time
 from argparse import ArgumentParser
 from typing import Dict, List
 
+import numpy as np
+
 import torch
 
 from tensordict.nn import NormalParamExtractor, TensorDictModule
@@ -17,18 +19,25 @@ from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
-import numpy as np
 
 parser = ArgumentParser()
-parser.add_argument("--env_name", choices=["Pendulum-v1", "CartPole-v1", "HalfCheetah-v4", "LunarLander-v2"], default="CartPole-v1")
+parser.add_argument(
+    "--env_name",
+    choices=["Pendulum-v1", "CartPole-v1", "HalfCheetah-v4", "LunarLander-v2"],
+    default="CartPole-v1",
+)
 parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--preemptive_threshold", default=0.7, type=float)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--device", default="auto")
-parser.add_argument("--fpb", "--frames-per-batch", "--frames_per_batch", default=200, type=int)
 parser.add_argument(
-    "--run", choices=["collector", "collector_preempt", "sb3", "penv", "tianshou"], default="penv"
+    "--fpb", "--frames-per-batch", "--frames_per_batch", default=200, type=int
+)
+parser.add_argument(
+    "--run",
+    choices=["collector", "collector_preempt", "sb3", "penv", "tianshou"],
+    default="penv",
 )
 parser.add_argument("--logger", default="wandb", choices=["wandb", "tensorboard", "tb"])
 
@@ -286,7 +295,7 @@ if __name__ == "__main__":
         del model
 
     elif run == "penv":
-        from torchrl.envs import EnvCreator, ParallelEnv, DoubleToFloat, TransformedEnv
+        from torchrl.envs import DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 
@@ -311,9 +320,15 @@ if __name__ == "__main__":
         )
 
         if env_name == "HalfCheetah-v4":
+
             def make_env():
-                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
+                return TransformedEnv(
+                    GymEnv(env_name, categorical_action_encoding=True, device=device),
+                    DoubleToFloat(),
+                )
+
         else:
+
             def make_env():
                 return GymEnv(env_name, categorical_action_encoding=True, device=device)
 
@@ -350,16 +365,25 @@ if __name__ == "__main__":
 
     elif run == "collector":
         from torchrl.collectors import MultiaSyncDataCollector
-        from torchrl.envs import EnvCreator, DoubleToFloat, TransformedEnv
+        from torchrl.envs import DoubleToFloat, EnvCreator, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 
         if env_name == "HalfCheetah-v4":
+
             def make_env():
-                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
+                return TransformedEnv(
+                    GymEnv(env_name, categorical_action_encoding=True, device=device),
+                    DoubleToFloat(),
+                )
+
         else:
+
             def make_env():
-                return GymEnv(env_name, categorical_action_encoding=True, )
+                return GymEnv(
+                    env_name,
+                    categorical_action_encoding=True,
+                )
 
         # reproduce the actor
         backbone = MLP(
@@ -382,10 +406,7 @@ if __name__ == "__main__":
         # round up fpb
         fpb = -(fpb // -n_envs) * n_envs
         collector = MultiaSyncDataCollector(
-            n_envs
-            * [
-                make_env
-            ],
+            n_envs * [make_env],
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
@@ -403,74 +424,7 @@ if __name__ == "__main__":
             if i % 20 == 0:
                 t = time.time()
                 fps = cur / (t - prev_t)
-                if i>0:
-                    fps_list.append(fps)
-                logger.log_scalar("total", fps, step=frames)
-                logger.log_scalar("frames", frames)
-                prev_t = t
-                cur = 0
-
-        if args.logger == "wandb":
-            logger.experiment.finish()
-        collector.shutdown()
-        del collector, actor, logger, module, backbone
-
-    elif run == "collector":
-        from torchrl.collectors import MultiaSyncDataCollector
-        from torchrl.envs import EnvCreator, DoubleToFloat, TransformedEnv
-        from torchrl.envs.libs.gym import GymEnv
-        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
-
-        if env_name == "HalfCheetah-v4":
-            def make_env():
-                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
-        else:
-            def make_env():
-                return GymEnv(env_name, categorical_action_encoding=True, )
-
-        # reproduce the actor
-        backbone = MLP(
-            in_features=in_features,
-            out_features=out_features,
-            depth=2,
-            num_cells=64,
-            activation_class=nn.Tanh,
-        )
-        if dist_class is TanhNormal:
-            backbone = nn.Sequential(backbone, NormalParamExtractor())
-        module = TensorDictModule(
-            backbone,
-            in_keys=["observation"],
-            out_keys=dist_key,
-        )
-        actor = ProbabilisticActor(
-            module, in_keys=dist_key, distribution_class=dist_class
-        )
-        # round up fpb
-        fpb = -(fpb // -n_envs) * n_envs
-        collector = MultiaSyncDataCollector(
-            n_envs
-            * [
-                make_env
-            ],
-            actor,
-            total_frames=total_frames,
-            frames_per_batch=fpb,
-            device=device,
-        )
-
-        logger = Logger(exp_name=f"torchrl-preemptive-{env_name}", **logger_kwargs)
-
-        prev_t = time.time()
-        frames = 0
-        cur = 0
-        for i, data in enumerate(collector):
-            frames += data.numel()
-            cur += data.numel()
-            if i % 20 == 0:
-                t = time.time()
-                fps = cur / (t - prev_t)
-                if i>0:
+                if i > 0:
                     fps_list.append(fps)
                 logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
@@ -487,6 +441,22 @@ if __name__ == "__main__":
         from torchrl.envs import EnvCreator
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
+        if env_name == "HalfCheetah-v4":
+
+            def make_env():
+                return TransformedEnv(
+                    GymEnv(env_name, categorical_action_encoding=True, device=device),
+                    DoubleToFloat(),
+                )
+
+        else:
+
+            def make_env():
+                return GymEnv(
+                    env_name,
+                    categorical_action_encoding=True,
+                )
 
         # reproduce the actor
         backbone = MLP(
@@ -510,14 +480,7 @@ if __name__ == "__main__":
         # round up fpb
         fpb = -(fpb // -n_envs) * n_envs
         collector = MultiSyncDataCollector(
-            n_envs
-            * [
-                lambda: GymEnv(
-                    env_name,
-                    categorical_action_encoding=True,
-                    device=device,
-                )
-            ],
+            n_envs * [make_env],
             actor,
             total_frames=total_frames,
             frames_per_batch=fpb,
