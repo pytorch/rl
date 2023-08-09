@@ -11,10 +11,6 @@ from argparse import ArgumentParser
 
 import torch
 
-from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
-
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torch import nn
 from torch.distributions import Categorical
@@ -30,6 +26,7 @@ parser.add_argument("--env_name", default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--total_frames", default=100_000, type=int)
+parser.add_argument("--device", default="auto")
 parser.add_argument("--run", choices=["collector", "sb3", "penv"], default="penv")
 
 env_maps = {
@@ -59,13 +56,81 @@ if __name__ == "__main__":
     fpb = log_sep * n_envs
     total_frames = args.total_frames
     run = args.run
-    device = (
-        torch.device("cpu")
-        if torch.cuda.device_count() == 0
-        else torch.device("cuda:0")
-    )
+    if args.device == "auto":
+        device = (
+            torch.device("cpu")
+            if torch.cuda.device_count() == 0
+            else torch.device("cuda:0")
+        )
+    else:
+        device = torch.device(args.device)
 
-    if run == "sb3":
+    if run == "tianshou":
+        from tianshou.env import SubprocVectorEnv
+        from tianshou.utils.net.common import Net
+        from tianshou.utils.net.discrete import Actor
+        import warnings
+        import gym
+
+        warnings.filterwarnings('ignore')
+        net = Net(in_features, hidden_sizes=[64, 64], device=device)
+        actor = Actor(net, out_features, device=device)
+
+        env = SubprocVectorEnv(
+            [lambda: gym.make('CartPole-v1') for _ in range(n_envs)]
+        )
+
+        obs = vec_env.reset()
+        i = 0
+        model_time = 0
+        env_time = 0
+        frames = 0
+        cur_frames = 0
+        while frames < total_frames:
+            i += 1
+
+            with timeit("policy"):
+                t0 = time.time()
+                action, _states = model.predict(obs)
+                t1 = time.time()
+            with timeit("step"):
+                obs, rewards, dones, info = vec_env.step(action)
+                t2 = time.time()
+
+            frames += len(dones)
+            cur_frames += len(dones)
+
+            model_time += t1 - t0
+            env_time += t2 - t1
+
+            if i % log_sep == 0:
+                logger.log_scalar(
+                    "model step fps", cur_frames / model_time, step=frames
+                )
+                logger.log_scalar("env step", cur_frames / env_time, step=frames)
+
+                fps = cur_frames / (env_time + model_time)
+                logger.log_scalar(
+                    "total", fps, step=frames
+                )
+                logger.log_scalar("frames", frames)
+                env_time = 0
+                model_time = 0
+                cur_frames = 0
+
+            # vec_env.render("human")
+
+        logger.experiment.finish()
+        vec_env.close()
+        del vec_env
+        del model
+
+    elif run == "sb3":
+
+        from stable_baselines3 import PPO
+        from stable_baselines3.common.env_util import make_vec_env
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+
         vec_env = make_vec_env(env_name, n_envs=n_envs, vec_env_cls=SubprocVecEnv)
 
         model = PPO("MlpPolicy", vec_env, verbose=0)
