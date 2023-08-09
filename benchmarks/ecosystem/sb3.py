@@ -60,7 +60,7 @@ if __name__ == "__main__":
     total_frames = args.total_frames
     run = args.run
     device = (
-        torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda")
+        torch.device("cpu") if torch.cuda.device_count() == 0 else torch.device("cuda:0")
     )
 
     if run == "sb3":
