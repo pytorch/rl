@@ -120,7 +120,7 @@ if __name__ == "__main__":
             i += 1
             with timeit("policy"):
                 t0 = time.time()
-                action = policy(Batch(obs=obs, state=None)).act.cpu().numpy()
+                action = policy(Batch(obs=obs), state=None).act.cpu().numpy()
                 t1 = time.time()
             with timeit("step"):
                 obs, rewards, term, dones, info = env.step(action)
