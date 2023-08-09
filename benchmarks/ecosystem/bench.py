@@ -5,20 +5,19 @@
 #
 # Logs Gym Async env data collection speed with a simple policy.
 #
-from typing import List, Dict
-
 import time
 
 from argparse import ArgumentParser
+from typing import Dict, List
 
 import torch
 
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torch import nn
 from torch.distributions import Categorical
-from torchrl.record.loggers.wandb import WandbLogger
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
+from torchrl.record.loggers.wandb import WandbLogger
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
@@ -26,7 +25,9 @@ parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--device", default="auto")
-parser.add_argument("--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv")
+parser.add_argument(
+    "--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv"
+)
 
 env_maps = {
     "CartPole-v1": {
@@ -65,17 +66,17 @@ if __name__ == "__main__":
         device = torch.device(args.device)
 
     if run == "tianshou":
-        from tianshou.env import SubprocVectorEnv
-        from tianshou.utils.net.common import Net
-        from tianshou.utils.net.discrete import Actor as DiscreteActor
-        from tianshou.utils.net.continuous import Actor as ContActor
-
         import warnings
+
         import gym
+        import numpy as np
 
         from tianshou.data import Batch, ReplayBuffer, to_torch, to_torch_as
+        from tianshou.env import SubprocVectorEnv
         from tianshou.policy import BasePolicy
-        import numpy as np
+        from tianshou.utils.net.common import Net
+        from tianshou.utils.net.continuous import Actor as ContActor
+        from tianshou.utils.net.discrete import Actor as DiscreteActor
 
         class REINFORCEPolicy(BasePolicy):
             """Implementation of REINFORCE algorithm."""
@@ -83,7 +84,8 @@ if __name__ == "__main__":
             def __init__(
                 self,
                 model: torch.nn.Module,
-                optim: torch.optim.Optimizer, ):
+                optim: torch.optim.Optimizer,
+            ):
                 super().__init__()
                 self.actor = model
                 self.optim = optim
@@ -102,25 +104,17 @@ if __name__ == "__main__":
                 act = dist.sample()
                 return Batch(act=act, dist=dist)
 
-            def process_fn(
-                self,
-                batch: Batch,
-                buffer: ReplayBuffer,
-                indices
-                ) -> Batch:
+            def process_fn(self, batch: Batch, buffer: ReplayBuffer, indices) -> Batch:
                 """Compute the discounted returns for each transition."""
                 returns, _ = self.compute_episodic_return(
-                    batch,
-                    buffer,
-                    indices,
-                    gamma=0.99,
-                    gae_lambda=1.0
-                    )
+                    batch, buffer, indices, gamma=0.99, gae_lambda=1.0
+                )
                 batch.returns = returns
                 return batch
 
-            def learn(self, batch: Batch, batch_size: int, repeat: int) -> Dict[
-                str, List[float]]:
+            def learn(
+                self, batch: Batch, batch_size: int, repeat: int
+            ) -> Dict[str, List[float]]:
                 """Perform the back-propagation."""
                 logging_losses = []
                 for _ in range(repeat):
@@ -130,23 +124,19 @@ if __name__ == "__main__":
                         dist = result.dist
                         act = to_torch_as(minibatch.act, result.act)
                         ret = to_torch(
-                            minibatch.returns,
-                            torch.float,
-                            result.act.device
-                            )
-                        log_prob = dist.log_prob(act).reshape(
-                            len(ret),
-                            -1
-                            ).transpose(0, 1)
+                            minibatch.returns, torch.float, result.act.device
+                        )
+                        log_prob = (
+                            dist.log_prob(act).reshape(len(ret), -1).transpose(0, 1)
+                        )
                         loss = -(log_prob * ret).mean()
                         loss.backward()
                         self.optim.step()
                         logging_losses.append(loss.item())
                 return {"loss": logging_losses}
 
-
-        warnings.filterwarnings('ignore')
-        net = Net(in_features, hidden_sizes=[64, 64], device=device)
+        warnings.filterwarnings("ignore")
+        net = Net(in_features, activation=nn.Tanh, hidden_sizes=[64, 64], device=device)
         if dist_class == Categorical:
             actor = DiscreteActor(net, out_features, device=device)
         else:
@@ -155,9 +145,7 @@ if __name__ == "__main__":
         optim = torch.optim.Adam(actor.parameters(), lr=0.0003)
         policy = REINFORCEPolicy(actor, optim)
 
-        env = SubprocVectorEnv(
-            [lambda: gym.make('CartPole-v1') for _ in range(n_envs)]
-        )
+        env = SubprocVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)])
 
         logger = WandbLogger(exp_name=f"tianshou-{env_name}", project="benchmark")
 
@@ -192,9 +180,7 @@ if __name__ == "__main__":
                 logger.log_scalar("env step", cur_frames / env_time, step=frames)
 
                 fps = cur_frames / (env_time + model_time)
-                logger.log_scalar(
-                    "total", fps, step=frames
-                )
+                logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 env_time = 0
                 model_time = 0
@@ -250,9 +236,7 @@ if __name__ == "__main__":
                 logger.log_scalar("env step", cur_frames / env_time, step=frames)
 
                 fps = cur_frames / (env_time + model_time)
-                logger.log_scalar(
-                    "total", fps, step=frames
-                )
+                logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 env_time = 0
                 model_time = 0
