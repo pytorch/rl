@@ -34,6 +34,7 @@ from _utils_internal import (
     PONG_VERSIONED,
 )
 from packaging import version
+from tensordict import LazyStackedTensorDict
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
@@ -1113,7 +1114,8 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         torch.manual_seed(0)
@@ -1125,15 +1127,31 @@ class TestVmas:
         )
         env.set_seed(0)
         tdreset = env.reset()
-        tdrollout = env.rollout(max_steps=n_rollout_samples)
+        tdrollout = env.rollout(
+            max_steps=n_rollout_samples,
+            return_contiguous=False if env.het_specs else True,
+        )
         env.close()
 
+        if env.het_specs:
+            assert isinstance(tdreset["agents"], LazyStackedTensorDict)
+        else:
+            assert isinstance(tdreset["agents"], TensorDict)
+
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["agents"].batch_size == (num_envs, env.n_agents)
+        if not env.het_specs:
+            assert tdreset["agents", "observation"].shape[1] == env.n_agents
         assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["agents"].batch_size == (
+            num_envs,
+            n_rollout_samples,
+            env.n_agents,
+        )
+        if not env.het_specs:
+            assert tdrollout["agents", "observation"].shape[2] == env.n_agents
         assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
         assert tdrollout["agents", "action"].shape[2] == env.n_agents
         assert tdrollout["done"].shape[2] == 1
@@ -1143,7 +1161,8 @@ class TestVmas:
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("continuous_actions", [True, False])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
@@ -1164,7 +1183,7 @@ class TestVmas:
         )
         for e in [env, wrapped]:
             e.set_seed(0)
-            check_env_specs(e)
+            check_env_specs(e, return_contiguous=False if e.het_specs else True)
             del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1298,7 +1317,6 @@ class TestVmas:
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
     def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
-
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
             scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
@@ -1352,6 +1370,41 @@ class TestVmas:
         assert _td["next", "agents", "observation"].shape == agents_td_batch + (
             n_observations_per_agent,
         )
+        assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
+        assert _td[env.done_key].shape == td_batch + (1,)
+        assert _td["next", env.done_key].shape == td_batch + (1,)
+
+        assert env.reward_key not in _td.keys(True, True)
+        assert env.action_key not in _td["next"].keys(True, True)
+
+    def test_collector_hetero(self, n_envs=10, frames_per_batch=20):
+        env = VmasEnv(
+            scenario="simple_tag",
+            num_envs=n_envs,
+        )
+        torch.manual_seed(1)
+
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=None,
+            frames_per_batch=frames_per_batch,
+            total_frames=1000,
+            device="cpu",
+        )
+
+        for i, _td in enumerate(ccollector):
+            if i == 1:
+                break
+        ccollector.shutdown()
+
+        td_batch = (n_envs, frames_per_batch // n_envs)
+        agents_td_batch = td_batch + (env.n_agents,)
+
+        assert _td.shape == td_batch
+        assert _td["next"].shape == td_batch
+        assert _td["agents"].shape == agents_td_batch
+        assert _td["next", "agents"].shape == agents_td_batch
+        assert _td["collector"].shape == td_batch
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
         assert _td[env.done_key].shape == td_batch + (1,)
         assert _td["next", env.done_key].shape == td_batch + (1,)
