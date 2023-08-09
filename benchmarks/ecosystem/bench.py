@@ -17,8 +17,6 @@ from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
-from torchrl.record.loggers.wandb import WandbLogger
-from torchrl.record.loggers.tensorboard import TensorboardLogger
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
@@ -67,9 +65,13 @@ if __name__ == "__main__":
     else:
         device = torch.device(args.device)
     if args.logger == "wandb":
+        from torchrl.record.loggers.wandb import WandbLogger
+
         Logger = WandbLogger
         logger_kwargs = {"project": "benchmark"}
     elif args.logger in ("tensorboard", "tb"):
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         Logger = TensorboardLogger
         logger_kwargs = {}
 
