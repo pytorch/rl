@@ -883,8 +883,6 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        cmd_out = "reset"
-
         _reset = None
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
@@ -897,6 +895,7 @@ class ParallelEnv(_BatchedEnv):
             _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
                 self.done_spec.shape
             )
+        workers = []
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -921,12 +920,14 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            out = (cmd_out, tensordict_)
+            out = ("reset", tensordict_)
             channel.send(out)
+            workers.append(i)
 
         completed = set()
         while len(completed) < self.num_workers:
-            for i, event in enumerate(self._events):
+            for i in workers:
+                event = self._events[i]
                 if i in completed:
                     continue
                 if event.is_set():
