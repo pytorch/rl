@@ -960,63 +960,51 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        with timeit("env.reset-_reset read"):
-            if tensordict is not None and "_reset" in tensordict.keys():
-                self._assert_tensordict_shape(tensordict)
-                _reset = tensordict.get("_reset")
-                if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                    raise RuntimeError(
-                        "_reset flag in tensordict should follow env.done_spec"
-                    )
-            else:
-                _reset = None
+        if tensordict is not None and "_reset" in tensordict.keys():
+            self._assert_tensordict_shape(tensordict)
+            _reset = tensordict.get("_reset")
+            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
+                raise RuntimeError(
+                    "_reset flag in tensordict should follow env.done_spec"
+                )
+        else:
+            _reset = None
 
-        with timeit("env.reset-_reset exec"):
-            tensordict_reset = self._reset(tensordict, **kwargs)
+        tensordict_reset = self._reset(tensordict, **kwargs)
 #        We assume that this is done properly
 #        if tensordict_reset.device != self.device:
 #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
-        with timeit("env.reset-other1"):
-            if tensordict_reset is tensordict:
-                raise RuntimeError(
-                    "EnvBase._reset should return outplace changes to the input "
-                    "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                    "tensordict.select()) inside _reset before writing new tensors onto this new instance."
-                )
-        with timeit("env.reset-other2"):
-            if not isinstance(tensordict_reset, TensorDictBase):
-                raise RuntimeError(
-                    f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
-                )
+        if tensordict_reset is tensordict:
+            raise RuntimeError(
+                "EnvBase._reset should return outplace changes to the input "
+                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
+                "tensordict.select()) inside _reset before writing new tensors onto this new instance."
+            )
+        if not isinstance(tensordict_reset, TensorDictBase):
+            raise RuntimeError(
+                f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
+            )
     
-        with timeit("env.reset-other3"):
-            if len(self.batch_size):
-                leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
-            else:
-                leading_dim = tensordict_reset.shape
-        with timeit("env.reset-other4"):
-            done = tensordict_reset.get(self.done_key, None)
-        with timeit("env.reset-other5"):
-            done_spec = self.done_spec
-        with timeit("env.reset-other6"):
-            if done is None:
-                with timeit("env.reset-other6a"):
-                    done = done_spec.zero(leading_dim)
-                with timeit("env.reset-other6b"):
-                    key = self.done_key
-                with timeit("env.reset-other6c"):
-                    tensordict_reset.set(key, done)
-            elif (_reset is None and done.any()) or (
-                _reset is not None and done[_reset].any()
-            ):
-                raise RuntimeError(
-                    f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
-        with timeit("env.reset-other7"):
-            if tensordict is not None:
-                tensordict.update(tensordict_reset)
-            else:
-                tensordict = tensordict_reset
+        if len(self.batch_size):
+            leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
+        else:
+            leading_dim = tensordict_reset.shape
+        done = tensordict_reset.get(self.done_key, None)
+        done_spec = self.done_spec
+        if done is None:
+            done = done_spec.zero(leading_dim)
+            key = self.done_key
+            tensordict_reset.set(key, done)
+        elif (_reset is None and done.any()) or (
+            _reset is not None and done[_reset].any()
+        ):
+            raise RuntimeError(
+                f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+            )
+        if tensordict is not None:
+            tensordict.update(tensordict_reset)
+        else:
+            tensordict = tensordict_reset
         return tensordict
 
     def numel(self) -> int:
@@ -1328,11 +1316,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
 
-        with timeit("stack"):
-            data = torch.stack(tensordicts, len(batch_size))
-            if return_contiguous:
-                data = data.contiguous()
-            data.refine_names(..., "time")
+        data = torch.stack(tensordicts, len(batch_size))
+        if return_contiguous:
+            data = data.contiguous()
+        data.refine_names(..., "time")
         return data
 
     def _single_rollout(
