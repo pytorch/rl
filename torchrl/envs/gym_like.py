@@ -236,8 +236,7 @@ class GymLikeEnv(_EnvWrapper):
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
-        if self.device != torch.device("cpu"):
-            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
@@ -266,8 +265,7 @@ class GymLikeEnv(_EnvWrapper):
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
                     source[key] = item.zero()
-        if self.device != torch.device("cpu"):
-            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
