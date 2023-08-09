@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
     elif run == "collector_preempt":
         from torchrl.collectors import MultiSyncDataCollector
-        from torchrl.envs import EnvCreator
+        from torchrl.envs import DoubleToFloat, EnvCreator, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 
