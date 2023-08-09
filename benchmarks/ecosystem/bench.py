@@ -164,8 +164,7 @@ if __name__ == "__main__":
                 return {"loss": logging_losses}
 
         warnings.filterwarnings("ignore")
-        if env_maps[env_name]["backbone"] == "mlp":
-            net = Net(in_features, activation=nn.Tanh, hidden_sizes=[64, 64], device=device)
+        net = Net(in_features, activation=nn.Tanh, hidden_sizes=[64, 64], device=device)
         if dist_class == Categorical:
             actor = DiscreteActor(net, out_features, device=device)
         else:
