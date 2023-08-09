@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from torchrl._utils import timeit
 import abc
 from copy import deepcopy
 from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
@@ -16,7 +15,7 @@ import torch.nn as nn
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import TensorDictBase
 
-from torchrl._utils import prod, seed_generator
+from torchrl._utils import prod, seed_generator, timeit
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -651,7 +650,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         out = self._done_key
         if out is None:
-            self.done_spec # lazy init
+            self.done_spec  # lazy init
             out = self._get_done_key()
         return out
 
@@ -971,9 +970,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             _reset = None
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-#        We assume that this is done properly
-#        if tensordict_reset.device != self.device:
-#            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
+        #        We assume that this is done properly
+        #        if tensordict_reset.device != self.device:
+        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -984,7 +983,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-    
+
         if len(self.batch_size):
             leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
         else:

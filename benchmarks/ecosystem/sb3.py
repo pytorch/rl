@@ -15,7 +15,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
-from tensordict.nn import TensorDictModule, NormalParamExtractor
+from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
@@ -46,7 +46,7 @@ env_maps = {
         "out_features": 2,
         "distribution": TanhNormal,
         "key": ["loc", "scale"],
-    }
+    },
 }
 if __name__ == "__main__":
     # Parallel environments
@@ -119,13 +119,13 @@ if __name__ == "__main__":
     elif run == "penv":
         # reproduce the actor
         backbone = MLP(
-                in_features=in_features,
-                out_features=out_features,
-                depth=2,
-                num_cells=64,
-                activation_class=nn.Tanh,
-                device=device,
-            )
+            in_features=in_features,
+            out_features=out_features,
+            depth=2,
+            num_cells=64,
+            activation_class=nn.Tanh,
+            device=device,
+        )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
         module = TensorDictModule(
@@ -169,13 +169,13 @@ if __name__ == "__main__":
     elif run == "collector":
         # reproduce the actor
         backbone = MLP(
-                in_features=in_features,
-                out_features=out_features,
-                depth=2,
-                num_cells=64,
-                activation_class=nn.Tanh,
-                device=device,
-            )
+            in_features=in_features,
+            out_features=out_features,
+            depth=2,
+            num_cells=64,
+            activation_class=nn.Tanh,
+            device=device,
+        )
         if dist_class is TanhNormal:
             backbone = nn.Sequential(backbone, NormalParamExtractor())
         module = TensorDictModule(

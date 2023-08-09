@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
+
 import abc
 import itertools
 import warnings
@@ -252,7 +253,7 @@ class GymLikeEnv(_EnvWrapper):
 
         source = self.read_obs(obs)
 
-        #if self.done_key not in source:
+        # if self.done_key not in source:
         #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
             source=source,

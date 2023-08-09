@@ -733,9 +733,7 @@ class ParallelEnv(_BatchedEnv):
             assert msg == "started"
 
         # send shared tensordict to workers
-        for channel, shared_tensordict in zip(
-            self.parent_channels, self.shared_tensordicts
-        ):
+        for channel in self.parent_channels:
             channel.send(("init", None))
         self.is_closed = False
 
@@ -808,13 +806,14 @@ class ParallelEnv(_BatchedEnv):
             # strict=False ensures that non-homogeneous keys are still there
             out = next_td.select(*self._selected_step_keys, strict=False).clone()
         return out
+
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase, auto_reset=None
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         # get the current data and next data
         next_tensordict = self._step_and_maybe_reset(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
-    
+
         done = next_tensordict.get(self.done_key)
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
@@ -832,7 +831,7 @@ class ParallelEnv(_BatchedEnv):
                 tensordict,
                 excluded=(_unravel_key_to_tuple(self.reward_key),),
             )
-    
+
         tensordict.set("next", next_tensordict)
         return cur_td, tensordict
 
@@ -864,7 +863,7 @@ class ParallelEnv(_BatchedEnv):
                 if event.is_set():
                     completed.add(i)
                     event.clear()
-    
+
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         next_td_buffer = self.shared_tensordict_parent.get("next")
@@ -1175,7 +1174,11 @@ def _run_worker_pipe_shared_mem(
                 cur_td = _fuse_tensordicts(
                     next_td,
                     shared_tensordict,
-                    excluded=(_unravel_key_to_tuple(env.reward_key), _unravel_key_to_tuple(env.done_key),_unravel_key_to_tuple(env.action_key),),
+                    excluded=(
+                        _unravel_key_to_tuple(env.reward_key),
+                        _unravel_key_to_tuple(env.done_key),
+                        _unravel_key_to_tuple(env.action_key),
+                    ),
                 )
                 if done.all():
                     cur_td = env.reset(cur_td)
