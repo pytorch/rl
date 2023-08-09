@@ -19,7 +19,7 @@ from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
 
 parser = ArgumentParser()
-parser.add_argument("--env_name", choices=["Pendulum-v1", "CartPole-v1"], default="CartPole-v1")
+parser.add_argument("--env_name", choices=["Pendulum-v1", "CartPole-v1", "HalfCheetah-v4", "LunarLander-v2"], default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--preemptive_threshold", default=0.7, type=float)
@@ -43,6 +43,18 @@ env_maps = {
         "out_features": 2,
         "distribution": TanhNormal,
         "key": ["loc", "scale"],
+    },
+    "HalfCheetah-v4": {
+        "in_features": 17,
+        "out_features": 6,
+        "distribution": TanhNormal,
+        "key": ["loc", "scale"],
+    },
+    "LunarLander-v2": {
+        "in_features": 8,
+        "out_features": 4,
+        "distribution": Categorical,
+        "key": ["logits"],
     },
 }
 if __name__ == "__main__":
