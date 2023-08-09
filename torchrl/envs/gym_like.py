@@ -251,10 +251,13 @@ class GymLikeEnv(_EnvWrapper):
         if len(other) == 1:
             info = other[0]
 
+        source = self.read_obs(obs)
+
+        # if self.done_key not in source:
+        #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
-            source=self.read_obs(obs),
+            source=source,
             batch_size=self.batch_size,
-            device=self.device,
         )
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
@@ -262,12 +265,9 @@ class GymLikeEnv(_EnvWrapper):
             # populate the reset with the items we have not seen from info
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
-                    tensordict_out[key] = item.zero()
-
-        tensordict_out.setdefault(
-            "done",
-            self.done_spec.zero(),
-        )
+                    source[key] = item.zero()
+        if self.device != torch.device("cpu"):
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

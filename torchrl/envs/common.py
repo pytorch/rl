@@ -650,6 +650,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         out = self._done_key
         if out is None:
+            self.done_spec  # noqa
             out = self._get_done_key()
         return out
 
@@ -969,8 +970,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             _reset = None
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset.device != self.device:
-            tensordict_reset = tensordict_reset.to(self.device)
+        #        We assume that this is done properly
+        #        if tensordict_reset.device != self.device:
+        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -986,16 +988,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
         else:
             leading_dim = tensordict_reset.shape
-        if self.done_spec is not None and self.done_key not in tensordict_reset.keys(
-            True, True
-        ):
-            tensordict_reset.set(
-                self.done_key,
-                self.done_spec.zero(leading_dim),
-            )
-
-        if (_reset is None and tensordict_reset.get(self.done_key).any()) or (
-            _reset is not None and tensordict_reset.get(self.done_key)[_reset].any()
+        done = tensordict_reset.get(self.done_key, None)
+        done_spec = self.done_spec
+        if done is None:
+            done = done_spec.zero(leading_dim)
+            key = self.done_key
+            tensordict_reset.set(key, done)
+        elif (_reset is None and done.any()) or (
+            _reset is not None and done[_reset].any()
         ):
             raise RuntimeError(
                 f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."

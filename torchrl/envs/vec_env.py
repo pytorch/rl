@@ -688,7 +688,6 @@ class ParallelEnv(_BatchedEnv):
 
     def _start_workers(self) -> None:
         _num_workers = self.num_workers
-        ctx = mp.get_context("spawn")
 
         self.parent_channels = []
         self._workers = []
@@ -701,8 +700,8 @@ class ParallelEnv(_BatchedEnv):
             if self._verbose:
                 print(f"initiating worker {idx}")
             # No certainty which module multiprocessing_context is
-            channel1, channel2 = ctx.Pipe()
-            event = ctx.Event()
+            channel1, channel2 = mp.Pipe()
+            event = mp.Event()
             self._events.append(event)
             env_fun = self.create_env_fn[idx]
             if env_fun.__class__.__name__ != "EnvCreator":
@@ -721,6 +720,7 @@ class ParallelEnv(_BatchedEnv):
                     self.device,
                     self.allow_step_when_done,
                     event,
+                    self.shared_tensordicts[idx],
                 ),
             )
             w.daemon = True
@@ -733,10 +733,8 @@ class ParallelEnv(_BatchedEnv):
             assert msg == "started"
 
         # send shared tensordict to workers
-        for channel, shared_tensordict in zip(
-            self.parent_channels, self.shared_tensordicts
-        ):
-            channel.send(("init", shared_tensordict))
+        for channel in self.parent_channels:
+            channel.send(("init", None))
         self.is_closed = False
 
     @_check_start
@@ -789,6 +787,8 @@ class ParallelEnv(_BatchedEnv):
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
+                if i in completed:
+                    continue
                 if event.is_set():
                     completed.add(i)
                     event.clear()
@@ -858,6 +858,8 @@ class ParallelEnv(_BatchedEnv):
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
+                if i in completed:
+                    continue
                 if event.is_set():
                     completed.add(i)
                     event.clear()
@@ -925,6 +927,8 @@ class ParallelEnv(_BatchedEnv):
         completed = set()
         while len(completed) < self.num_workers:
             for i, event in enumerate(self._events):
+                if i in completed:
+                    continue
                 if event.is_set():
                     completed.add(i)
                     event.clear()
@@ -1053,6 +1057,7 @@ def _run_worker_pipe_shared_mem(
     device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
     mp_event: mp.Event = None,
+    shared_tensordict: TensorDictBase = None,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1078,7 +1083,6 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     # make sure that process can be closed
-    shared_tensordict = None
     local_tensordict = None
 
     child_pipe.send("started")
@@ -1102,7 +1106,6 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            shared_tensordict = data
             next_shared_tensordict = shared_tensordict.get("next")
             shared_tensordict = shared_tensordict.clone(False)
             del shared_tensordict["next"]
@@ -1161,7 +1164,6 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             next_td = env._step(shared_tensordict)
-            next_shared_tensordict.update_(next_td)
 
             done = next_td.get(env.done_key)
             truncated = next_td.get("truncated", None)
@@ -1171,17 +1173,21 @@ def _run_worker_pipe_shared_mem(
                 # we'll need to call reset
                 cur_td = _fuse_tensordicts(
                     next_td,
-                    local_tensordict,
-                    excluded=(_unravel_key_to_tuple(env.reward_key),),
+                    shared_tensordict,
+                    excluded=(
+                        _unravel_key_to_tuple(env.reward_key),
+                        _unravel_key_to_tuple(env.done_key),
+                        _unravel_key_to_tuple(env.action_key),
+                    ),
                 )
                 if done.all():
                     cur_td = env.reset(cur_td)
-                    shared_tensordict.update_(cur_td)
                 else:
                     cur_td.set("_reset", done)
                     cur_td = env.reset(cur_td)
                     del cur_td["_reset"]
-                    shared_tensordict.update_(cur_td)
+                shared_tensordict.update_(cur_td)
+            next_shared_tensordict.update_(next_td)
 
             if event is not None:
                 event.record()
@@ -1194,7 +1200,6 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before closing")
             env.close()
             del env
-
             mp_event.set()
             child_pipe.close()
             if verbose:
