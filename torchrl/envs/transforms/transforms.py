@@ -9,6 +9,7 @@ import collections
 import multiprocessing as mp
 import warnings
 from copy import copy, deepcopy
+from functools import wraps
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
@@ -65,6 +66,7 @@ FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent" "enviro
 
 
 def _apply_to_composite(function):
+    @wraps(function)
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
@@ -215,12 +217,10 @@ class Transform(nn.Module):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict.keys(include_nested=True):
-                observation = self._apply_transform(tensordict.get(in_key))
-                tensordict.set(
-                    out_key,
-                    observation,
-                )
+            data = tensordict.get(in_key, None)
+            if data is not None:
+                data = self._apply_transform(data)
+                tensordict.set(out_key, data)
             elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
@@ -259,12 +259,10 @@ class Transform(nn.Module):
         # # exposed to the user: we'd like that the input keys remain unchanged
         # # in the originating script if they're being transformed.
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            if in_key in tensordict.keys(include_nested=True):
-                item = self._inv_apply_transform(tensordict.get(in_key))
-                tensordict.set(
-                    out_key,
-                    item,
-                )
+            data = tensordict.get(in_key, None)
+            if data is not None:
+                item = self._inv_apply_transform(data)
+                tensordict.set(out_key, item)
             elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
 
@@ -396,10 +394,7 @@ class Transform(nn.Module):
                     compose_parent = TransformedEnv(
                         compose.__dict__["_container"].base_env
                     )
-                    if compose_parent.transform is not compose:
-                        comp_parent_trans = compose_parent.transform.clone()
-                    else:
-                        comp_parent_trans = None
+                    comp_parent_trans = compose_parent.transform.clone()
                     out = TransformedEnv(
                         compose_parent.base_env,
                         transform=comp_parent_trans,
@@ -2358,6 +2353,21 @@ class FiniteTensorDictCheck(Transform):
 class DoubleToFloat(Transform):
     """Maps actions float to double before they are called on the environment.
 
+    Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
+    during construction, the class behaviour will change:
+
+      * If the keys are provided, those entries and those entries only will be
+        transformed from ``float64`` to ``float32`` entries;
+      * If the keys are not provided and the object is within an environment
+        register of transforms, the input and output specs that have a dtype
+        set to ``float64`` will be used as in_keys_inv / in_keys respectively.
+      * If the keys are not provided and the object is used without an
+        environment, the ``forward`` / ``inverse`` pass will scan through the
+        input tensordict for all float64 values and map them to a float32
+        tensor. For large data structures, this can impact performance as this
+        scanning doesn't come for free. The keys to be
+        transformed will not be cached.
+
     Args:
         in_keys (sequence of NestedKey, optional): list of double keys to be converted to
             float before being exposed to external objects and functions.
@@ -2366,11 +2376,76 @@ class DoubleToFloat(Transform):
 
     Examples:
         >>> td = TensorDict(
-        ...     {'obs': torch.ones(1, dtype=torch.double)}, [])
+        ...     {'obs': torch.ones(1, dtype=torch.double),
+        ...     'not_transformed': torch.ones(1, dtype=torch.double),
+        ... }, [])
         >>> transform = DoubleToFloat(in_keys=["obs"])
         >>> _ = transform(td)
         >>> print(td.get("obs").dtype)
         torch.float32
+        >>> print(td.get("not_transformed").dtype)
+        torch.float64
+
+    In "automatic" mode, all float64 entries are transformed:
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {'obs': torch.ones(1, dtype=torch.double),
+        ...     'not_transformed': torch.ones(1, dtype=torch.double),
+        ... }, [])
+        >>> transform = DoubleToFloat()
+        >>> _ = transform(td)
+        >>> print(td.get("obs").dtype)
+        torch.float32
+        >>> print(td.get("not_transformed").dtype)
+        torch.float32
+
+    The same behaviour is the rule when environments are constructedw without
+    specifying the transform keys:
+
+    Examples:
+        >>> class MyEnv(EnvBase):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec((), dtype=torch.float64))
+        ...         self.action_spec = UnboundedContinuousTensorSpec((), dtype=torch.float64)
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float64)
+        ...         self.done_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.bool)
+        ...     def _reset(self, data=None):
+        ...         return TensorDict({"done": torch.zeros((1,), dtype=torch.bool), **self.observation_spec.rand()}, [])
+        ...     def _step(self, data):
+        ...         assert data["action"].dtype == torch.float64
+        ...         reward = self.reward_spec.rand()
+        ...         done = torch.zeros((1,), dtype=torch.bool)
+        ...         obs = self.observation_spec.rand()
+        ...         assert reward.dtype == torch.float64
+        ...         assert obs["obs"].dtype == torch.float64
+        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...     def _set_seed(self, seed):
+        ...         pass
+        >>> env = TransformedEnv(MyEnv(), DoubleToFloat())
+        >>> assert env.action_spec.dtype == torch.float32
+        >>> assert env.observation_spec["obs"].dtype == torch.float32
+        >>> assert env.reward_spec.dtype == torch.float32, env.reward_spec.dtype
+        >>> print(env.rollout(2))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        obs: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                obs: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        >>> assert env.transform.in_keys == ["obs", "reward"]
+        >>> assert env.transform.in_keys_inv == ["action"]
 
     """
 
@@ -2381,7 +2456,74 @@ class DoubleToFloat(Transform):
         in_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
+        if in_keys is None:
+            self._keys_unset = True
+            in_keys = []
+        else:
+            self._keys_unset = False
+        if in_keys_inv is None:
+            self._keys_inv_unset = True
+            in_keys_inv = []
+        else:
+            self._keys_inv_unset = False
+
         super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
+
+    def _set_in_keys(self):
+        env_base = self.parent
+        if env_base is not None:
+            # retrieve the specs that are float32
+            if self._keys_unset:
+                in_keys = []
+                observation_spec = env_base.observation_spec
+                for key, spec in observation_spec.items(True, True):
+                    if spec.dtype == torch.float64:
+                        in_keys.append(unravel_key(key))
+                reward_spec = env_base.reward_spec
+                if reward_spec.dtype == torch.float64:
+                    in_keys.append(unravel_key(env_base.reward_key))
+
+                self.in_keys = self.out_keys = in_keys
+                self._keys_unset = False
+            if self._keys_inv_unset:
+                in_keys_inv = []
+                state_spec = env_base.state_spec
+                if state_spec is not None:
+                    for key, spec in state_spec.items(True, True):
+                        if spec.dtype == torch.float64:
+                            in_keys_inv.append(unravel_key(key))
+                action_spec = env_base.action_spec
+                if action_spec.dtype == torch.float64:
+                    in_keys_inv.append(unravel_key(env_base.action_key))
+                self.in_keys_inv = self.out_keys_inv = in_keys_inv
+                self._keys_inv_unset = False
+            self._container.empty_cache()
+
+    @dispatch(source="in_keys", dest="out_keys")
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        if self._keys_unset:
+            self._set_in_keys()
+            for in_key, data in tensordict.items(True, True):
+                if data.dtype == torch.float64:
+                    out_key = in_key
+                    data = self._apply_transform(data)
+                    tensordict.set(out_key, data)
+            return tensordict
+        return super().forward(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._keys_inv_unset:
+            self._set_in_keys()
+            # we can't differentiate between content of forward and inverse
+            tensordict = tensordict.clone(False)
+            for in_key, data in tensordict.items(True, True):
+                if data.dtype == torch.float32:
+                    out_key = in_key
+                    data = self._inv_apply_transform(data)
+                    tensordict.set(out_key, data)
+            return tensordict
+        return super()._inv_call(tensordict)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(torch.float)
@@ -2401,6 +2543,8 @@ class DoubleToFloat(Transform):
                 space.maximum = space.maximum.to(torch.float)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        if self._keys_inv_unset:
+            self._set_in_keys()
         action_spec = input_spec["_action_spec"]
         state_spec = input_spec["_state_spec"]
         for key in self.in_keys_inv:
@@ -2419,6 +2563,8 @@ class DoubleToFloat(Transform):
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if self._keys_unset:
+            self._set_in_keys()
         reward_key = self.parent.reward_key if self.parent is not None else "reward"
         if unravel_key(reward_key) in self.in_keys:
             if reward_spec.dtype is not torch.double:
@@ -2427,8 +2573,13 @@ class DoubleToFloat(Transform):
             self._transform_spec(reward_spec)
         return reward_spec
 
-    @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if self._keys_unset:
+            self._set_in_keys()
+        return self._transform_observation_spec(observation_spec)
+
+    @_apply_to_composite
+    def _transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         self._transform_spec(observation_spec)
         return observation_spec
 
