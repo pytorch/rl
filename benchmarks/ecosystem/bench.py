@@ -70,6 +70,8 @@ if __name__ == "__main__":
     fpb = args.fpb
     total_frames = args.total_frames
     run = args.run
+    fps_list = []
+
     if args.device == "auto":
         device = (
             torch.device("cpu")
@@ -213,6 +215,9 @@ if __name__ == "__main__":
                 env_time = 0
                 model_time = 0
                 cur_frames = 0
+                if i > 0:
+                    # skip first
+                    fps_list.append(fps)
 
             # vec_env.render("human")
         if args.logger == "wandb":
@@ -264,6 +269,8 @@ if __name__ == "__main__":
                 logger.log_scalar("env step", cur_frames / env_time, step=frames)
 
                 fps = cur_frames / (env_time + model_time)
+                if i > 0:
+                    fps_list.append(fps)
                 logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 env_time = 0
@@ -326,6 +333,8 @@ if __name__ == "__main__":
                 if i % 20 == 0:
                     t = time.time()
                     fps = cur / (t - prev_t)
+                    if i > 0:
+                        fps_list.append(fps)
                     logger.log_scalar("total", fps, step=frames)
                     logger.log_scalar("frames", frames)
                     prev_t = t
@@ -386,6 +395,8 @@ if __name__ == "__main__":
             if i % 20 == 0:
                 t = time.time()
                 fps = cur / (t - prev_t)
+                if i>0:
+                    fps_list.append(fps)
                 logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 prev_t = t
@@ -447,6 +458,8 @@ if __name__ == "__main__":
             if i % 20 == 0:
                 t = time.time()
                 fps = cur / (t - prev_t)
+                if i>0:
+                    fps_list.append(fps)
                 logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 prev_t = t
@@ -512,6 +525,8 @@ if __name__ == "__main__":
             if i % 20 == 0:
                 t = time.time()
                 fps = cur / (t - prev_t)
+                if i > 0:
+                    fps_list.append(fps)
                 logger.log_scalar("total", fps, step=frames)
                 logger.log_scalar("frames", frames)
                 prev_t = t
@@ -522,5 +537,5 @@ if __name__ == "__main__":
         collector.shutdown()
         del collector, actor, logger, module, backbone
 
-    print("\n\n", "=" * 20, "\n" + "fps:", fps)
+    print("\n\n", "=" * 20, "\n" + "fps:", np.mean(fps_list))
     timeit.print()
