@@ -290,8 +290,8 @@ if __name__ == "__main__":
             while frames < total_frames:
                 if i == 1:
                     timeit.erase()
-                data = env.rollout(fpb, actor, break_when_any_done=False)
-                # data = env._single_rollout(fpb, actor, break_when_any_done=False)
+                # data = env.rollout(fpb, actor, break_when_any_done=False)
+                data = env._single_rollout(fpb, actor, break_when_any_done=False)
                 frames += data.numel()
                 cur += data.numel()
                 if i % 20 == 0:
