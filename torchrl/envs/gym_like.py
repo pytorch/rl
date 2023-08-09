@@ -232,12 +232,14 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict[self.reward_key] = reward
         obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+        tensordict_out = TensorDict(
+            obs_dict, batch_size=tensordict.batch_size, device=self.device
+        )
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
-        if self.device != torch.device("cpu"):
-            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        # if self.device != torch.device("cpu"):
+        #     tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
