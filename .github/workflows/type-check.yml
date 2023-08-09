@@ -1,0 +1,26 @@
+name: Type Check
+
+# Not running this job anywhere since it's broken on main. Just creating the
+# job config so it's there when issues are fixed.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+jobs:
+  type-check:
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/rl
+      script: |
+        set -euo pipefail
+
+        git config --global --add safe.directory /__w/rl/rl
+
+        conda create -n env --yes --quiet python=3.7
+        conda activate env
+
+        pip install --progress-bar off mypy
+        mypy --install-types --non-interactive --config-file mypy.ini
