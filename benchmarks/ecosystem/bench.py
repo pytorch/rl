@@ -40,13 +40,13 @@ env_maps = {
     },
     "Pendulum-v1": {
         "in_features": 3,
-        "out_features": 2,
+        "out_features": 1 * 2,
         "distribution": TanhNormal,
         "key": ["loc", "scale"],
     },
     "HalfCheetah-v4": {
         "in_features": 17,
-        "out_features": 6,
+        "out_features": 6 * 2,
         "distribution": TanhNormal,
         "key": ["loc", "scale"],
     },
