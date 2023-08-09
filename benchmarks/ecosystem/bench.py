@@ -5,6 +5,8 @@
 #
 # Logs Gym Async env data collection speed with a simple policy.
 #
+from typing import List, Dict
+
 import time
 
 from argparse import ArgumentParser
@@ -14,12 +16,9 @@ import torch
 from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torch import nn
 from torch.distributions import Categorical
-from torchrl._utils import timeit
-from torchrl.collectors import MultiaSyncDataCollector
-from torchrl.envs import EnvCreator, ParallelEnv
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 from torchrl.record.loggers.wandb import WandbLogger
+from torchrl._utils import timeit
+from torchrl.modules import TanhNormal
 
 parser = ArgumentParser()
 parser.add_argument("--env_name", default="CartPole-v1")
@@ -27,7 +26,7 @@ parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--device", default="auto")
-parser.add_argument("--run", choices=["collector", "sb3", "penv"], default="penv")
+parser.add_argument("--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv")
 
 env_maps = {
     "CartPole-v1": {
@@ -68,19 +67,101 @@ if __name__ == "__main__":
     if run == "tianshou":
         from tianshou.env import SubprocVectorEnv
         from tianshou.utils.net.common import Net
-        from tianshou.utils.net.discrete import Actor
+        from tianshou.utils.net.discrete import Actor as DiscreteActor
+        from tianshou.utils.net.continuous import Actor as ContActor
+
         import warnings
         import gym
 
+        from tianshou.data import Batch, ReplayBuffer, to_torch, to_torch_as
+        from tianshou.policy import BasePolicy
+        import numpy as np
+
+        class REINFORCEPolicy(BasePolicy):
+            """Implementation of REINFORCE algorithm."""
+
+            def __init__(
+                self,
+                model: torch.nn.Module,
+                optim: torch.optim.Optimizer, ):
+                super().__init__()
+                self.actor = model
+                self.optim = optim
+                # action distribution
+                self.dist_fn = dist_class
+
+            def forward(self, batch: Batch) -> Batch:
+                """Compute action over the given batch data."""
+                preds, _ = self.actor(batch.obs)
+                if self.dist_fn == TanhNormal:
+                    preds = preds.chunk(2, dim=-1)
+                    preds = [preds[0], preds[1].exp()]
+                    dist = self.dist_fn(*preds)
+                else:
+                    dist = self.dist_fn(preds)
+                act = dist.sample()
+                return Batch(act=act, dist=dist)
+
+            def process_fn(
+                self,
+                batch: Batch,
+                buffer: ReplayBuffer,
+                indices
+                ) -> Batch:
+                """Compute the discounted returns for each transition."""
+                returns, _ = self.compute_episodic_return(
+                    batch,
+                    buffer,
+                    indices,
+                    gamma=0.99,
+                    gae_lambda=1.0
+                    )
+                batch.returns = returns
+                return batch
+
+            def learn(self, batch: Batch, batch_size: int, repeat: int) -> Dict[
+                str, List[float]]:
+                """Perform the back-propagation."""
+                logging_losses = []
+                for _ in range(repeat):
+                    for minibatch in batch.split(batch_size, merge_last=True):
+                        self.optim.zero_grad()
+                        result = self(minibatch)
+                        dist = result.dist
+                        act = to_torch_as(minibatch.act, result.act)
+                        ret = to_torch(
+                            minibatch.returns,
+                            torch.float,
+                            result.act.device
+                            )
+                        log_prob = dist.log_prob(act).reshape(
+                            len(ret),
+                            -1
+                            ).transpose(0, 1)
+                        loss = -(log_prob * ret).mean()
+                        loss.backward()
+                        self.optim.step()
+                        logging_losses.append(loss.item())
+                return {"loss": logging_losses}
+
+
         warnings.filterwarnings('ignore')
         net = Net(in_features, hidden_sizes=[64, 64], device=device)
-        actor = Actor(net, out_features, device=device)
+        if dist_class == Categorical:
+            actor = DiscreteActor(net, out_features, device=device)
+        else:
+            actor = ContActor(net, out_features, device=device)
+        # this is useless but Tianshou requires the policy to have an optimizer associated
+        optim = torch.optim.Adam(actor.parameters(), lr=0.0003)
+        policy = REINFORCEPolicy(actor, optim)
 
         env = SubprocVectorEnv(
             [lambda: gym.make('CartPole-v1') for _ in range(n_envs)]
         )
 
-        obs = vec_env.reset()
+        logger = WandbLogger(exp_name=f"tianshou-{env_name}", project="benchmark")
+
+        obs, _ = env.reset()
         i = 0
         model_time = 0
         env_time = 0
@@ -88,13 +169,14 @@ if __name__ == "__main__":
         cur_frames = 0
         while frames < total_frames:
             i += 1
-
             with timeit("policy"):
                 t0 = time.time()
-                action, _states = model.predict(obs)
+                action = policy(Batch(obs=obs)).act.cpu().numpy()
                 t1 = time.time()
             with timeit("step"):
-                obs, rewards, dones, info = vec_env.step(action)
+                obs, rewards, term, dones, info = env.step(action)
+                if np.sum(dones):
+                    env.reset(np.where(dones)[0])
                 t2 = time.time()
 
             frames += len(dones)
@@ -184,6 +266,10 @@ if __name__ == "__main__":
         del model
 
     elif run == "penv":
+        from torchrl.envs import EnvCreator, ParallelEnv
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
         # reproduce the actor
         backbone = MLP(
             in_features=in_features,
@@ -235,6 +321,12 @@ if __name__ == "__main__":
         del env
 
     elif run == "collector":
+        from torchrl.collectors import MultiaSyncDataCollector
+        from torchrl.envs import EnvCreator
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+        from torchrl.record.loggers.wandb import WandbLogger
+
         # reproduce the actor
         backbone = MLP(
             in_features=in_features,
