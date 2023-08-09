@@ -1138,19 +1138,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if local_tensordict is not None:
-                for key in env_input_keys:
-                    # local_tensordict.set(key, shared_tensordict.get(key))
-                    key = _unravel_key_to_tuple(key)
-                    local_tensordict._set_tuple(
-                        key,
-                        shared_tensordict._get_tuple(key, None),
-                        inplace=False,
-                        validated=True,
-                    )
-            else:
-                local_tensordict = shared_tensordict.clone(recurse=False)
-            next_td = env._step(local_tensordict)
+            next_td = env._step(shared_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             next_shared_tensordict.update_(next_td)
