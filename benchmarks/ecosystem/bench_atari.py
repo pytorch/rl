@@ -8,13 +8,12 @@
 import time
 
 from argparse import ArgumentParser
-from typing import Dict, List
 
 import numpy as np
 
 import torch
 
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict.nn import TensorDictModule
 from torch import nn
 from torch.distributions import Categorical
 from torchrl._utils import timeit
@@ -121,7 +120,7 @@ if __name__ == "__main__":
             i += 1
             with timeit("policy"):
                 t0 = time.time()
-                action = policy(Batch(obs=obs)).act.cpu().numpy()
+                action = policy(Batch(obs=obs, state=None)).act.cpu().numpy()
                 t1 = time.time()
             with timeit("step"):
                 obs, rewards, term, dones, info = env.step(action)
@@ -233,7 +232,7 @@ if __name__ == "__main__":
             TransformedEnv,
         )
         from torchrl.envs.libs.gym import GymEnv
-        from torchrl.modules import ConvNet, MLP, ProbabilisticActor, TanhNormal
+        from torchrl.modules import ConvNet, MLP, ProbabilisticActor
 
         # reproduce the actor
         backbone = nn.Sequential(
@@ -306,7 +305,6 @@ if __name__ == "__main__":
         from torchrl.envs import (
             CatFrames,
             Compose,
-            DoubleToFloat,
             EnvCreator,
             GrayScale,
             ParallelEnv,

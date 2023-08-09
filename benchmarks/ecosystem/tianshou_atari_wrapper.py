@@ -366,7 +366,6 @@ class DQN(nn.Module):
         self,
         obs,
         state=None,
-        info={},
     ):
         r"""Mapping: s -> Q(s, \*)."""
         obs = torch.as_tensor(obs, device=self.device, dtype=torch.float32)
