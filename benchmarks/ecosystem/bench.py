@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
         env = SubprocVectorEnv([lambda: gym.make("CartPole-v1") for _ in range(n_envs)])
 
-        logger = Logger(exp_name=f"tianshou-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"tianshou-{env_name}", )#project="benchmark")
 
         obs, _ = env.reset()
         i = 0
@@ -205,7 +205,7 @@ if __name__ == "__main__":
         model = PPO("MlpPolicy", vec_env, verbose=0)
         print("policy", model.policy)
 
-        logger = Logger(exp_name=f"sb3-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"sb3-{env_name}", )#project="benchmark")
 
         obs = vec_env.reset()
         i = 0
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 
         env = ParallelEnv(n_envs, EnvCreator(make_env))
 
-        logger = Logger(exp_name=f"torchrl-penv-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"torchrl-penv-{env_name}", )#project="benchmark")
 
         prev_t = time.time()
         frames = 0
@@ -347,7 +347,7 @@ if __name__ == "__main__":
             device=device,
         )
 
-        logger = Logger(exp_name=f"torchrl-async-{env_name}", project="benchmark")
+        logger = Logger(exp_name=f"torchrl-async-{env_name}", )#project="benchmark")
 
         prev_t = time.time()
         frames = 0
