@@ -19,7 +19,7 @@ from torchrl._utils import timeit
 from torchrl.modules import TanhNormal
 
 parser = ArgumentParser()
-parser.add_argument("--env_name", default="CartPole-v1")
+parser.add_argument("--env_name", choices=["Pendulum-v1", "CartPole-v1"], default="CartPole-v1")
 parser.add_argument("--n_envs", default=4, type=int)
 parser.add_argument("--log_sep", default=200, type=int)
 parser.add_argument("--preemptive_threshold", default=0.7, type=float)
@@ -152,7 +152,8 @@ if __name__ == "__main__":
                 return {"loss": logging_losses}
 
         warnings.filterwarnings("ignore")
-        net = Net(in_features, activation=nn.Tanh, hidden_sizes=[64, 64], device=device)
+        if env_maps[env_name]["backbone"] == "mlp":
+            net = Net(in_features, activation=nn.Tanh, hidden_sizes=[64, 64], device=device)
         if dist_class == Categorical:
             actor = DiscreteActor(net, out_features, device=device)
         else:
