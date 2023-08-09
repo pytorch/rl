@@ -325,7 +325,6 @@ if __name__ == "__main__":
         from torchrl.envs import EnvCreator
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
-        from torchrl.record.loggers.wandb import WandbLogger
 
         # reproduce the actor
         backbone = MLP(
