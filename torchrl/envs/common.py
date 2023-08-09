@@ -25,7 +25,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import get_available_libraries, step_mdp, \
     _fuse_tensordicts
-
+from tensordict._tensordict import _unravel_key_to_tuple
 LIBRARIES = get_available_libraries()
 
 
@@ -827,8 +827,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if truncated is not None:
             done = done | truncated
 
-        cur_td = _fuse_tensordicts(next_tensordict, tensordict)
-        del cur_td[self.reward_key]
+        cur_td = _fuse_tensordicts(next_tensordict, tensordict, excluded=(_unravel_key_to_tuple(self.reward_key)))
 
         if done.any():
             if done.numel() > 1:

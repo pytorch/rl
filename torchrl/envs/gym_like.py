@@ -154,7 +154,7 @@ class GymLikeEnv(_EnvWrapper):
             step_reward (reward in the format provided by the inner env): reward of this particular step
 
         """
-        return total_reward + self.reward_spec.encode(step_reward, ignore_device=True)
+        return total_reward + step_reward  # self.reward_spec.encode(step_reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -215,11 +215,9 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = self.read_reward(reward, _reward)
 
-            if isinstance(done, bool) or (
-                isinstance(done, np.ndarray) and not len(done)
-            ):
-                done = torch.tensor([done])
 
+            if isinstance(done, bool) or (isinstance(done, np.ndarray) and not len(done)):
+                done = torch.tensor([done])
             done, do_break = self.read_done(done)
             if do_break:
                 break
@@ -231,13 +229,12 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict[self.reward_key] = reward
         obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(
-                obs_dict, batch_size=tensordict.batch_size, device=self.device
-            )
+        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
-
+        if self.device != torch.device("cpu"):
+            tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
