@@ -203,9 +203,9 @@ if __name__ == "__main__":
             # vec_env.render("human")
 
         logger.experiment.finish()
-        vec_env.close()
-        del vec_env
-        del model
+        env.close()
+        del env
+        del actor, policy
 
     elif run == "sb3":
 
@@ -318,7 +318,8 @@ if __name__ == "__main__":
                     prev_t = t
                     cur = 0
                 i += 1
-        del env
+        logger.experiment.finish()
+        del env, actor, logger, module, backbone
 
     elif run == "collector":
         from torchrl.collectors import MultiaSyncDataCollector
@@ -376,6 +377,10 @@ if __name__ == "__main__":
                 logger.log_scalar("frames", frames)
                 prev_t = t
                 cur = 0
+
+        logger.experiment.finish()
+        collector.shutdown()
+        del collector, actor, logger, module, backbone
 
     print("\n\n", "=" * 20, "\n" + "fps:", fps)
     timeit.print()
