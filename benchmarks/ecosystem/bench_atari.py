@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
         warnings.filterwarnings("ignore")
         net = DQN(12, 84, 84, out_features, device).to(args.device)
-        optim = torch.optim.Adam(net.parameters(), lr=args.lr)
+        optim = torch.optim.Adam(net.parameters(), lr=1e-4)
         # define policy
         policy = DQNPolicy(
             net,
