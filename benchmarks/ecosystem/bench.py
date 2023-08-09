@@ -288,7 +288,7 @@ if __name__ == "__main__":
         def make_env():
             return GymEnv(env_name, categorical_action_encoding=True, device=device)
 
-        env = ParallelEnv(n_envs, EnvCreator(make_env))
+        env = ParallelEnv(n_envs, EnvCreator(make_env), share_individual_td=True)
 
         logger = Logger(exp_name=f"torchrl-penv-{env_name}", **logger_kwargs)
 
