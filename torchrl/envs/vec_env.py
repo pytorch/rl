@@ -693,10 +693,10 @@ class ParallelEnv(_BatchedEnv):
         self.parent_channels = []
         self._workers = []
         self._events = []
-        if self.device.type == "cuda":
-            self.event = torch.cuda.Event()
-        else:
-            self.event = None
+        # if self.device.type == "cuda":
+        #     self.event = torch.cuda.Event()
+        # else:
+        self.event = None
         for idx in range(_num_workers):
             if self._verbose:
                 print(f"initiating worker {idx}")
