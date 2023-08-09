@@ -20,8 +20,12 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, \
-    TensorDictBase, TensorDict
+from tensordict.tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+)
 
 __all__ = [
     "exploration_mode",
@@ -551,6 +555,7 @@ def make_composite_from_td(data):
     )
     return composite
 
+
 def _fuse_tensordicts(*tds, excluded, total=None):
     """Fuses tensordicts with rank-wise priority.
 
@@ -605,6 +610,11 @@ def _fuse_tensordicts(*tds, excluded, total=None):
                 continue
             val = td._get_str(key, None)
             if is_tensor_collection(val):
-                val = _fuse_tensordicts(val, *[_td._get_str(key, None) for _td in tds[i + 1:]], total=cur_total, excluded=excluded)
+                val = _fuse_tensordicts(
+                    val,
+                    *[_td._get_str(key, None) for _td in tds[i + 1 :]],
+                    total=cur_total,
+                    excluded=excluded,
+                )
             out._set_str(key, val, validated=True, inplace=False)
     return out

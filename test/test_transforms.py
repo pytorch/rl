@@ -3025,7 +3025,7 @@ class TestNoop(TransformBase):
         ):
             t.reset(TensorDict({"next": {}}, []))
         td = TensorDict({"next": {}}, [])
-        t._step(td, td.get('next'))
+        t._step(td, td.get("next"))
 
     def test_transform_compose(self):
         t = Compose(NoopResetEnv())
@@ -5055,9 +5055,9 @@ class TestTargetReturn(TransformBase):
             batch_size=batch,
         )
         td = t.reset(td)
-        next_td = td.get('next')
+        next_td = td.get("next")
         next_td = t._step(td, next_td)
-        td.set('next', next_td)
+        td.set("next", next_td)
 
         if mode == "reduce":
             assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
@@ -5134,7 +5134,7 @@ class TestTargetReturn(TransformBase):
         reward = torch.randn(10)
         td = TensorDict({("next", in_key): reward}, [])
         td = t.reset(td)
-        td_next = t._step(td, td.get('next'))
+        td_next = t._step(td, td.get("next"))
         td.set("next", td_next)
         if mode == "reduce":
             assert (td["next", out_key] + td["next", in_key] == 10.0).all()
