@@ -286,7 +286,7 @@ if __name__ == "__main__":
         del model
 
     elif run == "penv":
-        from torchrl.envs import EnvCreator, ParallelEnv
+        from torchrl.envs import EnvCreator, ParallelEnv, DoubleToFloat, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
 
@@ -310,8 +310,12 @@ if __name__ == "__main__":
             module, in_keys=dist_key, distribution_class=dist_class
         )
 
-        def make_env():
-            return GymEnv(env_name, categorical_action_encoding=True, device=device)
+        if env_name == "HalfCheetah-v4":
+            def make_env():
+                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
+        else:
+            def make_env():
+                return GymEnv(env_name, categorical_action_encoding=True, device=device)
 
         env = ParallelEnv(n_envs, EnvCreator(make_env))
 
@@ -346,9 +350,16 @@ if __name__ == "__main__":
 
     elif run == "collector":
         from torchrl.collectors import MultiaSyncDataCollector
-        from torchrl.envs import EnvCreator
+        from torchrl.envs import EnvCreator, DoubleToFloat, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
+        if env_name == "HalfCheetah-v4":
+            def make_env():
+                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
+        else:
+            def make_env():
+                return GymEnv(env_name, categorical_action_encoding=True, )
 
         # reproduce the actor
         backbone = MLP(
@@ -373,10 +384,7 @@ if __name__ == "__main__":
         collector = MultiaSyncDataCollector(
             n_envs
             * [
-                lambda: GymEnv(
-                    env_name,
-                    categorical_action_encoding=True,
-                )
+                make_env
             ],
             actor,
             total_frames=total_frames,
@@ -409,9 +417,16 @@ if __name__ == "__main__":
 
     elif run == "collector":
         from torchrl.collectors import MultiaSyncDataCollector
-        from torchrl.envs import EnvCreator
+        from torchrl.envs import EnvCreator, DoubleToFloat, TransformedEnv
         from torchrl.envs.libs.gym import GymEnv
         from torchrl.modules import MLP, ProbabilisticActor, TanhNormal
+
+        if env_name == "HalfCheetah-v4":
+            def make_env():
+                return TransformedEnv(GymEnv(env_name, categorical_action_encoding=True, device=device), DoubleToFloat())
+        else:
+            def make_env():
+                return GymEnv(env_name, categorical_action_encoding=True, )
 
         # reproduce the actor
         backbone = MLP(
@@ -436,10 +451,7 @@ if __name__ == "__main__":
         collector = MultiaSyncDataCollector(
             n_envs
             * [
-                lambda: GymEnv(
-                    env_name,
-                    categorical_action_encoding=True,
-                )
+                make_env
             ],
             actor,
             total_frames=total_frames,
