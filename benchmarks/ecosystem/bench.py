@@ -27,7 +27,7 @@ parser.add_argument("--total_frames", default=100_000, type=int)
 parser.add_argument("--device", default="auto")
 parser.add_argument("--fpb", "--frames-per-batch", "--frames_per_batch", default=200, type=int)
 parser.add_argument(
-    "--run", choices=["collector", "sb3", "penv", "tianshou"], default="penv"
+    "--run", choices=["collector", "collector_preempt", "sb3", "penv", "tianshou"], default="penv"
 )
 parser.add_argument("--logger", default="wandb", choices=["wandb", "tensorboard", "tb"])
 
