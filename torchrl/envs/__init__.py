@@ -15,6 +15,7 @@ from .transforms import (
     Compose,
     DiscreteActionProjection,
     DoubleToFloat,
+    dTypeCastTransform,
     ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,

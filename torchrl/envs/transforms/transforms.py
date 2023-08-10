@@ -2342,8 +2342,255 @@ class FiniteTensorDictCheck(Transform):
     forward = _call
 
 
-class DoubleToFloat(Transform):
-    """Maps actions float to double before they are called on the environment.
+class dTypeCastTransform(Transform):
+    """Casts one dtype to another for selected keys.
+
+    Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
+    during construction, the class behaviour will change:
+
+      * If the keys are provided, those entries and those entries only will be
+        transformed from ``dtype_in`` to ``dtype_out`` entries;
+      * If the keys are not provided and the object is within an environment
+        register of transforms, the input and output specs that have a dtype
+        set to ``dtype_in`` will be used as in_keys_inv / in_keys respectively.
+      * If the keys are not provided and the object is used without an
+        environment, the ``forward`` / ``inverse`` pass will scan through the
+        input tensordict for all ``dtype_in`` values and map them to a ``dtype_out``
+        tensor. For large data structures, this can impact performance as this
+        scanning doesn't come for free. The keys to be
+        transformed will not be cached.
+
+    Args:
+        dtype_in (torch.dtype): the input dtype (from the env).
+        dtype_out (torch.dtype): the output dtype (for model training).
+        in_keys (sequence of NestedKey, optional): list of ``dtype_in`` keys to be converted to
+            ``dtype_out`` before being exposed to external objects and functions.
+        in_keys_inv (sequence of NestedKey, optional): list of ``dtype_out`` keys to be converted to
+            ``dtype_in`` before being passed to the contained base_env or storage.
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {'obs': torch.ones(1, dtype=torch.double),
+        ...     'not_transformed': torch.ones(1, dtype=torch.double),
+        ... }, [])
+        >>> transform = dTypeCastTransform(torch.double, torch.float, in_keys=["obs"])
+        >>> _ = transform(td)
+        >>> print(td.get("obs").dtype)
+        torch.float32
+        >>> print(td.get("not_transformed").dtype)
+        torch.float64
+
+    In "automatic" mode, all float64 entries are transformed:
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {'obs': torch.ones(1, dtype=torch.double),
+        ...     'not_transformed': torch.ones(1, dtype=torch.double),
+        ... }, [])
+        >>> transform = dTypeCastTransform(torch.double, torch.float)
+        >>> _ = transform(td)
+        >>> print(td.get("obs").dtype)
+        torch.float32
+        >>> print(td.get("not_transformed").dtype)
+        torch.float32
+
+    The same behaviour is the rule when environments are constructedw without
+    specifying the transform keys:
+
+    Examples:
+        >>> class MyEnv(EnvBase):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec((), dtype=torch.float64))
+        ...         self.action_spec = UnboundedContinuousTensorSpec((), dtype=torch.float64)
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.float64)
+        ...         self.done_spec = UnboundedContinuousTensorSpec((1,), dtype=torch.bool)
+        ...     def _reset(self, data=None):
+        ...         return TensorDict({"done": torch.zeros((1,), dtype=torch.bool), **self.observation_spec.rand()}, [])
+        ...     def _step(self, data):
+        ...         assert data["action"].dtype == torch.float64
+        ...         reward = self.reward_spec.rand()
+        ...         done = torch.zeros((1,), dtype=torch.bool)
+        ...         obs = self.observation_spec.rand()
+        ...         assert reward.dtype == torch.float64
+        ...         assert obs["obs"].dtype == torch.float64
+        ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
+        ...     def _set_seed(self, seed):
+        ...         pass
+        >>> env = TransformedEnv(MyEnv(), dTypeCastTransform(torch.double, torch.float))
+        >>> assert env.action_spec.dtype == torch.float32
+        >>> assert env.observation_spec["obs"].dtype == torch.float32
+        >>> assert env.reward_spec.dtype == torch.float32, env.reward_spec.dtype
+        >>> print(env.rollout(2))
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        obs: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                obs: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        >>> assert env.transform.in_keys == ["obs", "reward"]
+        >>> assert env.transform.in_keys_inv == ["action"]
+
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        dtype_in: torch.dtype,
+        dtype_out: torch.dtype,
+        in_keys: Optional[Sequence[NestedKey]] = None,
+        in_keys_inv: Optional[Sequence[NestedKey]] = None,
+    ):
+        self.dtype_in = dtype_in
+        self.dtype_out = dtype_out
+        if in_keys is None:
+            self._keys_unset = True
+            in_keys = []
+        else:
+            self._keys_unset = False
+        if in_keys_inv is None:
+            self._keys_inv_unset = True
+            in_keys_inv = []
+        else:
+            self._keys_inv_unset = False
+
+        super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
+
+    def _set_in_keys(self):
+        env_base = self.parent
+        if env_base is not None:
+            # retrieve the specs that are self.dtype_in
+            if self._keys_unset:
+                in_keys = []
+                observation_spec = env_base.observation_spec
+                for key, spec in observation_spec.items(True, True):
+                    if spec.dtype == self.dtype_in:
+                        in_keys.append(unravel_key(key))
+                reward_spec = env_base.reward_spec
+                if reward_spec.dtype == self.dtype_in:
+                    in_keys.append(unravel_key(env_base.reward_key))
+
+                self.in_keys = self.out_keys = in_keys
+                self._keys_unset = False
+            if self._keys_inv_unset:
+                in_keys_inv = []
+                state_spec = env_base.state_spec
+                if state_spec is not None:
+                    for key, spec in state_spec.items(True, True):
+                        if spec.dtype == self.dtype_in:
+                            in_keys_inv.append(unravel_key(key))
+                action_spec = env_base.action_spec
+                if action_spec.dtype == self.dtype_in:
+                    in_keys_inv.append(unravel_key(env_base.action_key))
+                self.in_keys_inv = self.out_keys_inv = in_keys_inv
+                self._keys_inv_unset = False
+            self._container.empty_cache()
+
+    @dispatch(source="in_keys", dest="out_keys")
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Reads the input tensordict, and for the selected keys, applies the transform."""
+        if self._keys_unset:
+            self._set_in_keys()
+            for in_key, data in tensordict.items(True, True):
+                if data.dtype == self.dtype_in:
+                    out_key = in_key
+                    data = self._apply_transform(data)
+                    tensordict.set(out_key, data)
+            return tensordict
+        return super().forward(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._keys_inv_unset:
+            self._set_in_keys()
+            # we can't differentiate between content of forward and inverse
+            tensordict = tensordict.clone(False)
+            for in_key, data in tensordict.items(True, True):
+                if data.dtype == self.dtype_out:
+                    out_key = in_key
+                    data = self._inv_apply_transform(data)
+                    tensordict.set(out_key, data)
+            return tensordict
+        return super()._inv_call(tensordict)
+
+    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        return obs.to(self.dtype_out)
+
+    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+        return obs.to(self.dtype_in)
+
+    def _transform_spec(self, spec: TensorSpec) -> None:
+        if isinstance(spec, CompositeSpec):
+            for key in spec:
+                self._transform_spec(spec[key])
+        else:
+            spec.dtype = self.dtype_out
+            space = spec.space
+            if isinstance(space, ContinuousBox):
+                space.minimum = space.minimum.to(self.dtype_out)
+                space.maximum = space.maximum.to(self.dtype_out)
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        if self._keys_inv_unset:
+            self._set_in_keys()
+        action_spec = input_spec["_action_spec"]
+        state_spec = input_spec["_state_spec"]
+        for key in self.in_keys_inv:
+            if key in action_spec.keys(True):
+                _spec = action_spec
+            elif state_spec is not None and key in state_spec.keys(True):
+                _spec = state_spec
+            else:
+                raise KeyError(f"Key {key} not found in state_spec and action_spec.")
+            if _spec[key].dtype != self.dtype_in:
+                raise TypeError(
+                    f"input_spec[{key}].dtype is not {self.dtype_in}: {input_spec[key].dtype}"
+                )
+            self._transform_spec(_spec[key])
+        return input_spec
+
+    @_apply_to_composite
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        if self._keys_unset:
+            self._set_in_keys()
+        reward_key = self.parent.reward_key if self.parent is not None else "reward"
+        if unravel_key(reward_key) in self.in_keys:
+            if reward_spec.dtype != self.dtype_in:
+                raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
+
+            self._transform_spec(reward_spec)
+        return reward_spec
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        if self._keys_unset:
+            self._set_in_keys()
+        return self._transform_observation_spec(observation_spec)
+
+    @_apply_to_composite
+    def _transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        self._transform_spec(observation_spec)
+        return observation_spec
+
+    def __repr__(self) -> str:
+        s = (
+            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys}, "
+            f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
+        )
+        return s
+
+
+class DoubleToFloat(dTypeCastTransform):
+    """Casts one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
     during construction, the class behaviour will change:
@@ -2448,18 +2695,7 @@ class DoubleToFloat(Transform):
         in_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
-        if in_keys is None:
-            self._keys_unset = True
-            in_keys = []
-        else:
-            self._keys_unset = False
-        if in_keys_inv is None:
-            self._keys_inv_unset = True
-            in_keys_inv = []
-        else:
-            self._keys_inv_unset = False
-
-        super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
+        super().__init__(torch.double, torch.float, in_keys, in_keys_inv)
 
     def _set_in_keys(self):
         env_base = self.parent
@@ -2490,97 +2726,6 @@ class DoubleToFloat(Transform):
                 self.in_keys_inv = self.out_keys_inv = in_keys_inv
                 self._keys_inv_unset = False
             self._container.empty_cache()
-
-    @dispatch(source="in_keys", dest="out_keys")
-    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Reads the input tensordict, and for the selected keys, applies the transform."""
-        if self._keys_unset:
-            self._set_in_keys()
-            for in_key, data in tensordict.items(True, True):
-                if data.dtype == torch.float64:
-                    out_key = in_key
-                    data = self._apply_transform(data)
-                    tensordict.set(out_key, data)
-            return tensordict
-        return super().forward(tensordict)
-
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._keys_inv_unset:
-            self._set_in_keys()
-            # we can't differentiate between content of forward and inverse
-            tensordict = tensordict.clone(False)
-            for in_key, data in tensordict.items(True, True):
-                if data.dtype == torch.float32:
-                    out_key = in_key
-                    data = self._inv_apply_transform(data)
-                    tensordict.set(out_key, data)
-            return tensordict
-        return super()._inv_call(tensordict)
-
-    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        return obs.to(torch.float)
-
-    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        return obs.to(torch.double)
-
-    def _transform_spec(self, spec: TensorSpec) -> None:
-        if isinstance(spec, CompositeSpec):
-            for key in spec:
-                self._transform_spec(spec[key])
-        else:
-            spec.dtype = torch.float
-            space = spec.space
-            if isinstance(space, ContinuousBox):
-                space.minimum = space.minimum.to(torch.float)
-                space.maximum = space.maximum.to(torch.float)
-
-    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        if self._keys_inv_unset:
-            self._set_in_keys()
-        action_spec = input_spec["_action_spec"]
-        state_spec = input_spec["_state_spec"]
-        for key in self.in_keys_inv:
-            if key in action_spec.keys(True):
-                _spec = action_spec
-            elif state_spec is not None and key in state_spec.keys(True):
-                _spec = state_spec
-            else:
-                raise KeyError(f"Key {key} not found in state_spec and action_spec.")
-            if _spec[key].dtype is not torch.double:
-                raise TypeError(
-                    f"input_spec[{key}].dtype is not double: {input_spec[key].dtype}"
-                )
-            self._transform_spec(_spec[key])
-        return input_spec
-
-    @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        reward_key = self.parent.reward_key if self.parent is not None else "reward"
-        if unravel_key(reward_key) in self.in_keys:
-            if reward_spec.dtype is not torch.double:
-                raise TypeError("reward_spec.dtype is not double")
-
-            self._transform_spec(reward_spec)
-        return reward_spec
-
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        return self._transform_observation_spec(observation_spec)
-
-    @_apply_to_composite
-    def _transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._transform_spec(observation_spec)
-        return observation_spec
-
-    def __repr__(self) -> str:
-        s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys}, "
-            f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
-        )
-        return s
 
 
 class CatTensors(Transform):
