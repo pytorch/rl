@@ -316,14 +316,25 @@ class LossModule(TensorDictModuleBase):
         setattr(self, module_name, functional_module)
 
         name_params_target = "target_" + module_name
-        # if create_target_params:
-        # we create a TensorDictParams to keep the target params as Buffer instances
-        target_params = TensorDictParams(
-                params_and_buffers.apply(_make_target_param(clone=create_target_params)),
+        if create_target_params:
+            # if create_target_params:
+            # we create a TensorDictParams to keep the target params as Buffer instances
+            target_params = TensorDictParams(
+                params_and_buffers.apply(
+                    _make_target_param(clone=create_target_params)
+                ),
                 no_convert=True,
             )
-        setattr(self, name_params_target + "_params", target_params)
+            setattr(self, name_params_target + "_params", target_params)
         self._has_update_associated[module_name] = not create_target_params
+
+    def __getattr__(self, item):
+        if item.startswith("target_"):
+            params = self._modules.get(item, None)
+            if params is None:
+                params = getattr(self, item[7:]).data
+            return params
+        return super().__getattr__(item)
 
     def _apply(self, fn):
         # any call to apply erases the cache: the reason is that detached

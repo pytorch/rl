@@ -1962,7 +1962,6 @@ class TestTD3(LossModuleTestBase):
                         p.grad is None or p.grad.norm() == 0.0
                     ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
-
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
@@ -2106,7 +2105,6 @@ class TestTD3(LossModuleTestBase):
                 assert (
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
-
 
         # Check param update effect on targets
         target_actor = loss_fn.target_actor_network_params.clone().values(
