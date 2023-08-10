@@ -815,12 +815,14 @@ class ParallelEnv(_BatchedEnv):
             out = next_td.select(*self._selected_step_keys, strict=False).clone()
         return out
 
+    @_check_start
     @timeit("step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase, auto_reset=None
     ) -> Tuple[TensorDictBase, TensorDictBase]:
         # get the current data and next data
-        next_tensordict = self._step_and_maybe_reset(tensordict)
+        self._step_and_maybe_reset_async(tensordict)
+        next_tensordict = self._step_and_maybe_reset_wait()
         next_tensordict = self._step_proc_data(next_tensordict)
 
         with timeit("proc_reset"):
@@ -846,10 +848,9 @@ class ParallelEnv(_BatchedEnv):
         tensordict.set("next", next_tensordict)
         return cur_td, tensordict
 
-    @_check_start
-    @timeit("_step_and_maybe_reset")
-    def _step_and_maybe_reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        with timeit("_step_and_maybe_reset.1"):
+    @timeit("_step_and_maybe_reset_async")
+    def _step_and_maybe_reset_async(self, tensordict: TensorDictBase) -> TensorDictBase:
+        with timeit("_step_and_maybe_reset_async.1"):
             # this is faster than update_ but won't work for lazy stacks
             if self._single_task:
                 for key in self.env_input_keys:
@@ -871,7 +872,10 @@ class ParallelEnv(_BatchedEnv):
         with timeit("_step_and_maybe_reset.3"):
             for i in range(self.num_workers):
                 self.parent_channels[i].send(("step_and_maybe_reset", None))
-        with timeit("_step_and_maybe_reset.4"):
+
+    @timeit("_step_and_maybe_reset_wait")
+    def _step_and_maybe_reset_wait(self) -> TensorDictBase:
+        with timeit("_step_and_maybe_reset_wait.1"):
             completed = set()
             while len(completed) < self.num_workers:
                 for i, event in enumerate(self._events):
@@ -881,7 +885,7 @@ class ParallelEnv(_BatchedEnv):
                         completed.add(i)
                         event.clear()
 
-        with timeit("_step_and_maybe_reset.5"):
+        with timeit("_step_and_maybe_reset_wait.2"):
             # We must pass a clone of the tensordict, as the values of this tensordict
             # will be modified in-place at further steps
             next_td_buffer = self.shared_tensordict_parent.get("next")
