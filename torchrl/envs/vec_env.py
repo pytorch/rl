@@ -429,6 +429,11 @@ class _BatchedEnv(EnvBase):
                     raise RuntimeError("memmap_() failed")
 
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
+        print("Shared tensordicts:", self.shared_tensordict_parent)
+        print("Keys in:", self.env_input_keys)
+        print("Keys out:", self.env_output_keys)
+        print("Keys obs:", self.env_obs_keys)
+
         if self.pin_memory:
             self.shared_tensordict_parent.pin_memory()
 
