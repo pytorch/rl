@@ -865,6 +865,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.set("next", next_tensordict)
         return tensordict
 
+    @timeit("_step_proc_data")
     def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         reward = next_tensordict_out.get(self.reward_key)
