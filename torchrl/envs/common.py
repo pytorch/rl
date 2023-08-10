@@ -1239,7 +1239,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
+            print("before", tensordict["next", "recurrent_state_c"])
             tensordict = self.step(tensordict)
+            print("after", tensordict["next", "recurrent_state_c"])
 
             tensordicts.append(tensordict.clone(False))
             done = tensordict.get(("next", self.done_key))
@@ -1334,11 +1336,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         next_output.update(fake_reward)
         next_output.update(fake_done)
         fake_in_out.update(fake_done.clone())
+        if "next" not in fake_in_out.keys():
+            fake_in_out.set("next", next_output)
+        else:
+            fake_in_out.get("next").update(next_output)
 
-        fake_td = fake_in_out.set("next", next_output)
-        fake_td.batch_size = self.batch_size
-        fake_td = fake_td.to(self.device)
-        return fake_td
+        fake_in_out.batch_size = self.batch_size
+        fake_in_out = fake_in_out.to(self.device)
+        return fake_in_out
 
 
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):

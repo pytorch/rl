@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-
+from mocking_classes import DiscreteActionVecMockEnv
+from tensordict.nn import TensorDictSequential
+from torchrl.modules import MLP, ProbabilisticActor
 import pytest
 import torch
 from tensordict import pad, TensorDict, unravel_key_list
@@ -1758,6 +1760,56 @@ class TestLSTMModule:
         torch.testing.assert_close(
             td_ss["intermediate"], td["intermediate"][..., -1, :]
         )
+
+    def test_lstm_parallel_env(self):
+        from torchrl.envs import ParallelEnv, TransformedEnv, InitTracker
+        # tests that hidden states are carried over with parallel envs
+        lstm_module = LSTMModule(
+                input_size=7,
+                hidden_size=12,
+                num_layers=2,
+                in_key="observation",
+                out_key="features",
+            )
+
+        def create_transformed_env():
+            primer = lstm_module.make_tensordict_primer()
+            env = DiscreteActionVecMockEnv(
+                categorical_action_encoding=True
+                )
+            env = TransformedEnv(env)
+            env.append_transform(InitTracker())
+            env.append_transform(primer)
+            return env
+
+        env = ParallelEnv(
+            create_env_fn=create_transformed_env,
+            num_workers=2,
+        )
+
+        mlp = TensorDictModule(
+            MLP(
+                in_features=12,
+                out_features=7,
+                num_cells=[],
+            ),
+            in_keys=["features"],
+            out_keys=["logits"],
+        )
+
+        actor_model = TensorDictSequential(lstm_module, mlp)
+
+        actor = ProbabilisticActor(
+            module=actor_model,
+            in_keys=["logits"],
+            out_keys=["action"],
+            distribution_class=torch.distributions.Categorical,
+            return_log_prob=True,
+        )
+        for break_when_any_done in [False, True]:
+            data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
+            assert (data.get("recurrent_state_c") != 0.0).any()
+            assert (data.get("next", "recurrent_state_c") != 0.0).all()
 
 
 def test_safe_specs():

@@ -2942,46 +2942,44 @@ class TensorDictPrimer(Transform):
             self.device = dtype_or_device
         return super().to(dtype_or_device)
 
-    def transform_observation_spec(
-        self, observation_spec: CompositeSpec
-    ) -> CompositeSpec:
-        if not isinstance(observation_spec, CompositeSpec):
-            raise ValueError(
-                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
-            )
-        for key, spec in self.primers.items():
-            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-                raise RuntimeError(
-                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-                    f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
-                )
-            try:
-                device = observation_spec.device
-            except RuntimeError:
-                device = self.device
-            observation_spec[key] = spec.to(device)
-        return observation_spec
-
-    # def transform_input_spec(
-    #     self, input_spec: CompositeSpec
+    # def transform_observation_spec(
+    #     self, observation_spec: CompositeSpec
     # ) -> CompositeSpec:
-    #     if not isinstance(input_spec, CompositeSpec):
+    #     if not isinstance(observation_spec, CompositeSpec):
     #         raise ValueError(
-    #             f"input_spec was expected to be of type CompositeSpec. Got {type(input_spec)} instead."
+    #             f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
     #         )
-    #     state_spec = input_spec["_state_spec"]
     #     for key, spec in self.primers.items():
-    #         if spec.shape[: len(state_spec.shape)] != state_spec.shape:
+    #         if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
     #             raise RuntimeError(
     #                 f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-    #                 f"Got state_spec.shape={state_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+    #                 f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
     #             )
     #         try:
-    #             device = state_spec.device
+    #             device = observation_spec.device
     #         except RuntimeError:
     #             device = self.device
-    #         state_spec[key] = spec.to(device)
-    #     return input_spec
+    #         observation_spec[key] = spec.to(device)
+    #     return observation_spec
+
+    def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
+        state_spec = input_spec['_state_spec']
+        if state_spec is None:
+            state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
+        for key, spec in self.primers.items():
+            if spec.shape[: len(state_spec.shape)] != state_spec.shape:
+                raise RuntimeError(
+                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
+                    f"Got state_spec.shape={state_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+                )
+            try:
+                device = state_spec.device
+            except RuntimeError:
+                device = self.device
+            print('state spec key', key)
+            state_spec[key] = spec.to(device)
+        input_spec["_state_spec"] = state_spec
+        return input_spec
 
     @property
     def _batch_size(self):

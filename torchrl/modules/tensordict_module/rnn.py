@@ -5,11 +5,11 @@
 from typing import Optional, Tuple
 
 import torch
-from tensordict import unravel_key_list
+from tensordict import unravel_key_list, unravel_key, TensorDictBase
 
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
-from tensordict.tensordict import NO_DEFAULT, TensorDictBase
+from tensordict.tensordict import NO_DEFAULT
 from tensordict.utils import prod
 
 from torch import nn
@@ -227,10 +227,16 @@ class LSTMModule(ModuleBase):
             )
         return TensorDictPrimer(
             {
-                in_key1: UnboundedContinuousTensorSpec(
+                # in_key1: UnboundedContinuousTensorSpec(
+                #     shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                # ),
+                # in_key2: UnboundedContinuousTensorSpec(
+                #     shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                # ),
+                unravel_key(("next", in_key1)): UnboundedContinuousTensorSpec(
                     shape=(self.lstm.num_layers, self.lstm.hidden_size)
                 ),
-                in_key2: UnboundedContinuousTensorSpec(
+                unravel_key(("next", in_key2)): UnboundedContinuousTensorSpec(
                     shape=(self.lstm.num_layers, self.lstm.hidden_size)
                 ),
             }
