@@ -431,7 +431,6 @@ class _BatchedEnv(EnvBase):
                 self.shared_tensordict_parent.memmap_()
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
-
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
         print("Shared tensordicts:", self.shared_tensordict_parent)
         print("Keys in:", self.env_input_keys)
@@ -728,7 +727,7 @@ class ParallelEnv(_BatchedEnv):
                     self.shared_tensordicts[idx].to_dict(),
                 ),
             )
-            # process.daemon = True
+            process.daemon = True
             process.start()
             child_pipe.close()
             self.parent_channels.append(parent_pipe)
