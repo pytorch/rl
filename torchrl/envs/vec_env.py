@@ -18,6 +18,7 @@ from warnings import warn
 
 import numpy as np
 import torch
+from gymnasium.vector.utils import clear_mpi_env_vars
 
 from tensordict import TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
@@ -704,34 +705,35 @@ class ParallelEnv(_BatchedEnv):
             self.event = torch.cuda.Event()
         else:
             self.event = None
-        for idx in range(_num_workers):
-            if self._verbose:
-                print(f"initiating worker {idx}")
-            # No certainty which module multiprocessing_context is
-            parent_pipe, child_pipe = ctx.Pipe()
-            event = ctx.Event()
-            self._events.append(event)
-            env_fun = self.create_env_fn[idx]
-            if not isinstance(env_fun, EnvCreator):
-                env_fun = CloudpickleWrapper(env_fun)
+        with clear_mpi_env_vars():
+            for idx in range(_num_workers):
+                if self._verbose:
+                    print(f"initiating worker {idx}")
+                # No certainty which module multiprocessing_context is
+                parent_pipe, child_pipe = ctx.Pipe()
+                event = ctx.Event()
+                self._events.append(event)
+                env_fun = self.create_env_fn[idx]
+                if not isinstance(env_fun, EnvCreator):
+                    env_fun = CloudpickleWrapper(env_fun)
 
-            process = ctx.Process(
-                target=_run_worker_pipe_shared_mem,
-                args=(
-                    parent_pipe,
-                    child_pipe,
-                    env_fun,
-                    self.create_env_kwargs[idx],
-                    self.device,
-                    event,
-                    self.shared_tensordicts[idx].to_dict(),
-                ),
-            )
-            process.daemon = True
-            process.start()
-            child_pipe.close()
-            self.parent_channels.append(parent_pipe)
-            self._workers.append(process)
+                process = ctx.Process(
+                    target=_run_worker_pipe_shared_mem,
+                    args=(
+                        parent_pipe,
+                        child_pipe,
+                        env_fun,
+                        self.create_env_kwargs[idx],
+                        self.device,
+                        event,
+                        self.shared_tensordicts[idx].to_dict(),
+                    ),
+                )
+                process.daemon = True
+                process.start()
+                child_pipe.close()
+                self.parent_channels.append(parent_pipe)
+                self._workers.append(process)
 
         for parent_pipe in self.parent_channels:
             msg = parent_pipe.recv()
