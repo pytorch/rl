@@ -117,7 +117,6 @@ class _BatchedEnv(EnvBase):
             if a list of callable is provided, the environment will be executed as if multiple, diverse tasks were
             needed, which comes with a slight compute overhead;
         create_env_kwargs (dict or list of dicts, optional): kwargs to be used with the environments being created;
-        pin_memory (bool): if True and device is "cpu", calls :obj:`pin_memory` on the tensordicts when created.
         share_individual_td (bool, optional): if ``True``, a different tensordict is created for every process/worker and a lazy
             stack is returned.
             default = None (False if single task);
@@ -195,10 +194,15 @@ class _BatchedEnv(EnvBase):
         self.create_env_fn = create_env_fn
         self.create_env_kwargs = create_env_kwargs
         self.pin_memory = pin_memory
+        if pin_memory:
+            raise ValueError("pin_memory for batched envs is deprecated")
+
         self.share_individual_td = bool(share_individual_td)
         self._share_memory = shared_memory
         self._memmap = memmap
         self.allow_step_when_done = allow_step_when_done
+        if allow_step_when_done:
+            raise ValueError("allow_step_when_done is deprecated")
         if self._share_memory and self._memmap:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -433,9 +437,6 @@ class _BatchedEnv(EnvBase):
         print("Keys in:", self.env_input_keys)
         print("Keys out:", self.env_output_keys)
         print("Keys obs:", self.env_obs_keys)
-
-        if self.pin_memory:
-            self.shared_tensordict_parent.pin_memory()
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -718,15 +719,11 @@ class ParallelEnv(_BatchedEnv):
             process = ctx.Process(
                 target=_run_worker_pipe_shared_mem,
                 args=(
-                    idx,
                     parent_pipe,
                     child_pipe,
                     env_fun,
                     self.create_env_kwargs[idx],
-                    False,
-                    self.env_input_keys,
                     self.device,
-                    self.allow_step_when_done,
                     event,
                     self.shared_tensordicts[idx],
                 ),
@@ -736,6 +733,7 @@ class ParallelEnv(_BatchedEnv):
             child_pipe.close()
             self.parent_channels.append(parent_pipe)
             self._workers.append(process)
+
         for parent_pipe in self.parent_channels:
             msg = parent_pipe.recv()
             assert msg == "started"
@@ -1071,15 +1069,11 @@ def _recursively_strip_locks_from_state_dict(state_dict: OrderedDict) -> Ordered
 
 
 def _run_worker_pipe_shared_mem(
-    idx: int,
     parent_pipe: connection.Connection,
     child_pipe: connection.Connection,
     env_fun: Union[EnvBase, Callable],
     env_fun_kwargs: Dict[str, Any],
-    pin_memory: bool,
-    env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = None,
-    allow_step_when_done: bool = False,
     mp_event: mp.Event = None,
     shared_tensordict: TensorDictBase = None,
     verbose: bool = False,
@@ -1102,6 +1096,7 @@ def _run_worker_pipe_shared_mem(
             )
         env = env_fun
     env = env.to(device)
+    del env_fun
 
     i = -1
     initialized = False
@@ -1150,8 +1145,6 @@ def _run_worker_pipe_shared_mem(
 
             if "_reset" in cur_td.keys():
                 cur_td.del_("_reset")
-            if pin_memory:
-                cur_td.pin_memory()
             shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()
@@ -1163,8 +1156,6 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             next_td = env._step(shared_tensordict)
-            if pin_memory:
-                local_tensordict.pin_memory()
             next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
