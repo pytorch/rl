@@ -687,6 +687,9 @@ class ParallelEnv(_BatchedEnv):
     __doc__ += _BatchedEnv.__doc__
 
     def _start_workers(self) -> None:
+        from torchrl.envs.env_creator import EnvCreator
+        ctx = mp.get_context("spawn")
+
         _num_workers = self.num_workers
 
         self.parent_channels = []
@@ -700,19 +703,19 @@ class ParallelEnv(_BatchedEnv):
             if self._verbose:
                 print(f"initiating worker {idx}")
             # No certainty which module multiprocessing_context is
-            channel1, channel2 = mp.Pipe()
-            event = mp.Event()
+            parent_pipe, child_pipe = ctx.Pipe()
+            event = ctx.Event()
             self._events.append(event)
             env_fun = self.create_env_fn[idx]
-            if env_fun.__class__.__name__ != "EnvCreator":
+            if not isinstance(env_fun, EnvCreator):
                 env_fun = CloudpickleWrapper(env_fun)
 
-            w = mp.Process(
+            process = ctx.Process(
                 target=_run_worker_pipe_shared_mem,
                 args=(
                     idx,
-                    channel1,
-                    channel2,
+                    parent_pipe,
+                    child_pipe,
                     env_fun,
                     self.create_env_kwargs[idx],
                     False,
@@ -723,13 +726,13 @@ class ParallelEnv(_BatchedEnv):
                     self.shared_tensordicts[idx],
                 ),
             )
-            w.daemon = True
-            w.start()
-            channel2.close()
-            self.parent_channels.append(channel1)
-            self._workers.append(w)
-        for channel1 in self.parent_channels:
-            msg = channel1.recv()
+            process.daemon = True
+            process.start()
+            child_pipe.close()
+            self.parent_channels.append(parent_pipe)
+            self._workers.append(process)
+        for parent_pipe in self.parent_channels:
+            msg = parent_pipe.recv()
             assert msg == "started"
 
         # send shared tensordict to workers
