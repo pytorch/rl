@@ -728,7 +728,7 @@ class ParallelEnv(_BatchedEnv):
                     self.shared_tensordicts[idx].to_dict(),
                 ),
             )
-            process.daemon = True
+            # process.daemon = True
             process.start()
             child_pipe.close()
             self.parent_channels.append(parent_pipe)
