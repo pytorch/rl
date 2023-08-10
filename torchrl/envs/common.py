@@ -15,7 +15,7 @@ import torch.nn as nn
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import TensorDictBase
 
-from torchrl._utils import prod, seed_generator, timeit
+from torchrl._utils import prod, seed_generator
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
