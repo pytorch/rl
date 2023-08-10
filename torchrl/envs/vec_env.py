@@ -421,12 +421,13 @@ class _BatchedEnv(EnvBase):
                 # Multi-task: we share tensordict that *may* have different keys
                 # LazyStacked already stores this so we don't need to do anything
                 self.shared_tensordicts = self.shared_tensordict_parent
-            if self._share_memory:
-                for td in self.shared_tensordicts:
-                    td.share_memory_()
-            elif self._memmap:
-                for td in self.shared_tensordicts:
-                    td.memmap_()
+            if self.device.type == "cpu":
+                if self._share_memory:
+                    for td in self.shared_tensordicts:
+                        td.share_memory_()
+                elif self._memmap:
+                    for td in self.shared_tensordicts:
+                        td.memmap_()
         else:
             if self._share_memory:
                 self.shared_tensordict_parent.share_memory_()
@@ -731,7 +732,7 @@ class ParallelEnv(_BatchedEnv):
                         self.create_env_kwargs[idx],
                         self.device,
                         event,
-                        self.shared_tensordicts[idx].to_dict(),
+                        self.shared_tensordicts[idx],
                     ),
                 )
                 process.daemon = True
@@ -1112,8 +1113,6 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
-
-    shared_tensordict = TensorDict.from_dict(shared_tensordict).share_memory_()
 
     while True:
         try:
