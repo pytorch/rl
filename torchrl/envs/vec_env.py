@@ -725,7 +725,7 @@ class ParallelEnv(_BatchedEnv):
                     self.create_env_kwargs[idx],
                     self.device,
                     event,
-                    self.shared_tensordicts[idx],
+                    self.shared_tensordicts[idx].to_dict(),
                 ),
             )
             process.daemon = True
@@ -1105,6 +1105,8 @@ def _run_worker_pipe_shared_mem(
     local_tensordict = None
 
     child_pipe.send("started")
+
+    shared_tensordict = TensorDict.from_dict(shared_tensordict)
 
     while True:
         try:
