@@ -1106,7 +1106,7 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
 
-    shared_tensordict = TensorDict.from_dict(shared_tensordict)
+    shared_tensordict = TensorDict.from_dict(shared_tensordict).share_memory_()
 
     while True:
         try:
