@@ -2342,7 +2342,7 @@ class FiniteTensorDictCheck(Transform):
     forward = _call
 
 
-class dTypeCastTransform(Transform):
+class DTypeCastTransform(Transform):
     """Casts one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
@@ -2373,7 +2373,7 @@ class dTypeCastTransform(Transform):
         ...     {'obs': torch.ones(1, dtype=torch.double),
         ...     'not_transformed': torch.ones(1, dtype=torch.double),
         ... }, [])
-        >>> transform = dTypeCastTransform(torch.double, torch.float, in_keys=["obs"])
+        >>> transform = DTypeCastTransform(torch.double, torch.float, in_keys=["obs"])
         >>> _ = transform(td)
         >>> print(td.get("obs").dtype)
         torch.float32
@@ -2387,7 +2387,7 @@ class dTypeCastTransform(Transform):
         ...     {'obs': torch.ones(1, dtype=torch.double),
         ...     'not_transformed': torch.ones(1, dtype=torch.double),
         ... }, [])
-        >>> transform = dTypeCastTransform(torch.double, torch.float)
+        >>> transform = DTypeCastTransform(torch.double, torch.float)
         >>> _ = transform(td)
         >>> print(td.get("obs").dtype)
         torch.float32
@@ -2417,7 +2417,7 @@ class dTypeCastTransform(Transform):
         ...         return obs.select().set("next", obs.update({"reward": reward, "done": done}))
         ...     def _set_seed(self, seed):
         ...         pass
-        >>> env = TransformedEnv(MyEnv(), dTypeCastTransform(torch.double, torch.float))
+        >>> env = TransformedEnv(MyEnv(), DTypeCastTransform(torch.double, torch.float))
         >>> assert env.action_spec.dtype == torch.float32
         >>> assert env.observation_spec["obs"].dtype == torch.float32
         >>> assert env.reward_spec.dtype == torch.float32, env.reward_spec.dtype
@@ -2589,7 +2589,7 @@ class dTypeCastTransform(Transform):
         return s
 
 
-class DoubleToFloat(dTypeCastTransform):
+class DoubleToFloat(DTypeCastTransform):
     """Casts one dtype to another for selected keys.
 
     Depending on whether the ``in_keys`` or ``in_keys_inv`` are provided
@@ -2696,36 +2696,6 @@ class DoubleToFloat(dTypeCastTransform):
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__(torch.double, torch.float, in_keys, in_keys_inv)
-
-    def _set_in_keys(self):
-        env_base = self.parent
-        if env_base is not None:
-            # retrieve the specs that are float32
-            if self._keys_unset:
-                in_keys = []
-                observation_spec = env_base.observation_spec
-                for key, spec in observation_spec.items(True, True):
-                    if spec.dtype == torch.float64:
-                        in_keys.append(unravel_key(key))
-                reward_spec = env_base.reward_spec
-                if reward_spec.dtype == torch.float64:
-                    in_keys.append(unravel_key(env_base.reward_key))
-
-                self.in_keys = self.out_keys = in_keys
-                self._keys_unset = False
-            if self._keys_inv_unset:
-                in_keys_inv = []
-                state_spec = env_base.state_spec
-                if state_spec is not None:
-                    for key, spec in state_spec.items(True, True):
-                        if spec.dtype == torch.float64:
-                            in_keys_inv.append(unravel_key(key))
-                action_spec = env_base.action_spec
-                if action_spec.dtype == torch.float64:
-                    in_keys_inv.append(unravel_key(env_base.action_key))
-                self.in_keys_inv = self.out_keys_inv = in_keys_inv
-                self._keys_inv_unset = False
-            self._container.empty_cache()
 
 
 class CatTensors(Transform):
