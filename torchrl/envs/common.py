@@ -15,7 +15,7 @@ import torch.nn as nn
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import TensorDictBase
 
-from torchrl._utils import prod, seed_generator
+from torchrl._utils import prod, seed_generator, timeit
 
 from torchrl.data.tensor_specs import (
     CompositeSpec,
@@ -650,7 +650,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         out = self._done_key
         if out is None:
-            self.done_spec  # noqa
             out = self._get_done_key()
         return out
 
@@ -988,8 +987,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
         else:
             leading_dim = tensordict_reset.shape
-        done = tensordict_reset.get(self.done_key, None)
         done_spec = self.done_spec
+        done = tensordict_reset.get(self.done_key, None)
         if done is None:
             done = done_spec.zero(leading_dim)
             key = self.done_key
@@ -1299,7 +1298,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         for i in range(max_steps):
             if auto_cast_to_device:
                 tensordict = tensordict.to(policy_device, non_blocking=True)
-
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)

@@ -1298,6 +1298,7 @@ also that the state dict is synchronised across processes if needed."""
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+        for pipe_parent in self.pipes:
             msg = pipe_parent.recv()
             if msg != "instantiated":
                 raise RuntimeError(msg)

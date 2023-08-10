@@ -883,8 +883,6 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        cmd_out = "reset"
-
         _reset = None
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
@@ -897,6 +895,7 @@ class ParallelEnv(_BatchedEnv):
             _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
                 self.done_spec.shape
             )
+        workers = []
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -921,12 +920,14 @@ class ParallelEnv(_BatchedEnv):
                         tensordict_.select(*self._selected_reset_keys, strict=False)
                     )
                 continue
-            out = (cmd_out, tensordict_)
+            out = ("reset", tensordict_)
             channel.send(out)
+            workers.append(i)
 
         completed = set()
-        while len(completed) < self.num_workers:
-            for i, event in enumerate(self._events):
+        while len(completed) < len(workers):
+            for i in workers:
+                event = self._events[i]
                 if i in completed:
                     continue
                 if event.is_set():
@@ -1121,14 +1122,13 @@ def _run_worker_pipe_shared_mem(
                 print(f"resetting worker {pid}")
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
-            local_tensordict = data
-            local_tensordict = env._reset(tensordict=local_tensordict)
+            cur_td = env._reset(tensordict=data)
 
-            if "_reset" in local_tensordict.keys():
-                local_tensordict.del_("_reset")
+            if "_reset" in cur_td.keys():
+                cur_td.del_("_reset")
             if pin_memory:
-                local_tensordict.pin_memory()
-            shared_tensordict.update_(local_tensordict)
+                cur_td.pin_memory()
+            shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()
                 event.synchronize()
@@ -1138,19 +1138,7 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
-            if local_tensordict is not None:
-                for key in env_input_keys:
-                    # local_tensordict.set(key, shared_tensordict.get(key))
-                    key = _unravel_key_to_tuple(key)
-                    local_tensordict._set_tuple(
-                        key,
-                        shared_tensordict._get_tuple(key, None),
-                        inplace=False,
-                        validated=True,
-                    )
-            else:
-                local_tensordict = shared_tensordict.clone(recurse=False)
-            next_td = env._step(local_tensordict)
+            next_td = env._step(shared_tensordict)
             if pin_memory:
                 local_tensordict.pin_memory()
             next_shared_tensordict.update_(next_td)
