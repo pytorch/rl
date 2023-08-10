@@ -4,9 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 import importlib.util
 import re
-
+import os
 import torch
 
 from tensordict import is_tensor_collection, unravel_key
@@ -618,3 +620,29 @@ def _fuse_tensordicts(*tds, excluded, total=None):
                 )
             out._set_str(key, val, validated=True, inplace=False)
     return out
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """Clears the MPI of environment variables.
+
+    `from mpi4py import MPI` will call `MPI_Init` by default.
+    If the child process has MPI environment variables, MPI will think that the child process
+    is an MPI process just like the parent and do bad things such as hang.
+
+    This context manager is a hacky way to clear those environment variables
+    temporarily such as when we are starting multiprocessing Processes.
+
+    Yields:
+        Yields for the context manager
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ["OMPI_", "PMI_"]:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)

@@ -18,13 +18,12 @@ from warnings import warn
 
 import numpy as np
 import torch
-from gymnasium.vector.utils import clear_mpi_env_vars
 
 from tensordict import TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process, VERBOSE, timeit
+from torchrl._utils import _check_for_faulty_process, timeit, VERBOSE
 from torchrl.data.tensor_specs import (
     CompositeSpec,
     DiscreteTensorSpec,
@@ -35,7 +34,12 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _fuse_tensordicts, _set_single_key, _sort_keys
+from torchrl.envs.utils import (
+    _fuse_tensordicts,
+    _set_single_key,
+    _sort_keys,
+    clear_mpi_env_vars,
+)
 
 _has_envpool = importlib.util.find_spec("envpool")
 
@@ -694,6 +698,7 @@ class ParallelEnv(_BatchedEnv):
 
     def _start_workers(self) -> None:
         from torchrl.envs.env_creator import EnvCreator
+
         ctx = mp.get_context("spawn")
 
         _num_workers = self.num_workers
@@ -833,7 +838,9 @@ class ParallelEnv(_BatchedEnv):
                 # if all are done, then the next td to be used is simply the root td
                 # we copy the fields from tensordict that are missing from the shared one
                 cur_td = _fuse_tensordicts(
-                    self.shared_tensordict_parent, tensordict, excluded=(("next",), ("_reset",))
+                    self.shared_tensordict_parent,
+                    tensordict,
+                    excluded=(("next",), ("_reset",)),
                 )
             else:
                 # if none is done, then the next td to use is simply the one
@@ -890,7 +897,9 @@ class ParallelEnv(_BatchedEnv):
             next_td_buffer = self.shared_tensordict_parent.get("next")
             if self._single_task:
                 next_tensordict = TensorDict(
-                    {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
+                    {},
+                    batch_size=self.shared_tensordict_parent.shape,
+                    device=self.device,
                 )
                 for key in self._selected_step_keys:
                     _set_single_key(next_td_buffer, next_tensordict, key, clone=True)
@@ -1102,9 +1111,6 @@ def _run_worker_pipe_shared_mem(
     i = -1
     initialized = False
 
-    # make sure that process can be closed
-    local_tensordict = None
-
     child_pipe.send("started")
 
     shared_tensordict = TensorDict.from_dict(shared_tensordict).share_memory_()
@@ -1205,7 +1211,7 @@ def _run_worker_pipe_shared_mem(
                 mp_event.set()
 
         elif cmd == "close":
-            del shared_tensordict, local_tensordict, data
+            del shared_tensordict, data
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
             env.close()
