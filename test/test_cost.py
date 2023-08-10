@@ -7572,7 +7572,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     module = custom_module_error().to(device)
     with pytest.raises(
-        RuntimeError, match="Your module seems to have a target tensor list "
+        ValueError, match="The loss_module must be a LossModule instance"
     ):
         if mode == "hard":
             upd = HardUpdate(
@@ -7603,7 +7603,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             pass
 
     module = custom_module(delay_module=False)
-    with pytest.raises(RuntimeError, match="The target and source data are identical"):
+    with pytest.raises(
+        RuntimeError,
+        match="Did not find any target parameters or buffers in the loss module",
+    ):
         if mode == "hard":
             upd = HardUpdate(
                 module, value_network_update_interval=value_network_update_interval
@@ -7616,8 +7619,9 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         else:
             raise NotImplementedError
 
-    with pytest.warns(UserWarning, match="No target network updater has been"):
-        module = custom_module().to(device).to(dtype)
+    # this is now allowed
+    # with pytest.warns(UserWarning, match="No target network updater has been"):
+    #     module = custom_module().to(device).to(dtype)
 
     if mode == "soft":
         with pytest.raises(ValueError, match="One and only one argument"):
@@ -7627,6 +7631,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 tau=0.1,
             )
 
+    module = custom_module(delay_module=True)
     _ = module.module1_params
     with pytest.warns(UserWarning, match="No target network updater has been"):
         _ = module.target_module1_params
@@ -8855,7 +8860,7 @@ def test_shared_params(dest, expected_dtype, expected_device):
         if p.requires_grad:
             p.data += torch.randn_like(p)
 
-    assert len(list(loss.parameters())) == 6
+    assert len([p for p in loss.parameters() if p.requires_grad]) == 6
     assert (
         len(loss.actor_network_params.keys(include_nested=True, leaves_only=True)) == 4
     )

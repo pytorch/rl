@@ -31,11 +31,7 @@ from torchrl.objectives.value import ValueEstimatorBase
 def _updater_check_forward_prehook(module, *args, **kwargs):
     if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
         warnings.warn(
-            "No target network updater has been associated "
-            "with this loss module, but target parameters have been found. "
-            "While this is supported, it is expected that the target network "
-            "updates will be manually performed. You can deactivate this warning "
-            "by turning the RL_WARNINGS env variable to False.",
+            module.TARGET_NET_WARNING,
             category=UserWarning,
         )
 
@@ -92,6 +88,13 @@ class LossModule(TensorDictModuleBase):
 
     default_value_estimator: ValueEstimators = None
     SEP = "_sep_"
+    TARGET_NET_WARNING = (
+        "No target network updater has been associated "
+        "with this loss module, but target parameters have been found. "
+        "While this is supported, it is expected that the target network "
+        "updates will be manually performed. You can deactivate this warning "
+        "by turning the RL_WARNINGS env variable to False."
+    )
 
     @property
     def tensor_keys(self) -> _AcceptedKeys:
@@ -329,10 +332,18 @@ class LossModule(TensorDictModuleBase):
         self._has_update_associated[module_name] = not create_target_params
 
     def __getattr__(self, item):
-        if item.startswith("target_"):
+        if item.startswith("target_") and item.endswith("_params"):
             params = self._modules.get(item, None)
             if params is None:
-                params = getattr(self, item[7:]).data
+                # no target param, take detached data
+                params = getattr(self, item[7:])
+                params = params.data
+            elif not self._has_update_associated[item[7:-7]] and RL_WARNINGS:
+                # no updater associated
+                warnings.warn(
+                    self.TARGET_NET_WARNING,
+                    category=UserWarning,
+                )
             return params
         return super().__getattr__(item)
 

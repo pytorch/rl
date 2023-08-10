@@ -141,6 +141,10 @@ class TargetNetUpdater:
         self,
         loss_module: "LossModule",  # noqa: F821
     ):
+        from torchrl.objectives.common import LossModule
+
+        if not isinstance(loss_module, LossModule):
+            raise ValueError("The loss_module must be a LossModule instance.")
         _has_update_associated = getattr(loss_module, "_has_update_associated", None)
         for k in loss_module._has_update_associated.keys():
             loss_module._has_update_associated[k] = True
@@ -148,11 +152,7 @@ class TargetNetUpdater:
             _target_names = []
             for name, _ in loss_module.named_children():
                 # the TensorDictParams is a nn.Module instance
-                if (
-                    name.startswith("target_")
-                    and name.endswith("params")
-                    and (getattr(loss_module, name) is not None)
-                ):
+                if name.startswith("target_") and name.endswith("_params"):
                     _target_names.append(name)
 
             if len(_target_names) == 0:
