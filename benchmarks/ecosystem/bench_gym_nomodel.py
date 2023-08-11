@@ -112,6 +112,7 @@ if __name__ == "__main__":
         logger.experiment.finish()
         del logger, env
         print("FPS Gym AsyncVectorEnv mean:", args.total_frames / sum(times))
+        logger.log_scalar("fps (bar)", args.total_frames / sum(times))
 
     # Test asynchronous gym collector
     def test_sb3():
@@ -144,6 +145,8 @@ if __name__ == "__main__":
         logger.experiment.finish()
         del logger, env
         print("FPS SB3 AsyncVectorEnv mean:", args.total_frames / sum(times))
+        logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+
 
     # Test multiprocess TorchRL collector
     def test_torch_rl(collector_class, device):
@@ -204,6 +207,8 @@ if __name__ == "__main__":
             "mean:",
             args.total_frames / sum(times),
         )
+        logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+
 
     # Test multiprocess TorchRL collector
     def test_torch_rl_env(device):
@@ -244,6 +249,8 @@ if __name__ == "__main__":
             "mean:",
             args.total_frames / sum(times),
         )
+        logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+
 
     test_sb3()
     test_gym()
