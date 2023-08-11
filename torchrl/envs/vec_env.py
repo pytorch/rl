@@ -35,7 +35,6 @@ from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 from torchrl.envs.utils import (
-    _fuse_tensordicts,
     _set_single_key,
     _sort_keys,
     clear_mpi_env_vars,
