@@ -36,8 +36,8 @@ class IsaacGymWrapper(GymWrapper):
     """
 
     def __init__(
-        self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs
-    ):  # noqa: F821
+        self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821
+    ):
         warnings.warn(
             "IsaacGym environment support is an experimental feature that may change in the future."
         )
