@@ -385,11 +385,18 @@ class _BatchedEnv(EnvBase):
         self._selected_keys.add("_reset")
 
         # input keys
-        self._selected_input_keys = {_unravel_key_to_tuple(key) for key in self._env_input_keys}
+        self._selected_input_keys = {
+            _unravel_key_to_tuple(key) for key in self._env_input_keys
+        }
         # output keys after reset
-        self._selected_reset_keys = {_unravel_key_to_tuple(key) for key in self._env_obs_keys + [self.done_key] + ["_reset"]}
+        self._selected_reset_keys = {
+            _unravel_key_to_tuple(key)
+            for key in self._env_obs_keys + [self.done_key] + ["_reset"]
+        }
         # output keys after step
-        self._selected_step_keys = {_unravel_key_to_tuple(key) for key in self._env_output_keys}
+        self._selected_step_keys = {
+            _unravel_key_to_tuple(key) for key in self._env_output_keys
+        }
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -1024,11 +1031,10 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
 
-    _excluded_reset_keys = {
-        _unravel_key_to_tuple(env.reward_key),
-        # _unravel_key_to_tuple(env.done_key),
-        _unravel_key_to_tuple(env.action_key),
-    }
+    # _excluded_reset_keys = {
+    #     _unravel_key_to_tuple(env.reward_key),
+    #     _unravel_key_to_tuple(env.action_key),
+    # }
 
     while True:
         try:

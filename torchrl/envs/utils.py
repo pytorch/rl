@@ -559,73 +559,73 @@ def make_composite_from_td(data):
     return composite
 
 
-def _fuse_tensordicts(*tds, excluded, selected=None, total=None):
-    """Fuses tensordicts with rank-wise priority.
-
-    The first tensordicts of the list will have a higher priority than those
-    coming after, in such a way that if a key is present in both the first and
-    second tensordict, the first value is guaranteed to result in the output.
-
-    Args:
-        tds (sequence of TensorDictBase): tensordicts to fuse.
-        excluded (sequence of tuples): keys to ignore. Must be tuples, no string
-            allowed.
-        selected (sequence of tuples): keys to accept. Must be tuples, no string
-            allowed.
-        total (tuple): the root key of the tds. Used for recursive calls.
-
-    Examples:
-        >>> td1 = TensorDict({
-        ...     "a": 0,
-        ...     "b": {"c": 0},
-        ... }, [])
-        >>> td2 = TensorDict({
-        ...     "a": 1,
-        ...     "b": {"c": 1, "d": 1},
-        ... }, [])
-        >>> td3 = TensorDict({
-        ...     "a": 2,
-        ...     "b": {"c": 2, "d": 2, "e": {"f": 2}},
-        ...     "g": 2,
-        ...     "h": {"i": 2},
-        ... }, [])
-        >>> out = fuse_tensordicts(td1, td2, td3, excluded=("h", "i"))
-        >>> assert out["a"] == 0
-        >>> assert out["b", "c"] == 0
-        >>> assert out["b", "d"] == 1
-        >>> assert out["b", "e", "f"] == 2
-        >>> assert out["g"] == 2
-        >>> assert ("h", "i") not in out.keys(True, True)
-
-    """
-    out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
-    if total is None:
-        total = ()
-
-    keys = set()
-    for i, td in enumerate(tds):
-        if td is None:
-            continue
-        for key in td.keys():
-            cur_total = total + (key,)
-            if cur_total in excluded:
-                continue
-            if selected is not None and cur_total not in selected:
-                continue
-            if key in keys:
-                continue
-            keys.add(key)
-            val = td._get_str(key, None)
-            if is_tensor_collection(val):
-                val = _fuse_tensordicts(
-                    val,
-                    *[_td._get_str(key, None) for _td in tds[i + 1 :]],
-                    total=cur_total,
-                    excluded=excluded,
-                    selected=selected,
-                )
-            out._set_str(key, val, validated=True, inplace=False)
-    return out
+# def _fuse_tensordicts(*tds, excluded, selected=None, total=None):
+#     """Fuses tensordicts with rank-wise priority.
+#
+#     The first tensordicts of the list will have a higher priority than those
+#     coming after, in such a way that if a key is present in both the first and
+#     second tensordict, the first value is guaranteed to result in the output.
+#
+#     Args:
+#         tds (sequence of TensorDictBase): tensordicts to fuse.
+#         excluded (sequence of tuples): keys to ignore. Must be tuples, no string
+#             allowed.
+#         selected (sequence of tuples): keys to accept. Must be tuples, no string
+#             allowed.
+#         total (tuple): the root key of the tds. Used for recursive calls.
+#
+#     Examples:
+#         >>> td1 = TensorDict({
+#         ...     "a": 0,
+#         ...     "b": {"c": 0},
+#         ... }, [])
+#         >>> td2 = TensorDict({
+#         ...     "a": 1,
+#         ...     "b": {"c": 1, "d": 1},
+#         ... }, [])
+#         >>> td3 = TensorDict({
+#         ...     "a": 2,
+#         ...     "b": {"c": 2, "d": 2, "e": {"f": 2}},
+#         ...     "g": 2,
+#         ...     "h": {"i": 2},
+#         ... }, [])
+#         >>> out = fuse_tensordicts(td1, td2, td3, excluded=("h", "i"))
+#         >>> assert out["a"] == 0
+#         >>> assert out["b", "c"] == 0
+#         >>> assert out["b", "d"] == 1
+#         >>> assert out["b", "e", "f"] == 2
+#         >>> assert out["g"] == 2
+#         >>> assert ("h", "i") not in out.keys(True, True)
+#
+#     """
+#     out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
+#     if total is None:
+#         total = ()
+#
+#     keys = set()
+#     for i, td in enumerate(tds):
+#         if td is None:
+#             continue
+#         for key in td.keys():
+#             cur_total = total + (key,)
+#             if cur_total in excluded:
+#                 continue
+#             if selected is not None and cur_total not in selected:
+#                 continue
+#             if key in keys:
+#                 continue
+#             keys.add(key)
+#             val = td._get_str(key, None)
+#             if is_tensor_collection(val):
+#                 val = _fuse_tensordicts(
+#                     val,
+#                     *[_td._get_str(key, None) for _td in tds[i + 1 :]],
+#                     total=cur_total,
+#                     excluded=excluded,
+#                     selected=selected,
+#                 )
+#             out._set_str(key, val, validated=True, inplace=False)
+#     return out
 
 
 @contextlib.contextmanager

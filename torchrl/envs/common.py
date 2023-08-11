@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import TensorDictBase
 
 from torchrl._utils import prod, seed_generator

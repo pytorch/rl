@@ -98,9 +98,9 @@ if __name__ == "__main__":
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
             obs, *_ = env.step(env.action_space.sample())
+            obs + 1 # to make sure data is accessed once
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
-                print(obs.shape)
                 times.append(time.time() - start)
                 fps = frames_per_batch / times[-1]
                 start = time.time()
@@ -117,11 +117,12 @@ if __name__ == "__main__":
     def test_sb3():
         from stable_baselines3.common.env_util import make_vec_env
         from stable_baselines3.common.vec_env import SubprocVecEnv
+
         logger = WandbLogger(
             project="benchmark-atari",
             exp_name=f"{current_branch}/{latest_commit_hash[:6]}/gym",
         )
-        env = make_vec_env(env_name, n_envs=num_workers, vec_env_cls=SubprocVecEnv)
+        env = make_vec_env(args.env, n_envs=num_workers, vec_env_cls=SubprocVecEnv)
         env.reset()
         global_step = 0
         times = []
@@ -129,9 +130,9 @@ if __name__ == "__main__":
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
             obs, *_ = env.step(env.action_space.sample())
+            obs + 1 # to make sure data is accessed once
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
-                print(obs.shape)
                 times.append(time.time() - start)
                 fps = frames_per_batch / times[-1]
                 start = time.time()
@@ -181,6 +182,7 @@ if __name__ == "__main__":
         print("Timer started.")
         for data in collector:
             global_step += data.numel()
+            data.get("pixels") + 1
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
             start = time.time()
@@ -222,6 +224,7 @@ if __name__ == "__main__":
         print("Timer started.")
         while global_step < args.total_frames:
             data = parallel_env.rollout(nsteps, break_when_any_done=False)
+            data.get("pixels") + 1
             global_step += data.numel()
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
@@ -241,7 +244,6 @@ if __name__ == "__main__":
             "mean:",
             args.total_frames / sum(times),
         )
-
 
     test_gym()
     test_sb3()
