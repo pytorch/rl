@@ -1955,6 +1955,67 @@ class TestDoubleToFloat(TransformBase):
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
 
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", ("some_other", "nested_key")],
+            ["observation_pixels"],
+            ["action"],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", ("some_other", "nested_key")],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float_auto(self, keys, keys_inv, device):
+        torch.manual_seed(0)
+        double2float = DoubleToFloat()
+        d = {
+            key: torch.zeros(1, 3, 3, dtype=torch.double, device=device) for key in keys
+        }
+        d.update(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_inv
+            }
+        )
+        td = TensorDict(d, [1], device=device)
+        # check that the transform does change the dtype in forward
+        double2float(td)
+        for key in keys:
+            assert td.get(key).dtype == torch.float
+
+        # check that inv does not affect the tensordict in-place
+        td = td.apply(lambda x: x.float())
+        td_modif = double2float.inv(td)
+        for key in keys_inv:
+            assert td.get(key).dtype != torch.double
+            assert td_modif.get(key).dtype == torch.double
+
+    def test_single_env_no_inkeys(self):
+        base_env = ContinuousActionVecMockEnv()
+        for key, spec in list(base_env.observation_spec.items(True, True)):
+            base_env.observation_spec[key] = spec.to(torch.float64)
+        for key, spec in list(base_env.state_spec.items(True, True)):
+            base_env.state_spec[key] = spec.to(torch.float64)
+        if base_env.action_spec.dtype == torch.float32:
+            base_env.action_spec = base_env.action_spec.to(torch.float64)
+        env = TransformedEnv(
+            base_env,
+            DoubleToFloat(),
+        )
+        for spec in env.observation_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        for spec in env.state_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        assert env.action_spec.dtype != torch.float64
+        check_env_specs(env)
+
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
