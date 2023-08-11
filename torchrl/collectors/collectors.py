@@ -419,9 +419,6 @@ class SyncDataCollector(DataCollectorBase):
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
             Default is ``False``.
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -542,6 +539,8 @@ class SyncDataCollector(DataCollectorBase):
         self.storing_device = torch.device(storing_device)
         self.env: EnvBase = env
         self.closed = False
+        if not reset_when_done:
+            raise ValueError("reset_when_done is deprectated.")
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
@@ -687,10 +686,6 @@ class SyncDataCollector(DataCollectorBase):
 
         if split_trajs is None:
             split_trajs = False
-        elif not self.reset_when_done and split_trajs:
-            raise RuntimeError(
-                "Cannot split trajectories when reset_when_done is False."
-            )
         self.split_trajs = split_trajs
         self._exclude_private_keys = True
         self.interruptor = interruptor
@@ -801,9 +796,6 @@ class SyncDataCollector(DataCollectorBase):
             action_key=self.env.action_key,
         )
 
-        if not self.reset_when_done:
-            return
-
         done_or_terminated = (
             (done | truncated) if truncated is not None else done.clone()
         )
@@ -902,7 +894,7 @@ class SyncDataCollector(DataCollectorBase):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
-        md = self._tensordict["collector"].clone()
+        md = self._tensordict.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -914,7 +906,7 @@ class SyncDataCollector(DataCollectorBase):
             )
             _reset[index] = 1
             self._tensordict[index].zero_()
-            self._tensordict["_reset"] = _reset
+            self._tensordict.set("_reset", _reset)
         else:
             _reset = None
             self._tensordict.zero_()
@@ -1336,6 +1328,7 @@ also that the state dict is synchronised across processes if needed."""
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+        for pipe_parent in self.pipes:
             msg = pipe_parent.recv()
             if msg != "instantiated":
                 raise RuntimeError(msg)

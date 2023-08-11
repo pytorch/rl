@@ -4,7 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 import importlib.util
+import os
 import re
 
 import torch
@@ -20,7 +23,12 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
+from tensordict.tensordict import (
+    LazyStackedTensorDict,
+    NestedKey,
+    TensorDict,
+    TensorDictBase,
+)
 
 __all__ = [
     "exploration_mode",
@@ -221,19 +229,17 @@ def _set_single_key(source, dest, key, clone=False):
         key = (key,)
     for k in key:
         try:
-            val = source.get(k)
+            val = source._get_str(k, None)
             if is_tensor_collection(val):
-                new_val = dest.get(k, None)
+                new_val = dest._get_str(k, None)
                 if new_val is None:
                     new_val = val.empty()
-                    # dest.set(k, new_val)
                     dest._set_str(k, new_val, inplace=False, validated=True)
                 source = val
                 dest = new_val
             else:
                 if clone:
                     val = val.clone()
-                # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
@@ -551,3 +557,98 @@ def make_composite_from_td(data):
         shape=data.shape,
     )
     return composite
+
+
+def _fuse_tensordicts(*tds, excluded, selected=None, total=None):
+    """Fuses tensordicts with rank-wise priority.
+
+    The first tensordicts of the list will have a higher priority than those
+    coming after, in such a way that if a key is present in both the first and
+    second tensordict, the first value is guaranteed to result in the output.
+
+    Args:
+        tds (sequence of TensorDictBase): tensordicts to fuse.
+        excluded (sequence of tuples): keys to ignore. Must be tuples, no string
+            allowed.
+        selected (sequence of tuples): keys to accept. Must be tuples, no string
+            allowed.
+        total (tuple): the root key of the tds. Used for recursive calls.
+
+    Examples:
+        >>> td1 = TensorDict({
+        ...     "a": 0,
+        ...     "b": {"c": 0},
+        ... }, [])
+        >>> td2 = TensorDict({
+        ...     "a": 1,
+        ...     "b": {"c": 1, "d": 1},
+        ... }, [])
+        >>> td3 = TensorDict({
+        ...     "a": 2,
+        ...     "b": {"c": 2, "d": 2, "e": {"f": 2}},
+        ...     "g": 2,
+        ...     "h": {"i": 2},
+        ... }, [])
+        >>> out = fuse_tensordicts(td1, td2, td3, excluded=("h", "i"))
+        >>> assert out["a"] == 0
+        >>> assert out["b", "c"] == 0
+        >>> assert out["b", "d"] == 1
+        >>> assert out["b", "e", "f"] == 2
+        >>> assert out["g"] == 2
+        >>> assert ("h", "i") not in out.keys(True, True)
+
+    """
+    out = TensorDict({}, batch_size=tds[0].batch_size, device=tds[0].device)
+    if total is None:
+        total = ()
+
+    keys = set()
+    for i, td in enumerate(tds):
+        if td is None:
+            continue
+        for key in td.keys():
+            cur_total = total + (key,)
+            if cur_total in excluded:
+                continue
+            if selected is not None and cur_total not in selected:
+                continue
+            if key in keys:
+                continue
+            keys.add(key)
+            val = td._get_str(key, None)
+            if is_tensor_collection(val):
+                val = _fuse_tensordicts(
+                    val,
+                    *[_td._get_str(key, None) for _td in tds[i + 1 :]],
+                    total=cur_total,
+                    excluded=excluded,
+                    selected=selected,
+                )
+            out._set_str(key, val, validated=True, inplace=False)
+    return out
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """Clears the MPI of environment variables.
+
+    `from mpi4py import MPI` will call `MPI_Init` by default.
+    If the child process has MPI environment variables, MPI will think that the child process
+    is an MPI process just like the parent and do bad things such as hang.
+
+    This context manager is a hacky way to clear those environment variables
+    temporarily such as when we are starting multiprocessing Processes.
+
+    Yields:
+        Yields for the context manager
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ["OMPI_", "PMI_"]:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)
