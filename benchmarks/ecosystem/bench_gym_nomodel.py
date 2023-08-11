@@ -104,7 +104,7 @@ if __name__ == "__main__":
                 fps = frames_per_batch / times[-1]
                 start = time.time()
                 if global_step % args.log_every == 0:
-                    logger.log_scalar("fps", args.log_every // (prev_start - start))
+                    logger.log_scalar("fps", args.log_every // (start - prev_start))
                     print(f"FPS Gym AsyncVectorEnv at step {global_step}:", fps)
                     prev_start = start
         env.close()
@@ -153,10 +153,7 @@ if __name__ == "__main__":
             fps = frames_per_batch / times[-1]
             start = time.time()
             if global_step % args.log_every == 0:
-                logger.log_scalar(
-                    "fps",
-                    args.log_every // (prev_start - start)
-                    )
+                logger.log_scalar("fps", args.log_every // (start - prev_start))
                 print(
                     f"FPS TorchRL with {collector_class.__name__} on {device} at step {global_step}:",
                     fps,
@@ -198,10 +195,7 @@ if __name__ == "__main__":
             fps = frames_per_batch / times[-1]
             start = time.time()
             if global_step % args.log_every == 0:
-                logger.log_scalar(
-                    "fps",
-                    args.log_every // (prev_start - start)
-                    )
+                logger.log_scalar("fps", args.log_every // (start - prev_start))
                 print(
                     f"FPS TorchRL with ParallelEnv on {device} at step {global_step}:",
                     fps,
