@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
         logger = WandbLogger(
             project="benchmark-atari",
-            exp_name=f"{current_branch}/{latest_commit_hash[:6]}/gym",
+            exp_name=f"{current_branch}/{latest_commit_hash[:6]}/sb3",
         )
         env = make_vec_env(args.env, n_envs=num_workers, vec_env_cls=SubprocVecEnv)
         env.reset()
