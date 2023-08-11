@@ -109,10 +109,11 @@ if __name__ == "__main__":
                     print(f"FPS Gym AsyncVectorEnv at step {global_step}:", fps)
                     prev_start = start
         env.close()
-        logger.experiment.finish()
-        del logger, env
         print("FPS Gym AsyncVectorEnv mean:", args.total_frames / sum(times))
         logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+        logger.experiment.finish()
+        del env
+
 
     # Test asynchronous gym collector
     def test_sb3():
@@ -142,10 +143,10 @@ if __name__ == "__main__":
                     print(f"FPS SB3 AsyncVectorEnv at step {global_step}:", fps)
                     prev_start = start
         env.close()
-        logger.experiment.finish()
-        del logger, env
         print("FPS SB3 AsyncVectorEnv mean:", args.total_frames / sum(times))
         logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+        logger.experiment.finish()
+        del logger, env
 
 
     # Test multiprocess TorchRL collector
@@ -197,8 +198,6 @@ if __name__ == "__main__":
                 )
                 prev_start = start
         collector.shutdown()
-        logger.experiment.finish()
-        del logger, collector
         print(
             "FPS TorchRL with",
             collector_class.__name__,
@@ -208,6 +207,8 @@ if __name__ == "__main__":
             args.total_frames / sum(times),
         )
         logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+        logger.experiment.finish()
+        del logger, collector
 
 
     # Test multiprocess TorchRL collector
@@ -241,8 +242,6 @@ if __name__ == "__main__":
                     fps,
                 )
                 prev_start = start
-        logger.experiment.finish()
-        del logger, parallel_env
         print(
             "FPS TorchRL with ParallelEnv on",
             device,
@@ -250,6 +249,8 @@ if __name__ == "__main__":
             args.total_frames / sum(times),
         )
         logger.log_scalar("fps (bar)", args.total_frames / sum(times))
+        logger.experiment.finish()
+        del parallel_env
 
 
     test_sb3()
