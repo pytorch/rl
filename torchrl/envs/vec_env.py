@@ -1129,6 +1129,7 @@ def _run_worker_pipe_shared_mem(
         # _unravel_key_to_tuple(env.done_key),
         _unravel_key_to_tuple(env.action_key),
     }
+    done_key = env.done_key
 
     while True:
         try:
@@ -1191,7 +1192,7 @@ def _run_worker_pipe_shared_mem(
             i += 1
             next_td = env._step(shared_tensordict)
 
-            done = next_td.get(env.done_key)
+            done = next_td.get(done_key)
             truncated = next_td.get("truncated", None)
             if truncated is not None:
                 done = done | truncated
@@ -1205,11 +1206,8 @@ def _run_worker_pipe_shared_mem(
                 cur_td = _fuse_tensordicts(
                     next_td,
                     shared_tensordict,
-                    excluded=(
-                        _unravel_key_to_tuple(env.reward_key),
-                        _unravel_key_to_tuple(env.done_key),
-                        _unravel_key_to_tuple(env.action_key),
-                    ),
+                    selected=_selected_reset_keys,
+                    excluded=_excluded_reset_keys,
                 )
 
                 # we'll need to call reset
