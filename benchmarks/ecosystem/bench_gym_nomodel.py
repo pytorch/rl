@@ -23,7 +23,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.record.loggers.wandb import WandbLogger
 
 print(torch.multiprocessing.get_sharing_strategy())
-torch.multiprocessing.set_sharing_strategy('file_descriptor')#file_system')
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -91,6 +91,37 @@ if __name__ == "__main__":
         env = gym.vector.AsyncVectorEnv(
             [lambda: gym.make(args.env) for _ in range(num_workers)]
         )
+        env.reset()
+        global_step = 0
+        times = []
+        prev_start = start = time.time()
+        print("Timer started.")
+        for _ in range(args.total_frames // num_workers):
+            obs = env.step(env.action_space.sample())
+            global_step += num_workers
+            if global_step % int(frames_per_batch) == 0:
+                print(obs.shape)
+                times.append(time.time() - start)
+                fps = frames_per_batch / times[-1]
+                start = time.time()
+                if global_step % args.log_every == 0:
+                    logger.log_scalar("fps", args.log_every // (start - prev_start))
+                    print(f"FPS Gym AsyncVectorEnv at step {global_step}:", fps)
+                    prev_start = start
+        env.close()
+        logger.experiment.finish()
+        del logger, env
+        print("FPS Gym AsyncVectorEnv mean:", args.total_frames / sum(times))
+
+    # Test asynchronous gym collector
+    def test_sb3():
+        from stable_baselines3.common.env_util import make_vec_env
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        logger = WandbLogger(
+            project="benchmark-atari",
+            exp_name=f"{current_branch}/{latest_commit_hash[:6]}/gym",
+        )
+        env = make_vec_env(env_name, n_envs=num_workers, vec_env_cls=SubprocVecEnv)
         env.reset()
         global_step = 0
         times = []
@@ -210,6 +241,10 @@ if __name__ == "__main__":
             args.total_frames / sum(times),
         )
 
+
+    test_gym()
+    test_sb3()
+
     device_list = ["cpu"]
     if torch.cuda.device_count():
         device_list = ["cuda:0", *device_list]
@@ -224,5 +259,4 @@ if __name__ == "__main__":
         for device in device_list:
             test_torch_rl(collector_class, device)
 
-    test_gym()
     exit()
