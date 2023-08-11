@@ -632,7 +632,7 @@ class SerialEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if key != "_reset":
+                if key != ("_reset",):
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
@@ -879,7 +879,7 @@ class ParallelEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if key != "_reset":
+                if key != ("_reset",):
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
