@@ -1127,7 +1127,7 @@ def _run_worker_pipe_shared_mem(
 
     _excluded_reset_keys = {
         _unravel_key_to_tuple(env.reward_key),
-        _unravel_key_to_tuple(env.done_key),
+        # _unravel_key_to_tuple(env.done_key),
         _unravel_key_to_tuple(env.action_key),
     }
     _selected_reset_keys = {_unravel_key_to_tuple(key) for key in _selected_reset_keys}
