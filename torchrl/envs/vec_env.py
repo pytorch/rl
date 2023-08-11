@@ -876,8 +876,7 @@ class ParallelEnv(_BatchedEnv):
     def _step_and_maybe_reset_async(self, tensordict: TensorDictBase) -> TensorDictBase:
         # this is faster than update_ but won't work for lazy stacks
         if self._single_task:
-            for key in self._env_input_keys:
-                key = _unravel_key_to_tuple(key)
+            for key in self._selected_input_keys:
                 self.shared_tensordict_parent._set_tuple(
                     key,
                     tensordict._get_tuple(key, None),
