@@ -385,11 +385,11 @@ class _BatchedEnv(EnvBase):
         self._selected_keys.add("_reset")
 
         # input keys
-        self._selected_input_keys = self._env_input_keys
+        self._selected_input_keys = {_unravel_key_to_tuple(key) for key in self._env_input_keys}
         # output keys after reset
-        self._selected_reset_keys = self._env_obs_keys + [self.done_key] + ["_reset"]
+        self._selected_reset_keys = {_unravel_key_to_tuple(key) for key in self._env_obs_keys + [self.done_key] + ["_reset"]}
         # output keys after step
-        self._selected_step_keys = self._env_output_keys
+        self._selected_step_keys = {_unravel_key_to_tuple(key) for key in self._env_output_keys}
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -839,6 +839,7 @@ class ParallelEnv(_BatchedEnv):
             cur_td = _fuse_tensordicts(
                 self.shared_tensordict_parent,
                 tensordict,
+                selected=self._selected_reset_keys,
                 excluded=(("next",), ("_reset",)),
             )
         # elif done.any():
@@ -861,6 +862,7 @@ class ParallelEnv(_BatchedEnv):
             cur_td = _fuse_tensordicts(
                 next_tensordict,
                 tensordict,
+                selected=self._selected_reset_keys,
                 excluded=(_unravel_key_to_tuple(self.reward_key),),
             )
         if "next" in tensordict.keys():
@@ -872,8 +874,7 @@ class ParallelEnv(_BatchedEnv):
     def _step_and_maybe_reset_async(self, tensordict: TensorDictBase) -> TensorDictBase:
         # this is faster than update_ but won't work for lazy stacks
         if self._single_task:
-            for key in self._env_input_keys:
-                key = _unravel_key_to_tuple(key)
+            for key in self._selected_input_keys:
                 self.shared_tensordict_parent._set_tuple(
                     key,
                     tensordict._get_tuple(key, None),
@@ -1128,8 +1129,6 @@ def _run_worker_pipe_shared_mem(
         # _unravel_key_to_tuple(env.done_key),
         _unravel_key_to_tuple(env.action_key),
     }
-    _selected_reset_keys = {_unravel_key_to_tuple(key) for key in _selected_reset_keys}
-    _selected_step_keys = {_unravel_key_to_tuple(key) for key in _selected_step_keys}
 
     while True:
         try:
@@ -1216,7 +1215,6 @@ def _run_worker_pipe_shared_mem(
                 # we'll need to call reset
                 cur_td.set("_reset", done)
                 cur_td = env.reset(cur_td)
-                del cur_td["_reset"]
                 # shared_tensordict.update_(cur_td)
 
             for key in _selected_reset_keys:
