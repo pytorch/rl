@@ -1238,7 +1238,8 @@ class TestStepCounter(TransformBase):
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            td = step_counter._step(td)
+            next_td = step_counter._step(td, td.get("next"))
+            td.set("next", next_td)
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -1291,7 +1292,7 @@ class TestStepCounter(TransformBase):
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            td = step_counter._step(td)
+            td.set("next", step_counter._step(td, td.get("next")))
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -1954,6 +1955,67 @@ class TestDoubleToFloat(TransformBase):
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", ("some_other", "nested_key")],
+            ["observation_pixels"],
+            ["action"],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", ("some_other", "nested_key")],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float_auto(self, keys, keys_inv, device):
+        torch.manual_seed(0)
+        double2float = DoubleToFloat()
+        d = {
+            key: torch.zeros(1, 3, 3, dtype=torch.double, device=device) for key in keys
+        }
+        d.update(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_inv
+            }
+        )
+        td = TensorDict(d, [1], device=device)
+        # check that the transform does change the dtype in forward
+        double2float(td)
+        for key in keys:
+            assert td.get(key).dtype == torch.float
+
+        # check that inv does not affect the tensordict in-place
+        td = td.apply(lambda x: x.float())
+        td_modif = double2float.inv(td)
+        for key in keys_inv:
+            assert td.get(key).dtype != torch.double
+            assert td_modif.get(key).dtype == torch.double
+
+    def test_single_env_no_inkeys(self):
+        base_env = ContinuousActionVecMockEnv()
+        for key, spec in list(base_env.observation_spec.items(True, True)):
+            base_env.observation_spec[key] = spec.to(torch.float64)
+        for key, spec in list(base_env.state_spec.items(True, True)):
+            base_env.state_spec[key] = spec.to(torch.float64)
+        if base_env.action_spec.dtype == torch.float32:
+            base_env.action_spec = base_env.action_spec.to(torch.float64)
+        env = TransformedEnv(
+            base_env,
+            DoubleToFloat(),
+        )
+        for spec in env.observation_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        for spec in env.state_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        assert env.action_spec.dtype != torch.float64
+        check_env_specs(env)
 
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
@@ -2699,7 +2761,7 @@ class TestFrameSkipTransform(TransformBase):
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
-            t._step(tensordict)
+            t._step(tensordict, tensordict.get("next"))
 
     def test_transform_compose(self):
         t = Compose(FrameSkipTransform(2))
@@ -2707,7 +2769,7 @@ class TestFrameSkipTransform(TransformBase):
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
-            t._step(tensordict)
+            t._step(tensordict, tensordict.get("next"))
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
@@ -3023,7 +3085,8 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             t.reset(TensorDict({"next": {}}, []))
-        t._step(TensorDict({"next": {}}, []))
+        td = TensorDict({"next": {}}, [])
+        t._step(td, td.get("next"))
 
     def test_transform_compose(self):
         t = Compose(NoopResetEnv())
@@ -3032,7 +3095,8 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             t.reset(TensorDict({"next": {}}, []))
-        t._step(TensorDict({"next": {}}, []))
+        td = TensorDict({"next": {}}, [])
+        t._step(td, td.get("next"))
 
     def test_transform_model(self):
         t = nn.Sequential(NoopResetEnv(), nn.Identity())
@@ -4168,15 +4232,13 @@ class TestRewardSum(TransformBase):
         )
 
         # apply one time, episode_reward should be equal to reward again
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert "episode_reward" in td.keys()
         assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # apply a second time, episode_reward should twice the reward
         td["episode_reward"] = td["next", "episode_reward"]
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert (td_next.get("episode_reward") == 2 * td_next.get("reward")).all()
 
         # reset environments
@@ -4184,8 +4246,7 @@ class TestRewardSum(TransformBase):
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # test transform_observation_spec
@@ -5055,7 +5116,9 @@ class TestTargetReturn(TransformBase):
             batch_size=batch,
         )
         td = t.reset(td)
-        td = t._step(td)
+        next_td = td.get("next")
+        next_td = t._step(td, next_td)
+        td.set("next", next_td)
 
         if mode == "reduce":
             assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
@@ -5132,7 +5195,8 @@ class TestTargetReturn(TransformBase):
         reward = torch.randn(10)
         td = TensorDict({("next", in_key): reward}, [])
         td = t.reset(td)
-        td = t._step(td)
+        td_next = t._step(td, td.get("next"))
+        td.set("next", td_next)
         if mode == "reduce":
             assert (td["next", out_key] + td["next", in_key] == 10.0).all()
         else:
@@ -7884,12 +7948,13 @@ class TestKLRewardTransform(TransformBase):
             {
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
-                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
                 "sample_log_prob": torch.randn(*batch),
             },
             batch,
         )
-        t._step(tensordict)
+        next_td = TensorDict({t.in_keys[0]: torch.zeros(*batch, 1)}, batch)
+        next_td = t._step(tensordict, next_td)
+        tensordict.set("next", next_td)
         assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
 
     def test_transform_compose(self):
