@@ -329,18 +329,18 @@ class _BatchedEnv(EnvBase):
             shared_tensordict_parent = self._env_tensordict.clone()
 
         if self._single_task:
-            self.env_input_keys = sorted(
+            self._env_input_keys = sorted(
                 list(self.input_spec["_action_spec"].keys(True, True))
                 + list(self.state_spec.keys(True, True)),
                 key=_sort_keys,
             )
-            self.env_output_keys = []
-            self.env_obs_keys = []
+            self._env_output_keys = []
+            self._env_obs_keys = []
             for key in self.output_spec["_observation_spec"].keys(True, True):
-                self.env_output_keys.append(key)
-                self.env_obs_keys.append(key)
-            self.env_output_keys.append(self.reward_key)
-            self.env_output_keys.append(self.done_key)
+                self._env_output_keys.append(key)
+                self._env_obs_keys.append(key)
+            self._env_output_keys.append(self.reward_key)
+            self._env_output_keys.append(self.done_key)
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -372,20 +372,24 @@ class _BatchedEnv(EnvBase):
                     self.done_key,
                 }
             )
-            self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
-            self.env_input_keys = sorted(env_input_keys, key=_sort_keys)
-            self.env_output_keys = sorted(env_output_keys, key=_sort_keys)
+            self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
+            self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
+            self._env_output_keys = sorted(env_output_keys, key=_sort_keys)
 
         self._selected_keys = (
-            set(self.env_output_keys)
-            .union(self.env_input_keys)
-            .union(self.env_obs_keys)
+            set(self._env_output_keys)
+            .union(self._env_input_keys)
+            .union(self._env_obs_keys)
         )
         self._selected_keys.add(self.done_key)
         self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + [self.done_key] + ["_reset"]
-        self._selected_step_keys = self.env_output_keys
+        # input keys
+        self._selected_input_keys = self._env_input_keys
+        # output keys after reset
+        self._selected_reset_keys = self._env_obs_keys + [self.done_key] + ["_reset"]
+        # output keys after step
+        self._selected_step_keys = self._env_output_keys
 
         if self._single_task:
             shared_tensordict_parent = shared_tensordict_parent.select(
@@ -551,7 +555,7 @@ class SerialEnv(_BatchedEnv):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
-            next_td[i].update_(out_td.select(*self.env_output_keys))
+            next_td[i].update_(out_td.select(*self._env_output_keys))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
@@ -728,6 +732,9 @@ class ParallelEnv(_BatchedEnv):
                         self.device,
                         event,
                         self.shared_tensordicts[idx],
+                        self._selected_input_keys,
+                        self._selected_reset_keys,
+                        self._selected_step_keys,
                     ),
                 )
                 process.daemon = True
@@ -774,7 +781,7 @@ class ParallelEnv(_BatchedEnv):
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self._single_task:
             # this is faster than update_ but won't work for lazy stacks
-            for key in self.env_input_keys:
+            for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
                     key,
@@ -784,7 +791,7 @@ class ParallelEnv(_BatchedEnv):
                 )
         else:
             self.shared_tensordict_parent.update_(
-                tensordict.select(*self.env_input_keys, strict=False)
+                tensordict.select(*self._env_input_keys, strict=False)
             )
         if self.event is not None:
             self.event.record()
@@ -867,7 +874,7 @@ class ParallelEnv(_BatchedEnv):
     def _step_and_maybe_reset_async(self, tensordict: TensorDictBase) -> TensorDictBase:
         # this is faster than update_ but won't work for lazy stacks
         if self._single_task:
-            for key in self.env_input_keys:
+            for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
                 self.shared_tensordict_parent._set_tuple(
                     key,
@@ -1088,6 +1095,9 @@ def _run_worker_pipe_shared_mem(
     device: DEVICE_TYPING = None,
     mp_event: mp.Event = None,
     shared_tensordict: TensorDictBase = None,
+    _selected_input_keys=None,
+    _selected_reset_keys=None,
+    _selected_step_keys=None,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1114,6 +1124,14 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
+
+    _excluded_reset_keys = {
+        _unravel_key_to_tuple(env.reward_key),
+        _unravel_key_to_tuple(env.done_key),
+        _unravel_key_to_tuple(env.action_key),
+    }
+    _selected_reset_keys = {_unravel_key_to_tuple(key) for key in _selected_reset_keys}
+    _selected_step_keys = {_unravel_key_to_tuple(key) for key in _selected_step_keys}
 
     while True:
         try:
@@ -1183,11 +1201,8 @@ def _run_worker_pipe_shared_mem(
             cur_td = _fuse_tensordicts(
                 next_td,
                 shared_tensordict,
-                excluded=(
-                    _unravel_key_to_tuple(env.reward_key),
-                    _unravel_key_to_tuple(env.done_key),
-                    _unravel_key_to_tuple(env.action_key),
-                ),
+                selected=_selected_reset_keys,
+                excluded=_excluded_reset_keys,
             )
             if done.any():
                 # cur_td = _fuse_tensordicts(
@@ -1206,8 +1221,16 @@ def _run_worker_pipe_shared_mem(
                 del cur_td["_reset"]
                 # shared_tensordict.update_(cur_td)
 
-            shared_tensordict.update_(cur_td)
-            next_shared_tensordict.update_(next_td)
+            for key in _selected_reset_keys:
+                shared_tensordict._set_tuple(
+                    key, cur_td._get_tuple(key, None), validated=True, inplace=True
+                )
+            # shared_tensordict.update_(cur_td)
+            for key in _selected_step_keys:
+                next_shared_tensordict._set_tuple(
+                    key, next_td._get_tuple(key, None), validated=True, inplace=True
+                )
+            # next_shared_tensordict.update_(next_td)
 
             if event is not None:
                 event.record()
