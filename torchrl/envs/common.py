@@ -802,45 +802,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
-    def step_and_maybe_reset(
-        self, tensordict: TensorDictBase
-    ) -> Tuple[TensorDictBase, TensorDictBase]:
-        """Runs a step in tne environment and possibly resets it.
-
-        This method returns the current tensordict updated with the `"next"`
-        value (as with ``step``) alongside the root tensordict of the next
-        step (ie, the result of ``step_mdp``).
-
-        This method will run :meth:`~.reset` on whichever sub-envs that needs
-        to be reset.
-
-        Returns: A ``cur_tensordict`` that will be used at the next step as the
-            root. It may contain data from a partial ``reset``. The second output
-            is the updated tensordict passed as input with the ``"next"`` key.
-
-        """
-        next_tensordict = self._step(tensordict)
-        next_tensordict = self._step_proc_data(next_tensordict)
-
-        done = next_tensordict.get(self.done_key)
-        truncated = next_tensordict.get("truncated", None)
-        if truncated is not None:
-            done = done | truncated
-
-        cur_td = _fuse_tensordicts(
-            next_tensordict,
-            tensordict,
-            excluded=(_unravel_key_to_tuple(self.reward_key)),
-        )
-
-        if done.any():
-            if done.numel() > 1:
-                _reset = done
-                cur_td.set("_reset", _reset)
-            cur_td = self.reset(cur_td)
-        tensordict.set("next", next_tensordict)
-        return cur_td, tensordict
-
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1090,12 +1051,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict = self.rand_action(tensordict)
         return self.step(tensordict)
 
-    def rand_step_and_maybe_reset(
-        self, tensordict: Optional[TensorDictBase] = None
-    ) -> TensorDictBase:
-        tensordict = self.rand_action(tensordict)
-        return self.step_and_maybe_reset(tensordict)
-
     @property
     def specs(self) -> CompositeSpec:
         """Returns a Composite container where all the environment are present.
@@ -1239,96 +1194,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             [None, 'time']
 
         """
-        if not break_when_any_done:
-            # rollout will use step_and_maybe_reset
-            return self._split_rollout(
-                max_steps=max_steps,
-                policy=policy,
-                callback=callback,
-                auto_reset=auto_reset,
-                auto_cast_to_device=auto_cast_to_device,
-                return_contiguous=return_contiguous,
-                tensordict=tensordict,
-            )
-        else:
-            # rollout will use step
-            return self._single_rollout(
-                max_steps=max_steps,
-                policy=policy,
-                callback=callback,
-                auto_reset=auto_reset,
-                auto_cast_to_device=auto_cast_to_device,
-                break_when_any_done=break_when_any_done,
-                return_contiguous=return_contiguous,
-                tensordict=tensordict,
-            )
-
-    def _split_rollout(
-        self,
-        max_steps: int,
-        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
-        auto_reset: bool = True,
-        auto_cast_to_device: bool = False,
-        return_contiguous: bool = True,
-        tensordict: Optional[TensorDictBase] = None,
-    ):
-        try:
-            policy_device = next(policy.parameters()).device
-        except (StopIteration, AttributeError):
-            policy_device = self.device
-
-        env_device = self.device
-
-        if auto_reset:
-            if tensordict is not None:
-                raise RuntimeError(
-                    "tensordict cannot be provided when auto_reset is True"
-                )
-            tensordict = self.reset()
-        elif tensordict is None:
-            raise RuntimeError("tensordict must be provided when auto_reset is False")
-        if policy is None:
-
-            def policy(td):
-                self.rand_action(td)
-                return td
-
-        tensordicts = []
-        for i in range(max_steps):
-            if auto_cast_to_device:
-                tensordict = tensordict.to(policy_device, non_blocking=True)
-            tensordict = policy(tensordict)
-            if auto_cast_to_device:
-                tensordict = tensordict.to(env_device, non_blocking=True)
-            cur_td, tensordict = self.step_and_maybe_reset(tensordict)
-
-            tensordicts.append(tensordict)
-            tensordict = cur_td
-            if i == max_steps - 1:
-                break
-            if callback is not None:
-                callback(self, tensordict)
-
-        batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-
-        data = torch.stack(tensordicts, len(batch_size))
-        if return_contiguous:
-            data = data.contiguous()
-        data.refine_names(..., "time")
-        return data
-
-    def _single_rollout(
-        self,
-        max_steps: int,
-        policy: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        callback: Optional[Callable[[TensorDictBase, ...], TensorDictBase]] = None,
-        auto_reset: bool = True,
-        auto_cast_to_device: bool = False,
-        break_when_any_done: bool = True,  # kept for testing
-        return_contiguous: bool = True,
-        tensordict: Optional[TensorDictBase] = None,
-    ) -> TensorDictBase:
         try:
             policy_device = next(policy.parameters()).device
         except (StopIteration, AttributeError):

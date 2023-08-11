@@ -44,6 +44,7 @@ from torchrl.envs.utils import (
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
+    step_mdp,
 )
 from torchrl.envs.vec_env import _BatchedEnv
 
@@ -784,18 +785,50 @@ class SyncDataCollector(DataCollectorBase):
                 if self._frames >= self.total_frames:
                     break
 
-    def _step_mdp(self, data) -> None:
-        next_data = data.get("next")
-        done = next_data.get(self.env.done_key)
-        truncated = next_data.get("truncated", None)
-        if truncated is not None:
-            done = truncated | done
-        done = done.reshape(next_data.shape)
-        if done.any():
+    def _step_and_maybe_reset(self) -> None:
+        done = self._tensordict.get(("next", self.env.done_key))
+        truncated = self._tensordict.get(("next", "truncated"), None)
+
+        self._tensordict = step_mdp(
+            self._tensordict,
+            reward_key=self.env.reward_key,
+            done_key=self.env.done_key,
+            action_key=self.env.action_key,
+        )
+
+        done_or_terminated = (
+            (done | truncated) if truncated is not None else done.clone()
+        )
+        if done_or_terminated.any():
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
-            traj_ids[done] = traj_ids.max() + torch.arange(
-                1, done.sum() + 1, device=traj_ids.device
+            # collectors do not support passing other tensors than `"_reset"`
+            # to `reset()`.
+            _reset = done_or_terminated
+            td_reset = self._tensordict.select().set("_reset", _reset)
+            td_reset = self.env.reset(td_reset)
+            td_reset.del_("_reset")
+            traj_done_or_terminated = done_or_terminated.sum(
+                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
+                dtype=torch.bool,
+            )
+            if td_reset.batch_dims:
+                # better cloning here than when passing the td for stacking
+                # cloning is necessary to avoid modifying dones in-place
+                self._tensordict = self._tensordict.clone()
+                self._tensordict[traj_done_or_terminated] = td_reset[
+                    traj_done_or_terminated
+                ]
+            else:
+                self._tensordict.update(td_reset)
+
+            done = self._tensordict.get(self.env.done_key)
+            if done.any():
+                raise RuntimeError(
+                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+                )
+            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
+                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
@@ -816,17 +849,14 @@ class SyncDataCollector(DataCollectorBase):
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
-                    current_td, data = self.env.rand_step_and_maybe_reset(
-                        self._tensordict
-                    )
+                    self.env.rand_step(self._tensordict)
                 else:
                     self.policy(self._tensordict)
-                    current_td, data = self.env.step_and_maybe_reset(self._tensordict)
-
+                    self.env.step(self._tensordict)
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                tensordicts.append(data.to(self.storing_device))
-                self._tensordict = current_td
-                self._step_mdp(data)
+                tensordicts.append(self._tensordict.to(self.storing_device))
+
+                self._step_and_maybe_reset()
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
