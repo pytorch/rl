@@ -1217,7 +1217,6 @@ def _run_worker_pipe_shared_mem(
                 # we'll need to call reset
                 cur_td.set("_reset", done)
                 cur_td = env.reset(cur_td)
-                del cur_td["_reset"]
                 # shared_tensordict.update_(cur_td)
 
             for key in _selected_reset_keys:
