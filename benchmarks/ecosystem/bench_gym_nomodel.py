@@ -22,6 +22,9 @@ from torchrl.envs import ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.record.loggers.wandb import WandbLogger
 
+print(torch.multiprocessing.get_sharing_strategy())
+torch.multiprocessing.set_sharing_strategy('file_descriptor')#file_system')
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 parser = ArgumentParser()
