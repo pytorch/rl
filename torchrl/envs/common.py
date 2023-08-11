@@ -23,7 +23,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import _fuse_tensordicts, get_available_libraries, step_mdp
+from torchrl.envs.utils import get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
