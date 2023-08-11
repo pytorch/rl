@@ -121,9 +121,7 @@ def make_env_transforms(
             "reward",
         ]
         float_to_double_list += ["action"]  # DMControl requires double-precision
-    env.append_transform(
-        DoubleToFloat(in_keys=double_to_float_list, in_keys_inv=float_to_double_list)
-    )
+    env.append_transform(DoubleToFloat())
 
     default_dict = {
         "state": UnboundedContinuousTensorSpec(shape=(*env.batch_size, cfg.state_dim)),
