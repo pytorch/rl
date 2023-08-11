@@ -559,7 +559,7 @@ def make_composite_from_td(data):
     return composite
 
 
-def _fuse_tensordicts(*tds, excluded, total=None):
+def _fuse_tensordicts(*tds, excluded, selected=None, total=None):
     """Fuses tensordicts with rank-wise priority.
 
     The first tensordicts of the list will have a higher priority than those
@@ -569,6 +569,8 @@ def _fuse_tensordicts(*tds, excluded, total=None):
     Args:
         tds (sequence of TensorDictBase): tensordicts to fuse.
         excluded (sequence of tuples): keys to ignore. Must be tuples, no string
+            allowed.
+        selected (sequence of tuples): keys to accept. Must be tuples, no string
             allowed.
         total (tuple): the root key of the tds. Used for recursive calls.
 
@@ -605,12 +607,14 @@ def _fuse_tensordicts(*tds, excluded, total=None):
         if td is None:
             continue
         for key in td.keys():
-            if key in keys:
-                continue
-            keys.add(key)
             cur_total = total + (key,)
             if cur_total in excluded:
                 continue
+            if selected is not None and cur_total not in selected:
+                continue
+            if key in keys:
+                continue
+            keys.add(key)
             val = td._get_str(key, None)
             if is_tensor_collection(val):
                 val = _fuse_tensordicts(
@@ -618,6 +622,7 @@ def _fuse_tensordicts(*tds, excluded, total=None):
                     *[_td._get_str(key, None) for _td in tds[i + 1 :]],
                     total=cur_total,
                     excluded=excluded,
+                    selected=selected,
                 )
             out._set_str(key, val, validated=True, inplace=False)
     return out
