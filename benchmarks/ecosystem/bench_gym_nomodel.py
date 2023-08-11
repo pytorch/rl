@@ -98,7 +98,7 @@ if __name__ == "__main__":
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
             obs, *_ = env.step(env.action_space.sample())
-            obs + 1 # to make sure data is accessed once
+            obs * 1 # to make sure data is accessed once
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
                 times.append(time.time() - start)
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
             obs, *_ = env.step(env.action_space.sample())
-            obs + 1 # to make sure data is accessed once
+            obs * 1 # to make sure data is accessed once
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
                 times.append(time.time() - start)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
         print("Timer started.")
         for data in collector:
             global_step += data.numel()
-            data.get("pixels") + 1
+            data.get("pixels") * 1
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
             start = time.time()
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         print("Timer started.")
         while global_step < args.total_frames:
             data = parallel_env.rollout(nsteps, break_when_any_done=False)
-            data.get("pixels") + 1
+            data.get("pixels") * 1
             global_step += data.numel()
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
