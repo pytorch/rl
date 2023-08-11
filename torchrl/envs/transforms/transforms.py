@@ -3712,7 +3712,7 @@ class StepCounter(Transform):
         self.step_count_key = step_count_key
         super().__init__([])
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _get_done(self, tensordict):
         done_key = self.parent.done_key if self.parent else "done"
         done = tensordict.get(done_key, None)
         if done is None:
@@ -3721,24 +3721,26 @@ class StepCounter(Transform):
                 dtype=self.parent.done_spec.dtype,
                 device=self.parent.done_spec.device,
             )
+        return done
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        done = None
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
             default=None,
         )
         if _reset is None:
+            done = self._get_done(tensordict)
             _reset = torch.ones_like(done)
-        step_count = tensordict.get(
-            self.step_count_key,
-            default=None,
-        )
+        step_count = tensordict.get(self.step_count_key, default=None)
         if step_count is None:
+            if done is None:
+                # avoid getting done if not needed
+                done = self._get_done(tensordict)
             step_count = torch.zeros_like(done, dtype=torch.int64)
         step_count = torch.where(~_reset, step_count, 0)
-        tensordict.set(
-            self.step_count_key,
-            step_count,
-        )
+        tensordict.set(self.step_count_key, step_count)
         if self.max_steps is not None:
             truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
@@ -3748,9 +3750,7 @@ class StepCounter(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        step_count = tensordict.get(
-            self.step_count_key,
-        )
+        step_count = tensordict.get(self.step_count_key)
         next_step_count = step_count + 1
         next_tensordict.set(self.step_count_key, next_step_count)
         if self.max_steps is not None:
