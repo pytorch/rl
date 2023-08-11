@@ -97,7 +97,7 @@ if __name__ == "__main__":
         prev_start = start = time.time()
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
-            obs = env.step(env.action_space.sample())
+            obs, *_ = env.step(env.action_space.sample())
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
                 print(obs.shape)
@@ -128,9 +128,10 @@ if __name__ == "__main__":
         prev_start = start = time.time()
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
-            env.step(env.action_space.sample())
+            obs, *_ = env.step(env.action_space.sample())
             global_step += num_workers
             if global_step % int(frames_per_batch) == 0:
+                print(obs.shape)
                 times.append(time.time() - start)
                 fps = frames_per_batch / times[-1]
                 start = time.time()
