@@ -2,6 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
+
+_has_isaac = importlib.util.find_spec("isaacgym") is not None
+
+if _has_isaac:
+    # isaac gym asks to be imported before torch...
+    import isaacgym  # noqa
+    import isaacgymenvs  # noqa
+    from torchrl.envs.libs.isaacgym import IsaacGymEnv
+
 import argparse
 import importlib
 
@@ -18,6 +28,7 @@ from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
     get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -1532,6 +1543,76 @@ class TestOpenML:
         for i, _ in enumerate(data):  # noqa: B007
             continue
         assert len(data) // 2048 in (i, i - 1)
+
+
+@pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
+@pytest.mark.parametrize(
+    "task",
+    [
+        "AllegroHand",
+        # "AllegroKuka",
+        # "AllegroKukaTwoArms",
+        # "AllegroHandManualDR",
+        # "AllegroHandADR",
+        "Ant",
+        # "Anymal",
+        # "AnymalTerrain",
+        # "BallBalance",
+        # "Cartpole",
+        # "FactoryTaskGears",
+        # "FactoryTaskInsertion",
+        # "FactoryTaskNutBoltPick",
+        # "FactoryTaskNutBoltPlace",
+        # "FactoryTaskNutBoltScrew",
+        # "FrankaCabinet",
+        # "FrankaCubeStack",
+        "Humanoid",
+        # "HumanoidAMP",
+        # "Ingenuity",
+        # "Quadcopter",
+        # "ShadowHand",
+        "Trifinger",
+    ],
+)
+@pytest.mark.parametrize("num_envs", [10, 20])
+@pytest.mark.parametrize("device", get_default_devices())
+class TestIsaacGym:
+    @classmethod
+    def _run_on_proc(cls, q, task, num_envs, device):
+        try:
+            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+            check_env_specs(env)
+            q.put(("succeeded!", None))
+        except Exception as err:
+            q.put(("failed!", err))
+            raise err
+
+    def test_env(self, task, num_envs, device):
+        from torch import multiprocessing as mp
+
+        q = mp.Queue(1)
+        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
+        try:
+            proc.start()
+            msg, error = q.get()
+            if msg != "succeeded!":
+                raise error
+        finally:
+            q.close()
+            proc.join()
+
+    #
+    # def test_collector(self, task, num_envs, device):
+    #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+    #     collector = SyncDataCollector(
+    #         env,
+    #         policy=SafeModule(nn.LazyLinear(out_features=env.observation_spec['obs'].shape[-1]), in_keys=["obs"], out_keys=["action"]),
+    #         frames_per_batch=20,
+    #         total_frames=-1
+    #     )
+    #     for c in collector:
+    #         assert c.shape == torch.Size([num_envs, 20])
+    #         break
 
 
 if __name__ == "__main__":
