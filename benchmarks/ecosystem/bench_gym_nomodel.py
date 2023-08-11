@@ -91,7 +91,7 @@ if __name__ == "__main__":
         env.reset()
         global_step = 0
         times = []
-        start = time.time()
+        prev_start = start = time.time()
         print("Timer started.")
         for _ in range(args.total_frames // num_workers):
             env.step(env.action_space.sample())
@@ -99,10 +99,11 @@ if __name__ == "__main__":
             if global_step % int(frames_per_batch) == 0:
                 times.append(time.time() - start)
                 fps = frames_per_batch / times[-1]
-                logger.log_scalar("fps", fps)
-                if global_step % args.log_every == 0:
-                    print(f"FPS Gym AsyncVectorEnv at step {global_step}:", fps)
                 start = time.time()
+                if global_step % args.log_every == 0:
+                    logger.log_scalar("fps", args.log_every // (prev_start - start))
+                    print(f"FPS Gym AsyncVectorEnv at step {global_step}:", fps)
+                    prev_start = start
         env.close()
         logger.experiment.finish()
         del logger, env
@@ -141,19 +142,23 @@ if __name__ == "__main__":
             )
         global_step = 0
         times = []
-        start = time.time()
+        prev_start = start = time.time()
         print("Timer started.")
         for data in collector:
             global_step += data.numel()
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
-            logger.log_scalar("fps", fps)
+            start = time.time()
             if global_step % args.log_every == 0:
+                logger.log_scalar(
+                    "fps",
+                    args.log_every // (prev_start - start)
+                    )
                 print(
                     f"FPS TorchRL with {collector_class.__name__} on {device} at step {global_step}:",
                     fps,
                 )
-            start = time.time()
+                prev_start = start
         collector.shutdown()
         logger.experiment.finish()
         del logger, collector
@@ -180,7 +185,7 @@ if __name__ == "__main__":
         parallel_env = ParallelEnv(args.num_workers, make_env)
         global_step = 0
         times = []
-        start = time.time()
+        prev_start = start = time.time()
         nsteps = frames_per_batch // num_workers
         print("Timer started.")
         while global_step < args.total_frames:
@@ -188,13 +193,17 @@ if __name__ == "__main__":
             global_step += data.numel()
             times.append(time.time() - start)
             fps = frames_per_batch / times[-1]
-            logger.log_scalar("fps", fps)
+            start = time.time()
             if global_step % args.log_every == 0:
+                logger.log_scalar(
+                    "fps",
+                    args.log_every // (prev_start - start)
+                    )
                 print(
                     f"FPS TorchRL with ParallelEnv on {device} at step {global_step}:",
                     fps,
                 )
-            start = time.time()
+                prev_start = start
         logger.experiment.finish()
         del logger, parallel_env
         print(
