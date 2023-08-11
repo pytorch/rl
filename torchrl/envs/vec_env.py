@@ -833,7 +833,7 @@ class ParallelEnv(_BatchedEnv):
         truncated = next_tensordict.get("truncated", None)
         if truncated is not None:
             done = done | truncated
-        if done.any():
+        if done.all():
             # if all are done, then the next td to be used is simply the root td
             # we copy the fields from tensordict that are missing from the shared one
             cur_td = _fuse_tensordicts(
@@ -842,20 +842,20 @@ class ParallelEnv(_BatchedEnv):
                 selected=self._selected_reset_keys,
                 excluded=(("next",), ("_reset",)),
             )
-        # elif done.any():
-        #     # if all are done, then the next td to be used is simply the root td
-        #     # we copy the fields from tensordict that are missing from the shared one
-        #     cur_td0 = _fuse_tensordicts(
-        #         self.shared_tensordict_parent,
-        #         tensordict,
-        #         excluded=(("next",), ("_reset",)),
-        #     )
-        #     cur_td1 = _fuse_tensordicts(
-        #         next_tensordict,
-        #         tensordict,
-        #         excluded=(_unravel_key_to_tuple(self.reward_key),),
-        #     )
-        #     cur_td = torch.where(done.view(cur_td1.shape), cur_td0, cur_td1)
+        elif done.any():
+            # if all are done, then the next td to be used is simply the root td
+            # we copy the fields from tensordict that are missing from the shared one
+            cur_td0 = _fuse_tensordicts(
+                self.shared_tensordict_parent,
+                tensordict,
+                excluded=(("next",), ("_reset",)),
+            )
+            cur_td1 = _fuse_tensordicts(
+                next_tensordict,
+                tensordict,
+                excluded=(_unravel_key_to_tuple(self.reward_key),),
+            )
+            cur_td = torch.where(done.view(cur_td1.shape), cur_td0, cur_td1)
         else:
             # if none is done, then the next td to use is simply the one
             # we got from the procs, filtered.
@@ -1195,33 +1195,33 @@ def _run_worker_pipe_shared_mem(
             truncated = next_td.get("truncated", None)
             if truncated is not None:
                 done = done | truncated
-            cur_td = _fuse_tensordicts(
-                next_td,
-                shared_tensordict,
-                selected=_selected_reset_keys,
-                excluded=_excluded_reset_keys,
-            )
+            # cur_td = _fuse_tensordicts(
+            #     next_td,
+            #     shared_tensordict,
+            #     selected=_selected_reset_keys,
+            #     excluded=_excluded_reset_keys,
+            # )
             if done.any():
-                # cur_td = _fuse_tensordicts(
-                #     next_td,
-                #     shared_tensordict,
-                #     excluded=(
-                #         _unravel_key_to_tuple(env.reward_key),
-                #         _unravel_key_to_tuple(env.done_key),
-                #         _unravel_key_to_tuple(env.action_key),
-                #     ),
-                # )
+                cur_td = _fuse_tensordicts(
+                    next_td,
+                    shared_tensordict,
+                    excluded=(
+                        _unravel_key_to_tuple(env.reward_key),
+                        _unravel_key_to_tuple(env.done_key),
+                        _unravel_key_to_tuple(env.action_key),
+                    ),
+                )
 
                 # we'll need to call reset
                 cur_td.set("_reset", done)
                 cur_td = env.reset(cur_td)
                 # shared_tensordict.update_(cur_td)
 
-            for key in _selected_reset_keys:
-                shared_tensordict._set_tuple(
-                    key, cur_td._get_tuple(key, None), validated=True, inplace=True
-                )
-            # shared_tensordict.update_(cur_td)
+                for key in _selected_reset_keys:
+                    shared_tensordict._set_tuple(
+                        key, cur_td._get_tuple(key, None), validated=True, inplace=True
+                    )
+                # shared_tensordict.update_(cur_td)
             for key in _selected_step_keys:
                 next_shared_tensordict._set_tuple(
                     key, next_td._get_tuple(key, None), validated=True, inplace=True
