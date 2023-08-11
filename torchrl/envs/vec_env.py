@@ -439,8 +439,6 @@ class _BatchedEnv(EnvBase):
                 if not self.shared_tensordict_parent.is_memmap():
                     raise RuntimeError("memmap_() failed")
             self.shared_tensordicts = self.shared_tensordict_parent.unbind(0)
-        if self.pin_memory:
-            self.shared_tensordict_parent.pin_memory()
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
