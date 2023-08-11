@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import collections
 import multiprocessing as mp
-import os
 import warnings
 from copy import copy, deepcopy
 from functools import wraps
@@ -3723,6 +3722,7 @@ class StepCounter(Transform):
                 device=self.parent.done_spec.device,
             )
         return done
+
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         done = None
         _reset = tensordict.get(
@@ -3733,14 +3733,14 @@ class StepCounter(Transform):
         if _reset is None:
             done = self._get_done(tensordict)
             _reset = torch.ones_like(done)
-        step_count = tensordict.get(            self.step_count_key,default=None)
+        step_count = tensordict.get(self.step_count_key, default=None)
         if step_count is None:
             if done is None:
                 # avoid getting done if not needed
                 done = self._get_done(tensordict)
             step_count = torch.zeros_like(done, dtype=torch.int64)
         step_count = torch.where(~_reset, step_count, 0)
-        tensordict.set(            self.step_count_key,step_count)
+        tensordict.set(self.step_count_key, step_count)
         if self.max_steps is not None:
             truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
