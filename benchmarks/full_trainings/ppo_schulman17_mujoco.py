@@ -19,6 +19,7 @@ from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
     Resize,
+    VecNorm,
     GrayScale,
     RewardSum,
     CatFrames,
@@ -63,32 +64,12 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", state_dict=None, is_test=F
     env.append_transform(CatTensors(in_keys=selected_keys, out_key="observation_vector"))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    env.append_transform(ObservationNorm(in_keys=["observation_vector"]))
+    env.append_transform(VecNorm(in_keys=["observation_vector"]))  # TODO: testing
     env.append_transform(DoubleToFloat(in_keys=["observation_vector"]))
-    env.append_transform(RewardScaling(1.0))
+    env.append_transform(RewardScaling(loc=1.0, scale=1.0))
     if not is_test:
         env.append_transform(RewardClipping(-10.0, 10.0))
-    if state_dict is not None:
-        init_stats(env, 3)
-        env.load_state_dict(state_dict)
     return env
-
-
-def get_stats(env_name, device):
-    env = make_env(env_name, device)
-    init_stats(env, 1000)
-    state_dict = env.state_dict()
-    for key in list(state_dict.keys()):
-        if key.endswith("loc") or key.endswith("scale"):
-            continue
-        del state_dict[key]
-    return state_dict
-
-
-def init_stats(env, n_samples_stats):
-    for t in env.transform:
-        if isinstance(t, ObservationNorm):
-                t.init_stats(n_samples_stats)
 
 
 # ====================================================================
@@ -101,7 +82,6 @@ def make_ppo_modules_state(proof_environment):
     input_shape = proof_environment.observation_spec["observation_vector"].shape
 
     # Define distribution class and kwargs
-    continuous_actions = True
     num_outputs = proof_environment.action_spec.shape[-1] * 2
     distribution_class = TanhNormal
     distribution_kwargs = {
@@ -110,24 +90,23 @@ def make_ppo_modules_state(proof_environment):
         "tanh_loc": False,
     }
 
-    # Define input keys
-    in_keys = ["observation_vector"]
-
     policy_mlp = MLP(
         in_features=input_shape[-1],
         activation_class=torch.nn.Tanh,
         out_features=num_outputs,
         num_cells=[64, 64],
     )
-    policy_module = TensorDictModule(
-        module=policy_mlp,
-        in_keys=in_keys,
-        out_keys=["loc", "scale"],
+    policy_mlp = torch.nn.Sequential(
+        policy_mlp, NormalParamExtractor(scale_lb=1e-2)
     )
     # Add probabilistic sampling of the actions
     policy_module = ProbabilisticActor(
-        policy_module,
-        in_keys=["loc", "scale"] if continuous_actions else ["logits"],
+        TensorDictModule(
+            module=policy_mlp,
+            in_keys=["observation_vector"],
+            out_keys=["loc", "scale"],
+        ),
+        in_keys=["loc", "scale"],
         spec=CompositeSpec(action=proof_environment.action_spec),
         safe=True,
         distribution_class=distribution_class,
@@ -144,8 +123,14 @@ def make_ppo_modules_state(proof_environment):
     )
     value_module = ValueOperator(
         value_mlp,
-        in_keys=in_keys,
+        in_keys=["observation_vector"],
     )
+
+    with torch.no_grad():
+        td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
+        td = policy_module(td)
+        td = value_module(td)
+        del td
 
     return policy_module, value_module
 
@@ -162,9 +147,8 @@ def make_ppo_models(env_name):
 
 def make_collector(env_name, policy, device):
     collector_class = SyncDataCollector
-    state_dict = get_stats(env_name, device)
     collector = collector_class(
-        make_env(env_name, device, state_dict),
+        make_env(env_name, device),
         policy,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -264,7 +248,7 @@ if __name__ == "__main__":
     for data in collector:
 
         frames_in_batch = data.numel()
-        collected_frames += frames_in_batch * frame_skip
+        collected_frames += frames_in_batch
         pbar.update(data.numel())
 
         # Train loging

@@ -20,6 +20,7 @@ from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
     Resize,
+    VecNorm,
     GrayScale,
     RewardSum,
     CatFrames,
@@ -130,8 +131,8 @@ def make_parallel_env(env_name, device, is_test=False):
     if not is_test:
         env.append_transform(StepCounter(max_steps=4500))
         env.append_transform(RewardClipping(-1, 1))
-    env.append_transform(ObservationNorm(in_keys=["pixels"], loc=0.5, scale=1.0, standard_normal=True))
     env.append_transform(DoubleToFloat())
+    env.append_transform(VecNorm(in_keys=["pixels"]))  # TODO: testing
     return env
 
 
@@ -324,9 +325,9 @@ if __name__ == "__main__":
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "PongNoFrameskip-v4"
     frame_skip = 4
-    frames_per_batch = 4096 // frame_skip  # correct for frame_skip
-    mini_batch_size = 1024 // frame_skip  # correct for frame_skip
-    total_frames = 40_000_000 // frame_skip  # correct for frame_skip
+    frames_per_batch = 4096 // frame_skip
+    mini_batch_size = 1024 // frame_skip
+    total_frames = 40_000_000 // frame_skip
     gamma = 0.99
     gae_lambda = 0.95
     lr = 2.5e-4
