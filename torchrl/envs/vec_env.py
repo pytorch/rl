@@ -437,9 +437,11 @@ class _BatchedEnv(EnvBase):
                         td.memmap_()
         else:
             if self._share_memory:
-                self.shared_tensordict_parent.share_memory_()
-                if not self.shared_tensordict_parent.is_shared():
-                    raise RuntimeError("share_memory_() failed")
+                # self.shared_tensordict_parent.share_memory_()
+                from tensordict.memmap import MemoryMappedTensor
+                self.shared_tensordict_parent = self.shared_tensordict_parent.apply(lambda x: MemoryMappedTensor.from_tensor(x))
+                # if not self.shared_tensordict_parent.is_shared():
+                #     raise RuntimeError("share_memory_() failed")
             elif self._memmap:
                 self.shared_tensordict_parent.memmap_()
                 if not self.shared_tensordict_parent.is_memmap():
@@ -1058,10 +1060,10 @@ def _run_worker_pipe_shared_mem(
             shared_tensordict = shared_tensordict.clone(False)
             del shared_tensordict["next"]
 
-            if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
-                raise RuntimeError(
-                    "tensordict must be placed in shared memory (share_memory_() or memmap_())"
-                )
+            # if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
+            #     raise RuntimeError(
+            #         "tensordict must be placed in shared memory (share_memory_() or memmap_())"
+            #     )
             initialized = True
 
         elif cmd == "reset":
