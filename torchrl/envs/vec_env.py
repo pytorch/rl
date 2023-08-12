@@ -1086,7 +1086,9 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             next_td = env._step(shared_tensordict)
-            next_shared_tensordict.update_(next_td)
+            for key in _selected_step_keys:
+                next_shared_tensordict._set_tuple(key, next_td._get_tuple(key, None), validated=True, inplace=True)
+            # next_shared_tensordict.update_(next_td)
             if event is not None:
                 event.record()
                 event.synchronize()
