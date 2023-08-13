@@ -30,12 +30,10 @@ from torchrl.envs import (
 )
 from torchrl.modules import (
     MLP,
-    ConvNet,
     TanhNormal,
+    IndependentNormal,
     ValueOperator,
-    OneHotCategorical,
     ProbabilisticActor,
-    ActorValueOperator,
 )
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value.advantages import GAE
@@ -68,6 +66,7 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", state_dict=None, is_test=F
 # Model utils
 # --------------------------------------------------------------------
 
+
 def make_ppo_modules_state(proof_environment):
 
     # Define input shape
@@ -79,8 +78,10 @@ def make_ppo_modules_state(proof_environment):
     distribution_kwargs = {
         "min": proof_environment.action_spec.space.minimum,
         "max": proof_environment.action_spec.space.maximum,
-        "tanh_loc": False,
     }
+
+    # distribution_class = IndependentNormal
+    # distribution_kwargs = {}
 
     policy_mlp = MLP(
         in_features=input_shape[-1],
@@ -89,7 +90,8 @@ def make_ppo_modules_state(proof_environment):
         num_cells=[64, 64],
     )
     policy_mlp = torch.nn.Sequential(
-        policy_mlp, NormalParamExtractor(scale_lb=1e-2)
+        policy_mlp,
+        NormalParamExtractor(scale_lb=0.0, scale_mapping="exp")  # TODO: testing 0.0
     )
     # Add probabilistic sampling of the actions
     policy_module = ProbabilisticActor(

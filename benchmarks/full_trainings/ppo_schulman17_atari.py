@@ -315,7 +315,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "PongNoFrameskip-v4"
+    env_name = "BreakoutNoFrameskip-v4"
     frame_skip = 4
     frames_per_batch = 4096 // frame_skip
     mini_batch_size = 1024 // frame_skip
