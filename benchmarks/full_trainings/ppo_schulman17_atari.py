@@ -27,13 +27,11 @@ from torchrl.envs import (
     CatFrames,
     EnvCreator,
     StepCounter,
-    SerialEnv,
     ParallelEnv,
     ToTensorImage,
     DoubleToFloat,
     RewardClipping,
     TransformedEnv,
-    ObservationNorm,
     ExplorationType,
     set_exploration_type,
 )
@@ -126,7 +124,7 @@ def make_parallel_env(env_name, device, is_test=False):
         env.append_transform(StepCounter(max_steps=4500))
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(VecNorm(in_keys=["pixels"]))  # TODO: testing
+    env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
@@ -278,7 +276,7 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=False,  # TODO: testing
+        average_gae=False,
     )
     return advantage_module
 
@@ -292,7 +290,7 @@ def make_loss(actor_network, value_network, value_head):
         loss_critic_type=loss_critic_type,
         entropy_coef=entropy_coef,
         critic_coef=critic_coef,
-        normalize_advantage=True,   # TODO: testing
+        normalize_advantage=True,
     )
     return loss_module, advantage_module
 
@@ -302,7 +300,7 @@ def make_optim(loss_module):
         loss_module.parameters(),
         lr=lr,
         weight_decay=0.0,
-        eps=1e-5,  # TODO: testing
+        eps=1e-6,
     )
     return optim
 
@@ -317,7 +315,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "BreakoutNoFrameskip-v4"
+    env_name = "PongNoFrameskip-v4"
     frame_skip = 4
     frames_per_batch = 4096 // frame_skip
     mini_batch_size = 1024 // frame_skip
@@ -411,7 +409,7 @@ if __name__ == "__main__":
         logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
 
         # Test logging
-        record_interval = 50_000
+        record_interval = 1_000_000
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
                 actor.eval()
@@ -428,7 +426,7 @@ if __name__ == "__main__":
                 logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
                 actor.train()
 
-    collector.update_policy_weights_()
+        collector.update_policy_weights_()
 
     end_time = time.time()
     execution_time = end_time - start_time

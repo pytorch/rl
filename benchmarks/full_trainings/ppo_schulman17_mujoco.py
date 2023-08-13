@@ -15,24 +15,16 @@ from tensordict.nn import NormalParamExtractor, TensorDictModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
-    Resize,
     VecNorm,
-    GrayScale,
     RewardSum,
-    CatFrames,
     CatTensors,
-    EnvCreator,
     StepCounter,
-    ParallelEnv,
     RewardScaling,
-    ToTensorImage,
     DoubleToFloat,
     RewardClipping,
     TransformedEnv,
-    ObservationNorm,
     ExplorationType,
     set_exploration_type,
 )
@@ -173,7 +165,7 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=False,  # TODO: testing
+        average_gae=False,
     )
     return advantage_module
 
@@ -187,7 +179,7 @@ def make_loss(actor_network, value_network):
         loss_critic_type=loss_critic_type,
         entropy_coef=entropy_coef,
         critic_coef=critic_coef,
-        normalize_advantage=True,   # TODO: testing
+        normalize_advantage=True,
     )
     return loss_module, advantage_module
 
@@ -197,7 +189,7 @@ def make_optim(loss_module):
         loss_module.parameters(),
         lr=lr,
         weight_decay=0.0,
-        eps=1e-5,  # TODO: testing
+        eps=1e-5,
     )
     return optim
 
@@ -212,7 +204,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "Walker2d-v2"
+    env_name = "Swimmer-v2"
     frames_per_batch = 2048
     mini_batch_size = 64
     total_frames = 1_000_000
@@ -220,7 +212,7 @@ if __name__ == "__main__":
     gae_lambda = 0.95
     lr = 3e-4
     ppo_epochs = 10
-    critic_coef = 1.0
+    critic_coef = 0.5
     entropy_coef = 0.0
     clip_epsilon = 0.2
     loss_critic_type = "l2"
@@ -241,7 +233,6 @@ if __name__ == "__main__":
 
     # Main loop
     collected_frames = 0
-    num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
 
@@ -269,13 +260,6 @@ if __name__ == "__main__":
 
             for i, batch in enumerate(data_buffer):
 
-                # Linearly decrease the learning rate and clip epsilon
-                # alpha = 1 - (num_network_updates / total_network_updates)
-                # for g in optim.param_groups:
-                #     g['lr'] = lr * alpha
-                # loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
-                num_network_updates += 1
-
                 # Get a data batch
                 batch = batch.to(device)
 
@@ -297,16 +281,14 @@ if __name__ == "__main__":
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
-        # logger.log_scalar("lr", alpha * lr, collected_frames)
-        # logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
 
         # Test logging
-        record_interval = 50_000
+        record_interval = 100_000
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
                 actor.eval()
                 test_rewards = []
-                for i in range(5):
+                for i in range(10):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_cast_to_device=True,
