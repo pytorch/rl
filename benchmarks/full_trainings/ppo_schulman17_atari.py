@@ -19,6 +19,7 @@ from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
+    default_info_dict_reader,
     Resize,
     VecNorm,
     GrayScale,
@@ -26,6 +27,7 @@ from torchrl.envs import (
     CatFrames,
     EnvCreator,
     StepCounter,
+    SerialEnv,
     ParallelEnv,
     ToTensorImage,
     DoubleToFloat,
@@ -85,29 +87,19 @@ class EpisodicLifeEnv(gym.Wrapper):
         """
         gym.Wrapper.__init__(self, env)
         self.lives = 0
-        self.was_real_done = True
-        self.total_reward = 0.0
 
     def step(self, action):
-
-        obs, reward, done, *other = self.env.step(action)
-        self.was_real_done = done
+        obs, rew, done, info = self.env.step(action)
         lives = self.env.unwrapped.ale.lives()
-        if lives < self.lives and lives > 0:
-            done = True
+        info["end_of_life"] = False
+        if (lives < self.lives) or done:
+            info["end_of_life"] = True
         self.lives = lives
-        return obs, reward, done, *other
+        return obs, rew, done, info
 
     def reset(self, **kwargs):
-        """Reset only when lives are exhausted."""
-        if self.was_real_done:
-            self.total_reward = 0.0
-            obs = self.env.reset(**kwargs)
-        else:
-            # no-op step to advance from terminal/lost life state
-            obs, *other = self.env.step(0)
         self.lives = self.env.unwrapped.ale.lives()
-        return obs
+        return self.env.reset(**kwargs)
 
 
 def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False):
@@ -116,6 +108,8 @@ def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False
         env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
     env = GymWrapper(env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device)
+    reader = default_info_dict_reader(["end_of_life"])
+    env.set_info_dict_reader(reader)
     return env
 
 
@@ -284,7 +278,7 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=True,
+        average_gae=False,  # TODO: testing
     )
     return advantage_module
 
@@ -323,7 +317,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "PongNoFrameskip-v4"
+    env_name = "BreakoutNoFrameskip-v4"
     frame_skip = 4
     frames_per_batch = 4096 // frame_skip
     mini_batch_size = 1024 // frame_skip
@@ -358,6 +352,10 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(total=total_frames)
 
     for data in collector:
+
+        # Apply episodic end of life
+        data["done"].copy_(data["end_of_life"])
+        data["next", "done"].copy_(data["next", "end_of_life"])
 
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
@@ -418,18 +416,19 @@ if __name__ == "__main__":
             if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
                 actor.eval()
                 test_rewards = []
-                for i in range(10):
+                for i in range(3):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_cast_to_device=True,
                         max_steps=10_000_000,
                     )
-                    actor.train()
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
+                    del td_test
                 logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                actor.train()
 
-        collector.update_policy_weights_()
+    collector.update_policy_weights_()
 
     end_time = time.time()
     execution_time = end_time - start_time

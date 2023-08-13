@@ -173,7 +173,7 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=True,
+        average_gae=False,  # TODO: testing
     )
     return advantage_module
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "HalfCheetah-v4"  # TODO: test on Walker2d-v1
+    env_name = "Walker2d-v2"
     frames_per_batch = 2048
     mini_batch_size = 64
     total_frames = 1_000_000
@@ -270,10 +270,10 @@ if __name__ == "__main__":
             for i, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
-                for g in optim.param_groups:
-                    g['lr'] = lr * alpha
-                loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
+                # alpha = 1 - (num_network_updates / total_network_updates)
+                # for g in optim.param_groups:
+                #     g['lr'] = lr * alpha
+                # loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
                 num_network_updates += 1
 
                 # Get a data batch
@@ -297,8 +297,8 @@ if __name__ == "__main__":
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
-        logger.log_scalar("lr", alpha * lr, collected_frames)
-        logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
+        # logger.log_scalar("lr", alpha * lr, collected_frames)
+        # logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
 
         # Test logging
         record_interval = 50_000
@@ -306,16 +306,17 @@ if __name__ == "__main__":
             if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
                 actor.eval()
                 test_rewards = []
-                for i in range(10):
+                for i in range(5):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_cast_to_device=True,
                         max_steps=10_000_000,
                     )
-                    actor.train()
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
+                    del td_test
                 logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                actor.train()
 
         collector.update_policy_weights_()
 
