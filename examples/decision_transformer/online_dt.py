@@ -87,6 +87,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     max_steps=eval_steps,
                     policy=inference_policy,
                     auto_cast_to_device=True,
+                    break_when_any_done=False,
                 )
                 inference_policy.train()
         if r0 is None:

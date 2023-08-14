@@ -1204,7 +1204,8 @@ class OnlineDTActor(nn.Module):
                 if hasattr(m.bias, "data"):
                     m.bias.data.fill_(0.0)
 
-        self.apply(weight_init)
+        self.action_layer_mean.apply(weight_init)
+        self.action_layer_logstd.apply(weight_init)
 
     def forward(
         self,
@@ -1215,7 +1216,7 @@ class OnlineDTActor(nn.Module):
         hidden_state = self.transformer(observation, action, return_to_go)
         mu = self.action_layer_mean(hidden_state)
         log_std = self.action_layer_logstd(hidden_state)
-        # mu, log_std = torch.chunk(out, 2, -1)
+
         log_std = torch.tanh(log_std)
         # log_std is the output of tanh so it will be between [-1, 1]
         # map it to be between [log_std_min, log_std_max]
@@ -1288,14 +1289,14 @@ class DTActor(nn.Module):
             transformer_config["n_embd"], action_dim, device=device
         )
 
-        def weight_init(m):
-            """Custom weight init for Conv2D and Linear layers."""
-            if isinstance(m, torch.nn.Linear):
-                nn.init.orthogonal_(m.weight.data)
-                if hasattr(m.bias, "data"):
-                    m.bias.data.fill_(0.0)
+        # def weight_init(m):
+        #     """Custom weight init for Conv2D and Linear layers."""
+        #     if isinstance(m, torch.nn.Linear):
+        #         nn.init.orthogonal_(m.weight.data)
+        #         if hasattr(m.bias, "data"):
+        #             m.bias.data.fill_(0.0)
 
-        self.apply(weight_init)
+        # self.apply(weight_init)
 
     def forward(
         self,

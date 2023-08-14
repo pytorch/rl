@@ -190,13 +190,16 @@ class OnlineDTLoss(LossModule):
         """Compute the loss for the Online Decision Transformer."""
         # extract action targets
         target_actions = tensordict.get(self.tensor_keys.action).detach()
-
+        target_actions = torch.clamp(target_actions, -0.99999, 0.99999)
         action_dist = self.actor_network.get_dist(
             tensordict, params=self.actor_network_params
         )
 
-        loss_log_likelihood = action_dist.log_prob(target_actions).mean()
-        entropy = self.get_entropy_bonus(action_dist).mean()
+        # loss_log_likelihood = action_dist.log_prob(target_actions).mean()
+        # entropy = self.get_entropy_bonus(action_dist).mean()
+        loss_log_likelihood = action_dist.log_likelihood(target_actions).mean()
+        entropy = action_dist.entropy().mean()
+
         loss_entropy = self.alpha.detach() * entropy
 
         loss_alpha = self.log_alpha.exp() * (entropy - self.target_entropy).detach()
@@ -207,6 +210,9 @@ class OnlineDTLoss(LossModule):
             "loss_alpha": loss_alpha,
             "entropy": entropy.detach(),
             "alpha": self.alpha.detach(),
+            "return_to_go-mean": tensordict["return_to_go"].mean(),
+            "action_dist_mean": action_dist.loc.mean(),
+            "action_dist_std": action_dist.scale.mean(),
         }
         return TensorDict(out, [])
 

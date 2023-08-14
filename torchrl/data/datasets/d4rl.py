@@ -136,6 +136,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
         if split_trajs:
             dataset = split_trajectories(dataset)
+            dataset["next", "done"][:, -1] = True
+
         storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             batch_size=batch_size,
@@ -261,6 +263,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             )
         else:
             dataset.set("done", dataset.get("terminal"))
+
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         try:

@@ -1,7 +1,13 @@
+import math
+
 import torch.nn
+
+import torch.nn.functional as F
 import torch.optim
 from lamb import Lamb
 from tensordict.nn import TensorDictModule
+from torch import distributions as pyd
+from torch.distributions import constraints
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -15,11 +21,12 @@ from torchrl.envs import (
     ExcludeTransform,
     NoopResetEnv,
     ObservationNorm,
-    ParallelEnv,
+    # ParallelEnv,
     RandomCropTensorDict,
     Reward2GoTransform,
     RewardScaling,
     RewardSum,
+    SerialEnv,
     TargetReturn,
     TensorDictPrimer,
     TransformedEnv,
@@ -33,13 +40,12 @@ from torchrl.modules import (
     OnlineDTActor,
     ProbabilisticActor,
     TanhDelta,
-    TanhNormal,
+    # TanhNormal,
 )
 
 from torchrl.objectives import DTLoss, OnlineDTLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.envs import LIBS
-
 
 # ====================================================================
 # Environment utils
@@ -130,7 +136,7 @@ def make_parallel_env(env_cfg, obs_loc, obs_std, train=False):
             return make_base_env(env_cfg)
 
     env = make_transformed_env(
-        ParallelEnv(num_envs, EnvCreator(make_env)),
+        SerialEnv(num_envs, EnvCreator(make_env)),
         env_cfg,
         obs_loc,
         obs_std,
@@ -296,12 +302,12 @@ def make_odt_model(cfg):
             "scale",
         ],
     )
-    dist_class = TanhNormal
-    dist_kwargs = {
-        "min": -1.0,
-        "max": 1.0,
-        "tanh_loc": False,
-    }
+    dist_class = SquashedNormal  # TanhNormal
+    # dist_kwargs = {
+    #     "min": -1.0,
+    #     "max": 1.0,
+    #     "tanh_loc": False,
+    # }
 
     actor = ProbabilisticActor(
         spec=action_spec,
@@ -309,7 +315,7 @@ def make_odt_model(cfg):
         out_keys=["action"],
         module=actor_module,
         distribution_class=dist_class,
-        distribution_kwargs=dist_kwargs,
+        # distribution_kwargs=dist_kwargs,
         default_interaction_mode="random",
         cache_dist=False,
         return_log_prob=False,
@@ -451,3 +457,82 @@ def make_logger(cfg):
         wandb_kwargs={"config": cfg},
     )
     return logger
+
+
+class TanhTransform(pyd.transforms.Transform):
+    domain = pyd.constraints.real
+    codomain = pyd.constraints.interval(-1.0, 1.0)
+    bijective = True
+    sign = +1
+
+    def __init__(self, cache_size=1):
+        super().__init__(cache_size=cache_size)
+
+    @staticmethod
+    def atanh(x):
+        return 0.5 * (x.log1p() - (-x).log1p())
+
+    def __eq__(self, other):
+        return isinstance(other, TanhTransform)
+
+    def _call(self, x):
+        return x.tanh()
+
+    def _inverse(self, y):
+        # We do not clamp to the boundary here as it may degrade the performance of certain algorithms.
+        # one should use `cache_size=1` instead
+        return self.atanh(y)
+
+    def log_abs_det_jacobian(self, x, y):
+        # We use a formula that is more numerically stable, see details in the following link
+        # https://github.com/tensorflow/probability/commit/ef6bb176e0ebd1cf6e25c6b5cecdd2428c22963f#diff-e120f70e92e6741bca649f04fcd907b7
+        return 2.0 * (math.log(2.0) - x - F.softplus(-2.0 * x))
+
+
+class SquashedNormal(
+    pyd.transformed_distribution.TransformedDistribution
+):  # FasterTransformedDistribution): #
+    """
+    Squashed Normal Distribution(s)
+
+    If loc/std is of size (batch_size, sequence length, d),
+    this returns batch_size * sequence length * d
+    independent squashed univariate normal distributions.
+    """
+
+    arg_constraints = {
+        "loc": constraints.real,
+        "scale": constraints.greater_than(1e-6),
+    }
+
+    def __init__(self, loc, scale, **kwargs):
+        self.loc = loc
+        self.scale = scale
+        self.base_dist = pyd.Normal(loc, scale)
+
+        transforms = [TanhTransform()]
+        super().__init__(self.base_dist, transforms)
+
+    @property
+    def mode(self):
+        mu = self.loc
+        for tr in self.transforms:
+            mu = tr(mu)
+        return mu
+
+    def entropy(self, N=1):
+        # sample from the distribution and then compute
+        # the empirical entropy:
+        x = self.rsample((N,))
+        x = torch.clamp(x, -0.99999, 0.99999)
+        log_p = self.log_prob(x)
+
+        # log_p: (batch_size, context_len, action_dim),
+        return -log_p.mean(axis=0).sum(axis=2)
+
+    def log_likelihood(self, x):
+        # log_prob(x): (batch_size, context_len, action_dim)
+        # sum up along the action dimensions
+        # Return tensor shape: (batch_size, context_len)
+        x = torch.clamp(x, -0.99999, 0.99999)
+        return self.log_prob(x).sum(axis=2)
