@@ -120,8 +120,8 @@ def make_parallel_env(env_name, device, is_test=False):
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
     env.append_transform(RewardSum())
+    env.append_transform(StepCounter(max_steps=4500))
     if not is_test:
-        env.append_transform(StepCounter(max_steps=4500))
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
     env.append_transform(VecNorm(in_keys=["pixels"]))
@@ -417,7 +417,9 @@ if __name__ == "__main__":
                 for i in range(3):
                     td_test = test_env.rollout(
                         policy=actor,
+                        auto_reset=True,
                         auto_cast_to_device=True,
+                        break_when_any_done=True,
                         max_steps=10_000_000,
                     )
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
