@@ -3475,7 +3475,6 @@ class TestDiscreteSAC(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
             torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
             torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
             # test select
             torch.manual_seed(self.seed)
             loss.select_out_keys("loss_actor", "loss_alpha")

@@ -15,7 +15,8 @@ from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
 
-from torchrl.data import CompositeSpec
+from torchrl.data import CompositeSpec, TensorSpec
+from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.modules import ProbabilisticActor
@@ -756,6 +757,13 @@ class DiscreteSACLoss(LossModule):
         actor_network (ProbabilisticActor): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         num_actions (int): number of actions in the action space.
+        action_space (str or TensorSpec, optional): Action space. Must be one of
+            ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
+            or an instance of the corresponding specs (:class:`torchrl.data.OneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.MultiOneHotDiscreteTensorSpec`,
+            :class:`torchrl.data.BinaryDiscreteTensorSpec` or :class:`torchrl.data.DiscreteTensorSpec`).
+            If not provided, an attempt to retrieve it from the value network
+            will be made.
         num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
         loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
             "l1", Default is "smooth_l1".
@@ -925,15 +933,15 @@ class DiscreteSACLoss(LossModule):
         "loss_alpha",
         "alpha",
         "entropy",
-        "target_value",
     ]
 
     def __init__(
         self,
         actor_network: ProbabilisticActor,
         qvalue_network: TensorDictModule,
-        num_actions: int,  # replace with spec?
         *,
+        action_space: Union[str, TensorSpec] = None,
+        num_actions: Optional[int] = None,
         num_qvalue_nets: int = 2,
         loss_function: str = "smooth_l1",
         alpha_init: float = 1.0,
@@ -1009,7 +1017,19 @@ class DiscreteSACLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
             )
 
+        if action_space is None:
+            warnings.warn(
+                "action_space was not specified. DiscreteSACLoss will default to 'one-hot'."
+                "This behaviour will be deprecated soon and a space will have to be passed."
+                "Check the DiscreteSACLoss documentation to see how to pass the action space. "
+            )
+            action_space = "one-hot"
+        self.action_space = _find_action_space(action_space)
         if target_entropy == "auto":
+            if num_actions is None:
+                raise ValueError(
+                    "num_actions needs to be provided if target_entropy == 'auto'"
+                )
             target_entropy = -float(np.log(1.0 / num_actions) * target_entropy_weight)
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
@@ -1116,9 +1136,6 @@ class DiscreteSACLoss(LossModule):
                 self.tensor_keys.action_value
             )
 
-            # if next_action_value.shape[-len(next_log_prob.shape) :] != next_log_prob.shape:
-            #     next_log_prob = next_log_prob.unsqueeze(-1)
-
             # like in continuous SAC, we take the minimum of the value ensemble and subtract the entropy term
             next_state_value = next_action_value.min(0)[0] - _alpha * next_log_prob
             # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
@@ -1147,7 +1164,7 @@ class DiscreteSACLoss(LossModule):
 
         # TODO this block comes from the dqn loss, we need to swap all thse with a proper
         #  helper function which selects the value given the action for all discrete spaces
-        if False:
+        if self.action_space == "categorical":
             if action.shape != action_value.shape:
                 # unsqueeze the action if it lacks on trailing singleton dim
                 action = action.unsqueeze(-1)
