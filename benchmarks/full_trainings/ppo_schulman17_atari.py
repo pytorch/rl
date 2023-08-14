@@ -96,8 +96,9 @@ class EpisodicLifeEnv(gym.Wrapper):
         return obs, rew, done, info
 
     def reset(self, **kwargs):
+        reset_data = self.env.reset(**kwargs)
         self.lives = self.env.unwrapped.ale.lives()
-        return self.env.reset(**kwargs)
+        return reset_data
 
 
 def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False):
@@ -315,11 +316,12 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "BreakoutNoFrameskip-v4"
+    env_name = "EnduroNoFrameskip-v4"
     frame_skip = 4
     frames_per_batch = 4096 // frame_skip
     mini_batch_size = 1024 // frame_skip
     total_frames = 40_000_000 // frame_skip
+    record_interval = 40_000_000 // frame_skip  # check final performance
     gamma = 0.99
     gae_lambda = 0.95
     lr = 2.5e-4
@@ -351,10 +353,6 @@ if __name__ == "__main__":
 
     for data in collector:
 
-        # Apply episodic end of life
-        data["done"].copy_(data["end_of_life"])
-        data["next", "done"].copy_(data["next", "end_of_life"])
-
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
@@ -363,6 +361,10 @@ if __name__ == "__main__":
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
+
+        # Apply episodic end of life
+        data["done"].copy_(data["end_of_life"])
+        data["next", "done"].copy_(data["next", "end_of_life"])
 
         losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
         for j in range(ppo_epochs):
@@ -409,12 +411,11 @@ if __name__ == "__main__":
         logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
 
         # Test logging
-        record_interval = 1_000_000
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
+            if (collected_frames - frames_in_batch) // (record_interval < collected_frames // record_interval):
                 actor.eval()
                 test_rewards = []
-                for i in range(3):
+                for i in range(1):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_reset=True,

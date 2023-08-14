@@ -11,19 +11,14 @@ import torch.optim
 import numpy as np
 
 from tensordict import TensorDict
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict.nn import TensorDictModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
-    VecNorm,
     RewardSum,
-    CatTensors,
-    StepCounter,
-    RewardScaling,
     DoubleToFloat,
-    RewardClipping,
     TransformedEnv,
     ExplorationType,
     set_exploration_type,
@@ -31,7 +26,6 @@ from torchrl.envs import (
 from torchrl.modules import (
     MLP,
     TanhNormal,
-    IndependentNormal,
     ValueOperator,
     ProbabilisticActor,
 )
@@ -45,20 +39,14 @@ from torchrl.record.loggers import generate_exp_name, get_logger
 # --------------------------------------------------------------------
 
 
-def make_env(env_name="HalfCheetah-v4", device="cpu", state_dict=None, is_test=False):
+def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = gym.make(env_name)
-    env = GymWrapper(env, device=device)  # TODO: testing
+    env = gym.wrappers.NormalizeObservation(env)
+    env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
+    env = GymWrapper(env, device=device)
     env = TransformedEnv(env)
-    # env.append_transform(RewardScaling(0.0, reward_scaling))
-    selected_keys = [key for key in env.observation_spec.keys(True, True)]
-    env.append_transform(CatTensors(in_keys=selected_keys, out_key="observation_vector"))
     env.append_transform(RewardSum())
-    env.append_transform(StepCounter())
-    env.append_transform(VecNorm(in_keys=["observation_vector"]))  # TODO: testing
-    env.append_transform(DoubleToFloat(in_keys=["observation_vector"]))
-    env.append_transform(RewardScaling(loc=1.0, scale=1.0))
-    if not is_test:
-        env.append_transform(RewardClipping(-10.0, 10.0))
+    env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
 
 
@@ -67,21 +55,40 @@ def make_env(env_name="HalfCheetah-v4", device="cpu", state_dict=None, is_test=F
 # --------------------------------------------------------------------
 
 
+class AddStateIndependentStd(torch.nn.Module):
+    def __init__(self, num_outputs) -> None:
+        super().__init__()
+        self.scale = torch.nn.Parameter(torch.zeros(num_outputs))
+
+    def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        loc, *others = tensors
+
+        # Get the number of dimensions in loc tensor
+        num_dimensions = loc.dim()
+
+        # Reshape logstd to match the number of dimensions in loc
+        logstd = self.scale.view((1,) * (num_dimensions - self.scale.dim()) + self.scale.shape)
+
+        # Clip logstd and convert to std
+        scale = torch.zeros(loc.size()).to(loc.device) + logstd
+        scale = scale.exp()
+
+        return (loc, scale, *others)
+
+
 def make_ppo_modules_state(proof_environment):
 
     # Define input shape
-    input_shape = proof_environment.observation_spec["observation_vector"].shape
+    input_shape = proof_environment.observation_spec["observation"].shape
 
     # Define distribution class and kwargs
-    num_outputs = proof_environment.action_spec.shape[-1] * 2
+    num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
         "min": proof_environment.action_spec.space.minimum,
         "max": proof_environment.action_spec.space.maximum,
+        "tanh_loc": False,
     }
-
-    # distribution_class = IndependentNormal
-    # distribution_kwargs = {}
 
     policy_mlp = MLP(
         in_features=input_shape[-1],
@@ -89,15 +96,22 @@ def make_ppo_modules_state(proof_environment):
         out_features=num_outputs,
         num_cells=[64, 64],
     )
+
+    for layer in policy_mlp.modules():
+        if isinstance(layer, torch.nn.Linear):
+            torch.nn.init.orthogonal_(layer.weight, 1.0)
+            layer.bias.data.zero_()
+
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
-        NormalParamExtractor(scale_lb=0.0, scale_mapping="exp")  # TODO: testing 0.0
+        AddStateIndependentStd(proof_environment.action_spec.shape[-1])
     )
+
     # Add probabilistic sampling of the actions
     policy_module = ProbabilisticActor(
         TensorDictModule(
             module=policy_mlp,
-            in_keys=["observation_vector"],
+            in_keys=["observation"],
             out_keys=["loc", "scale"],
         ),
         in_keys=["loc", "scale"],
@@ -115,16 +129,16 @@ def make_ppo_modules_state(proof_environment):
         out_features=1,
         num_cells=[64, 64],
     )
+
+    for layer in value_mlp.modules():
+        if isinstance(layer, torch.nn.Linear):
+            torch.nn.init.orthogonal_(layer.weight, 0.01)
+            layer.bias.data.zero_()
+
     value_module = ValueOperator(
         value_mlp,
-        in_keys=["observation_vector"],
+        in_keys=["observation"],
     )
-
-    with torch.no_grad():
-        td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
-        td = policy_module(td)
-        td = value_module(td)
-        del td
 
     return policy_module, value_module
 
@@ -186,16 +200,6 @@ def make_loss(actor_network, value_network):
     return loss_module, advantage_module
 
 
-def make_optim(loss_module):
-    optim = torch.optim.Adam(
-        loss_module.parameters(),
-        lr=lr,
-        weight_decay=0.0,
-        eps=1e-5,
-    )
-    return optim
-
-
 def make_logger(backend="csv"):
     exp_name = generate_exp_name("PPO", f"Atari_Schulman17_{env_name}")
     logger = get_logger(backend, logger_name="ppo", experiment_name=exp_name)
@@ -206,15 +210,16 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "Swimmer-v2"
+    env_name = "Walker2d-v3"
     frames_per_batch = 2048
     mini_batch_size = 64
     total_frames = 1_000_000
+    record_interval = 1_000_000  # check final performance
     gamma = 0.99
     gae_lambda = 0.95
     lr = 3e-4
     ppo_epochs = 10
-    critic_coef = 0.5
+    critic_coef = 0.25
     entropy_coef = 0.0
     clip_epsilon = 0.2
     loss_critic_type = "l2"
@@ -228,13 +233,16 @@ if __name__ == "__main__":
     collector = make_collector(env_name, actor, device)
     data_buffer = make_data_buffer()
     loss_module, adv_module = make_loss(actor, critic)
-    optim = make_optim(loss_module)
     logger = make_logger(logger_backend)
-    test_env = make_env(env_name, device, is_test=True)
+    test_env = make_env(env_name, device)
     test_env.eval()
+
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=lr, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=lr, eps=1e-5)
 
     # Main loop
     collected_frames = 0
+    num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
 
@@ -243,6 +251,9 @@ if __name__ == "__main__":
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
+
+        # data["observation"].copy_(torch.clamp(data["observation"], -5, 5))
+        # data["next", "observation"].copy_(torch.clamp(data["next", "observation"], -5, 5))
 
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -262,30 +273,38 @@ if __name__ == "__main__":
 
             for i, batch in enumerate(data_buffer):
 
+                # Linearly decrease the learning rate and clip epsilon
+                alpha = 1 - (num_network_updates / total_network_updates)
+                for g in actor_optim.param_groups:
+                    g['lr'] = lr * alpha
+                for g in critic_optim.param_groups:
+                    g['lr'] = lr * alpha
+                num_network_updates += 1
+
                 # Get a data batch
                 batch = batch.to(device)
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
                 losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
-                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                critic_loss = loss["loss_critic"]
+                actor_loss = loss["loss_objective"] + loss["loss_entropy"]
 
                 # Backward pass
-                loss_sum.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    list(loss_module.parameters()), max_norm=0.5
-                )
+                actor_loss.backward()
+                critic_loss.backward()
 
                 # Update the networks
-                optim.step()
-                optim.zero_grad()
+                actor_optim.step()
+                critic_optim.step()
+                actor_optim.zero_grad()
+                critic_optim.zero_grad()
 
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
 
         # Test logging
-        record_interval = 100_000
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_in_batch) // record_interval < collected_frames // record_interval:
                 actor.eval()
@@ -293,7 +312,9 @@ if __name__ == "__main__":
                 for i in range(10):
                     td_test = test_env.rollout(
                         policy=actor,
+                        auto_reset=True,
                         auto_cast_to_device=True,
+                        break_when_any_done=True,
                         max_steps=10_000_000,
                     )
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
