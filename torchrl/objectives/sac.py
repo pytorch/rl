@@ -516,17 +516,14 @@ class SACLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        device = self.device
-        td_device = tensordict_reshape.to(device)
-
         if self._version == 1:
-            loss_qvalue, priority = self._loss_qvalue_v1(td_device)
-            loss_value = self._loss_value(td_device)
+            loss_qvalue, priority = self._loss_qvalue_v1(tensordict_reshape)
+            loss_value = self._loss_value(tensordict_reshape)
         else:
-            loss_qvalue, priority = self._loss_qvalue_v2(td_device)
+            loss_qvalue, priority = self._loss_qvalue_v2(tensordict_reshape)
             loss_value = None
-        loss_actor = self._loss_actor(td_device)
-        loss_alpha = self._loss_alpha(td_device)
+        loss_actor = self._loss_actor(tensordict_reshape)
+        loss_alpha = self._loss_alpha(tensordict_reshape)
         tensordict_reshape.set(self.tensor_keys.priority, priority)
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -541,7 +538,9 @@ class SACLoss(LossModule):
             "loss_qvalue": loss_qvalue.mean(),
             "loss_alpha": loss_alpha.mean(),
             "alpha": self._alpha,
-            "entropy": -td_device.get(self.tensor_keys.log_prob).mean().detach(),
+            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
+            .mean()
+            .detach(),
         }
         if self._version == 1:
             out["loss_value"] = loss_value.mean()
@@ -750,7 +749,7 @@ class SACLoss(LossModule):
         return alpha
 
 
-class DiscreteSACLoss(LossModule):
+class DiscreteSACLossOld(LossModule):
     """Discrete SAC Loss module.
 
     Args:
@@ -1072,7 +1071,12 @@ class DiscreteSACLoss(LossModule):
         tensordict_actor_grad = tensordict_select.select(
             *obs_keys
         )  # to avoid overwriting keys
-        next_td_actor = step_mdp(tensordict_select).select(
+        next_td_actor = step_mdp(
+            tensordict_select,
+            reward_key=self.tensor_keys.reward,
+            done_key=self.tensor_keys.done,
+            action_key=self.tensor_keys.action,
+        ).select(
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
@@ -1213,6 +1217,503 @@ class DiscreteSACLoss(LossModule):
             raise RuntimeError(
                 "expected log_pi to require gradient for the alpha loss)"
             )
+        if self.target_entropy is not None:
+            # we can compute this loss even if log_alpha is not a parameter
+            alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
+        else:
+            # placeholder
+            alpha_loss = torch.zeros_like(log_pi)
+        return alpha_loss
+
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
+        value_net = None
+        hp = dict(default_value_kwargs(value_type))
+        hp.update(hyperparams)
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        if value_type is ValueEstimators.TD1:
+            self._value_estimator = TD1Estimator(
+                **hp,
+                value_network=value_net,
+            )
+        elif value_type is ValueEstimators.TD0:
+            self._value_estimator = TD0Estimator(
+                **hp,
+                value_network=value_net,
+            )
+        elif value_type is ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type is ValueEstimators.TDLambda:
+            self._value_estimator = TDLambdaEstimator(
+                **hp,
+                value_network=value_net,
+            )
+        else:
+            raise NotImplementedError(f"Unknown value type {value_type}")
+
+        tensor_keys = {
+            "value": self.tensor_keys.value,
+            "value_target": "value_target",
+            "reward": self.tensor_keys.reward,
+            "done": self.tensor_keys.done,
+        }
+        self._value_estimator.set_keys(**tensor_keys)
+
+
+class DiscreteSACLoss(LossModule):
+    """Discrete SAC Loss module.
+
+    Args:
+        actor_network (ProbabilisticActor): the actor to be trained
+        qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
+        num_actions (int): number of actions in the action space.
+        num_qvalue_nets (int, optional): Number of Q-value networks to be trained. Default is 10.
+        loss_function (str, optional): loss function to be used for the Q-value. Can be one of  `"smooth_l1"`, "l2",
+            "l1", Default is "smooth_l1".
+        alpha_init (float, optional): initial entropy multiplier.
+            Default is 1.0.
+        min_alpha (float, optional): min value of alpha.
+            Default is None (no minimum value).
+        max_alpha (float, optional): max value of alpha.
+            Default is None (no maximum value).
+        fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
+        target_entropy_weight (float, optional): weight for the target entropy term.
+        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
+            for data collection. Default is ``False``.
+        priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
+            Key where to write the priority value for prioritized replay buffers.
+            Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
+
+    Examples:
+    >>> import torch
+    >>> from torch import nn
+    >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+    >>> from torchrl.modules.distributions.continuous import NormalParamWrapper
+    >>> from torchrl.modules.distributions.discrete import OneHotCategorical
+    >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+    >>> from torchrl.modules.tensordict_module.common import SafeModule
+    >>> from torchrl.objectives.sac import DiscreteSACLoss
+    >>> from tensordict.tensordict import TensorDict
+    >>> n_act, n_obs = 4, 3
+    >>> spec = OneHotDiscreteTensorSpec(n_act)
+    >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+    >>> module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
+    >>> actor = ProbabilisticActor(
+    ...     module=module,
+    ...     in_keys=["logits"],
+    ...     out_keys=["action"],
+    ...     spec=spec,
+    ...     distribution_class=OneHotCategorical)
+    >>> class ValueClass(nn.Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.linear = nn.Linear(n_obs, n_act)
+    ...     def forward(self, obs):
+    ...         return self.linear(obs)
+    >>> module = ValueClass()
+    >>> qvalue = ValueOperator(
+    ...     module=module,
+    ...     in_keys=['observation'])
+    >>> loss = DiscreteSACLoss(actor, qvalue, num_actions=actor.spec["action"].space.n)
+    >>> batch = [2, ]
+    >>> action = spec.rand(batch)
+    >>> data = TensorDict({
+    ...         "observation": torch.randn(*batch, n_obs),
+    ...         "action": action,
+    ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+    ...         ("next", "reward"): torch.randn(*batch, 1),
+    ...         ("next", "observation"): torch.randn(*batch, n_obs),
+    ...     }, batch)
+    >>> loss(data)
+    TensorDict(
+        fields={
+            action_log_prob_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_alpha: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            loss_qvalue: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            next.state_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            state_action_value_actor: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+            target_value: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([]),
+        device=None,
+        is_shared=False)
+
+    This class is compatible with non-tensordict based modules too and can be
+    used without recurring to any tensordict-related primitive. In this case,
+    the expected keyword arguments are:
+    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network.
+    The return value is a tuple of tensors in the following order:
+    ``["loss_actor", "loss_qvalue", "loss_alpha",
+       "alpha", "entropy", "state_action_value_actor",
+       "action_log_prob_actor", "next.state_value", "target_value"]``
+    The output keys can also be filtered using :meth:`DiscreteSACLoss.select_out_keys` method.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from torchrl.data.tensor_specs import OneHotDiscreteTensorSpec
+        >>> from torchrl.modules.distributions.continuous import NormalParamWrapper
+        >>> from torchrl.modules.distributions.discrete import OneHotCategorical
+        >>> from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+        >>> from torchrl.modules.tensordict_module.common import SafeModule
+        >>> from torchrl.objectives.sac import DiscreteSACLoss
+        >>> n_act, n_obs = 4, 3
+        >>> spec = OneHotDiscreteTensorSpec(n_act)
+        >>> net = NormalParamWrapper(nn.Linear(n_obs, 2 * n_act))
+        >>> module = SafeModule(net, in_keys=["observation"], out_keys=["logits"])
+        >>> actor = ProbabilisticActor(
+        ...     module=module,
+        ...     in_keys=["logits"],
+        ...     out_keys=["action"],
+        ...     spec=spec,
+        ...     distribution_class=OneHotCategorical)
+        >>> class ValueClass(nn.Module):
+        ...     def __init__(self):
+        ...         super().__init__()
+        ...         self.linear = nn.Linear(n_obs, n_act)
+        ...     def forward(self, obs):
+        ...         return self.linear(obs)
+        >>> module = ValueClass()
+        >>> qvalue = ValueOperator(
+        ...     module=module,
+        ...     in_keys=['observation'])
+        >>> loss = DiscreteSACLoss(actor, qvalue, num_actions=actor.spec["action"].space.n)
+        >>> batch = [2, ]
+        >>> action = spec.rand(batch)
+        >>> # filter output keys to "loss_actor", and "loss_qvalue"
+        >>> _ = loss.select_out_keys("loss_actor", "loss_qvalue")
+        >>> loss_actor, loss_qvalue = loss(
+        ...     observation=torch.randn(*batch, n_obs),
+        ...     action=action,
+        ...     next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_observation=torch.zeros(*batch, n_obs),
+        ...     next_reward=torch.randn(*batch, 1))
+        >>> loss_actor.backward()
+    """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+
+        Attributes:
+            action (NestedKey): The input tensordict key where the action is expected.
+                Defaults to ``"action"``.
+            value (NestedKey): The input tensordict key where the state value is expected.
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            priority (NestedKey): The input tensordict key where the target priority is written to.
+                Defaults to ``"td_error"``.
+            reward (NestedKey): The input tensordict key where the reward is expected.
+                Will be used for the underlying value estimator. Defaults to ``"reward"``.
+            done (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is done. Will be used for the underlying value estimator.
+                Defaults to ``"done"``.
+        """
+
+        action: NestedKey = "action"
+        value: NestedKey = "state_value"
+        action_value: NestedKey = "action_value"
+        priority: NestedKey = "td_error"
+        reward: NestedKey = "reward"
+        done: NestedKey = "done"
+
+    default_keys = _AcceptedKeys()
+    default_value_estimator = ValueEstimators.TD0
+    delay_actor: bool = False
+    out_keys = [
+        "loss_actor",
+        "loss_qvalue",
+        "loss_alpha",
+        "alpha",
+        "entropy",
+        "state_action_value_actor",
+        "action_log_prob_actor",
+        "next.state_value",
+        "target_value",
+    ]
+
+    def __init__(
+        self,
+        actor_network: ProbabilisticActor,
+        qvalue_network: TensorDictModule,
+        num_actions: int,  # replace with spec?
+        *,
+        num_qvalue_nets: int = 2,
+        loss_function: str = "smooth_l1",
+        alpha_init: float = 1.0,
+        min_alpha: float = None,
+        max_alpha: float = None,
+        fixed_alpha: bool = False,
+        target_entropy_weight: float = 0.98,
+        target_entropy: Union[str, Number] = "auto",
+        delay_qvalue: bool = True,
+        priority_key: str = None,
+        separate_losses: bool = False,
+    ):
+        self._in_keys = None
+        if not _has_functorch:
+            raise ImportError("Failed to import functorch.") from FUNCTORCH_ERROR
+        super().__init__()
+        self._set_deprecated_ctor_keys(priority_key=priority_key)
+
+        self.convert_to_functional(
+            actor_network,
+            "actor_network",
+            create_target_params=self.delay_actor,
+            funs_to_decorate=["forward", "get_dist_params"],
+        )
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
+        self.delay_qvalue = delay_qvalue
+        self.convert_to_functional(
+            qvalue_network,
+            "qvalue_network",
+            num_qvalue_nets,
+            create_target_params=self.delay_qvalue,
+            compare_against=policy_params,
+        )
+        self.num_qvalue_nets = num_qvalue_nets
+        self.loss_function = loss_function
+
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
+
+        self.register_buffer("alpha_init", torch.tensor(alpha_init, device=device))
+        if bool(min_alpha) ^ bool(max_alpha):
+            min_alpha = min_alpha if min_alpha else 0.0
+            if max_alpha == 0:
+                raise ValueError("max_alpha must be either None or greater than 0.")
+            max_alpha = max_alpha if max_alpha else 1e9
+        if min_alpha:
+            self.register_buffer(
+                "min_log_alpha", torch.tensor(min_alpha, device=device).log()
+            )
+        else:
+            self.min_log_alpha = None
+        if max_alpha:
+            self.register_buffer(
+                "max_log_alpha", torch.tensor(max_alpha, device=device).log()
+            )
+        else:
+            self.max_log_alpha = None
+        self.fixed_alpha = fixed_alpha
+        if fixed_alpha:
+            self.register_buffer(
+                "log_alpha", torch.tensor(math.log(alpha_init), device=device)
+            )
+        else:
+            self.register_parameter(
+                "log_alpha",
+                torch.nn.Parameter(torch.tensor(math.log(alpha_init), device=device)),
+            )
+
+        if target_entropy == "auto":
+            target_entropy = -float(np.log(1.0 / num_actions) * target_entropy_weight)
+        self.register_buffer(
+            "target_entropy", torch.tensor(target_entropy, device=device)
+        )
+        self._vmap_qnetworkN0 = vmap(self.qvalue_network, (None, 0))
+
+    @property
+    def alpha(self):
+        if self.min_log_alpha is not None:
+            self.log_alpha.data.clamp_(self.min_log_alpha, self.max_log_alpha)
+        with torch.no_grad():
+            alpha = self.log_alpha.exp()
+        return alpha
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value=self._tensor_keys.value,
+                reward=self.tensor_keys.reward,
+                done=self.tensor_keys.done,
+            )
+        self._set_in_keys()
+
+    def _set_in_keys(self):
+        keys = [
+            self.tensor_keys.action,
+            ("next", self.tensor_keys.reward),
+            ("next", self.tensor_keys.done),
+            *self.actor_network.in_keys,
+            *[("next", key) for key in self.actor_network.in_keys],
+            *self.qvalue_network.in_keys,
+        ]
+        self._in_keys = list(set(keys))
+
+    @property
+    def in_keys(self):
+        if self._in_keys is None:
+            self._set_in_keys()
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, values):
+        self._in_keys = values
+
+    @dispatch
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        shape = None
+        if tensordict.ndimension() > 1:
+            shape = tensordict.shape
+            tensordict_reshape = tensordict.reshape(-1)
+        else:
+            tensordict_reshape = tensordict
+
+        loss_value, priority = self._loss_value(tensordict_reshape)
+        loss_actor = self._loss_actor(tensordict_reshape)
+        loss_alpha = self._loss_alpha(tensordict_reshape)
+
+        tensordict_reshape.set(self.tensor_keys.priority, priority)
+        if loss_actor.shape != loss_value.shape:
+            raise RuntimeError(
+                f"Losses shape mismatch: {loss_actor.shape}, and {loss_value.shape}"
+            )
+        if shape:
+            tensordict.update(tensordict_reshape.view(shape))
+        out = {
+            "loss_actor": loss_actor.mean(),
+            "loss_value": loss_value.mean(),
+            "loss_alpha": loss_alpha.mean(),
+            "alpha": self._alpha,
+            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
+            .mean()
+            .detach(),
+        }
+        return TensorDict(out, [])
+
+    def _get_target_value(self, tensordict, _alpha, actor_params, qval_params):
+        r"""Value network for SAC v2.
+
+        SAC v2 is based on a value estimate of the form:
+
+        .. math::
+
+          V = Q(s,a) - \alpha * \log p(a | s)
+
+        This class computes this value given the actor and qvalue network
+
+        """
+        tensordict = tensordict.clone(False)
+        # get actions and log-probs
+        with torch.no_grad():
+            next_tensordict = tensordict.get("next").clone(False)
+
+            # get probs and log probs for actions computed from "next"
+            with set_exploration_type(ExplorationType.RANDOM):
+                next_dist = self.actor_network.get_dist(
+                    next_tensordict, params=actor_params
+                )
+                next_prob = next_dist.probs
+                next_log_prob = torch.log(next_prob)
+
+            # get q-values for all actions
+            next_tensordict_expand = self._vmap_qnetworkN0(next_tensordict, qval_params)
+            next_action_value = next_tensordict_expand.get(
+                self.tensor_keys.action_value
+            )
+
+            # if next_action_value.shape[-len(next_log_prob.shape) :] != next_log_prob.shape:
+            #     next_log_prob = next_log_prob.unsqueeze(-1)
+
+            # like in continuous SAC, we take the minimum of the value ensemble and subtract the entropy term
+            next_state_value = next_action_value.min(0)[0] - _alpha * next_log_prob
+            # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
+            next_state_value = (next_prob * next_state_value).sum(-1)
+
+            tensordict.set(
+                ("next", self.value_estimator.tensor_keys.value), next_state_value
+            )
+            target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+            return target_value
+
+    def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+        target_value = self._get_target_value(
+            tensordict,
+            self._alpha,
+            self.actor_network_params,
+            self.target_qvalue_network_params,
+        )
+        tensordict_expand = self._vmap_qnetworkN0(
+            tensordict.select(*self.qvalue_network.in_keys),
+            self.qvalue_network_params,
+        )
+
+        action_value = tensordict_expand.get(self.tensor_keys.action_value)
+        action = tensordict_expand.get(self.tensor_keys.action)
+
+        # TODO this block comes from the dqn loss, we need to swap all thse with a proper
+        #  helper function which selects the value given the action for all discrete spaces
+        if self.action_space == "categorical":
+            if action.shape != action_value.shape:
+                # unsqueeze the action if it lacks on trailing singleton dim
+                action = action.unsqueeze(-1)
+            chosen_action_value = torch.gather(action_value, -1, index=action).squeeze(
+                -1
+            )
+        else:
+            action = action.to(torch.float)
+            chosen_action_value = (action_value * action).sum(-1)
+
+        td_error = torch.abs(chosen_action_value - target_value)
+        loss_qval = distance_loss(
+            chosen_action_value,
+            target_value,
+            loss_function=self.loss_function,
+        ).mean(0)
+        return loss_qval, td_error.detach().max(0)[0]
+
+    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
+
+        # get probs and log probs for actions
+        with set_exploration_type(ExplorationType.RANDOM):
+            dist = self.actor_network.get_dist(tensordict)
+            prob = dist.probs
+            log_prob = torch.log(prob)
+
+        td_q = tensordict.select(*self.qvalue_network.in_keys)
+        td_q = self._vmap_qnetworkN0(
+            td_q, self._cached_detached_qvalue_params  # should we clone?
+        )
+        min_q = td_q.get(self.tensor_keys.action_value).min(0)[0]
+
+        if log_prob.shape != min_q.shape:
+            raise RuntimeError(
+                f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
+            )
+
+        # like in continuous SAC, we take the entropy term and subtract the minimum of the value ensemble
+        loss = self._alpha * log_prob - min_q
+        # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
+        loss = (prob * loss).sum(-1)
+
+        # write log_prob in tensordict for alpha loss
+        tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
+        return loss
+
+    def _loss_alpha(self, tensordict: TensorDictBase) -> Tensor:
+        log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
             alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
