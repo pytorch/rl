@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import random
 from typing import Optional
 
 import torch
@@ -1485,6 +1486,25 @@ class HeteroCountingEnv(EnvBase):
         torch.manual_seed(seed)
 
 
+class MultiKeyCountingEnvPolicy:
+    def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+        self.full_action_spec = full_action_spec
+        self.count = count
+
+    def __call__(self, td: TensorDictBase) -> TensorDictBase:
+        action_td = self.full_action_spec.zero()
+        if self.count:
+            # We choose an action at random
+            choice = random.randint(0, 3)
+            if choice == 0:
+                action_td["nested_1", "action"] += 1
+            elif choice == 1:
+                action_td["nested_2", "azione"] += 1
+            else:
+                action_td["action"][..., 1] = 1
+        return td.update(action_td)
+
+
 class MultiKeyCountingEnv(EnvBase):
     def __init__(self, max_steps: int = 5, start_val: int = 0, **kwargs):
         super().__init__(**kwargs)
@@ -1495,9 +1515,25 @@ class MultiKeyCountingEnv(EnvBase):
         self.nested_dim_2 = 2
 
         count = torch.zeros((*self.batch_size, 1), device=self.device, dtype=torch.int)
+        count_nested_1 = torch.zeros(
+            (*self.batch_size, self.nested_dim_1, 1),
+            device=self.device,
+            dtype=torch.int,
+        )
+        count_nested_2 = torch.zeros(
+            (*self.batch_size, self.nested_dim_2, 1),
+            device=self.device,
+            dtype=torch.int,
+        )
+
         count[:] = self.start_val
+        count_nested_1[:] = self.start_val
+        count_nested_2[:] = self.start_val
 
         self.register_buffer("count", count)
+        self.register_buffer("count_nested_1", count_nested_1)
+        self.register_buffer("count_nested_2", count_nested_2)
+
         self.make_specs()
 
         self.action_spec = self.unbatched_action_spec.expand(
@@ -1517,7 +1553,7 @@ class MultiKeyCountingEnv(EnvBase):
         self.unbatched_observation_spec = CompositeSpec(
             nested_1=CompositeSpec(
                 observation=BoundedTensorSpec(
-                    minimum=0, maximum=20, shape=(self.nested_dim_1, 3)
+                    minimum=0, maximum=200, shape=(self.nested_dim_1, 3)
                 ),
                 shape=(self.nested_dim_1,),
             ),
@@ -1527,8 +1563,8 @@ class MultiKeyCountingEnv(EnvBase):
             ),
             observation=UnboundedContinuousTensorSpec(
                 shape=(
-                    32,
-                    32,
+                    10,
+                    10,
                     3,
                 )
             ),
@@ -1541,7 +1577,7 @@ class MultiKeyCountingEnv(EnvBase):
             ),
             nested_2=CompositeSpec(
                 azione=BoundedTensorSpec(
-                    minimum=0, maximum=1, shape=(self.nested_dim_2, 1)
+                    minimum=0, maximum=100, shape=(self.nested_dim_2, 1)
                 ),
                 shape=(self.nested_dim_2,),
             ),
@@ -1592,11 +1628,24 @@ class MultiKeyCountingEnv(EnvBase):
         if tensordict is not None and "_reset" in tensordict.keys():
             _reset = tensordict.get("_reset").squeeze(-1).any(-1)
             self.count[_reset] = self.start_val
+            self.count_nested_1[_reset] = self.start_val
+            self.count_nested_2[_reset] = self.start_val
         else:
             self.count[:] = self.start_val
+            self.count_nested_1[:] = self.start_val
+            self.count_nested_2[:] = self.start_val
 
         reset_td = self.observation_spec.zero()
-        reset_td.apply_(lambda x: x + expand_right(self.count, x.shape))
+        reset_td["observation"] += expand_right(
+            self.count, reset_td["observation"].shape
+        )
+        reset_td["nested_1", "observation"] += expand_right(
+            self.count_nested_1, reset_td["nested_1", "observation"].shape
+        )
+        reset_td["nested_2", "observation"] += expand_right(
+            self.count_nested_2, reset_td["nested_2", "observation"].shape
+        )
+
         reset_td.update(self.output_spec["_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
@@ -1607,31 +1656,35 @@ class MultiKeyCountingEnv(EnvBase):
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        actions = torch.zeros_like(self.count.squeeze(-1), dtype=torch.bool)
 
-        one_hot_action = tensordict["action"]
-        one_hot_action = one_hot_action.argmax(-1)
-        actions += one_hot_action.to(torch.bool)
+        # Each action has a corresponding reward, done, and observation
+        reward = self.output_spec["_reward_spec"].zero()
+        done = self.output_spec["_done_spec"].zero()
+        td = self.observation_spec.zero()
 
-        discrete_action = tensordict["nested_1"]["action"]
-        actions += discrete_action.to(torch.bool).any(-1)
+        one_hot_action = tensordict["action"].argmax(-1).unsqueeze(-1)
+        reward["reward"] += one_hot_action.to(torch.float)
+        self.count += one_hot_action.to(torch.int)
+        td["observation"] += expand_right(self.count, td["observation"].shape)
+
+        discrete_action = tensordict["nested_1"]["action"].unsqueeze(-1)
+        reward["nested_1"]["gift"] += discrete_action.to(torch.float)
+        self.count_nested_1 += discrete_action.to(torch.int)
+        td["nested_1", "observation"] += expand_right(
+            self.count_nested_1, td["nested_1", "observation"].shape
+        )
 
         continuous_action = tensordict["nested_2"]["azione"]
-        actions += continuous_action.to(torch.bool).squeeze(-1).any(-1)
+        reward["nested_2"]["reward"] += continuous_action.to(torch.float)
+        self.count_nested_2 += continuous_action.to(torch.bool)
+        td["nested_2", "observation"] += expand_right(
+            self.count_nested_2, td["nested_2", "observation"].shape
+        )
 
-        self.count += actions.unsqueeze(-1).to(torch.int)
-
-        td = self.observation_spec.zero()
-        td.apply_(lambda x: x + expand_right(self.count, x.shape))
-        td.update(self.output_spec["_done_spec"].zero())
-        td.update(self.output_spec["_reward_spec"].zero())
+        td.update(done)
+        td.update(reward)
 
         assert td.batch_size == self.batch_size
-        for key in self.done_keys:
-            td[key] = expand_right(
-                self.count > self.max_steps, self.done_spec[key].shape
-            )
-
         return td.select().set("next", td)
 
     def _set_seed(self, seed: Optional[int]):
