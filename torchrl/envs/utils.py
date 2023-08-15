@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+from typing import List, Union
 
 import torch
 
@@ -37,6 +38,10 @@ __all__ = [
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
 
+DONE_AFTER_RESET_ERROR = RuntimeError(
+    "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+)
+
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
     if exploration_mode is not None:
@@ -56,9 +61,9 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
-    reward_key: NestedKey = "reward",
-    done_key: NestedKey = "done",
-    action_key: NestedKey = "action",
+    reward_keys: Union[NestedKey, List[NestedKey]] = "reward",
+    done_keys: Union[NestedKey, List[NestedKey]] = "done",
+    action_keys: Union[NestedKey, List[NestedKey]] = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
@@ -86,11 +91,11 @@ def step_mdp(
             be kept in the root tensordict (since it should not be present in
             the ``"next"`` entry).
             Default is ``True``.
-        reward_key (key, optional): the key where the reward is written. Defaults
+        reward_keys (NestedKey or list of NestedKey, optional): the keys where the reward is written. Defaults
             to "reward".
-        done_key (key, optional): the key where the done is written. Defaults
+        done_keys (NestedKey or list of NestedKey, optional): the keys where the done is written. Defaults
             to "done".
-        action_key (key, optional): the key where the action is written. Defaults
+        action_keys (NestedKey or list of NestedKey, optional): the keys where the action is written. Defaults
             to "action".
 
     Returns:
@@ -173,9 +178,9 @@ def step_mdp(
                     exclude_reward=exclude_reward,
                     exclude_done=exclude_done,
                     exclude_action=exclude_action,
-                    reward_key=reward_key,
-                    done_key=done_key,
-                    action_key=action_key,
+                    reward_keys=reward_keys,
+                    done_keys=done_keys,
+                    action_keys=action_keys,
                 )
                 for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
             ],
@@ -186,17 +191,20 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_key(action_key)
-    done_key = unravel_key(done_key)
-    reward_key = unravel_key(reward_key)
+    if not isinstance(action_keys, list):
+        action_keys = [action_keys]
+    if not isinstance(done_keys, list):
+        done_keys = [done_keys]
+    if not isinstance(reward_keys, list):
+        reward_keys = [reward_keys]
 
     excluded = set()
     if exclude_reward:
-        excluded = {reward_key}
+        excluded = {*reward_keys}
     if exclude_done:
-        excluded = excluded.union({done_key})
+        excluded = excluded.union({*done_keys})
     if exclude_action:
-        excluded = excluded.union({action_key})
+        excluded = excluded.union({*action_keys})
     next_td = tensordict.get("next")
     out = next_td.empty()
 
@@ -206,7 +214,8 @@ def step_mdp(
             if key != "next":
                 _set(tensordict, out, key, total_key, excluded)
     elif not exclude_action:
-        _set_single_key(tensordict, out, action_key)
+        for action_key in action_keys:
+            _set_single_key(tensordict, out, action_key)
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
     if next_tensordict is not None:

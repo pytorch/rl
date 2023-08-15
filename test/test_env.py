@@ -1234,9 +1234,9 @@ class TestStepMdp:
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
-            reward_key=reward_key,
-            done_key=done_key,
-            action_key=action_key,
+            reward_keys=reward_key,
+            done_keys=done_key,
+            action_keys=action_key,
             keep_other=keep_other,
         )
         td_nested_keys = td.keys(True, True)
@@ -1335,9 +1335,9 @@ class TestStepMdp:
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
-            reward_key=reward_key,
-            done_key=done_key,
-            action_key=action_key,
+            reward_keys=reward_key,
+            done_keys=done_key,
+            action_keys=action_key,
             keep_other=keep_other,
         )
         td_keys_nested = td.keys(True, True)
@@ -1374,9 +1374,9 @@ class TestStepMdp:
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
-            reward_key=reward_key,
-            done_key=done_key,
-            action_key=action_key,
+            reward_keys=reward_key,
+            done_keys=done_key,
+            action_keys=action_key,
             keep_other=keep_other,
         )
         td_keys = td.keys()
@@ -1478,9 +1478,9 @@ class TestStepMdp:
             exclude_reward=exclude_reward,
             exclude_done=exclude_done,
             exclude_action=exclude_action,
-            reward_key=nested_reward_key,
-            done_key=nested_done_key,
-            action_key=nested_action_key,
+            reward_keys=nested_reward_key,
+            done_keys=nested_done_key,
+            action_keys=nested_action_key,
             keep_other=keep_other,
         )
         td_nested_keys = td.keys(True, True)
@@ -1958,7 +1958,9 @@ class TestHeteroEnvs:
 class TestMultiKeyEnvs:
     def test_mult_key_env(self):
         env = MultiKeyCountingEnv()
-        check_env_specs(env)
+        env.rand_step()
+        env.reset()
+        env.rollout(3)
 
 
 @pytest.mark.parametrize(

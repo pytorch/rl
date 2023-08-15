@@ -42,6 +42,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _convert_exploration_type,
+    DONE_AFTER_RESET_ERROR,
     ExplorationType,
     set_exploration_type,
     step_mdp,
@@ -796,9 +797,9 @@ class SyncDataCollector(DataCollectorBase):
 
         self._tensordict = step_mdp(
             self._tensordict,
-            reward_key=self.env.reward_key,
-            done_key=self.env.done_key,
-            action_key=self.env.action_key,
+            reward_keys=self.env.reward_key,
+            done_keys=self.env.done_key,
+            action_keys=self.env.action_key,
         )
 
         if not self.reset_when_done:
@@ -832,9 +833,7 @@ class SyncDataCollector(DataCollectorBase):
 
             done = self._tensordict.get(self.env.done_key)
             if done.any():
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
+                raise DONE_AFTER_RESET_ERROR
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )

@@ -18,7 +18,7 @@ import torch
 from tensordict import unravel_key, unravel_key_list
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import expand_as_right, NestedKey
+from tensordict.utils import _unravel_key_to_tuple, expand_as_right, NestedKey
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -578,7 +578,9 @@ but got an object of type {type(transform)}."""
     @property
     def action_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
-        return self.input_spec[("_action_spec", self.action_key)]
+        return self.input_spec[
+            ("_action_spec", *_unravel_key_to_tuple(self.action_key))
+        ]
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -597,7 +599,9 @@ but got an object of type {type(transform)}."""
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-        return self.output_spec[("_reward_spec", self.reward_key)]
+        return self.output_spec[
+            ("_reward_spec", *_unravel_key_to_tuple(self.reward_key))
+        ]
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -618,7 +622,7 @@ but got an object of type {type(transform)}."""
     @property
     def done_spec(self) -> TensorSpec:
         """Done spec of the transformed environment."""
-        return self.output_spec[("_done_spec", self.done_key)]
+        return self.output_spec[("_done_spec", *_unravel_key_to_tuple(self.done_key))]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)

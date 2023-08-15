@@ -1536,16 +1536,16 @@ class MultiKeyCountingEnv(EnvBase):
 
         self.unbatched_action_spec = CompositeSpec(
             nested_1=CompositeSpec(
-                action=DiscreteTensorSpec(n=3, shape=(self.nested_dim_1,)),
+                action=DiscreteTensorSpec(n=2, shape=(self.nested_dim_1,)),
                 shape=(self.nested_dim_1,),
             ),
             nested_2=CompositeSpec(
                 azione=BoundedTensorSpec(
-                    minimum=0, maximum=5, shape=(self.nested_dim_2, 2)
+                    minimum=0, maximum=1, shape=(self.nested_dim_2, 1)
                 ),
                 shape=(self.nested_dim_2,),
             ),
-            action=OneHotDiscreteTensorSpec(n=4),
+            action=OneHotDiscreteTensorSpec(n=2),
         )
 
         self.unbatched_reward_spec = CompositeSpec(
@@ -1608,10 +1608,16 @@ class MultiKeyCountingEnv(EnvBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         actions = torch.zeros_like(self.count.squeeze(-1), dtype=torch.bool)
-        for i in range(self.n_nested_dim):
-            action = tensordict["lazy"][..., i]["action"]
-            action = action[..., 0].to(torch.bool)
-            actions += action
+
+        one_hot_action = tensordict["action"]
+        one_hot_action = one_hot_action.argmax(-1)
+        actions += one_hot_action.to(torch.bool)
+
+        discrete_action = tensordict["nested_1"]["action"]
+        actions += discrete_action.to(torch.bool).any(-1)
+
+        continuous_action = tensordict["nested_2"]["azione"]
+        actions += continuous_action.to(torch.bool).squeeze(-1).any(-1)
 
         self.count += actions.unsqueeze(-1).to(torch.int)
 
@@ -1621,9 +1627,10 @@ class MultiKeyCountingEnv(EnvBase):
         td.update(self.output_spec["_reward_spec"].zero())
 
         assert td.batch_size == self.batch_size
-        td[self.done_key] = expand_right(
-            self.count > self.max_steps, self.done_spec.shape
-        )
+        for key in self.done_keys:
+            td[key] = expand_right(
+                self.count > self.max_steps, self.done_spec[key].shape
+            )
 
         return td.select().set("next", td)
 

@@ -23,7 +23,7 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import get_available_libraries, step_mdp
+from torchrl.envs.utils import DONE_AFTER_RESET_ERROR, get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
@@ -1020,7 +1020,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
 
         # TODO: Refactor this using reward spec
-        reward = next_tensordict_out.get(self.reward_key)
         # unsqueeze rewards if needed
         # the input tensordict may have more leading dimensions than the batch_size
         # e.g. in model-based contexts.
@@ -1031,22 +1030,33 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if dims
             else next_tensordict_out.shape
         )
-        expected_reward_shape = torch.Size(
-            [*leading_batch_size, *self.reward_spec.shape]
-        )
-        actual_reward_shape = reward.shape
-        if actual_reward_shape != expected_reward_shape:
-            reward = reward.view(expected_reward_shape)
-            next_tensordict_out.set(self.reward_key, reward)
+        for reward_key in self.reward_keys:
+            reward = next_tensordict_out.get(reward_key)
+            expected_reward_shape = torch.Size(
+                [
+                    *leading_batch_size,
+                    *self.output_spec["_reward_spec"][reward_key].shape,
+                ]
+            )
+            actual_reward_shape = reward.shape
+            if actual_reward_shape != expected_reward_shape:
+                reward = reward.view(expected_reward_shape)
+                next_tensordict_out.set(reward_key, reward)
 
         # TODO: Refactor this using done spec
-        done = next_tensordict_out.get(self.done_key)
-        # unsqueeze done if needed
-        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
-        actual_done_shape = done.shape
-        if actual_done_shape != expected_done_shape:
-            done = done.view(expected_done_shape)
-            next_tensordict_out.set(self.done_key, done)
+        for done_key in self.done_keys:
+            done = next_tensordict_out.get(done_key)
+            expected_done_shape = torch.Size(
+                [
+                    *leading_batch_size,
+                    *self.output_spec["_done_spec"][done_key].shape,
+                ]
+            )
+            actual_done_shape = done.shape
+            if actual_done_shape != expected_done_shape:
+                done = done.view(expected_done_shape)
+                next_tensordict_out.set(done_key, done)
+
         tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
@@ -1054,19 +1064,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 obs = tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
-            if (
-                next_tensordict_out.get(self.reward_key).dtype
-                is not self.reward_spec.dtype
-            ):
-                raise TypeError(
-                    f"expected reward.dtype to be {self.reward_spec.dtype} "
-                    f"but got {tensordict_out.get(self.reward_key).dtype}"
-                )
+            for reward_key in self.reward_keys:
+                if (
+                    next_tensordict_out.get(reward_key).dtype
+                    is not self.output_spec["_reward_spec"][reward_key].dtype
+                ):
+                    raise TypeError(
+                        f"expected reward.dtype to be {self.output_spec['_reward_spec'][reward_key]} "
+                        f"but got {tensordict_out.get(reward_key).dtype}"
+                    )
 
-            if next_tensordict_out.get(self.done_key).dtype is not self.done_spec.dtype:
-                raise TypeError(
-                    f"expected done.dtype to be torch.bool but got {tensordict_out.get(self.done_key).dtype}"
-                )
+            for done_key in self.done_keys:
+                if (
+                    next_tensordict_out.get(done_key).dtype
+                    is not self.output_spec["_done_spec"].get(done_key).dtype
+                ):
+                    raise TypeError(
+                        f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
+                    )
         # tensordict could already have a "next" key
         tensordict.update(tensordict_out)
 
@@ -1142,20 +1157,23 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
         else:
             leading_dim = tensordict_reset.shape
-        if self.done_spec is not None and self.done_key not in tensordict_reset.keys(
-            True, True
-        ):
-            tensordict_reset.set(
-                self.done_key,
-                self.done_spec.zero(leading_dim),
-            )
+        if self.done_spec is not None:
+            td_reset_keys = list(tensordict_reset.keys(True, True))
+            for done_key in self.done_keys:
+                if done_key not in td_reset_keys:
+                    tensordict_reset.set(
+                        done_key,
+                        self.output_spec["_done_spec"][done_key].zero(leading_dim),
+                    )
+        if _reset is None:
+            for done_key in self.done_keys:
+                if tensordict_reset.get(done_key).any():
+                    raise DONE_AFTER_RESET_ERROR
+        else:
+            for done_key in self.done_keys:
+                if tensordict_reset.get(done_key)[_reset].any():
+                    raise DONE_AFTER_RESET_ERROR
 
-        if (_reset is None and tensordict_reset.get(self.done_key).any()) or (
-            _reset is not None and tensordict_reset.get(self.done_key)[_reset].any()
-        ):
-            raise RuntimeError(
-                f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-            )
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
@@ -1421,7 +1439,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.step(tensordict)
 
             tensordicts.append(tensordict.clone(False))
-            done = tensordict.get(("next", self.done_key))
+
+            if len(self.done_keys) == 1:
+                done = tensordict.get(("next", self.done_key))
+            else:
+                # We have multiple done keys.
+                # We get each and aggregate them to a single done with the td batch size
+                done = None
+                for done_key in self.done_keys:
+                    sub_done = tensordict.get(("next", done_key))
+                    reduced_done = sub_done.sum(
+                        tuple(range(tensordict.batch_dims, sub_done.ndim)),
+                        dtype=torch.bool,
+                    ).unsqueeze(-1)
+                    if done is None:
+                        done = reduced_done
+                    else:
+                        done += reduced_done
+
             truncated = tensordict.get(
                 ("next", "truncated"),
                 default=torch.zeros((), device=done.device, dtype=torch.bool),
@@ -1434,9 +1469,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 keep_other=True,
                 exclude_action=True,
                 exclude_reward=True,
-                reward_key=self.reward_key,
-                action_key=self.action_key,
-                done_key=self.done_key,
+                reward_keys=self.reward_keys,
+                action_keys=self.action_keys,
+                done_keys=self.done_keys,
             )
             if not break_when_any_done and done.any():
                 _reset = done.clone()
