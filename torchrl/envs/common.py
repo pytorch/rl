@@ -587,7 +587,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Reward spec
     def _get_reward_keys(self):
-        keys = self.input_spec["_reward_spec"].keys(True, True)
+        keys = self.output_spec["_reward_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find reward spec")
         keys = list(keys)
@@ -743,13 +743,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 value = CompositeSpec(
                     reward=value.to(device), shape=self.batch_size, device=device
                 )
-            if len(value.shape) == 0:
-                raise RuntimeError(
-                    "the reward_spec shape cannot be empty (this error"
-                    " usually comes from trying to set a reward_spec"
-                    " with a null number of dimensions. Try using a multidimensional"
-                    " spec instead, for instance with a singleton dimension at the tail)."
-                )
+            for leaf in value.values(True, True):
+                if len(leaf.shape) == 0:
+                    raise RuntimeError(
+                        "the reward_spec's leafs shape cannot be empty (this error"
+                        " usually comes from trying to set a reward_spec"
+                        " with a null number of dimensions. Try using a multidimensional"
+                        " spec instead, for instance with a singleton dimension at the tail)."
+                    )
             self.output_spec["_reward_spec"] = value.to(device)
             self._get_reward_keys()
         finally:
