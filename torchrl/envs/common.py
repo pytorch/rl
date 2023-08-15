@@ -432,6 +432,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         keys = self.input_spec["_action_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find action spec")
+        keys = list(keys)
         self.__dict__["_action_keys"] = keys
         return keys
 
@@ -439,10 +440,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     def action_keys(self) -> List[NestedKey]:
         """The action keys of an environment.
 
-        By default, there will only be one key named "actipn"
-
-        If the action is in a nested tensordict, this property will return its
-        location.
+        By default, there will only be one key named "action".
         """
         out = self._action_keys
         if out is None:
@@ -450,13 +448,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return out
 
     @property
-    def action_key(self):
+    def action_key(self) -> NestedKey:
         """The action key of an environment.
 
-        By default, non-nested keys are stored in the 'action' key.
+        By default, there will only be one key named "action".
 
         If the action is in a nested tensordict, this property will return its
         location.
+
+        If there is more than one action key in the environment, this function will raise an exception.
         """
         if len(self.action_keys) > 1:
             raise KeyError(
@@ -467,13 +467,63 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Action spec: action specs belong to input_spec
     @property
     def action_spec(self) -> TensorSpec:
-        """The ``action`` leaf spec.
+        """The ``action`` spec.
 
-        This property will always return the leaf spec of the action attribute,
-        which can be accessed in a typical rollout via
+        The action_spec is always stored in a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> action = fake_td[env.action_key]
+        If the action spec is provided as a simple spec, this will be returned.
+
+        Examples:
+            >>> env.action_spec = UnboundedContinuousTensorSpec(1)
+            >>> env.action_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the action spec contains only one leaf, this function will return just the leaf.
+
+        Examples:
+            >>> env.action_spec = CompositeSpec({"nested": {"action": UnboundedContinuousTensorSpec(1)}})
+            >>> env.action_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the action spec has more than one leaf, this function will return the whole spec.
+
+        Examples:
+            >>> env.action_spec = CompositeSpec({"nested": {"action": UnboundedContinuousTensorSpec(1), "another_action": DiscreteTensorSpec(1)}})
+            >>> env.action_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    action: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous),
+                    another_action: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=1),
+                        device=cpu,
+                        dtype=torch.int64,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To always retrieve the dull spec passed, use:
+
+            >>> env.input_spec["_action_spec"]
 
         This property is mutable.
         """
@@ -508,6 +558,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 delattr(self, "_action_keys")
             except AttributeError:
                 pass
+            if not hasattr(value, "shape"):
+                raise TypeError(
+                    f"action_spec of type {type(value)} do not have a shape attribute."
+                )
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    "The value of spec.shape must match the env batch size."
+                )
 
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
@@ -528,17 +586,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.lock_()
 
     # Reward spec
-    def _get_reward_key(self):
-        keys = self.output_spec["_reward_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the reward
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
+    def _get_reward_keys(self):
+        keys = self.input_spec["_reward_spec"].keys(True, True)
+        if not len(keys):
             raise AttributeError("Could not find reward spec")
-        self.__dict__["_reward_key"] = key
-        return key
+        keys = list(keys)
+        self.__dict__["_reward_keys"] = keys
+        return keys
+
+    @property
+    def reward_keys(self) -> List[NestedKey]:
+        """The reward keys of an environment.
+
+        By default, there will only be one key named "reward".
+        """
+        out = self._reward_keys
+        if out is None:
+            out = self._get_reward_keys()
+        return out
 
     @property
     def reward_key(self):
@@ -549,21 +614,72 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the reward is in a nested tensordict, this property will return its
         location.
         """
-        out = self._reward_key
-        if out is None:
-            out = self._get_reward_key()
-        return out
+        if len(self.reward_keys) > 1:
+            raise KeyError(
+                "reward_key requested but more than one key present in the environment"
+            )
+        return self.reward_keys[0]
 
-    # Done spec: reward specs belong to output_spec
+    # Reward spec: reward specs belong to output_spec
     @property
     def reward_spec(self) -> TensorSpec:
-        """The ``reward`` leaf spec.
+        """The ``reward`` spec.
 
-        This property will always return the leaf spec of the reward attribute,
-        which can be accessed in a typical rollout via
+        The reward_spec is always stored in a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> reward = fake_td[("next", *env.reward_key)]
+        If the reward spec is provided as a simple spec, this will be returned.
+
+        Examples:
+            >>> env.reward_spec = UnboundedContinuousTensorSpec(1)
+            >>> env.reward_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the reward spec contains only one leaf, this function will return just the leaf.
+
+        Examples:
+            >>> env.reward_spec = CompositeSpec({"nested": {"reward": UnboundedContinuousTensorSpec(1)}})
+            >>> env.reward_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the reward spec has more than one leaf, this function will return the whole spec.
+
+        Examples:
+            >>> env.reward_spec = CompositeSpec({"nested": {"reward": UnboundedContinuousTensorSpec(1), "another_reward": DiscreteTensorSpec(1)}})
+            >>> env.reward_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    reward: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous),
+                    another_reward: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=1),
+                        device=cpu,
+                        dtype=torch.int64,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To always retrieve the dull spec passed, use:
+
+            >>> env.output_spec["_reward_spec"]
 
         This property is mutable.
         """
@@ -579,7 +695,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 device=self.device,
             )
             reward_spec = self.output_spec["_reward_spec"]
-        finally:
+
+        if len(self.reward_keys) > 1:
+            out = reward_spec
+        else:
             try:
                 out = reward_spec[self.reward_key]
             except KeyError:
@@ -600,7 +719,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.output_spec.unlock_()
             device = self.output_spec.device
             try:
-                delattr(self, "_reward_key")
+                delattr(self, "_reward_keys")
             except AttributeError:
                 pass
             if not hasattr(value, "shape"):
@@ -613,7 +732,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     "The value of spec.shape must match the env batch size."
                 )
             if isinstance(value, CompositeSpec):
-                for nestedval in value.values(True, True):  # noqa: B007
+                for _ in value.values(True, True):  # noqa: B007
                     break
                 else:
                     raise RuntimeError(
@@ -621,11 +740,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "This is currently not permitted."
                     )
             else:
-                nestedval = value
                 value = CompositeSpec(
                     reward=value.to(device), shape=self.batch_size, device=device
                 )
-            if len(nestedval.shape) == 0:
+            if len(value.shape) == 0:
                 raise RuntimeError(
                     "the reward_spec shape cannot be empty (this error"
                     " usually comes from trying to set a reward_spec"
@@ -633,7 +751,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     " spec instead, for instance with a singleton dimension at the tail)."
                 )
             self.output_spec["_reward_spec"] = value.to(device)
-            self._get_reward_key()
+            self._get_reward_keys()
         finally:
             self.output_spec.lock_()
 
