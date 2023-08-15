@@ -1158,7 +1158,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         else:
             leading_dim = tensordict_reset.shape
         if self.done_spec is not None:
-            td_reset_keys = list(tensordict_reset.keys(True, True))
+            td_reset_keys = tensordict_reset.keys(True, True)
             for done_key in self.done_keys:
                 if done_key not in td_reset_keys:
                     tensordict_reset.set(
