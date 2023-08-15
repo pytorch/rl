@@ -45,6 +45,7 @@ from packaging import version
 from tensordict import dense_stack_tds
 from tensordict.nn import TensorDictModuleBase
 from tensordict.tensordict import assert_allclose_td, LazyStackedTensorDict, TensorDict
+from tensordict.utils import _unravel_key_to_tuple
 from torch import nn
 
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
@@ -1822,8 +1823,14 @@ class TestNestedSpecs:
         reset = env.reset()
         assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
-        assert env.done_spec == env.output_spec[("_done_spec", env.done_key)]
-        assert env.reward_spec == env.output_spec[("_reward_spec", env.reward_key)]
+        assert (
+            env.done_spec
+            == env.output_spec[("_done_spec", *_unravel_key_to_tuple(env.done_key))]
+        )
+        assert (
+            env.reward_spec
+            == env.output_spec[("_reward_spec", *_unravel_key_to_tuple(env.reward_key))]
+        )
         if envclass == "NestedCountingEnv":
             assert env.done_key == ("data", "done")
             assert env.reward_key == ("data", "reward")
@@ -1838,8 +1845,8 @@ class TestNestedSpecs:
             assert ("next", "data", "done") in next_state.keys(True)
             assert ("next", "data", "states") in next_state.keys(True)
             assert ("next", "data", "reward") in next_state.keys(True)
-        assert ("next", *env.done_key) in next_state.keys(True)
-        assert ("next", *env.reward_key) in next_state.keys(True)
+        assert ("next", *_unravel_key_to_tuple(env.done_key)) in next_state.keys(True)
+        assert ("next", *_unravel_key_to_tuple(env.reward_key)) in next_state.keys(True)
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, rollout_length=3):
@@ -1951,7 +1958,7 @@ class TestHeteroEnvs:
 class TestMultiKeyEnvs:
     def test_mult_key_env(self):
         env = MultiKeyCountingEnv()
-        print()
+        check_env_specs(env)
 
 
 @pytest.mark.parametrize(
