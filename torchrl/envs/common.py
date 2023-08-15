@@ -1165,6 +1165,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         done_key,
                         self.output_spec["_done_spec"][done_key].zero(leading_dim),
                     )
+        # TODO one _reset per done key
         if _reset is None:
             for done_key in self.done_keys:
                 if tensordict_reset.get(done_key).any():
@@ -1443,6 +1444,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if len(self.done_keys) == 1:
                 done = tensordict.get(("next", self.done_key))
             else:
+                # TODO one _reset per done key
                 # We have multiple done keys.
                 # We get each and aggregate them to a single done with the td batch size
                 done = None
@@ -1474,6 +1476,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 done_keys=self.done_keys,
             )
             if not break_when_any_done and done.any():
+                # TODO one _reset per done key
                 _reset = done.clone()
                 tensordict.set("_reset", _reset)
                 self.reset(tensordict)

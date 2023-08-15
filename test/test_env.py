@@ -1964,6 +1964,8 @@ class TestMultiKeyEnvs:
         policy = MultiKeyCountingEnvPolicy(full_action_spec=env.action_spec)
         td = env.rollout(rollout_steps, policy=policy)
 
+        # TODO test done and _reset
+
         # Check observation and reward update with count action for root
         action_is_count = td["action"].argmax(-1).to(torch.bool)
         assert (
