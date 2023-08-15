@@ -578,7 +578,7 @@ but got an object of type {type(transform)}."""
     @property
     def action_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
-        return self.input_spec[("_action_spec", *self.action_key)]
+        return self.input_spec[("_action_spec", self.action_key)]
 
     @property
     def input_spec(self) -> TensorSpec:
@@ -597,7 +597,7 @@ but got an object of type {type(transform)}."""
     @property
     def reward_spec(self) -> TensorSpec:
         """Reward spec of the transformed environment."""
-        return self.output_spec[("_reward_spec", *self.reward_key)]
+        return self.output_spec[("_reward_spec", self.reward_key)]
 
     @property
     def observation_spec(self) -> TensorSpec:
@@ -618,7 +618,7 @@ but got an object of type {type(transform)}."""
     @property
     def done_spec(self) -> TensorSpec:
         """Done spec of the transformed environment."""
-        return self.output_spec[("_done_spec", *self.done_key)]
+        return self.output_spec[("_done_spec", self.done_key)]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
