@@ -138,7 +138,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 >>> reward_spec = env.reward_spec
                 >>> reward_spec = env.output_spec['_reward_spec'][env.reward_key]
                 >>> # accessing reward:
-                >>> reward = env.fake_tensordict()[('next', *env.reward_key)]
+                >>> reward = env.fake_tensordict()[('next', env.reward_key)]
 
         done_spec (TensorSpec): the (leaf) spec of the done. If the done
             is nested within a tensordict, its location can be accessed via
@@ -148,7 +148,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 >>> done_spec = env.done_spec
                 >>> done_spec = env.output_spec['_done_spec'][env.done_key]
                 >>> # accessing done:
-                >>> done = env.fake_tensordict()[('next', *env.done_key)]
+                >>> done = env.fake_tensordict()[('next', env.done_key)]
 
         action_spec (TensorSpec): the ampling spec of the actions. This attribute
             is contained in input_spec.
@@ -521,7 +521,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         dtype=torch.int64,
                         domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
-        To always retrieve the dull spec passed, use:
+        To always retrieve the full spec passed, use:
 
             >>> env.input_spec["_action_spec"]
 
@@ -677,7 +677,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         dtype=torch.int64,
                         domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
-        To always retrieve the dull spec passed, use:
+        To always retrieve the full spec passed, use:
 
             >>> env.output_spec["_reward_spec"]
 
@@ -757,19 +757,24 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.output_spec.lock_()
 
     # done spec
-    def _get_done_key(self):
+    def _get_done_keys(self):
         keys = self.output_spec["_done_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the reward
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
-            raise AttributeError(
-                f"Could not find done spec: {self.output_spec['_done_spec']}"
-            )
-        self.__dict__["_done_key"] = key
-        return key
+        if not len(keys):
+            raise AttributeError("Could not find done spec")
+        keys = list(keys)
+        self.__dict__["_done_keys"] = keys
+        return keys
+
+    @property
+    def done_keys(self) -> List[NestedKey]:
+        """The done keys of an environment.
+
+        By default, there will only be one key named "done".
+        """
+        out = self._done_keys
+        if out is None:
+            out = self._get_done_keys()
+        return out
 
     @property
     def done_key(self):
@@ -780,21 +785,66 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         If the done is in a nested tensordict, this property will return its
         location.
         """
-        out = self._done_key
-        if out is None:
-            out = self._get_done_key()
-        return out
+        if len(self.done_keys) > 1:
+            raise KeyError(
+                "done_key requested but more than one key present in the environment"
+            )
+        return self.done_keys[0]
 
     # Done spec: done specs belong to output_spec
     @property
     def done_spec(self) -> TensorSpec:
-        """The ``done`` leaf spec.
+        """The ``done`` spec.
 
-        This property will always return the leaf spec of the done attribute,
-        which can be accessed in a typical rollout via
+        The done_spec is always stored in a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> done = fake_td[("next", *env.done_key)]
+        If the done spec is provided as a simple spec, this will be returned.
+
+        Examples:
+            >>> env.done_spec = DiscreteTensorSpec(2, dtype=torch.bool)
+            >>> env.done_spec
+            DiscreteTensorSpec(
+                shape=torch.Size([]),
+                space=DiscreteBox(n=2),
+                device=cpu,
+                dtype=torch.bool,
+                domain=discrete)
+
+        If the done spec contains only one leaf, this function will return just the leaf.
+
+        Examples:
+            >>> env.done_spec = CompositeSpec({"nested": {"done": DiscreteTensorSpec(2, dtype=torch.bool)}})
+            >>> env.done_spec
+            DiscreteTensorSpec(
+                shape=torch.Size([]),
+                space=DiscreteBox(n=2),
+                device=cpu,
+                dtype=torch.bool,
+                domain=discrete)
+
+        If the done spec has more than one leaf, this function will return the whole spec.
+
+        Examples:
+            >>> env.done_spec = CompositeSpec({"nested": {"done": DiscreteTensorSpec(2, dtype=torch.bool), "another_done": DiscreteTensorSpec(2, dtype=torch.bool)}})
+            >>> env.done_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    done: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=2),
+                        device=cpu,
+                        dtype=torch.bool,
+                        domain=discrete),
+                    another_done: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=2),
+                        device=cpu,
+                        dtype=torch.bool,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To always retrieve the Full spec passed, use:
+
+            >>> env.output_spec["_done_spec"]
 
         This property is mutable.
         """
@@ -809,7 +859,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
             done_spec = self.output_spec["_done_spec"]
-        finally:
+        if len(self.done_keys) > 1:
+            out = done_spec
+        else:
             try:
                 out = done_spec[self.done_key]
             except KeyError:
@@ -830,7 +882,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.output_spec.unlock_()
             device = self.output_spec.device
             try:
-                delattr(self, "_done_key")
+                delattr(self, "_done_keys")
             except AttributeError:
                 pass
             if not hasattr(value, "shape"):
@@ -843,7 +895,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     "The value of spec.shape must match the env batch size."
                 )
             if isinstance(value, CompositeSpec):
-                for nestedval in value.values(True, True):  # noqa: B007
+                for _ in value.values(True, True):  # noqa: B007
                     break
                 else:
                     raise RuntimeError(
@@ -851,21 +903,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "This is currently not permitted."
                     )
             else:
-                nestedval = value
                 value = CompositeSpec(
                     done=value.to(device), shape=self.batch_size, device=device
                 )
-            if len(nestedval.shape) == 0:
-                raise RuntimeError(
-                    "the done_spec shape cannot be empty (this error"
-                    " usually comes from trying to set a done_spec"
-                    " with a null number of dimensions. Try using a multidimensional"
-                    " spec instead, for instance with a singleton dimension at the tail)."
-                )
-            if len(list(value.keys())) == 0:
-                raise RuntimeError
+            for leaf in value.values(True, True):
+                if len(leaf.shape) == 0:
+                    raise RuntimeError(
+                        "the done_spec's leafs shape cannot be empty (this error"
+                        " usually comes from trying to set a reward_spec"
+                        " with a null number of dimensions. Try using a multidimensional"
+                        " spec instead, for instance with a singleton dimension at the tail)."
+                    )
             self.output_spec["_done_spec"] = value.to(device)
-            self._get_done_key()
+            self._get_done_keys()
         finally:
             self.output_spec.lock_()
 

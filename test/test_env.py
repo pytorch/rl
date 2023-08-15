@@ -1822,8 +1822,8 @@ class TestNestedSpecs:
         reset = env.reset()
         assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
-        assert env.done_spec == env.output_spec[("_done_spec", *env.done_key)]
-        assert env.reward_spec == env.output_spec[("_reward_spec", *env.reward_key)]
+        assert env.done_spec == env.output_spec[("_done_spec", env.done_key)]
+        assert env.reward_spec == env.output_spec[("_reward_spec", env.reward_key)]
         if envclass == "NestedCountingEnv":
             assert env.done_key == ("data", "done")
             assert env.reward_key == ("data", "reward")
@@ -1951,7 +1951,6 @@ class TestHeteroEnvs:
 class TestMultiKeyEnvs:
     def test_mult_key_env(self):
         env = MultiKeyCountingEnv()
-        print(env.action_key)
         print()
 
 
