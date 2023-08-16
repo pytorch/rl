@@ -560,3 +560,35 @@ def make_composite_from_td(data):
         shape=data.shape,
     )
     return composite
+
+
+def _get_single_done_from_multiple_dones(
+    td: TensorDictBase, done_keys: List[NestedKey]
+):
+    """Merge multiple done entries.
+
+    Merge multiple done entries in a tensordict into a single entry
+    with shape corresponding to the tensordict's batch_size.
+
+    The merge happens with logical OR.
+
+    Args:
+        td (TensorDictBase): the tensordict with the done entries
+        done_keys (list of NestedKey): the keys of the done entries
+
+    Returns:
+        the resulting done Tensor
+
+    """
+    done = None
+    for done_key in done_keys:
+        sub_done = td.get(("next", done_key))
+        reduced_done = sub_done.sum(
+            tuple(range(td.batch_dims, sub_done.ndim)),
+            dtype=torch.bool,
+        ).unsqueeze(-1)
+        if done is None:
+            done = reduced_done
+        else:
+            done += reduced_done
+    return done

@@ -333,8 +333,9 @@ class _BatchedEnv(EnvBase):
             for key in self.output_spec["_observation_spec"].keys(True, True):
                 self.env_output_keys.append(unravel_key(("next", key)))
                 self.env_obs_keys.append(key)
-            self.env_output_keys.append(unravel_key(("next", self.reward_key)))
-            self.env_output_keys.append(unravel_key(("next", self.done_key)))
+            self.env_output_keys += [
+                unravel_key(("next", key)) for key in self.reward_keys + self.done_keys
+            ]
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
@@ -362,8 +363,8 @@ class _BatchedEnv(EnvBase):
                 )
             env_output_keys = env_output_keys.union(
                 {
-                    unravel_key(("next", self.reward_key)),
-                    unravel_key(("next", self.done_key)),
+                    unravel_key(("next", key))
+                    for key in self.reward_keys + self.done_keys
                 }
             )
             self.env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
@@ -374,11 +375,11 @@ class _BatchedEnv(EnvBase):
             set(self.env_output_keys)
             .union(self.env_input_keys)
             .union(self.env_obs_keys)
+            .union(set(self.done_keys))
         )
-        self._selected_keys.add(self.done_key)
         self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + [self.done_key] + ["_reset"]
+        self._selected_reset_keys = self.env_obs_keys + self.done_keys + ["_reset"]
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:

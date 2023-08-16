@@ -23,7 +23,12 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import DONE_AFTER_RESET_ERROR, get_available_libraries, step_mdp
+from torchrl.envs.utils import (
+    _get_single_done_from_multiple_dones,
+    DONE_AFTER_RESET_ERROR,
+    get_available_libraries,
+    step_mdp,
+)
 
 LIBRARIES = get_available_libraries()
 
@@ -77,7 +82,15 @@ class EnvMetaData:
     @staticmethod
     def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        tensordict.set("_reset", torch.zeros_like(tensordict.get(env.done_key)))
+        # TODO _reset for multiple dones
+        tensordict.set(
+            "_reset",
+            torch.zeros_like(
+                _get_single_done_from_multiple_dones(tensordict, env.done_keys)
+                if len(env.done_keys) > 1
+                else tensordict.get(("next", env.done_key))
+            ),
+        )
 
         specs = env.specs.to("cpu")
 
@@ -1542,17 +1555,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 # TODO one _reset per done key
                 # We have multiple done keys.
                 # We get each and aggregate them to a single done with the td batch size
-                done = None
-                for done_key in self.done_keys:
-                    sub_done = tensordict.get(("next", done_key))
-                    reduced_done = sub_done.sum(
-                        tuple(range(tensordict.batch_dims, sub_done.ndim)),
-                        dtype=torch.bool,
-                    ).unsqueeze(-1)
-                    if done is None:
-                        done = reduced_done
-                    else:
-                        done += reduced_done
+                done = _get_single_done_from_multiple_dones(tensordict, self.done_keys)
 
             truncated = tensordict.get(
                 ("next", "truncated"),

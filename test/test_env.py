@@ -2008,6 +2008,70 @@ class TestMultiKeyEnvs:
         ).all()
         assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
 
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("rollout_steps", [1, 5])
+    @pytest.mark.parametrize("env_type", ["serial", "parallel"])
+    def test_parallel(self, batch_size, rollout_steps, env_type, n_workers=2):
+        env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
+        if env_type == "serial":
+            vec_env = SerialEnv(n_workers, env_fun)
+        else:
+            vec_env = ParallelEnv(n_workers, env_fun)
+
+        check_env_specs(vec_env)
+        policy = MultiKeyCountingEnvPolicy(
+            full_action_spec=vec_env.input_spec["_action_spec"]
+        )
+        vec_env.reset()
+        td = vec_env.rollout(
+            rollout_steps,
+            policy=policy,
+        )
+
+        # TODO test done and _reset
+
+        # Check observation and reward update with count action for root
+        action_is_count = td["action"].argmax(-1).to(torch.bool)
+        assert (
+            td["next", "observation"][action_is_count]
+            == td["observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "reward"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for root
+        assert (
+            td["next", "observation"][~action_is_count]
+            == td["observation"][~action_is_count]
+        ).all()
+        assert (td["next", "reward"][~action_is_count] == 0).all()
+
+        # Check observation and reward update with count action for nested_1
+        action_is_count = td["nested_1"]["action"].to(torch.bool)
+        assert (
+            td["next", "nested_1", "observation"][action_is_count]
+            == td["nested_1", "observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for nested_1
+        assert (
+            td["next", "nested_1", "observation"][~action_is_count]
+            == td["nested_1", "observation"][~action_is_count]
+        ).all()
+        assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
+
+        # Check observation and reward update with count action for nested_2
+        action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
+        assert (
+            td["next", "nested_2", "observation"][action_is_count]
+            == td["nested_2", "observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for nested_2
+        assert (
+            td["next", "nested_2", "observation"][~action_is_count]
+            == td["nested_2", "observation"][~action_is_count]
+        ).all()
+        assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
+
 
 @pytest.mark.parametrize(
     "envclass",
