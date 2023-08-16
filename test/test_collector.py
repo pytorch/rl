@@ -22,6 +22,8 @@ from mocking_classes import (
     HeteroCountingEnv,
     HeteroCountingEnvPolicy,
     MockSerialEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
 from tensordict.nn import TensorDictModule
@@ -1509,6 +1511,123 @@ class TestHetEnvsCollector:
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
         policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+
+class TestMultiKeyEnvsCollector:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
+    def test_collectorv(self, batch_size, frames_per_batch, seed=1):
+        batch_size = torch.Size(batch_size)
+        env = MultiKeyCountingEnv(batch_size=batch_size)
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(env.input_spec["_action_spec"])
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+
+        td = _td
+
+        # TODO test done and _reset
+        # Check observation and reward update with count action for root
+        action_is_count = td["action"].argmax(-1).to(torch.bool)
+        assert (
+            td["next", "observation"][action_is_count]
+            == td["observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "reward"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for root
+        assert (
+            td["next", "observation"][~action_is_count]
+            == td["observation"][~action_is_count]
+        ).all()
+        assert (td["next", "reward"][~action_is_count] == 0).all()
+
+        # Check observation and reward update with count action for nested_1
+        action_is_count = td["nested_1"]["action"].to(torch.bool)
+        assert (
+            td["next", "nested_1", "observation"][action_is_count]
+            == td["nested_1", "observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for nested_1
+        assert (
+            td["next", "nested_1", "observation"][~action_is_count]
+            == td["nested_1", "observation"][~action_is_count]
+        ).all()
+        assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
+
+        # Check observation and reward update with count action for nested_2
+        action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
+        assert (
+            td["next", "nested_2", "observation"][action_is_count]
+            == td["nested_2", "observation"][action_is_count] + 1
+        ).all()
+        assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
+        # Check observation and reward do not update with no-count action for nested_2
+        assert (
+            td["next", "nested_2", "observation"][~action_is_count]
+            == td["nested_2", "observation"][~action_is_count]
+        ).all()
+        assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
+
+    def test_multi_collector_consistency(
+        self, seed=1, frames_per_batch=20, batch_dim=10
+    ):
+        env = MultiKeyCountingEnv(batch_size=(batch_dim,))
+        env_fn = lambda: env
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(
+            env.input_spec["_action_spec"], deterministic=True
+        )
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],

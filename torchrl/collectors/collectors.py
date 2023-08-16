@@ -36,13 +36,13 @@ from torchrl._utils import (
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data.tensor_specs import TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _convert_exploration_type,
-    DONE_AFTER_RESET_ERROR,
+    _get_single_done_from_multiple_dones,
     ExplorationType,
     set_exploration_type,
     step_mdp,
@@ -79,7 +79,10 @@ class RandomPolicy:
         self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set(self.action_key, self.action_spec.rand())
+        if isinstance(self.action_spec, CompositeSpec):
+            return td.update(self.action_spec.rand())
+        else:
+            return td.set(self.action_key, self.action_spec.rand())
 
 
 class _Interruptor:
@@ -211,7 +214,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec, self.env.action_key)
+            policy = RandomPolicy(self.env.input_spec["_action_spec"])
         elif isinstance(policy, nn.Module):
             # TODO: revisit these checks when we have determined whether arbitrary
             # callables should be supported as policies.
@@ -246,7 +249,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     if not hasattr(self, "env") or self.env is None:
                         out_keys = ["action"]
                     else:
-                        out_keys = [self.env.action_key]
+                        out_keys = self.env.action_keys
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
@@ -792,14 +795,24 @@ class SyncDataCollector(DataCollectorBase):
                     break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", self.env.done_key))
+
+        if len(self.env.done_keys) == 1:
+            done = self._tensordict.get(("next", self.env.done_key))
+        else:
+            # TODO one _reset per done key
+            # We have multiple done keys.
+            # We get each and aggregate them to a single done with the td batch size
+            done = _get_single_done_from_multiple_dones(
+                self._tensordict, self.env.done_keys
+            )
+
         truncated = self._tensordict.get(("next", "truncated"), None)
 
         self._tensordict = step_mdp(
             self._tensordict,
-            reward_keys=self.env.reward_key,
-            done_keys=self.env.done_key,
-            action_keys=self.env.action_key,
+            reward_keys=self.env.reward_keys,
+            done_keys=self.env.done_keys,
+            action_keys=self.env.action_keys,
         )
 
         if not self.reset_when_done:
@@ -831,9 +844,6 @@ class SyncDataCollector(DataCollectorBase):
             else:
                 self._tensordict.update(td_reset)
 
-            done = self._tensordict.get(self.env.done_key)
-            if done.any():
-                raise DONE_AFTER_RESET_ERROR
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )

@@ -1487,21 +1487,35 @@ class HeteroCountingEnv(EnvBase):
 
 
 class MultiKeyCountingEnvPolicy:
-    def __init__(self, full_action_spec: TensorSpec, count: bool = True):
+    def __init__(
+        self,
+        full_action_spec: TensorSpec,
+        count: bool = True,
+        deterministic: bool = False,
+    ):
+        if not deterministic and not count:
+            raise ValueError("Not counting policy is always deterministic")
+
         self.full_action_spec = full_action_spec
         self.count = count
+        self.deterministic = deterministic
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
         action_td = self.full_action_spec.zero()
         if self.count:
-            # We choose an action at random
-            choice = random.randint(0, 3)
-            if choice == 0:
+            if self.deterministic:
                 action_td["nested_1", "action"] += 1
-            elif choice == 1:
                 action_td["nested_2", "azione"] += 1
-            else:
                 action_td["action"][..., 1] = 1
+            else:
+                # We choose an action at random
+                choice = random.randint(0, 3)
+                if choice == 0:
+                    action_td["nested_1", "action"] += 1
+                elif choice == 1:
+                    action_td["nested_2", "azione"] += 1
+                else:
+                    action_td["action"][..., 1] = 1
         return td.update(action_td)
 
 
