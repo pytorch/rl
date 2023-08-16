@@ -1,11 +1,11 @@
 # Environment
 env:
-  name: HalfCheetah-v3
+  name: Ant-v3
   task: ""
-  exp_name: "HalfCheetah-TD3"
+  exp_name: "Ant-TD3"
   library: gym
   frame_skip: 1
-  seed: 42
+  seed: 40
 
 # Collection
 collector:
@@ -29,7 +29,7 @@ optimization:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
-  lr: 3e-4
+  lr: 1.0e-3
   weight_decay: 2e-4
   batch_size: 256
   target_update_polyak: 0.995

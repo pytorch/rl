@@ -335,7 +335,7 @@ class TD3Loss(LossModule):
     @_cache_values
     def _cached_stack_actor_params(self):
         return torch.stack(
-            [self.actor_network_params, self.target_actor_network_params], 0
+            [self.actor_network_params, self.target_actor_network_params.detach()], 0
         )
 
     @dispatch
@@ -361,16 +361,25 @@ class TD3Loss(LossModule):
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
         # DO NOT call contiguous bc we'll update the tds later
-        actor_output_td = self._vmap_actor_network00(
-            tensordict_actor,
-            self._cached_stack_actor_params,
-        )
+
+        # actor_output_td = self._vmap_actor_network00(
+        #     tensordict_actor,
+        #     self._cached_stack_actor_params,
+        # )
+
         # add noise to target policy
-        actor_output_td1 = actor_output_td[1]
+        # actor_output_td1 = actor_output_td[1]
+        actor_output_td = self.actor_network(
+            tensordict_actor_grad, self.actor_network_params
+        )
+        actor_output_td1 = self.actor_network(
+            next_td_actor, self.target_actor_network_params
+        )
         next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
             self.min_action, self.max_action
         )
         actor_output_td1.set(self.tensor_keys.action, next_action)
+        actor_output_td = torch.stack([actor_output_td, actor_output_td1], 0)
         tensordict_actor.set(
             self.tensor_keys.action,
             actor_output_td.get(self.tensor_keys.action),

@@ -43,7 +43,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         Compose(
             InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(),
+            DoubleToFloat(in_keys=["observation"]),
         ),
     )
     return transformed_env
@@ -241,11 +241,14 @@ def make_optimizer(cfg, loss_module):
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
-        actor_params, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+        actor_params,
+        lr=cfg.optimization.lr,  # weight_decay=cfg.optimization.weight_decay,
+        # eps=1e-4
     )
     optimizer_critic = optim.Adam(
         critic_params,
         lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
+        # eps=1e-4,
+        # weight_decay=cfg.optimization.weight_decay,
     )
     return optimizer_actor, optimizer_critic

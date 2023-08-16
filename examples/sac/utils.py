@@ -29,7 +29,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(),
+            DoubleToFloat(in_keys=["observation"]),
         ),
     )
     return transformed_env
@@ -217,6 +217,8 @@ def make_loss_module(cfg, model):
         loss_function=cfg.optimization.loss_function,
         delay_actor=False,
         delay_qvalue=True,
+        fixed_alpha=cfg.optimization.fixed_alpha,
+        alpha_init=cfg.optimization.alpha_init,
     )
     loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
 
@@ -232,6 +234,7 @@ def make_sac_optimizer(cfg, loss_module):
     optimizer = optim.Adam(
         loss_module.parameters(),
         lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
+        # weight_decay=cfg.optimization.weight_decay,
+        # eps=1e-4,
     )
     return optimizer
