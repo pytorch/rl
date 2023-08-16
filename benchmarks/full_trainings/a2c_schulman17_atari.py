@@ -327,7 +327,7 @@ if __name__ == "__main__":
     critic_coef = 1.0
     entropy_coef = 0.01
     loss_critic_type = "l2"
-    logger_backend = "wandb"
+    logger_backend = "csv"
     num_mini_batches = frames_per_batch // mini_batch_size
     total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
@@ -406,7 +406,7 @@ if __name__ == "__main__":
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // (record_interval < collected_frames // record_interval):
+            if (collected_frames - frames_in_batch) // record_interval < (collected_frames // record_interval):
                 actor.eval()
                 test_rewards = []
                 for i in range(1):

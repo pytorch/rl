@@ -412,7 +412,7 @@ if __name__ == "__main__":
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // (record_interval < collected_frames // record_interval):
+            if (collected_frames - frames_in_batch) // record_interval < (collected_frames // record_interval):
                 actor.eval()
                 test_rewards = []
                 for i in range(1):
