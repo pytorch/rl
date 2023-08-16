@@ -1,6 +1,6 @@
 """
-PPO Benchmarks: Reproducing Experiments from Schulman et al. 2017
-Proximal Policy Optimization (PPO) Algorithm on Atari Environments.
+DQN Benchmarks: Reproducing Experiments from Mnih et al. 2015
+Deep Q-Learning Algorithm on Atari Environments.
 """
 
 import gym
@@ -239,7 +239,6 @@ def make_replay_buffer(
 
 def make_loss_module(model):
     """Make loss module and target network updater."""
-    # Create Discrete SAC loss
     loss_module = DQNLoss(
         value_network=model,
         gamma=gamma,
@@ -274,22 +273,21 @@ def make_logger(backend="csv"):
 if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "FreewayNoFrameskip-v4"
+    env_name = "PongNoFrameskip-v4"
     seed = 42
     record_interval = 10_000_000
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
     frames_per_batch = 4
     num_updates = 1
-    init_random_frames = 100
+    init_random_frames = 50_000
     annealing_frames = 1_000_000
     gamma = 0.99
-    loss_function = "l2"
     lr = 0.00025
     weight_decay = 0.0
     batch_size = 32
     hard_update_freq = 10_000
-    logger_backend = "csv"
+    logger_backend = "wandb"
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -307,6 +305,7 @@ if __name__ == "__main__":
 
     # Main loop
     collected_frames = 0
+    start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
 
     for i, data in enumerate(collector):
@@ -336,13 +335,9 @@ if __name__ == "__main__":
             q_losses = TensorDict({}, batch_size=[num_updates])
             for j in range(num_updates):
 
-                # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample(batch_size).clone().to(device)
-
                 loss_td = loss_module(sampled_tensordict.to(device))
-
                 q_loss = loss_td["loss"]
-
                 optimizer_actor.zero_grad()
                 q_loss.backward()
                 optimizer_actor.step()
@@ -375,3 +370,6 @@ if __name__ == "__main__":
                 model.train()
 
     collector.shutdown()
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Training took {execution_time:.2f} seconds to finish")
