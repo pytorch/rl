@@ -252,9 +252,6 @@ if __name__ == "__main__":
         collected_frames += frames_in_batch
         pbar.update(data.numel())
 
-        # data["observation"].copy_(torch.clamp(data["observation"], -5, 5))
-        # data["next", "observation"].copy_(torch.clamp(data["next", "observation"], -5, 5))
-
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
