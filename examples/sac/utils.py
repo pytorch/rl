@@ -234,7 +234,7 @@ def make_sac_optimizer(cfg, loss_module):
     optimizer = optim.Adam(
         loss_module.parameters(),
         lr=cfg.optimization.lr,
-        # weight_decay=cfg.optimization.weight_decay,
+        weight_decay=cfg.optimization.weight_decay,
         # eps=1e-4,
     )
     return optimizer

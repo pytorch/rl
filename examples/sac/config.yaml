@@ -1,8 +1,8 @@
 # Environment
 env:
-  name: Ant-v3
+  name: Walker2d-v3
   task: ""
-  exp_name: "Ant-SAC-lr1e-3-fixed-alpha"
+  exp_name: "Walker2d-SAC"
   library: gym
   frame_skip: 1
   seed: 1
@@ -29,13 +29,13 @@ optimization:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: smooth_l1
-  lr: 1.e-3
+  lr: 3.e-4
   weight_decay: 2e-4
   lr_scheduler: ""
   batch_size: 256
   target_update_polyak: 0.995
-  alpha_init: 0.2
-  fixed_alpha: True
+  alpha_init: 1.0
+  fixed_alpha: False
 
 # Algorithm
 network:
