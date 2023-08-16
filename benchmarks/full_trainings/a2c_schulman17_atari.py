@@ -327,7 +327,7 @@ if __name__ == "__main__":
     critic_coef = 1.0
     entropy_coef = 0.01
     loss_critic_type = "l2"
-    logger_backend = "csv"
+    logger_backend = "wandb"
     num_mini_batches = frames_per_batch // mini_batch_size
     total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
