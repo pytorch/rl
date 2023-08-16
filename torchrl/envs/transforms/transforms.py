@@ -18,7 +18,7 @@ import torch
 from tensordict import unravel_key, unravel_key_list
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import _unravel_key_to_tuple, expand_as_right, NestedKey
+from tensordict.utils import expand_as_right, NestedKey
 from torch import nn, Tensor
 
 from torchrl.data.tensor_specs import (
@@ -576,13 +576,6 @@ but got an object of type {type(transform)}."""
         return output_spec
 
     @property
-    def action_spec(self) -> TensorSpec:
-        """Action spec of the transformed environment."""
-        return self.input_spec[
-            ("_action_spec", *_unravel_key_to_tuple(self.action_key))
-        ]
-
-    @property
     def input_spec(self) -> TensorSpec:
         """Action spec of the transformed environment."""
         if self.__dict__.get("_input_spec", None) is None or not self.cache_specs:
@@ -595,34 +588,6 @@ but got an object of type {type(transform)}."""
         else:
             input_spec = self.__dict__.get("_input_spec", None)
         return input_spec
-
-    @property
-    def reward_spec(self) -> TensorSpec:
-        """Reward spec of the transformed environment."""
-        return self.output_spec[
-            ("_reward_spec", *_unravel_key_to_tuple(self.reward_key))
-        ]
-
-    @property
-    def observation_spec(self) -> TensorSpec:
-        """Observation spec of the transformed environment."""
-        observation_spec = self.output_spec["_observation_spec"]
-        if observation_spec is None:
-            observation_spec = CompositeSpec(device=self.device, shape=self.batch_size)
-        return observation_spec
-
-    @property
-    def state_spec(self) -> TensorSpec:
-        """State spec of the transformed environment."""
-        state_spec = self.input_spec["_state_spec"]
-        if state_spec is None:
-            state_spec = CompositeSpec(device=self.device, shape=self.batch_size)
-        return state_spec
-
-    @property
-    def done_spec(self) -> TensorSpec:
-        """Done spec of the transformed environment."""
-        return self.output_spec[("_done_spec", *_unravel_key_to_tuple(self.done_key))]
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
