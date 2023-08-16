@@ -379,7 +379,6 @@ if __name__ == "__main__":
             alpha = 1 - (num_network_updates / total_network_updates)
             for g in optim.param_groups:
                 g['lr'] = lr * alpha
-            loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
             num_network_updates += 1
 
             # Get a data batch
