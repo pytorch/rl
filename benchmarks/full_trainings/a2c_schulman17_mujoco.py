@@ -1,6 +1,6 @@
 """
-PPO Benchmarks: Reproducing Experiments from Schulman et al. 2017
-Proximal Policy Optimization (PPO) Algorithm on MuJoCo Environments.
+A2C Benchmarks: Reproducing Experiments from Schulman et al. 2017
+Asynchronous Actor Critic (A2C) Algorithm on MuJoCo Environments.
 """
 
 import gym
@@ -29,7 +29,7 @@ from torchrl.modules import (
     ValueOperator,
     ProbabilisticActor,
 )
-from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives import A2CLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -76,7 +76,7 @@ class AddStateIndependentStd(torch.nn.Module):
         return (loc, scale, *others)
 
 
-def make_ppo_modules_state(proof_environment):
+def make_a2c_modules_state(proof_environment):
 
     # Define input shape
     input_shape = proof_environment.observation_spec["observation"].shape
@@ -143,9 +143,9 @@ def make_ppo_modules_state(proof_environment):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name):
+def make_a2c_models(env_name):
     proof_environment = make_env(env_name, device="cpu")
-    actor, critic = make_ppo_modules_state(proof_environment)
+    actor, critic = make_a2c_modules_state(proof_environment)
     return actor, critic
 
 
@@ -181,28 +181,27 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=False,
+        average_gae=True,
     )
     return advantage_module
 
 
 def make_loss(actor_network, value_network):
     advantage_module = make_advantage_module(value_network)
-    loss_module = ClipPPOLoss(
+    loss_module = A2CLoss(
         actor=actor_network,
         critic=value_network,
-        clip_epsilon=clip_epsilon,
         loss_critic_type=loss_critic_type,
         entropy_coef=entropy_coef,
         critic_coef=critic_coef,
-        normalize_advantage=True,
     )
+
     return loss_module, advantage_module
 
 
 def make_logger(backend="csv"):
-    exp_name = generate_exp_name("PPO", f"Atari_Schulman17_{env_name}")
-    logger = get_logger(backend, logger_name="ppo", experiment_name=exp_name)
+    exp_name = generate_exp_name("A2C", f"Atari_Schulman17_{env_name}")
+    logger = get_logger(backend, logger_name="a2c", experiment_name=exp_name)
     return logger
 
 
@@ -211,24 +210,22 @@ if __name__ == "__main__":
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "Ant-v3"
-    frames_per_batch = 2048
+    frames_per_batch = 64
     mini_batch_size = 64
     total_frames = 1_000_000
     record_interval = 1_000_000  # check final performance
     gamma = 0.99
     gae_lambda = 0.95
     lr = 3e-4
-    ppo_epochs = 10
     critic_coef = 0.25
     entropy_coef = 0.0
-    clip_epsilon = 0.2
     loss_critic_type = "l2"
     logger_backend = "wandb"
     num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (total_frames // frames_per_batch) * ppo_epochs * num_mini_batches
+    total_network_updates = (total_frames // frames_per_batch)
 
     # Make the components
-    actor, critic = make_ppo_models(env_name)
+    actor, critic = make_a2c_models(env_name)
     actor, critic = actor.to(device), critic.to(device)
     collector = make_collector(env_name, actor, device)
     data_buffer = make_data_buffer()
@@ -257,45 +254,44 @@ if __name__ == "__main__":
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
 
-        losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
-        for j in range(ppo_epochs):
+        losses = TensorDict({}, batch_size=[num_mini_batches])
 
-            # Compute GAE
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
+        # Compute GAE
+        with torch.no_grad():
+            data = adv_module(data)
+        data_reshape = data.reshape(-1)
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
+        # Update the data buffer
+        data_buffer.extend(data_reshape)
 
-            for i, batch in enumerate(data_buffer):
+        for i, batch in enumerate(data_buffer):
 
-                # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
-                for g in actor_optim.param_groups:
-                    g['lr'] = lr * alpha
-                for g in critic_optim.param_groups:
-                    g['lr'] = lr * alpha
-                num_network_updates += 1
+            # Linearly decrease the learning rate and clip epsilon
+            alpha = 1 - (num_network_updates / total_network_updates)
+            for g in actor_optim.param_groups:
+                g['lr'] = lr * alpha
+            for g in critic_optim.param_groups:
+                g['lr'] = lr * alpha
+            num_network_updates += 1
 
-                # Get a data batch
-                batch = batch.to(device)
+            # Get a data batch
+            batch = batch.to(device)
 
-                # Forward pass PPO loss
-                loss = loss_module(batch)
-                losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
-                critic_loss = loss["loss_critic"]
-                actor_loss = loss["loss_objective"] + loss["loss_entropy"]
+            # Forward pass A2C loss
+            loss = loss_module(batch)
+            losses[i] = loss.select("loss_critic", "loss_objective").detach()
+            critic_loss = loss["loss_critic"]
+            actor_loss = loss["loss_objective"]
 
-                # Backward pass
-                actor_loss.backward()
-                critic_loss.backward()
+            # Backward pass
+            actor_loss.backward()
+            critic_loss.backward()
 
-                # Update the networks
-                actor_optim.step()
-                critic_optim.step()
-                actor_optim.zero_grad()
-                critic_optim.zero_grad()
+            # Update the networks
+            actor_optim.step()
+            critic_optim.step()
+            actor_optim.zero_grad()
+            critic_optim.zero_grad()
 
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():

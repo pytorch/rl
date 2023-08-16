@@ -44,7 +44,7 @@ from torchrl.modules import (
     ProbabilisticActor,
     ActorValueOperator,
 )
-from torchrl.objectives import ClipPPOLoss
+from torchrl.objectives import A2CLoss
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -277,21 +277,20 @@ def make_advantage_module(value_network):
         gamma=gamma,
         lmbda=gae_lambda,
         value_network=value_network,
-        average_gae=False,
+        average_gae=True,
     )
     return advantage_module
 
 
 def make_loss(actor_network, value_network, value_head):
     advantage_module = make_advantage_module(value_network)
-    loss_module = ClipPPOLoss(
+    loss_module = A2CLoss(
         actor=actor_network,
         critic=value_head,
-        clip_epsilon=clip_epsilon,
         loss_critic_type=loss_critic_type,
         entropy_coef=entropy_coef,
         critic_coef=critic_coef,
-        normalize_advantage=True,
+        entropy_bonus=True,
     )
     return loss_module, advantage_module
 
@@ -307,8 +306,8 @@ def make_optim(loss_module):
 
 
 def make_logger(backend="csv"):
-    exp_name = generate_exp_name("PPO", f"Atari_Schulman17_{env_name}")
-    logger = get_logger(backend, logger_name="ppo", experiment_name=exp_name)
+    exp_name = generate_exp_name("A2C", f"Atari_Schulman17_{env_name}")
+    logger = get_logger(backend, logger_name="a2c", experiment_name=exp_name)
     return logger
 
 
@@ -325,14 +324,12 @@ if __name__ == "__main__":
     gamma = 0.99
     gae_lambda = 0.95
     lr = 2.5e-4
-    ppo_epochs = 3
     critic_coef = 1.0
     entropy_coef = 0.01
-    clip_epsilon = 0.1
     loss_critic_type = "l2"
     logger_backend = "wandb"
     num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (total_frames // frames_per_batch) * ppo_epochs * num_mini_batches
+    total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
     # Make the components
     actor, critic, critic_head = make_ppo_models(env_name)
@@ -366,49 +363,47 @@ if __name__ == "__main__":
         data["done"].copy_(data["end_of_life"])
         data["next", "done"].copy_(data["next", "end_of_life"])
 
-        losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
-        for j in range(ppo_epochs):
+        losses = TensorDict({}, batch_size=[num_mini_batches])
 
-            # Compute GAE
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
+        # Compute GAE
+        with torch.no_grad():
+            data = adv_module(data)
+        data_reshape = data.reshape(-1)
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
+        # Update the data buffer
+        data_buffer.extend(data_reshape)
 
-            for i, batch in enumerate(data_buffer):
+        for i, batch in enumerate(data_buffer):
 
-                # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
-                for g in optim.param_groups:
-                    g['lr'] = lr * alpha
-                loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
-                num_network_updates += 1
+            # Linearly decrease the learning rate and clip epsilon
+            alpha = 1 - (num_network_updates / total_network_updates)
+            for g in optim.param_groups:
+                g['lr'] = lr * alpha
+            loss_module.clip_epsilon.copy_(clip_epsilon * alpha)
+            num_network_updates += 1
 
-                # Get a data batch
-                batch = batch.to(device)
+            # Get a data batch
+            batch = batch.to(device)
 
-                # Forward pass PPO loss
-                loss = loss_module(batch)
-                losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
-                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+            # Forward pass PPO loss
+            loss = loss_module(batch)
+            losses[i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
+            loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
 
-                # Backward pass
-                loss_sum.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    list(loss_module.parameters()), max_norm=0.5
-                )
+            # Backward pass
+            loss_sum.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                list(loss_module.parameters()), max_norm=0.5
+            )
 
-                # Update the networks
-                optim.step()
-                optim.zero_grad()
+            # Update the networks
+            optim.step()
+            optim.zero_grad()
 
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
         logger.log_scalar("lr", alpha * lr, collected_frames)
-        logger.log_scalar("clip_epsilon", alpha * clip_epsilon, collected_frames)
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
