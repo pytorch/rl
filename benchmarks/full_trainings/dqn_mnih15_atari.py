@@ -206,7 +206,7 @@ def make_collector(env_name, policy, device):
         storing_device=device,
         max_frames_per_traj=-1,
     )
-    collector.set_seed(seed)
+    # collector.set_seed(seed)
     return collector
 
 # ====================================================================
@@ -274,7 +274,6 @@ if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "PongNoFrameskip-v4"
-    seed = 42
     record_interval = 10_000_000
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
@@ -289,8 +288,9 @@ if __name__ == "__main__":
     hard_update_freq = 10_000
     logger_backend = "wandb"
 
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    # seed = 42
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
 
     # Make the components
     model = make_dqn_model(env_name)
