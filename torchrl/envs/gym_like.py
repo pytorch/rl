@@ -166,7 +166,6 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {key: value for key, value in observations.items()}
             if "state" in observations and "observation" not in observations:
                 # we rename "state" in "observation" as "observation" is the conventional name
                 # for single observation in torchrl.
