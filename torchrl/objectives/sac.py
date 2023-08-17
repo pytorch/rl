@@ -1236,7 +1236,6 @@ class DiscreteSACLoss(LossModule):
         if value_type is None:
             value_type = self.default_value_estimator
         self.value_type = value_type
-        value_net = None
         hp = dict(default_value_kwargs(value_type))
         hp.update(hyperparams)
         if hasattr(self, "gamma"):
@@ -1244,12 +1243,12 @@ class DiscreteSACLoss(LossModule):
         if value_type is ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 **hp,
-                value_network=value_net,
+                value_network=None,
             )
         elif value_type is ValueEstimators.TD0:
             self._value_estimator = TD0Estimator(
                 **hp,
-                value_network=value_net,
+                value_network=None,
             )
         elif value_type is ValueEstimators.GAE:
             raise NotImplementedError(
@@ -1258,7 +1257,7 @@ class DiscreteSACLoss(LossModule):
         elif value_type is ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
                 **hp,
-                value_network=value_net,
+                value_network=None,
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
