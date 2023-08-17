@@ -201,7 +201,7 @@ def make_loss(actor_network, value_network):
 
 
 def make_logger(backend="csv"):
-    exp_name = generate_exp_name("PPO", f"Atari_Schulman17_{env_name}")
+    exp_name = generate_exp_name("PPO", f"Mujoco_Schulman17_{env_name}")
     logger = get_logger(backend, logger_name="ppo", experiment_name=exp_name)
     return logger
 
