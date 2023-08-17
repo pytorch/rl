@@ -6,7 +6,7 @@ import math
 import warnings
 from dataclasses import dataclass
 from numbers import Number
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -518,14 +518,14 @@ class SACLoss(LossModule):
             tensordict_reshape = tensordict
 
         if self._version == 1:
-            loss_qvalue, priority = self._loss_qvalue_v1(tensordict_reshape)
-            loss_value = self._loss_value(tensordict_reshape)
+            loss_qvalue, value_metadata = self._qvalue_v1_loss(tensordict_reshape)
+            loss_value, _ = self._value_loss(tensordict_reshape)
         else:
-            loss_qvalue, priority = self._loss_qvalue_v2(tensordict_reshape)
+            loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict_reshape)
             loss_value = None
-        loss_actor = self._loss_actor(tensordict_reshape)
-        loss_alpha = self._loss_alpha(tensordict_reshape)
-        tensordict_reshape.set(self.tensor_keys.priority, priority)
+        loss_actor, _ = self._actor_loss(tensordict_reshape)
+        loss_alpha = self._alpha_loss(tensordict_reshape)
+        tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
         ):
@@ -552,7 +552,9 @@ class SACLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
-    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
+    def _actor_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
                 tensordict,
@@ -577,7 +579,7 @@ class SACLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return self._alpha * log_prob - min_q_logprob
+        return self._alpha * log_prob - min_q_logprob, {}
 
     @property
     @_cache_values
@@ -593,7 +595,9 @@ class SACLoss(LossModule):
             _run_checks=False,
         )
 
-    def _loss_qvalue_v1(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def _qvalue_v1_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
         target_params = self._cached_target_params_actor_value
         with set_exploration_type(ExplorationType.MODE):
             target_value = self.value_estimator.value_estimate(
@@ -623,11 +627,13 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        priority_value = torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
+        metadata = {
+            "td_error": torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
+        }
 
-        return loss_value, priority_value
+        return loss_value, metadata
 
-    def _get_value_v2(self, tensordict, _alpha, actor_params, qval_params):
+    def _compute_target_v2(self, tensordict) -> Tensor:
         r"""Value network for SAC v2.
 
         SAC v2 is based on a value estimate of the form:
@@ -645,14 +651,16 @@ class SACLoss(LossModule):
             with set_exploration_type(ExplorationType.RANDOM):
                 next_tensordict = tensordict.get("next").clone(False)
                 next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=actor_params
+                    next_tensordict, params=self.actor_network_params
                 )
                 next_action = next_dist.rsample()
                 next_tensordict.set(self.tensor_keys.action, next_action)
                 next_sample_log_prob = next_dist.log_prob(next_action)
 
             # get q-values
-            next_tensordict_expand = self._vmap_qnetworkN0(next_tensordict, qval_params)
+            next_tensordict_expand = self._vmap_qnetworkN0(
+                next_tensordict, self.target_qvalue_network_params
+            )
             state_action_value = next_tensordict_expand.get(
                 self.tensor_keys.state_action_value
             )
@@ -661,7 +669,7 @@ class SACLoss(LossModule):
                 != next_sample_log_prob.shape
             ):
                 next_sample_log_prob = next_sample_log_prob.unsqueeze(-1)
-            next_state_value = state_action_value - _alpha * next_sample_log_prob
+            next_state_value = state_action_value - self._alpha * next_sample_log_prob
             next_state_value = next_state_value.min(0)[0]
             tensordict.set(
                 ("next", self.value_estimator.tensor_keys.value), next_state_value
@@ -669,14 +677,11 @@ class SACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def _loss_qvalue_v2(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
+    def _qvalue_v2_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # we pass the alpha value to the tensordict. Since it's a scalar, we must erase the batch-size first.
-        target_value = self._get_value_v2(
-            tensordict,
-            self._alpha,
-            self.actor_network_params,
-            self.target_qvalue_network_params,
-        )
+        target_value = self._compute_target_v2(tensordict)
 
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys),
@@ -691,9 +696,12 @@ class SACLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).mean(0)
-        return loss_qval, td_error.detach().max(0)[0]
+        metadata = {"td_error": td_error.detach().max(0)[0]}
+        return loss_qval, metadata
 
-    def _loss_value(self, tensordict: TensorDictBase) -> Tensor:
+    def _value_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys).detach()
         self.value_network(
@@ -729,9 +737,9 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
         )
-        return loss_value
+        return loss_value, {}
 
-    def _loss_alpha(self, tensordict: TensorDictBase) -> Tensor:
+    def _alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
@@ -1065,11 +1073,11 @@ class DiscreteSACLoss(LossModule):
         else:
             tensordict_reshape = tensordict
 
-        loss_value, priority = self._loss_value(tensordict_reshape)
-        loss_actor = self._loss_actor(tensordict_reshape)
-        loss_alpha = self._loss_alpha(tensordict_reshape)
+        loss_value, metadata_value = self._value_loss(tensordict_reshape)
+        loss_actor, _ = self._actor_loss(tensordict_reshape)
+        loss_alpha = self._alpha_loss(tensordict_reshape)
 
-        tensordict_reshape.set(self.tensor_keys.priority, priority)
+        tensordict_reshape.set(self.tensor_keys.priority, metadata_value["td_error"])
         if loss_actor.shape != loss_value.shape:
             raise RuntimeError(
                 f"Losses shape mismatch: {loss_actor.shape}, and {loss_value.shape}"
@@ -1087,7 +1095,7 @@ class DiscreteSACLoss(LossModule):
         }
         return TensorDict(out, [])
 
-    def _get_target_value(self, tensordict, _alpha, actor_params, qval_params):
+    def _compute_target(self, tensordict) -> Tensor:
         r"""Value network for SAC v2.
 
         SAC v2 is based on a value estimate of the form:
@@ -1107,19 +1115,21 @@ class DiscreteSACLoss(LossModule):
             # get probs and log probs for actions computed from "next"
             with set_exploration_type(ExplorationType.RANDOM):
                 next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=actor_params
+                    next_tensordict, params=self.actor_network_params
                 )
                 next_prob = next_dist.probs
                 next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
 
             # get q-values for all actions
-            next_tensordict_expand = self._vmap_qnetworkN0(next_tensordict, qval_params)
+            next_tensordict_expand = self._vmap_qnetworkN0(
+                next_tensordict, self.target_qvalue_network_params
+            )
             next_action_value = next_tensordict_expand.get(
                 self.tensor_keys.action_value
             )
 
             # like in continuous SAC, we take the minimum of the value ensemble and subtract the entropy term
-            next_state_value = next_action_value.min(0)[0] - _alpha * next_log_prob
+            next_state_value = next_action_value.min(0)[0] - self._alpha * next_log_prob
             # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
             next_state_value = (next_prob * next_state_value).sum(-1).unsqueeze(-1)
 
@@ -1129,13 +1139,10 @@ class DiscreteSACLoss(LossModule):
             target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
             return target_value
 
-    def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
-        target_value = self._get_target_value(
-            tensordict,
-            self._alpha,
-            self.actor_network_params,
-            self.target_qvalue_network_params,
-        )
+    def _value_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
+        target_value = self._compute_target(tensordict)
         tensordict_expand = self._vmap_qnetworkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
@@ -1164,9 +1171,15 @@ class DiscreteSACLoss(LossModule):
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
         ).mean(0)
-        return loss_qval, td_error.detach().max(0)[0]
 
-    def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
+        metadata = {
+            "td_error": td_error.detach().max(0)[0],
+        }
+        return loss_qval, metadata
+
+    def _actor_loss(
+        self, tensordict: TensorDictBase
+    ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
@@ -1194,9 +1207,9 @@ class DiscreteSACLoss(LossModule):
 
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return loss
+        return loss, {}
 
-    def _loss_alpha(self, tensordict: TensorDictBase) -> Tensor:
+    def _alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
