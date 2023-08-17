@@ -197,14 +197,27 @@ def make_loss_module(model):
 # --------------------------------------------------------------------
 
 
-def make_optimizer(loss_module):
-    """Make SAC optimizer."""
-    optimizer = optim.Adam(
-        loss_module.parameters(),
-        lr=lr,
-        weight_decay=weight_decay,
+def make_optimizers(cfg, loss_module):
+    """Make SAC optimizers."""
+    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+
+    policy_optimizer = optim.Adam(
+        actor_params,
+        lr=cfg.optimization.lr,
+
     )
-    return optimizer
+    qvalue_optimizer = optim.Adam(
+        critic_params,
+        lr=cfg.optimization.lr,
+
+    )
+    alpha_optimizer = optim.Adam(
+        list([loss_module.log_alpha]),
+        lr=cfg.optimization.lr,
+
+    )
+    return policy_optimizer, qvalue_optimizer, alpha_optimizer
 
 
 def make_logger(backend="csv"):
@@ -241,7 +254,7 @@ if __name__ == "__main__":
     collector = make_collector(env_name, model_explore, device)
     replay_buffer = make_replay_buffer(batch_size)
     loss_module, target_net_updater = make_loss_module(model)
-    optimizer = make_optimizer(loss_module)
+    policy_optimizer, qvalue_optimizer, alpha_optimizer = make_optimizers(loss_module)
     logger = make_logger(logger_backend)
     test_env = make_env(env_name, device)
     test_env.eval()
@@ -281,11 +294,18 @@ if __name__ == "__main__":
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
-                loss = actor_loss + q_loss + alpha_loss
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                policy_optimizer.zero_grad()
+                qvalue_optimizer.zero_grad()
+                alpha_optimizer.zero_grad()
+
+                actor_loss.backward()
+                q_loss.backward()
+                alpha_loss.backward()
+
+                policy_optimizer.step()
+                qvalue_optimizer.step()
+                alpha_optimizer.step()
 
                 # update qnet_target params
                 target_net_updater.step()
