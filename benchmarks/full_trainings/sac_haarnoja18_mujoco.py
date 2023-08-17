@@ -246,7 +246,6 @@ if __name__ == "__main__":
     test_env = make_env(env_name, device)
     test_env.eval()
 
-
     # Main loop
     collected_frames = 0
     start_time = time.time()
