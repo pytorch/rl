@@ -116,7 +116,7 @@ def make_parallel_env(env_name, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(VecNorm(in_keys=["pixels"]))
+    # env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 # ====================================================================
@@ -273,7 +273,7 @@ def make_logger(backend="csv"):
 if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "PongNoFrameskip-v4"
+    env_name = "BoxingNoFrameskip-v4"
     record_interval = 10_000_000
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
@@ -326,7 +326,7 @@ if __name__ == "__main__":
         data = data.reshape(-1)
         current_frames = data.numel()
         replay_buffer.extend(data.to(device))
-        collected_frames += current_frames
+        collected_frames += current_frames * frame_skip
         model_explore.step(current_frames)
 
         # optimization steps
