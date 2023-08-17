@@ -257,8 +257,6 @@ if __name__ == "__main__":
         if len(episode_rewards) > 0:
             logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
 
-        losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
-
         # Compute GAE
         with torch.no_grad():
             data = adv_module(data)
@@ -267,16 +265,17 @@ if __name__ == "__main__":
         # Update the data buffer
         data_buffer.extend(data_reshape)
 
+        losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
         for j in range(ppo_epochs):
 
             for i, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1 - (num_network_updates / total_network_updates)
-                for g in actor_optim.param_groups:
-                    g['lr'] = lr * alpha
-                for g in critic_optim.param_groups:
-                    g['lr'] = lr * alpha
+                # for g in actor_optim.param_groups:
+                #     g['lr'] = lr * alpha
+                # for g in critic_optim.param_groups:
+                #     g['lr'] = lr * alpha
                 num_network_updates += 1
 
                 # Forward pass PPO loss
