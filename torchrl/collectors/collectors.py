@@ -42,7 +42,7 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _convert_exploration_type,
-    _get_single_done_from_multiple_dones,
+    _replace_last,
     ExplorationType,
     set_exploration_type,
     step_mdp,
@@ -796,17 +796,20 @@ class SyncDataCollector(DataCollectorBase):
 
     def _step_and_maybe_reset(self) -> None:
 
-        if len(self.env.done_keys) == 1:
-            done = self._tensordict.get(("next", self.env.done_key))
-        else:
-            # TODO one _reset per done key
-            # We have multiple done keys.
-            # We get each and aggregate them to a single done with the td batch size
-            done = _get_single_done_from_multiple_dones(
-                self._tensordict, self.env.done_keys
+        any_done = False
+        _reset_map = {}
+        for done_key in self.env.done_keys:
+            done = self._tensordict.get(("next", done_key))
+            truncated = self._tensordict.get(
+                ("next", _replace_last(done_key, "truncated")),
+                None,
             )
-
-        truncated = self._tensordict.get(("next", "truncated"), None)
+            done = (done | truncated) if truncated is not None else done.clone()
+            any_sub_done = done.any().item()
+            if any_sub_done and self.reset_when_done:
+                # Add this done to the map, we will need it to reset
+                _reset_map.update({_replace_last(done_key, "_reset"): done})
+            any_done += any_sub_done
 
         self._tensordict = step_mdp(
             self._tensordict,
@@ -818,22 +821,29 @@ class SyncDataCollector(DataCollectorBase):
         if not self.reset_when_done:
             return
 
-        done_or_terminated = (
-            (done | truncated) if truncated is not None else done.clone()
-        )
-        if done_or_terminated.any():
+        if any_done:
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            _reset = done_or_terminated
-            td_reset = self._tensordict.select().set("_reset", _reset)
+            td_reset = self._tensordict.select()
+            for _reset_key, done in _reset_map.items():
+                td_reset.set(_reset_key, done)
             td_reset = self.env.reset(td_reset)
-            td_reset.del_("_reset")
-            traj_done_or_terminated = done_or_terminated.sum(
-                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
-                dtype=torch.bool,
-            )
+            for _reset_key in _reset_map.keys():
+                del td_reset[_reset_key]
+
+            traj_done_or_terminated = torch.stack(
+                [
+                    done.sum(
+                        tuple(range(self._tensordict.batch_dims, done.ndim)),
+                        dtype=torch.bool,
+                    )
+                    for done in _reset_map.values()
+                ],
+                dim=0,
+            ).any(0)
+
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
                 # cloning is necessary to avoid modifying dones in-place

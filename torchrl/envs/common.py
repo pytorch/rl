@@ -22,9 +22,9 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.utils import _check_only_one_entry, DEVICE_TYPING
 from torchrl.envs.utils import (
-    _get_single_done_from_multiple_dones,
+    _replace_last,
     DONE_AFTER_RESET_ERROR,
     get_available_libraries,
     step_mdp,
@@ -82,15 +82,12 @@ class EnvMetaData:
     @staticmethod
     def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        # TODO _reset for multiple dones
-        tensordict.set(
-            "_reset",
-            torch.zeros_like(
-                _get_single_done_from_multiple_dones(tensordict, env.done_keys)
-                if len(env.done_keys) > 1
-                else tensordict.get(("next", env.done_key))
-            ),
-        )
+
+        for done_key in env.done_keys:
+            tensordict.set(
+                _replace_last(done_key, "_reset"),
+                torch.zeros_like(tensordict.get(("next", done_key))),
+            )
 
         specs = env.specs.to("cpu")
 
@@ -962,6 +959,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "An empty CompositeSpec was passed for the done spec. "
                         "This is currently not permitted."
                     )
+                _check_only_one_entry(
+                    value,
+                    error=RuntimeError(
+                        "done_spec has more than one leaf entry for a CompositeSpec. "
+                        "Only one leaf entry per composite spec is currently allowed"
+                    ),
+                )
             else:
                 value = CompositeSpec(
                     done=value.to(device), shape=self.batch_size, device=device
@@ -1237,15 +1241,26 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        if tensordict is not None and "_reset" in tensordict.keys():
+        if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
+            tensordict_keys = tensordict.keys()
+            _reset_map = {}
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                if _reset_key in tensordict_keys:
+                    _reset = tensordict.get(_reset_key)
+                    if (
+                        _reset.shape[
+                            -len(self.output_spec["_done_spec"][done_key].shape) :
+                        ]
+                        != self.output_spec["_done_spec"][done_key].shape
+                    ):
+                        raise RuntimeError(
+                            "_reset flag in tensordict should follow env.done_spec"
+                        )
+                    _reset_map.update({done_key: _reset})
         else:
-            _reset = None
+            _reset_map = {}
 
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset.device != self.device:
@@ -1273,14 +1288,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         done_key,
                         self.output_spec["_done_spec"][done_key].zero(leading_dim),
                     )
-        # TODO one _reset per done key
-        if _reset is None:
-            for done_key in self.done_keys:
+
+        for done_key in self.done_keys:
+            if done_key not in _reset_map:
                 if tensordict_reset.get(done_key).any():
                     raise DONE_AFTER_RESET_ERROR
-        else:
-            for done_key in self.done_keys:
-                if tensordict_reset.get(done_key)[_reset].any():
+            else:
+                if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
                     raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
@@ -1549,20 +1563,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
             tensordicts.append(tensordict.clone(False))
 
-            if len(self.done_keys) == 1:
-                done = tensordict.get(("next", self.done_key))
-            else:
-                # TODO one _reset per done key
-                # We have multiple done keys.
-                # We get each and aggregate them to a single done with the td batch size
-                done = _get_single_done_from_multiple_dones(tensordict, self.done_keys)
+            any_done = False
+            _reset_map = {}
+            for done_key in self.done_keys:
+                done = tensordict.get(("next", done_key))
+                truncated = tensordict.get(
+                    ("next", _replace_last(done_key, "truncated")),
+                    default=torch.zeros((), device=done.device, dtype=torch.bool),
+                )
+                done = done | truncated
+                any_sub_done = done.any().item()
+                if any_sub_done and not break_when_any_done:
+                    # Add this done to the map, we will need it to reset
+                    _reset_map.update({_replace_last(done_key, "_reset"): done})
+                any_done += any_sub_done
 
-            truncated = tensordict.get(
-                ("next", "truncated"),
-                default=torch.zeros((), device=done.device, dtype=torch.bool),
-            )
-            done = done | truncated
-            if (break_when_any_done and done.any()) or i == max_steps - 1:
+            if (break_when_any_done and any_done) or i == max_steps - 1:
                 break
             tensordict = step_mdp(
                 tensordict,
@@ -1573,12 +1589,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 action_keys=self.action_keys,
                 done_keys=self.done_keys,
             )
-            if not break_when_any_done and done.any():
-                # TODO one _reset per done key
-                _reset = done.clone()
-                tensordict.set("_reset", _reset)
+
+            if not break_when_any_done and any_done:
+                for _reset_key, done in _reset_map.items():
+                    tensordict.set(_reset_key, done.clone())
                 self.reset(tensordict)
-                del tensordict["_reset"]
+                for _reset_key in _reset_map.keys():
+                    del tensordict[_reset_key]
 
             if callback is not None:
                 callback(self, tensordict)
