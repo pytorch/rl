@@ -170,7 +170,7 @@ def make_collector(env_name, policy, device):
 def make_data_buffer():
     sampler = SamplerWithoutReplacement()
     return TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(frames_per_batch),
+        storage=LazyMemmapStorage(frames_per_batch, device=device),
         sampler=sampler,
         batch_size=mini_batch_size,
     )
@@ -210,7 +210,7 @@ if __name__ == "__main__":
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "Ant-v3"
+    env_name = "HalfCheetah-v3"
     frames_per_batch = 2048
     mini_batch_size = 64
     total_frames = 1_000_000
@@ -258,15 +258,16 @@ if __name__ == "__main__":
             logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
 
         losses = TensorDict({}, batch_size=[ppo_epochs, num_mini_batches])
+
+        # Compute GAE
+        with torch.no_grad():
+            data = adv_module(data)
+        data_reshape = data.reshape(-1)
+
+        # Update the data buffer
+        data_buffer.extend(data_reshape)
+
         for j in range(ppo_epochs):
-
-            # Compute GAE
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
-
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
 
             for i, batch in enumerate(data_buffer):
 
@@ -277,9 +278,6 @@ if __name__ == "__main__":
                 for g in critic_optim.param_groups:
                     g['lr'] = lr * alpha
                 num_network_updates += 1
-
-                # Get a data batch
-                batch = batch.to(device)
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)

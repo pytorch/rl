@@ -104,6 +104,7 @@ def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False
     env.set_info_dict_reader(reader)
     return env
 
+
 def make_parallel_env(env_name, device, is_test=False):
     env = ParallelEnv(1, EnvCreator(lambda: make_base_env(env_name, device)))
     env = TransformedEnv(env)
@@ -156,7 +157,7 @@ def make_dqn_modules_pixels(proof_environment):
     # Define Critic Network
     qvalue_net_kwargs = {
         "in_features": mlp_output.shape[-1],
-        "num_cells": [256],
+        "num_cells": [],
         "out_features": num_outputs,
         "activation_class": torch.nn.ReLU,
     }
@@ -216,7 +217,7 @@ def make_collector(env_name, policy, device):
 
 def make_replay_buffer(
         batch_size,
-        buffer_size=1000000,
+        buffer_size=1_000_000,
         buffer_scratch_dir="/tmp/",
         prefetch=3,
 ):
@@ -260,7 +261,9 @@ def make_loss_module(model):
 
 def make_optimizer(loss_module):
     params = list(loss_module.parameters())
-    optimizer_actor = torch.optim.Adam(params, lr=lr)  # eps=1e-4
+    optimizer_actor = torch.optim.RMSprop(
+        params, lr=lr, alpha=0.95, eps=0.01 #, momentum=0.95
+    )
     return optimizer_actor
 
 
@@ -273,14 +276,14 @@ def make_logger(backend="csv"):
 if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
-    env_name = "BoxingNoFrameskip-v4"
+    env_name = "PongNoFrameskip-v4"
     record_interval = 10_000_000
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
     frames_per_batch = 4
     num_updates = 1
     init_random_frames = 50_000
-    annealing_frames = 1_000_000
+    annealing_frames = 1_000_000 // frame_skip
     gamma = 0.99
     lr = 0.00025
     weight_decay = 0.0
@@ -355,7 +358,7 @@ if __name__ == "__main__":
             if (collected_frames - frames_per_batch) // record_interval < (collected_frames // record_interval):
                 model.eval()
                 test_rewards = []
-                for i in range(1):
+                for i in range(30):
                     td_test = test_env.rollout(
                         policy=model,
                         auto_reset=True,
