@@ -237,8 +237,10 @@ if __name__ == "__main__":
     test_env = make_env(env_name, device)
     test_env.eval()
 
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=lr, eps=1e-5)
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=lr, eps=1e-5)
+    # actor_optim = torch.optim.Adam(actor.parameters(), lr=lr, eps=1e-5)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=lr)
+    # critic_optim = torch.optim.Adam(critic.parameters(), lr=lr, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=lr)
 
     # Main loop
     collected_frames = 0
