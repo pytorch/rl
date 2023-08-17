@@ -1143,6 +1143,7 @@ class DiscreteSACLoss(LossModule):
 
         action_value = tensordict_expand.get(self.tensor_keys.action_value)
         action = tensordict.get(self.tensor_keys.action)
+        action = action.expand((action_value.shape[0], *action.shape))  # Add vmap dim
 
         # TODO this block comes from the dqn loss, we need to swap all thse with a proper
         #  helper function which selects the value given the action for all discrete spaces
