@@ -17,8 +17,7 @@ from torchrl.modules import (
     ValueOperator,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives import SoftUpdate
-from torchrl.objectives.ddpg import DDPGLoss
+from torchrl.objectives import SoftUpdate, DDPGLoss
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
     RewardSum,

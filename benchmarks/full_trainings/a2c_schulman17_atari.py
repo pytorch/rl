@@ -1,6 +1,6 @@
 """
-PPO Benchmarks: Reproducing Experiments from Schulman et al. 2017
-Proximal Policy Optimization (PPO) Algorithm on Atari Environments.
+A2C Benchmarks: Reproducing Experiments from Schulman et al. 2017
+Asynchronous Actor Critic (A2C) Algorithm on Atari Environments.
 """
 
 import gym

@@ -1,3 +1,8 @@
+"""
+SAC Benchmarks: Reproducing Experiments from Haarnoja et al. 2018
+Soft Actor Critic Algorithm on MuJoCo Environments.
+"""
+
 import gym
 import time
 import tqdm

@@ -259,13 +259,13 @@ if __name__ == "__main__":
     record_interval = 40_000_000 // frame_skip  # Check final performance
     frames_per_batch = 250  # 4
     num_updates = 250
-    buffer_size = 100_000  # 1_000_000 // frame_skip
-    init_random_frames = 10_000  # 50_000
-    annealing_frames = 10_000  # 1_000_000 // frame_skip
+    buffer_size = 1_000_000 // frame_skip
+    init_random_frames = 50_000
+    annealing_frames = 1_000_000 // frame_skip
     gamma = 0.99
-    lr = 1e-3  # 2.5e-4
+    lr = 2.5e-4
     batch_size = 32
-    hard_update_freq = 1000  # 10_000
+    hard_update_freq = 10_000
     logger_backend = "wandb"
 
     seed = 42
