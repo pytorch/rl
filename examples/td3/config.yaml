@@ -5,7 +5,7 @@ env:
   exp_name: "Ant-TD3"
   library: gym
   frame_skip: 1
-  seed: 5
+  seed: 88
 
 # Collection
 collector:
@@ -30,6 +30,7 @@ optimization:
   gamma: 0.99
   loss_function: l2
   lr: 1.0e-3
+  weight_decay: 1.e-4
   batch_size: 100
   target_update_polyak: 0.995
   policy_update_delay: 2

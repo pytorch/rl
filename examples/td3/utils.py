@@ -240,10 +240,12 @@ def make_optimizer(cfg, loss_module):
     critic_params = loss_module.qvalue_network_params.flatten_keys().values()
     actor_params = loss_module.actor_network_params.flatten_keys().values()
 
-    optimizer_actor = optim.Adam(actor_params, lr=cfg.optimization.lr, eps=1e-4)
+    optimizer_actor = optim.Adam(
+        actor_params, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+    )
     optimizer_critic = optim.Adam(
         critic_params,
         lr=cfg.optimization.lr,
-        eps=1e-4,
+        weight_decay=cfg.optimization.weight_decay,
     )
     return optimizer_actor, optimizer_critic
