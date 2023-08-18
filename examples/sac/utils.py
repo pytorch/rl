@@ -231,10 +231,19 @@ def make_loss_module(cfg, model):
 
 def make_sac_optimizer(cfg, loss_module):
     """Make SAC optimizer."""
-    optimizer = optim.Adam(
-        loss_module.parameters(),
+    critic_params = loss_module.qvalue_network_params.flatten_keys().values()
+    actor_params = loss_module.actor_network_params.flatten_keys().values()
+
+    policy_optimizer = optim.Adam(
+        actor_params,
         lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
-        # eps=1e-4,
     )
-    return optimizer
+    qvalue_optimizer = optim.Adam(
+        critic_params,
+        lr=cfg.optimization.lr,
+    )
+    alpha_optimizer = optim.Adam(
+        [loss_module.log_alpha],
+        lr=cfg.optimization.lr,
+    )
+    return policy_optimizer, qvalue_optimizer, alpha_optimizer

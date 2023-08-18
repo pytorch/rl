@@ -68,7 +68,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Make Optimizers
-    optimizer = make_sac_optimizer(cfg, loss_module)
+    a_opti, q_opti, alpha_opti = make_sac_optimizer(cfg, loss_module)
 
     rewards = []
     rewards_eval = []
@@ -116,11 +116,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
-                loss = actor_loss + q_loss + alpha_loss
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                alpha_opti.zero_grad()
+                a_opti.zero_grad()
+                q_opti.zero_grad()
+                actor_loss.backward()
+                a_opti.step()
+                q_loss.backward()
+                q_opti.step()
+                alpha_loss.backward()
+                alpha_opti.step()
 
                 q_losses.append(q_loss.item())
                 actor_losses.append(actor_loss.item())
