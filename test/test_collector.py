@@ -28,6 +28,8 @@ from mocking_classes import (
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
+
+from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -49,6 +51,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.utils import _replace_last
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
@@ -1557,9 +1560,9 @@ class TestHetEnvsCollector:
 class TestMultiKeyEnvsCollector:
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
-    def test_collectorv(self, batch_size, frames_per_batch, seed=1):
-        batch_size = torch.Size(batch_size)
-        env = MultiKeyCountingEnv(batch_size=batch_size)
+    @pytest.mark.parametrize("max_steps", [2, 3])
+    def test_collector(self, batch_size, frames_per_batch, max_steps, seed=1):
+        env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         torch.manual_seed(seed)
         policy = MultiKeyCountingEnvPolicy(env.input_spec["_action_spec"])
         ccollector = SyncDataCollector(
@@ -1573,51 +1576,9 @@ class TestMultiKeyEnvsCollector:
         for _td in ccollector:
             break
         ccollector.shutdown()
-
-        td = _td
-
-        # TODO test done and _reset
-        # Check observation and reward update with count action for root
-        action_is_count = td["action"].argmax(-1).to(torch.bool)
-        assert (
-            td["next", "observation"][action_is_count]
-            == td["observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "reward"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for root
-        assert (
-            td["next", "observation"][~action_is_count]
-            == td["observation"][~action_is_count]
-        ).all()
-        assert (td["next", "reward"][~action_is_count] == 0).all()
-
-        # Check observation and reward update with count action for nested_1
-        action_is_count = td["nested_1"]["action"].to(torch.bool)
-        assert (
-            td["next", "nested_1", "observation"][action_is_count]
-            == td["nested_1", "observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for nested_1
-        assert (
-            td["next", "nested_1", "observation"][~action_is_count]
-            == td["nested_1", "observation"][~action_is_count]
-        ).all()
-        assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
-
-        # Check observation and reward update with count action for nested_2
-        action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
-        assert (
-            td["next", "nested_2", "observation"][action_is_count]
-            == td["nested_2", "observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for nested_2
-        assert (
-            td["next", "nested_2", "observation"][~action_is_count]
-            == td["nested_2", "observation"][~action_is_count]
-        ).all()
-        assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
+        for done_key in env.done_keys:
+            assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
+        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10

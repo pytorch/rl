@@ -34,7 +34,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _set_single_key, _sort_keys
+from torchrl.envs.utils import _replace_last, _set_single_key, _sort_keys
 
 _has_envpool = importlib.util.find_spec("envpool")
 
@@ -379,7 +379,7 @@ class _BatchedEnv(EnvBase):
         )
         self._selected_keys.add("_reset")
 
-        self._selected_reset_keys = self.env_obs_keys + self.done_keys + ["_reset"]
+        self._selected_reset_keys = self.env_obs_keys + self.done_keys
         self._selected_step_keys = self.env_output_keys
 
         if self._single_task:
@@ -577,15 +577,22 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict.keys():
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        else:
-            _reset = torch.ones(self.done_spec.shape, dtype=torch.bool)
+
+        missing_reset = False
+        if tensordict is not None:
+            needs_resetting = [False for _ in range(self.num_workers)]
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is not None:
+                    for i in range(self.num_workers):
+                        needs_resetting[i] += _reset[i].any()
+                else:
+                    missing_reset = True
+                    break
+
+        if tensordict is None or missing_reset:
+            needs_resetting = [True for _ in range(self.num_workers)]
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -594,7 +601,8 @@ class SerialEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            if not _reset[i].any():
+
+            if not needs_resetting[i]:
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
                 # If we don't do this, the result of calling reset and skipping one env
@@ -620,12 +628,11 @@ class SerialEnv(_BatchedEnv):
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
             for key in self._selected_reset_keys:
-                if key != "_reset":
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *[key for key in self._selected_reset_keys if key != "_reset"],
+                *self._selected_reset_keys,
                 strict=False,
             ).clone()
 
@@ -810,17 +817,22 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         cmd_out = "reset"
-        if tensordict is not None and "_reset" in tensordict.keys():
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        else:
-            _reset = torch.ones(
-                self.done_spec.shape, dtype=torch.bool, device=self.device
-            )
+
+        missing_reset = False
+        if tensordict is not None:
+            needs_resetting = [False for _ in range(self.num_workers)]
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is not None:
+                    for i in range(self.num_workers):
+                        needs_resetting[i] += _reset[i].any()
+                else:
+                    missing_reset = True
+                    break
+
+        if tensordict is None or missing_reset:
+            needs_resetting = [True for _ in range(self.num_workers)]
 
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
@@ -829,7 +841,7 @@ class ParallelEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            if not _reset[i].any():
+            if not needs_resetting[i]:
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
                 # If we don't do this, the result of calling reset and skipping one env
@@ -850,7 +862,7 @@ class ParallelEnv(_BatchedEnv):
             channel.send(out)
 
         for i, channel in enumerate(self.parent_channels):
-            if not _reset[i].any():
+            if not needs_resetting[i]:
                 continue
             cmd_in, data = channel.recv()
             if cmd_in != "reset_obs":
@@ -861,12 +873,11 @@ class ParallelEnv(_BatchedEnv):
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict({}, batch_size=self.shared_tensordict_parent.shape)
             for key in self._selected_reset_keys:
-                if key != "_reset":
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *[key for key in self._selected_reset_keys if key != "_reset"],
+                *self._selected_reset_keys,
                 strict=False,
             ).clone()
 
@@ -1048,9 +1059,6 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("call 'init' before resetting")
             local_tensordict = data
             local_tensordict = env._reset(tensordict=local_tensordict)
-
-            if "_reset" in local_tensordict.keys():
-                local_tensordict.del_("_reset")
             if pin_memory:
                 local_tensordict.pin_memory()
             shared_tensordict.update_(local_tensordict)

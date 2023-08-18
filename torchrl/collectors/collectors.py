@@ -765,9 +765,14 @@ class SyncDataCollector(DataCollectorBase):
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
-                    excluded_keys = [
-                        key for key in tensordict_out.keys() if key.startswith("_")
-                    ]
+                    excluded_keys = []
+                    for key in tensordict_out.keys(True, True):
+                        if isinstance(key, Tuple):
+                            leaf_key = key[-1]
+                        else:
+                            leaf_key = key
+                        if leaf_key.startswith("_"):
+                            excluded_keys.append(key)
                     tensordict_out = tensordict_out.exclude(
                         *excluded_keys, inplace=True
                     )
@@ -804,11 +809,11 @@ class SyncDataCollector(DataCollectorBase):
                 ("next", _replace_last(done_key, "truncated")),
                 None,
             )
-            done = (done | truncated) if truncated is not None else done.clone()
+            done = (done | truncated) if truncated is not None else done
             any_sub_done = done.any().item()
             if any_sub_done and self.reset_when_done:
                 # Add this done to the map, we will need it to reset
-                done_map.update({done_key: done})
+                done_map.update({done_key: done.clone()})
             any_done += any_sub_done
 
         self._tensordict = step_mdp(
@@ -847,7 +852,7 @@ class SyncDataCollector(DataCollectorBase):
 
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
-                # cloning is necessary to avoid modifying dones in-place
+                # cloning is necessary to avoid modifying entries in-place
                 self._tensordict = self._tensordict.clone()
                 self._tensordict[traj_done_or_terminated] = td_reset[
                     traj_done_or_terminated

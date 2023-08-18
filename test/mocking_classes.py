@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import random
 from typing import Optional
 
 import torch
@@ -1509,7 +1508,7 @@ class MultiKeyCountingEnvPolicy:
                 action_td["action"][..., 1] = 1
             else:
                 # We choose an action at random
-                choice = random.randint(0, 3)
+                choice = torch.randint(0, 3, ()).item()
                 if choice == 0:
                     action_td["nested_1", "action"] += 1
                 elif choice == 1:
@@ -1620,7 +1619,7 @@ class MultiKeyCountingEnv(EnvBase):
                 shape=(self.nested_dim_1,),
             ),
             nested_2=CompositeSpec(
-                finish=DiscreteTensorSpec(
+                done=DiscreteTensorSpec(
                     n=2,
                     shape=(self.nested_dim_2, 1),
                     dtype=torch.bool,
@@ -1639,12 +1638,24 @@ class MultiKeyCountingEnv(EnvBase):
         tensordict: TensorDictBase = None,
         **kwargs,
     ) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict.keys():
-            _reset = tensordict.get("_reset").squeeze(-1).any(-1)
-            self.count[_reset] = self.start_val
-            self.count_nested_1[_reset] = self.start_val
-            self.count_nested_2[_reset] = self.start_val
-        else:
+        reset_all = False
+        if tensordict is not None:
+            _reset = tensordict.get("_reset", None)
+            if _reset is not None:
+                self.count[_reset.squeeze(-1)] = self.start_val
+
+            _reset_nested_1 = tensordict.get(("nested_1", "_reset"), None)
+            if _reset_nested_1 is not None:
+                self.count_nested_1[_reset_nested_1.squeeze(-1)] = self.start_val
+
+            _reset_nested_2 = tensordict.get(("nested_2", "_reset"), None)
+            if _reset_nested_2 is not None:
+                self.count_nested_2[_reset_nested_2.squeeze(-1)] = self.start_val
+
+            if _reset is None and _reset_nested_1 is None and _reset_nested_2 is None:
+                reset_all = True
+
+        if tensordict is None or reset_all:
             self.count[:] = self.start_val
             self.count_nested_1[:] = self.start_val
             self.count_nested_2[:] = self.start_val
@@ -1680,6 +1691,7 @@ class MultiKeyCountingEnv(EnvBase):
         reward["reward"] += one_hot_action.to(torch.float)
         self.count += one_hot_action.to(torch.int)
         td["observation"] += expand_right(self.count, td["observation"].shape)
+        done["done"] = self.count > self.max_steps
 
         discrete_action = tensordict["nested_1"]["action"].unsqueeze(-1)
         reward["nested_1"]["gift"] += discrete_action.to(torch.float)
@@ -1687,6 +1699,7 @@ class MultiKeyCountingEnv(EnvBase):
         td["nested_1", "observation"] += expand_right(
             self.count_nested_1, td["nested_1", "observation"].shape
         )
+        done["nested_1", "done"] = self.count_nested_1 > self.max_steps
 
         continuous_action = tensordict["nested_2"]["azione"]
         reward["nested_2"]["reward"] += continuous_action.to(torch.float)
@@ -1694,6 +1707,7 @@ class MultiKeyCountingEnv(EnvBase):
         td["nested_2", "observation"] += expand_right(
             self.count_nested_2, td["nested_2", "observation"].shape
         )
+        done["nested_2", "done"] = self.count_nested_2 > self.max_steps
 
         td.update(done)
         td.update(reward)
