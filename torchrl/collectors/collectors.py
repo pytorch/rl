@@ -797,7 +797,7 @@ class SyncDataCollector(DataCollectorBase):
     def _step_and_maybe_reset(self) -> None:
 
         any_done = False
-        _reset_map = {}
+        done_map = {}
         for done_key in self.env.done_keys:
             done = self._tensordict.get(("next", done_key))
             truncated = self._tensordict.get(
@@ -808,7 +808,7 @@ class SyncDataCollector(DataCollectorBase):
             any_sub_done = done.any().item()
             if any_sub_done and self.reset_when_done:
                 # Add this done to the map, we will need it to reset
-                _reset_map.update({_replace_last(done_key, "_reset"): done})
+                done_map.update({done_key: done})
             any_done += any_sub_done
 
         self._tensordict = step_mdp(
@@ -826,12 +826,13 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            td_reset = self._tensordict.select()
-            for _reset_key, done in _reset_map.items():
-                td_reset.set(_reset_key, done)
+            td_reset = self._tensordict.select(*done_map.keys())
+            for done_key, done in done_map.items():
+                td_reset.set(_replace_last(done_key, "_reset"), done)
+                del td_reset[done_key]
             td_reset = self.env.reset(td_reset)
-            for _reset_key in _reset_map.keys():
-                del td_reset[_reset_key]
+            for done_key in done_map.keys():
+                del td_reset[_replace_last(done_key, "_reset")]
 
             traj_done_or_terminated = torch.stack(
                 [
@@ -839,7 +840,7 @@ class SyncDataCollector(DataCollectorBase):
                         tuple(range(self._tensordict.batch_dims, done.ndim)),
                         dtype=torch.bool,
                     )
-                    for done in _reset_map.values()
+                    for done in done_map.values()
                 ],
                 dim=0,
             ).any(0)
