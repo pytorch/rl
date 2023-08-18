@@ -257,8 +257,8 @@ if __name__ == "__main__":
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
     record_interval = 40_000_000 // frame_skip  # Check final performance
-    frames_per_batch = 250  # 4
-    num_updates = 250
+    frames_per_batch = 4
+    num_updates = 1
     buffer_size = 1_000_000 // frame_skip
     init_random_frames = 50_000
     annealing_frames = 1_000_000 // frame_skip
