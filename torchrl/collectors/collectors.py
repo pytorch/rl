@@ -766,9 +766,7 @@ class SyncDataCollector(DataCollectorBase):
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
                     excluded_keys = []
-                    # Temp
-                    for key in tensordict_out.keys():
-                        # for key in tensordict_out.keys(True, True):
+                    for key in tensordict_out.keys(True, True):
                         if isinstance(key, Tuple):
                             leaf_key = key[-1]
                         else:
