@@ -117,7 +117,8 @@ def make_parallel_env(env_name, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    # env.append_transform(VecNorm(in_keys=["pixels"]))
+    if not is_test:
+        env.append_transform(VecNorm())
     return env
 
 # ====================================================================
@@ -148,6 +149,17 @@ def make_dqn_modules_pixels(proof_environment):
         out_features=num_outputs,
         num_cells=[512],
     )
+
+    for layer in cnn.modules():
+        if isinstance(layer, torch.nn.Conv2d):
+            torch.nn.init.orthogonal_(layer.weight, gain=torch.nn.init.calculate_gain("relu"))
+            layer.bias.data.zero_()
+
+    for layer in mlp.modules():
+        if isinstance(layer, torch.nn.Linear):
+            torch.nn.init.orthogonal_(layer.weight, 1.0)
+            layer.bias.data.zero_()
+
     qvalue_module = QValueActor(
         module=torch.nn.Sequential(cnn, mlp),
         spec=CompositeSpec(action=action_spec),
@@ -240,7 +252,7 @@ def make_loss_module(value_network):
 
 def make_optimizer(dqn_loss):
     # optimizer = torch.optim.RMSprop(dqn_loss.parameters(), lr=lr, alpha=0.95, eps=0.01)
-    optimizer = torch.optim.Adam(dqn_loss.parameters(), lr=lr, eps=1e-5, weight_decay=2e-4)
+    optimizer = torch.optim.Adam(dqn_loss.parameters(), lr=lr, eps=1e-6)
     return optimizer
 
 
@@ -261,7 +273,7 @@ if __name__ == "__main__":
     num_updates = 1
     buffer_size = 1_000_000 // frame_skip
     init_random_frames = 50_000
-    annealing_frames = 1_000_000 // frame_skip
+    annealing_frames = 100_000  # 1_000_000 // frame_skip
     gamma = 0.99
     lr = 2.5e-4
     batch_size = 32
@@ -274,7 +286,7 @@ if __name__ == "__main__":
 
     # Make the components
     model = make_dqn_model(env_name)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames, eps_end=0.01).to(device)
+    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames).to(device)
     collector = make_collector(env_name, model_explore, device)
     replay_buffer = make_replay_buffer(batch_size)
     loss_module, target_net_updater = make_loss_module(model)
@@ -319,9 +331,9 @@ if __name__ == "__main__":
                 q_loss = loss_td["loss"]
                 optimizer_actor.zero_grad()
                 q_loss.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(list(loss_module.parameters()), max_norm=0.5)
                 optimizer_actor.step()
                 target_net_updater.step()
-
                 q_losses[j] = loss_td.select("loss").detach()
 
             q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
