@@ -1243,22 +1243,20 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
-            tensordict_keys = tensordict.keys()
             _reset_map = {}
             for done_key in self.done_keys:
                 _reset_key = _replace_last(done_key, "_reset")
-                if _reset_key in tensordict_keys:
-                    _reset = tensordict.get(_reset_key)
-                    if (
-                        _reset.shape[
-                            -len(self.output_spec["_done_spec"][done_key].shape) :
-                        ]
-                        != self.output_spec["_done_spec"][done_key].shape
-                    ):
-                        raise RuntimeError(
-                            "_reset flag in tensordict should follow env.done_spec"
-                        )
-                    _reset_map.update({done_key: _reset})
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is None:
+                    continue
+                if (
+                    _reset.shape[-len(self.output_spec["_done_spec"][done_key].shape) :]
+                    != self.output_spec["_done_spec"][done_key].shape
+                ):
+                    raise RuntimeError(
+                        "_reset flag in tensordict should follow env.done_spec"
+                    )
+                _reset_map.update({done_key: _reset})
         else:
             _reset_map = {}
 
