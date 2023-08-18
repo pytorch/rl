@@ -317,7 +317,7 @@ if __name__ == "__main__":
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "BreakoutNoFrameskip-v4"
     frame_skip = 4
-    frames_per_batch = 4096 // frame_skip
+    frames_per_batch = 1024 // frame_skip
     mini_batch_size = 1024 // frame_skip
     total_frames = 40_000_000 // frame_skip
     record_interval = 40_000_000 // frame_skip  # check final performance

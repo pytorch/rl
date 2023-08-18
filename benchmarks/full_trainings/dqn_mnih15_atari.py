@@ -97,7 +97,7 @@ class EpisodicLifeEnv(gym.Wrapper):
 def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False):
     env = gym.make(env_name)
     if not is_test:
-        env = NoopResetEnv(env, noop_max=30)
+        # env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
     env = GymWrapper(env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device)
     reader = default_info_dict_reader(["end_of_life"])
@@ -131,10 +131,7 @@ def make_dqn_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
     env_specs = proof_environment.specs
     num_outputs = env_specs["input_spec", "_action_spec", "action"].space.n
-
     action_spec = env_specs["input_spec", "_action_spec", "action"]
-    # Define input keys
-    in_keys = ["pixels"]
 
     # Define Q-Value Module
     cnn = ConvNet(
@@ -148,30 +145,15 @@ def make_dqn_modules_pixels(proof_environment):
         in_features=cnn_output.shape[-1],
         activation_class=torch.nn.ReLU,
         activate_last_layer=True,
-        out_features=512,
-        num_cells=[],
+        out_features=num_outputs,
+        num_cells=[512],
     )
-    mlp_output = mlp(cnn_output)
-
-    # Define on head for the policy
-    # Define Critic Network
-    qvalue_net_kwargs = {
-        "in_features": mlp_output.shape[-1],
-        "num_cells": [],
-        "out_features": num_outputs,
-        "activation_class": torch.nn.ReLU,
-    }
-
-    qvalue_net = MLP(
-        **qvalue_net_kwargs,
-    )
-    value_kwargs = {"action_space": "one-hot"}
-
     qvalue_module = QValueActor(
-        module=torch.nn.Sequential(cnn, mlp, qvalue_net),
+        module=torch.nn.Sequential(cnn, mlp),
         spec=CompositeSpec(action=action_spec),
-        in_keys=in_keys,
-        **value_kwargs,
+        in_keys=["pixels"],
+        safe=True,
+        action_space="one-hot",
     )
 
     return qvalue_module
@@ -217,7 +199,6 @@ def make_collector(env_name, policy, device):
 
 def make_replay_buffer(
         batch_size,
-        buffer_size=1_000_000,
         buffer_scratch_dir="/tmp/",
         prefetch=3,
 ):
@@ -238,33 +219,31 @@ def make_replay_buffer(
 # --------------------------------------------------------------------
 
 
-def make_loss_module(model):
+def make_loss_module(value_network):
     """Make loss module and target network updater."""
-    loss_module = DQNLoss(
-        value_network=model,
+    dqn_loss = DQNLoss(
+        value_network=value_network,
         gamma=gamma,
-        loss_function="l2",
+        loss_function="smooth_l1",
+        # loss_function="l2",
         delay_value=True,
-        # action_space="categorical"
     )
-    loss_module.make_value_estimator(gamma=gamma)
+    dqn_loss.make_value_estimator(gamma=gamma)
 
-    target_net_updater = HardUpdate(
-        loss_module, value_network_update_interval=hard_update_freq
+    targ_net_updater = HardUpdate(
+        dqn_loss, value_network_update_interval=hard_update_freq
     )
-    return loss_module, target_net_updater
+    return dqn_loss, targ_net_updater
 
 # ====================================================================
 # Other component utils
 # --------------------------------------------------------------------
 
 
-def make_optimizer(loss_module):
-    params = list(loss_module.parameters())
-    optimizer_actor = torch.optim.RMSprop(
-        params, lr=lr, alpha=0.95, eps=0.01 #, momentum=0.95
-    )
-    return optimizer_actor
+def make_optimizer(dqn_loss):
+    # optimizer = torch.optim.RMSprop(dqn_loss.parameters(), lr=lr, alpha=0.95, eps=0.01)
+    optimizer = torch.optim.Adam(dqn_loss.parameters(), lr=lr, eps=1e-5, weight_decay=2e-4)
+    return optimizer
 
 
 def make_logger(backend="csv"):
@@ -277,23 +256,23 @@ if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "PongNoFrameskip-v4"
-    record_interval = 10_000_000
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
+    record_interval = 40_000_000 // frame_skip  # Check final performance
     frames_per_batch = 4
     num_updates = 1
+    buffer_size = 1_000_000 // frame_skip
     init_random_frames = 50_000
-    annealing_frames = 1_000_000 // frame_skip
+    annealing_frames = 200_000  # 1_000_000 // frame_skip
     gamma = 0.99
-    lr = 0.00025
-    weight_decay = 0.0
-    batch_size = 32
+    lr = 2.5e-4
+    batch_size = 64
     hard_update_freq = 10_000
     logger_backend = "wandb"
 
-    # seed = 42
-    # torch.manual_seed(seed)
-    # np.random.seed(seed)
+    seed = 42
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
     # Make the components
     model = make_dqn_model(env_name)
@@ -313,9 +292,6 @@ if __name__ == "__main__":
 
     for i, data in enumerate(collector):
 
-        # update weights of the inference policy
-        collector.update_policy_weights_()
-
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
@@ -330,15 +306,17 @@ if __name__ == "__main__":
         current_frames = data.numel()
         replay_buffer.extend(data.to(device))
         collected_frames += current_frames * frame_skip
-        model_explore.step(current_frames)
 
         # optimization steps
         if collected_frames >= init_random_frames:
 
+            model_explore.step(current_frames)
+
             q_losses = TensorDict({}, batch_size=[num_updates])
             for j in range(num_updates):
 
-                sampled_tensordict = replay_buffer.sample(batch_size).clone().to(device)
+                sampled_tensordict = replay_buffer.sample(batch_size).to(device)
+
                 loss_td = loss_module(sampled_tensordict.to(device))
                 q_loss = loss_td["loss"]
                 optimizer_actor.zero_grad()
@@ -371,6 +349,9 @@ if __name__ == "__main__":
                     del td_test
                 logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
                 model.train()
+
+        # update weights of the inference policy
+        collector.update_policy_weights_()
 
     collector.shutdown()
     end_time = time.time()
