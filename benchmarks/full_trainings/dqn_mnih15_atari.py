@@ -224,12 +224,10 @@ def make_loss_module(value_network):
     dqn_loss = DQNLoss(
         value_network=value_network,
         gamma=gamma,
-        loss_function="smooth_l1",
-        # loss_function="l2",
+        loss_function="l2",
         delay_value=True,
     )
     dqn_loss.make_value_estimator(gamma=gamma)
-
     targ_net_updater = HardUpdate(
         dqn_loss, value_network_update_interval=hard_update_freq
     )
@@ -259,15 +257,15 @@ if __name__ == "__main__":
     frame_skip = 4
     total_frames = 40_000_000 // frame_skip
     record_interval = 40_000_000 // frame_skip  # Check final performance
-    frames_per_batch = 4
-    num_updates = 1
-    buffer_size = 1_000_000 // frame_skip
-    init_random_frames = 50_000
-    annealing_frames = 200_000  # 1_000_000 // frame_skip
+    frames_per_batch = 250  # 4
+    num_updates = 250
+    buffer_size = 100_000  # 1_000_000 // frame_skip
+    init_random_frames = 10_000  # 50_000
+    annealing_frames = 10_000  # 1_000_000 // frame_skip
     gamma = 0.99
-    lr = 2.5e-4
-    batch_size = 64
-    hard_update_freq = 10_000
+    lr = 1e-3  # 2.5e-4
+    batch_size = 32
+    hard_update_freq = 1000  # 10_000
     logger_backend = "wandb"
 
     seed = 42
@@ -276,7 +274,7 @@ if __name__ == "__main__":
 
     # Make the components
     model = make_dqn_model(env_name)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames).to(device)
+    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames, eps_end=0.01).to(device)
     collector = make_collector(env_name, model_explore, device)
     replay_buffer = make_replay_buffer(batch_size)
     loss_module, target_net_updater = make_loss_module(model)
