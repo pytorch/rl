@@ -97,7 +97,7 @@ class EpisodicLifeEnv(gym.Wrapper):
 def make_base_env(env_name="BreakoutNoFrameskip-v4", device="cpu", is_test=False):
     env = gym.make(env_name)
     if not is_test:
-        # env = NoopResetEnv(env, noop_max=30)
+        env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
     env = GymWrapper(env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device)
     reader = default_info_dict_reader(["end_of_life"])
@@ -157,7 +157,7 @@ def make_dqn_modules_pixels(proof_environment):
 
     for layer in mlp.modules():
         if isinstance(layer, torch.nn.Linear):
-            torch.nn.init.orthogonal_(layer.weight, 1.0)
+            torch.nn.init.orthogonal_(layer.weight, 0.001)
             layer.bias.data.zero_()
 
     qvalue_module = QValueActor(
@@ -277,12 +277,12 @@ if __name__ == "__main__":
     gamma = 0.99
     lr = 2.5e-4
     batch_size = 32
-    hard_update_freq = 10_000
+    hard_update_freq = 1_000  # 10_000
     logger_backend = "wandb"
 
-    seed = 42
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    # seed = 42
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
 
     # Make the components
     model = make_dqn_model(env_name)
@@ -327,7 +327,7 @@ if __name__ == "__main__":
 
                 sampled_tensordict = replay_buffer.sample(batch_size).to(device)
 
-                loss_td = loss_module(sampled_tensordict.to(device))
+                loss_td = loss_module(sampled_tensordict)
                 q_loss = loss_td["loss"]
                 optimizer_actor.zero_grad()
                 q_loss.backward()
