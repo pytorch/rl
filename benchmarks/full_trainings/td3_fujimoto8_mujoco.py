@@ -206,8 +206,8 @@ def make_optimizers(loss_module):
 
 
 def make_logger(backend="csv"):
-    exp_name = generate_exp_name("SAC", f"Mujoco_haarnoja18_{env_name}")
-    logger = get_logger(backend, logger_name="sac", experiment_name=exp_name)
+    exp_name = generate_exp_name("TD·", f"Mujoco_fujimoto18_{env_name}")
+    logger = get_logger(backend, logger_name="td3", experiment_name=exp_name)
     return logger
 
 
