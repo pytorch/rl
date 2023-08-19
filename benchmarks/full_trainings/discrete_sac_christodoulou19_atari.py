@@ -4,18 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import hydra
 import numpy as np
-import torch
 import torch.cuda
 import tqdm
+from tensordict import TensorDict
 from tensordict.nn import InteractionType
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import (
     CompositeSpec,
-    TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
 )
 
@@ -82,25 +80,24 @@ if __name__ == "__main__":
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "PongNoFrameskip-v4"
     max_frames_per_traj = 500
-    total_frames = 1000000
+    total_frames = 1_000_000
+    record_interval = 1_000_000
     init_random_frames = 5000
     frames_per_batch = 500
     num_updates = 500
-    buffer_size = 1000000
+    buffer_size = 1_000_000
     env_per_collector = 1
-    gamma: 0.99
-    batch_size: 256
-    lr: 3.0e-4
-    weight_decay: 0.0
-    target_update_polyak: 0.995
-    target_entropy_weight: 0.2
-    logger_backend: "csv"
+    gamma = 0.99
+    batch_size = 256
+    lr = 3.0e-4
+    weight_decay = 0.0
+    target_update_polyak = 0.995
+    target_entropy_weight = 0.2
+    logger_backend = "csv"
     seed = 42
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    exp_name = generate_exp_name("Discrete_SAC", cfg.exp_name)
-    logger = make_logger(backend=logger_backend)
     test_env = env_factory(env_name, num_workers=1)
     num_actions = test_env.action_spec.space.n
 
@@ -198,26 +195,22 @@ if __name__ == "__main__":
     params = list(loss_module.parameters())
     optimizer_actor = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-    rewards = []
-    rewards_eval = []
+    logger = make_logger(backend=logger_backend)
 
     # Main loop
     collected_frames = 0
     pbar = tqdm.tqdm(total=total_frames)
-    r0 = None
-    loss = None
-
     for i, tensordict in enumerate(collector):
 
-        # update weights of the inference policy
         collector.update_policy_weights_()
-
-        new_collected_epochs = len(np.unique(tensordict["collector"]["traj_ids"]))
-        if r0 is None:
-            r0 = tensordict["next", "reward"].sum().item() / new_collected_epochs
         pbar.update(tensordict.numel())
 
-        # extend the replay buffer with the new data
+        # Train loging
+        episode_rewards = tensordict["next", "episode_reward"][tensordict["next", "done"]]
+        if len(episode_rewards) > 0:
+            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
+
+        # Extend the replay buffer with the new data
         if "mask" in tensordict.keys():
             # if multi-step, a mask is present to help filter padded values
             current_frames = tensordict["mask"].sum()
@@ -225,22 +218,16 @@ if __name__ == "__main__":
         else:
             tensordict = tensordict.view(-1)
             current_frames = tensordict.numel()
+
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
         total_collected_epochs = tensordict["collector"]["traj_ids"].max().item()
 
         # optimization steps
         if collected_frames >= init_random_frames:
-            (
-                total_losses,
-                actor_losses,
-                q_losses,
-                alpha_losses,
-                alphas,
-                entropies,
-            ) = ([], [], [], [], [], [])
-            for _ in range(num_updates):
-                # sample from replay buffer
+
+            losses = TensorDict({}, batch_size=[num_updates])
+            for j in range(num_updates):
                 sampled_tensordict = replay_buffer.sample().clone()
 
                 loss_td = loss_module(sampled_tensordict)
@@ -257,57 +244,30 @@ if __name__ == "__main__":
                 # update qnet_target params
                 target_net_updater.step()
 
-                total_losses.append(loss.item())
-                actor_losses.append(actor_loss.item())
-                q_losses.append(q_loss.item())
-                alpha_losses.append(alpha_loss.item())
-                alphas.append(loss_td["alpha"].item())
-                entropies.append(loss_td["entropy"].item())
+                losses[j] = loss_td.detach()
 
-        rewards.append(
-            (
-                i, tensordict["next", "reward"].sum().item() / new_collected_epochs,
-            )
-        )
-        metrics = {
-            "train_reward": rewards[-1][1],
-            "collected_frames": collected_frames,
-            "epochs": total_collected_epochs,
-        }
+            losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
+            for key, value in losses.items():
+                logger.log_scalar(key, value.item(), collected_frames)
 
-        if loss is not None:
-            metrics.update(
-                {
-                    "total_loss": np.mean(total_losses),
-                    "actor_loss": np.mean(actor_losses),
-                    "q_loss": np.mean(q_losses),
-                    "alpha_loss": np.mean(alpha_losses),
-                    "alpha": np.mean(alphas),
-                    "entropy": np.mean(entropies),
-                }
-            )
-
-        with set_exploration_type(
-                ExplorationType.RANDOM
-        ), torch.no_grad():  # TODO: exploration mode to mean causes nans
-
-            eval_rollout = test_env.rollout(
-                max_steps=-1,
-                policy=actor,
-                auto_cast_to_device=True,
-            ).clone()
-            eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-            rewards_eval.append((i, eval_reward))
-            eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
-            metrics.update({"test_reward": rewards_eval[-1][1]})
-        if len(rewards_eval):
-            pbar.set_description(
-                f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
-            )
-
-        # log metrics
-        for key, value in metrics.items():
-            logger.log_scalar(key, value, step=collected_frames)
+        # Test logging
+        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+            if (collected_frames - frames_per_batch) // record_interval < (collected_frames // record_interval):
+                model.eval()
+                test_rewards = []
+                for i in range(30):
+                    td_test = test_env.rollout(
+                        policy=model,
+                        auto_reset=True,
+                        auto_cast_to_device=True,
+                        break_when_any_done=True,
+                        max_steps=10_000_000,
+                    )
+                    reward = td_test["next", "episode_reward"][td_test["next", "done"]]
+                    test_rewards = np.append(test_rewards, reward.cpu().numpy())
+                    del td_test
+                logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                model.train()
 
     collector.shutdown()
 
