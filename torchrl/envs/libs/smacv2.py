@@ -8,6 +8,7 @@ import torch
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
@@ -153,6 +154,30 @@ class SMACv2Wrapper(_EnvWrapper):
             device=self.device,
             dtype=torch.float32,
         )
+        info_spec = CompositeSpec(
+            {
+                "battle_won": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device
+                ),
+                "episode_limit": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device
+                ),
+                "dead_allies": BoundedTensorSpec(
+                    minimum=0,
+                    maximum=self.n_agents,
+                    dtype=torch.long,
+                    device=self.device,
+                    shape=(),
+                ),
+                "dead_enemies": BoundedTensorSpec(
+                    minimum=0,
+                    maximum=self.n_enemies,
+                    dtype=torch.long,
+                    device=self.device,
+                    shape=(),
+                ),
+            }
+        )
         mask_spec = DiscreteTensorSpec(
             2,
             torch.Size([self.n_agents, self.n_actions]),
@@ -170,6 +195,7 @@ class SMACv2Wrapper(_EnvWrapper):
                     device=self.device,
                     dtype=torch.float32,
                 ),
+                "info": info_spec,
             }
         )
         return spec
@@ -200,6 +226,7 @@ class SMACv2Wrapper(_EnvWrapper):
         # collect outputs
         obs = self._to_tensor(obs)
         state = self._to_tensor(state)
+        info = self.observation_spec["info"].zero()
 
         mask = self.update_action_mask()
 
@@ -208,7 +235,7 @@ class SMACv2Wrapper(_EnvWrapper):
             {"observation": obs, "mask": mask}, batch_size=(self.n_agents,)
         )
         tensordict_out = TensorDict(
-            source={"agents": agents_td, "state": state},
+            source={"agents": agents_td, "state": state, "info": info},
             batch_size=(),
             device=self.device,
         )
@@ -226,9 +253,16 @@ class SMACv2Wrapper(_EnvWrapper):
         # collect outputs
         obs = self.get_obs()
         state = self.get_state()
+        info = self.observation_spec["info"].encode(info)
+        if "episode_limit" not in info.keys():
+            info["episode_limit"] = self.observation_spec["info"][
+                "episode_limit"
+            ].zero()
 
-        reward = torch.tensor(reward, device=self.device, dtype=torch.float32)
-        done = torch.tensor(done, device=self.device, dtype=torch.bool)
+        reward = torch.tensor(
+            reward, device=self.device, dtype=torch.float32
+        ).unsqueeze(-1)
+        done = torch.tensor(done, device=self.device, dtype=torch.bool).unsqueeze(-1)
 
         mask = self.update_action_mask()
 
@@ -242,6 +276,7 @@ class SMACv2Wrapper(_EnvWrapper):
                 "next": {
                     "agents": agents_td,
                     "state": state,
+                    "info": info,
                     "reward": reward,
                     "done": done,
                 }
