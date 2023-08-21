@@ -67,6 +67,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     gradient_steps = cfg.optim.gradient_steps
     evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
+    policy_eval_start = cfg.optim.policy_eval_start
 
     for i in range(gradient_steps):
         pbar.update(i)
@@ -74,7 +75,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # loss
         loss_vals = loss_module(data)
         # backprop
-        actor_loss = loss_vals["loss_actor"]
+        if i >= policy_eval_start:
+            actor_loss = loss_vals["loss_actor"]
+        else:
+            actor_loss = loss_vals["loss_actor_bc"]
         q_loss = loss_vals["loss_qvalue"]
         alpha_loss = loss_vals["loss_alpha"]
         alpha_prime_loss = loss_vals["loss_alpha_prime"]
