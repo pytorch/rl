@@ -765,14 +765,9 @@ class SyncDataCollector(DataCollectorBase):
                 if self.postproc is not None:
                     tensordict_out = self.postproc(tensordict_out)
                 if self._exclude_private_keys:
-                    excluded_keys = []
-                    for key in tensordict_out.keys(True, True):
-                        if isinstance(key, Tuple):
-                            leaf_key = key[-1]
-                        else:
-                            leaf_key = key
-                        if leaf_key.startswith("_"):
-                            excluded_keys.append(key)
+                    excluded_keys = [
+                        key for key in tensordict_out.keys() if key.startswith("_")
+                    ]
                     tensordict_out = tensordict_out.exclude(
                         *excluded_keys, inplace=True
                     )
