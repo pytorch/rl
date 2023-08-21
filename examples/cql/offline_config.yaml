@@ -12,7 +12,7 @@ env:
 # logger
 logger:
   backend: wandb
-  eval_iter: 500
+  eval_iter: 1000
   eval_steps: 1000
   mode: online
   eval_envs: 5
