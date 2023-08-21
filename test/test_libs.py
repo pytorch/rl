@@ -73,6 +73,7 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
+from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 
 if _has_gym:
     try:
@@ -1613,6 +1614,30 @@ class TestIsaacGym:
     #     for c in collector:
     #         assert c.shape == torch.Size([num_envs, 20])
     #         break
+
+
+@pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
+class TestSmacv2:
+    def test(self):
+        distribution_config = {
+            "n_units": 5,
+            "n_enemies": 10,
+            "team_gen": {
+                "dist_type": "weighted_teams",
+                "unit_types": ["marine", "marauder", "medivac"],
+                "exception_unit_types": ["medivac"],
+                "weights": [0.45, 0.55, 0.0],
+                "observe": True,
+            },
+        }
+        env = SMACv2Env(
+            map_name="10gen_terran",
+            capability_config=distribution_config,
+            seed=2,
+            render=False,
+        )
+        check_env_specs(env, seed=None)
+        # env.reset()
 
 
 if __name__ == "__main__":

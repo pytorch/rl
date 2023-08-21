@@ -147,16 +147,24 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _make_observation_spec(self) -> CompositeSpec:
         obs_spec = UnboundedContinuousTensorSpec(
-            torch.Size([self.n_agents, self.get_obs_size()]), device=self.device
+            torch.Size([self.n_agents, self.get_obs_size()]),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        mask_spec = DiscreteTensorSpec(
+            2,
+            torch.Size([self.n_agents, self.n_actions]),
+            device=self.device,
+            dtype=torch.bool,
         )
         spec = CompositeSpec(
             {
                 "agents": CompositeSpec(
-                    {"observation": obs_spec},
-                    shape=torch.Size((self.n_agents,), dtype=torch.float32),
+                    {"observation": obs_spec, "mask": mask_spec},
+                    shape=torch.Size((self.n_agents,)),
                 ),
                 "state": UnboundedContinuousTensorSpec(
-                    torch.Size([self.n_agents, self.get_state_size()]),
+                    torch.Size((self.get_state_size(),)),
                     device=self.device,
                     dtype=torch.float32,
                 ),
@@ -171,11 +179,11 @@ class SMACv2Wrapper(_EnvWrapper):
             )
 
     def get_obs(self):
-        obs = self.get_obs()
+        obs = self._env.get_obs()
         return self._to_tensor(obs)
 
     def get_state(self):
-        state = self.get_state()
+        state = self._env.get_state()
         return self._to_tensor(state)
 
     def _to_tensor(self, value):
@@ -191,17 +199,17 @@ class SMACv2Wrapper(_EnvWrapper):
         obs = self._to_tensor(obs)
         state = self._to_tensor(state)
 
-        mask = self.get_action_mask()
+        mask = self.update_action_mask()
 
         # build results
-        agents_td = TensorDict({"observation": obs}, batch_size=(self.n_agents,))
+        agents_td = TensorDict(
+            {"observation": obs, "mask": mask}, batch_size=(self.n_agents,)
+        )
         tensordict_out = TensorDict(
-            source={"agents": agents_td, "state": state, "mask": mask},
+            source={"agents": agents_td, "state": state},
             batch_size=(),
             device=self.device,
         )
-
-        self.get_action_mask()
 
         return tensordict_out
 
@@ -220,7 +228,7 @@ class SMACv2Wrapper(_EnvWrapper):
         reward = torch.tensor(reward, device=self.device, dtype=torch.float32)
         done = torch.tensor(done, device=self.device, dtype=torch.bool)
 
-        mask = self.get_action_mask()
+        mask = self.update_action_mask()
 
         # build results
         agents_td = TensorDict(
@@ -242,10 +250,12 @@ class SMACv2Wrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def get_action_mask(self):
-        return torch.tensor(
+    def update_action_mask(self):
+        mask = torch.tensor(
             self.get_avail_actions(), dtype=torch.bool, device=self.device
         )
+        self.action_spec.update_mask(mask)
+        return mask
 
 
 class SMACv2Env(SMACv2Wrapper):
