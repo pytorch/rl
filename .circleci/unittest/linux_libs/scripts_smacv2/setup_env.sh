@@ -49,8 +49,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 # 5. Install StarCraft 2 with SMACv2 maps
 # SC2PATH is set in run_test.sh
 printf "* Installing StarCraft 2 and SMACv2 maps into '${root_dir}/smacv2/StarCraftII'\n"
-mkdir "${root_dir}/smacv2"
-cd "${root_dir}/smacv2"
+cd "${root_dir}"
 # TODO: discuss how we can cache it to avoid downloading ~4 GB on each run.
 # e.g adding this into the image learn( which one is used and how it is maintained)
 wget https://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
