@@ -5,11 +5,12 @@
 from typing import Dict, Optional
 
 import torch
+from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
@@ -67,10 +68,12 @@ class SMACv2Wrapper(_EnvWrapper):
     def __init__(
         self,
         env: "smacv2.env.StarCraft2Env" = None,
+        categorical_actions: bool = False,
         **kwargs,
     ):
         if env is not None:
             kwargs["env"] = env
+        self.categorical_actions = categorical_actions
 
         super().__init__(**kwargs)
 
@@ -119,13 +122,20 @@ class SMACv2Wrapper(_EnvWrapper):
         self.observation_spec = self._make_observation_spec()
 
     def _make_action_spec(self) -> CompositeSpec:
-        # TODO masking
-        # mask = torch.tensor(env.get_avail_actions(), dtype=torch.bool, device=self.device)
-        action_spec = MultiOneHotDiscreteTensorSpec(
-            [self.n_actions],
-            shape=torch.Size([self.n_agents, self.n_actions]),
-            device=self.device,
-        )
+        if self.categorical_actions:
+            action_spec = DiscreteTensorSpec(
+                self.n_actions,
+                shape=torch.Size((self.n_agents,)),
+                device=self.device,
+                dtype=torch.long,
+            )
+        else:
+            action_spec = OneHotDiscreteTensorSpec(
+                self.n_actions,
+                shape=torch.Size((self.n_agents, self.n_actions)),
+                device=self.device,
+                dtype=torch.long,
+            )
         spec = CompositeSpec(
             {
                 "agents": CompositeSpec(
@@ -142,89 +152,100 @@ class SMACv2Wrapper(_EnvWrapper):
         spec = CompositeSpec(
             {
                 "agents": CompositeSpec(
-                    {"observation": obs_spec}, shape=torch.Size((self.n_agents,))
+                    {"observation": obs_spec},
+                    shape=torch.Size((self.n_agents,), dtype=torch.float32),
                 ),
                 "state": UnboundedContinuousTensorSpec(
                     torch.Size([self.n_agents, self.get_state_size()]),
                     device=self.device,
+                    dtype=torch.float32,
                 ),
             }
         )
         return spec
 
     def _set_seed(self, seed: Optional[int]):
-        raise NotImplementedError(
-            "Seed cannot be changed once environment was created."
+        if seed is not None:
+            raise NotImplementedError(
+                "Seed cannot be changed once environment was created."
+            )
+
+    def get_obs(self):
+        obs = self.get_obs()
+        return self._to_tensor(obs)
+
+    def get_state(self):
+        state = self.get_state()
+        return self._to_tensor(state)
+
+    def _to_tensor(self, value):
+        return torch.tensor(value, device=self.device, dtype=torch.float32)
+
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
+
+        obs, state = self._env.reset()
+
+        # collect outputs
+        obs = self._to_tensor(obs)
+        state = self._to_tensor(state)
+
+        mask = self.get_action_mask()
+
+        # build results
+        agents_td = TensorDict({"observation": obs}, batch_size=(self.n_agents,))
+        tensordict_out = TensorDict(
+            source={"agents": agents_td, "state": state, "mask": mask},
+            batch_size=(),
+            device=self.device,
         )
 
-    # def _action_transform(self, action: torch.Tensor):
-    #     action_np = self.action_spec.to_numpy(action)
-    #     return action_np
-    #
-    # def _read_state(self, state: np.ndarray) -> torch.Tensor:
-    #     return self.state_spec.encode(
-    #         torch.Tensor(state, device=self.device).expand(*self.state_spec.shape)
-    #     )
-    #
-    #
-    # def _reset(
-    #     self, tensordict: Optional[TensorDictBase] = None, **kwargs
-    # ) -> TensorDictBase:
-    #     env: smac.env.StarCraft2Env = self._env
-    #     obs, state = env.reset()
-    #
-    #     # collect outputs
-    #     obs_dict = self.read_obs(obs)
-    #     state = self._read_state(state)
-    #     self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-    #
-    #     # build results
-    #     tensordict_out = TensorDict(
-    #         source=obs_dict,
-    #         batch_size=self.batch_size,
-    #         device=self.device,
-    #     )
-    #     tensordict_out.set("done", self._is_done)
-    #     tensordict_out["state"] = state
-    #
-    #     self.input_spec = self._make_input_spec(env)
-    #
-    #     return tensordict_out
-    #
-    # def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-    #     env: smac.env.StarCraft2Env = self._env
-    #
-    #     # perform actions
-    #     action = tensordict.get("action")  # this is a list of actions for each agent
-    #     action_np = self._action_transform(action)
-    #
-    #     # Actions are validated by the environment.
-    #     reward, done, info = env.step(action_np)
-    #
-    #     # collect outputs
-    #     obs_dict = self.read_obs(env.get_obs())
-    #     # TODO: add centralized flag?
-    #     state = self._read_state(env.get_state())
-    #
-    #     reward = self._to_tensor(reward, dtype=self.reward_spec.dtype).expand(
-    #         self.batch_size
-    #     )
-    #     done = self._to_tensor(done, dtype=torch.bool).expand(self.batch_size)
-    #
-    #     # build results
-    #     tensordict_out = TensorDict(
-    #         source=obs_dict,
-    #         batch_size=tensordict.batch_size,
-    #         device=self.device,
-    #     )
-    #     tensordict_out.set("reward", reward)
-    #     tensordict_out.set("done", done)
-    #     tensordict_out["state"] = state
-    #
-    #     # Update available actions mask.
-    #     self.input_spec = self._make_input_spec(env)
-    #
-    #     return tensordict_out
+        self.get_action_mask()
+
+        return tensordict_out
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # perform actions
+        action = tensordict.get(("agents", "action"))
+        action_np = self.action_spec.to_numpy(action)
+
+        # Actions are validated by the environment.
+        reward, done, info = self._env.step(action_np)
+
+        # collect outputs
+        obs = self.get_obs()
+        state = self.get_state()
+
+        reward = torch.tensor(reward, device=self.device, dtype=torch.float32)
+        done = torch.tensor(done, device=self.device, dtype=torch.bool)
+
+        mask = self.get_action_mask()
+
+        # build results
+        agents_td = TensorDict(
+            {"observation": obs, "mask": mask}, batch_size=(self.n_agents,)
+        )
+
+        tensordict_out = TensorDict(
+            source={
+                "next": {
+                    "agents": agents_td,
+                    "state": state,
+                    "reward": reward,
+                    "done": done,
+                }
+            },
+            batch_size=(),
+            device=self.device,
+        )
+
+        return tensordict_out
+
+    def get_action_mask(self):
+        return torch.tensor(
+            self.get_avail_actions(), dtype=torch.bool, device=self.device
+        )
 
 
 class SMACv2Env(SMACv2Wrapper):
@@ -241,6 +262,7 @@ class SMACv2Env(SMACv2Wrapper):
         map_name: str,
         capability_config: Optional[Dict] = None,
         seed: Optional[int] = None,
+        categorical_actions: bool = False,
         **kwargs,
     ):
         if not _has_smacv2:
@@ -251,6 +273,7 @@ class SMACv2Env(SMACv2Wrapper):
         kwargs["map_name"] = map_name
         kwargs["capability_config"] = capability_config
         kwargs["seed"] = seed
+        kwargs["categorical_actions"] = categorical_actions
 
         super().__init__(**kwargs)
 
@@ -271,8 +294,6 @@ class SMACv2Env(SMACv2Wrapper):
                 capability_config=capability_config, map_name=map_name, seed=seed
             )
         else:
-            env = smacv2.env.StarCraft2Env(
-                capability_config=capability_config, map_name=map_name, seed=seed
-            )
+            env = smacv2.env.StarCraft2Env(map_name=map_name, seed=seed)
 
         return super()._build_env(env)

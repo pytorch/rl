@@ -406,8 +406,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     of an experiment and as such should be kept out of training scripts.
 
     """
-    torch.manual_seed(seed)
-    env.set_seed(seed)
+    if seed is not None:
+        torch.manual_seed(seed)
+        env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
