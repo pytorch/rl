@@ -624,5 +624,7 @@ the following function will return ``1`` when queried:
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
+    smacv2.SMACv2Wrapper
+    smacv2.SMACv2Env
     vmas.VmasEnv
     vmas.VmasWrapper
