@@ -121,6 +121,8 @@ class SMACv2Wrapper(_EnvWrapper):
         self.action_spec = self._make_action_spec()
         self.observation_spec = self._make_observation_spec()
 
+        self.update_action_mask()
+
     def _make_action_spec(self) -> CompositeSpec:
         if self.categorical_actions:
             action_spec = DiscreteTensorSpec(
