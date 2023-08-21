@@ -55,7 +55,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Make Optimizer
-    optimizer = make_cql_optimizer(cfg.optim, loss_module)
+    policy_optim, critic_optim, alpha_optim, alpha_prime_optim = make_cql_optimizer(
+        cfg.optim, loss_module
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
@@ -74,12 +76,28 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # backprop
         actor_loss = loss_vals["loss_actor"]
         q_loss = loss_vals["loss_qvalue"]
-        value_loss = loss_vals["loss_value"]
-        loss_val = actor_loss + q_loss + value_loss
+        alpha_loss = loss_vals["loss_alpha"]
+        alpha_prime_loss = loss_vals["loss_alpha_prime"]
 
-        optimizer.zero_grad()
-        loss_val.backward()
-        optimizer.step()
+        alpha_optim.zero_grad()
+        alpha_loss.backward()
+        alpha_optim.step()
+
+        policy_optim.zero_grad()
+        actor_loss.backward()
+        policy_optim.step()
+
+        if alpha_prime_optim is not None:
+            alpha_prime_optim.zero_grad()
+            alpha_prime_loss.backward(retain_graph=True)
+            alpha_prime_optim.step()
+
+        critic_optim.zero_grad()
+        q_loss.backward(retain_graph=False)
+        critic_optim.step()
+
+        loss = actor_loss + q_loss + alpha_loss + alpha_prime_loss
+
         target_net_updater.step()
 
         # evaluation
@@ -92,7 +110,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if r0 is None:
             r0 = eval_td["next", "reward"].sum(1).mean().item()
         if l0 is None:
-            l0 = loss_val.item()
+            l0 = loss.item()
 
         for key, value in loss_vals.items():
             logger.log_scalar(key, value.item(), i)
@@ -100,7 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger.log_scalar("evaluation_reward", eval_reward, i)
 
         pbar.set_description(
-            f"loss: {loss_val.item(): 4.4f} (init: {l0: 4.4f}), evaluation_reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
+            f"loss: {loss.item(): 4.4f} (init: {l0: 4.4f}), evaluation_reward: {eval_reward: 4.4f} (init={r0: 4.4f})"
         )
 
 

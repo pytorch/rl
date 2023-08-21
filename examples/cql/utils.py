@@ -244,9 +244,28 @@ def make_loss(loss_cfg, model):
 
 
 def make_cql_optimizer(optim_cfg, loss_module):
+    critic_params = loss_module.qvalue_network_params.flatten_keys().values()
+    actor_params = loss_module.actor_network_params.flatten_keys().values()
     optim = torch.optim.Adam(
-        loss_module.parameters(),
-        lr=optim_cfg.lr,
-        weight_decay=optim_cfg.weight_decay,
+        actor_params,
+        lr=optim_cfg.actor_lr,
+        # weight_decay=optim_cfg.weight_decay,
     )
-    return optim
+    critic_optim = torch.optim.Adam(
+        critic_params,
+        lr=optim_cfg.critic_lr,
+        # weight_decay=optim_cfg.weight_decay,
+    )
+    alpha_optim = torch.optim.Adam(
+        [loss_module.log_alpha],
+        lr=optim_cfg.actor_lr,
+        # weight_decay=optim_cfg.weight_decay,
+    )
+    if loss_module.with_lagrange:
+        alpha_prime_optim = torch.optim.Adam(
+            [loss_module.log_alpha_prime],
+            lr=optim_cfg.critic_lr,
+        )
+    else:
+        alpha_prime_optim = None
+    return optim, critic_optim, alpha_optim, alpha_prime_optim

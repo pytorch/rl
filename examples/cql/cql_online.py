@@ -64,7 +64,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Make Optimizer
-    optimizer = make_cql_optimizer(cfg.optim, loss_module)
+    policy_optim, critic_optim, alpha_optim, alpha_prime_optim = make_cql_optimizer(
+        cfg.optim, loss_module
+    )
 
     rewards = []
     rewards_eval = []
@@ -112,11 +114,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
                 alpha_prime_loss = loss_td["loss_alpha_prime"]
-                loss = actor_loss + q_loss + alpha_loss + alpha_prime_loss
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                alpha_optim.zero_grad()
+                alpha_loss.backward()
+                alpha_optim.step()
+
+                policy_optim.zero_grad()
+                actor_loss.backward()
+                policy_optim.step()
+
+                if alpha_prime_optim is not None:
+                    alpha_prime_optim.zero_grad()
+                    alpha_prime_loss.backward(retain_graph=True)
+                    alpha_prime_optim.step()
+
+                critic_optim.zero_grad()
+                q_loss.backward(retain_graph=False)
+                critic_optim.step()
 
                 q_losses.append(q_loss.item())
                 actor_losses.append(actor_loss.item())

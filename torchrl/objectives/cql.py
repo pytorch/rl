@@ -512,7 +512,7 @@ class CQLLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
-            td_q,
+            td_q.to_tensordict(),
             self._cached_detach_qvalue_params,
         )
         min_q_logprob = (
@@ -565,7 +565,7 @@ class CQLLoss(LossModule):
             # get q-values
             if not self.max_q_backup:
                 next_tensordict_expand = self._vmap_qvalue_networkN0(
-                    next_tensordict, qval_params
+                    next_tensordict.to_tensordict(), qval_params
                 )
                 next_state_value = next_tensordict_expand.get(
                     self.tensor_keys.state_action_value
@@ -586,7 +586,7 @@ class CQLLoss(LossModule):
                     num_actions=self.num_random,
                 )
                 next_tensordict_expand = self._vmap_qvalue_networkN0(
-                    next_tensordict, qval_params
+                    next_tensordict.to_tensordict(), qval_params
                 )
 
                 state_action_value = next_tensordict_expand.get(
@@ -616,7 +616,7 @@ class CQLLoss(LossModule):
 
         tensordict_pred_q = tensordict.select(*self.qvalue_network.in_keys)
         q_pred = self._vmap_qvalue_networkN0(
-            tensordict_pred_q, self.qvalue_network_params
+            tensordict_pred_q.to_tensordict(), self.qvalue_network_params
         ).get(self.tensor_keys.state_action_value)
 
         # add CQL
@@ -681,7 +681,7 @@ class CQLLoss(LossModule):
         cql_tensordict = cql_tensordict.contiguous()
 
         cql_tensordict_expand = self._vmap_qvalue_network00(
-            cql_tensordict, qvalue_params
+            cql_tensordict.to_tensordict(), qvalue_params
         )
         # get q values
         state_action_value = cql_tensordict_expand.get(
