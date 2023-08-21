@@ -59,6 +59,7 @@ unzip -qo -P iagreetotheeula SC2.4.10.zip
 mkdir -p "${map_dir}"
 # Install Maps
 wget https://github.com/oxwhirl/smacv2/releases/download/maps/SMAC_Maps.zip
-
-unzip -qo SMAC_Maps.zip -d ."${map_dir}"
+unzip SMAC_Maps.zip
+mkdir "${map_dir}/SMAC_Maps"
+mv *.SC2Map "${map_dir}/SMAC_Maps"
 printf "StarCraft II and SMAC are installed."
