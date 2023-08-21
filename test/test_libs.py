@@ -1637,7 +1637,6 @@ class TestSmacv2:
             render=False,
         )
         check_env_specs(env, seed=None)
-        # env.reset()
 
 
 if __name__ == "__main__":
