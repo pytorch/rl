@@ -335,7 +335,7 @@ class TD3Loss(LossModule):
     @_cache_values
     def _cached_stack_actor_params(self):
         return torch.stack(
-            [self.actor_network_params, self.target_actor_network_params.detach()], 0
+            [self.actor_network_params, self.target_actor_network_params], 0
         )
 
     @dispatch
