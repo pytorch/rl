@@ -49,11 +49,11 @@ class SMACv2Wrapper(_EnvWrapper):
                 done: Tensor(torch.Size([1]), dtype=torch.bool),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(torch.Size([8, 80]), dtype=torch.float32)},
+                        obs: Tensor(torch.Size([8, 80]), dtype=torch.float32)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(torch.Size([8, 80]), dtype=torch.float32),
+                obs: Tensor(torch.Size([8, 80]), dtype=torch.float32),
                 reward: Tensor(torch.Size([1]), dtype=torch.float32)},
             batch_size=torch.Size([]),
             device=cpu,
@@ -101,7 +101,6 @@ class SMACv2Wrapper(_EnvWrapper):
         return env
 
     def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:
-        # Extract specs from definition.
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=torch.Size((1,)),
             device=self.device,
@@ -112,16 +111,11 @@ class SMACv2Wrapper(_EnvWrapper):
             dtype=torch.bool,
             device=self.device,
         )
-
-        # Specs that require initialized environment are built in _init_env.
-
-    def _init_env(self) -> None:
-        self._env.reset()
-
-        # Before extracting environment specific specs, env.reset() must be executed.
         self.action_spec = self._make_action_spec()
         self.observation_spec = self._make_observation_spec()
 
+    def _init_env(self) -> None:
+        self._env.reset()
         self.update_action_mask()
 
     def _make_action_spec(self) -> CompositeSpec:
@@ -149,8 +143,10 @@ class SMACv2Wrapper(_EnvWrapper):
         return spec
 
     def _make_observation_spec(self) -> CompositeSpec:
-        obs_spec = UnboundedContinuousTensorSpec(
-            torch.Size([self.n_agents, self.get_obs_size()]),
+        obs_spec = BoundedTensorSpec(
+            minimum=-1.0,
+            maximum=1.0,
+            shape=torch.Size([self.n_agents, self.get_obs_size()]),
             device=self.device,
             dtype=torch.float32,
         )
@@ -187,11 +183,13 @@ class SMACv2Wrapper(_EnvWrapper):
         spec = CompositeSpec(
             {
                 "agents": CompositeSpec(
-                    {"observation": obs_spec, "mask": mask_spec},
+                    {"obs": obs_spec, "action_mask": mask_spec},
                     shape=torch.Size((self.n_agents,)),
                 ),
-                "state": UnboundedContinuousTensorSpec(
-                    torch.Size((self.get_state_size(),)),
+                "state": BoundedTensorSpec(
+                    minimum=-1.0,
+                    maximum=1.0,
+                    shape=torch.Size((self.get_state_size(),)),
                     device=self.device,
                     dtype=torch.float32,
                 ),
@@ -232,7 +230,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         # build results
         agents_td = TensorDict(
-            {"observation": obs, "mask": mask}, batch_size=(self.n_agents,)
+            {"obs": obs, "action_mask": mask}, batch_size=(self.n_agents,)
         )
         tensordict_out = TensorDict(
             source={"agents": agents_td, "state": state, "info": info},
@@ -268,7 +266,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         # build results
         agents_td = TensorDict(
-            {"observation": obs, "mask": mask}, batch_size=(self.n_agents,)
+            {"obs": obs, "action_mask": mask}, batch_size=(self.n_agents,)
         )
 
         tensordict_out = TensorDict(
@@ -293,6 +291,46 @@ class SMACv2Wrapper(_EnvWrapper):
         )
         self.action_spec.update_mask(mask)
         return mask
+
+    def close(self):
+        # Closes StarCraft II
+        self._env.close()
+
+    def get_agent_type(self, agent_index: int) -> str:
+        """Get the agent type string.
+
+        Given the agent index, get its unit type name.
+
+        Args:
+            agent_index (int): the index of the agent to get the type of
+
+        """
+        if agent_index < 0 or agent_index >= self.n_agents:
+            raise ValueError(f"Agent index out of range, {self.n_agents} available")
+
+        agent_info = self.agents[agent_index]
+        if agent_info.unit_type == self.marine_id:
+            agent_type = "marine"
+        elif agent_info.unit_type == self.marauder_id:
+            agent_type = "marauder"
+        elif agent_info.unit_type == self.medivac_id:
+            agent_type = "medivac"
+        elif agent_info.unit_type == self.hydralisk_id:
+            agent_type = "hydralisk"
+        elif agent_info.unit_type == self.zergling_id:
+            agent_type = "zergling"
+        elif agent_info.unit_type == self.baneling_id:
+            agent_type = "baneling"
+        elif agent_info.unit_type == self.stalker_id:
+            agent_type = "stalker"
+        elif agent_info.unit_type == self.colossus_id:
+            agent_type = "colossus"
+        elif agent_info.unit_type == self.zealot_id:
+            agent_type = "zealot"
+        else:
+            raise AssertionError(f"Agent type {agent_info.unit_type} unidentified")
+
+        return agent_type
 
 
 class SMACv2Env(SMACv2Wrapper):
