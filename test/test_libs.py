@@ -1618,23 +1618,49 @@ class TestIsaacGym:
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
 class TestSmacv2:
-    def test(self):
+    def test_env_procedural(self):
         distribution_config = {
             "n_units": 5,
-            "n_enemies": 10,
+            "n_enemies": 6,
             "team_gen": {
                 "dist_type": "weighted_teams",
                 "unit_types": ["marine", "marauder", "medivac"],
                 "exception_unit_types": ["medivac"],
-                "weights": [0.45, 0.55, 0.0],
+                "weights": [0.5, 0.2, 0.3],
                 "observe": True,
+            },
+            "start_positions": {
+                "dist_type": "surrounded_and_reflect",
+                "p": 0.5,
+                "n_enemies": 5,
+                "map_x": 32,
+                "map_y": 32,
             },
         }
         env = SMACv2Env(
             map_name="10gen_terran",
             capability_config=distribution_config,
-            seed=2,
-            render=False,
+            seed=0,
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    @pytest.mark.parametrize("map", ["MMM2", "3s_vs_5z"])
+    def test_env(self, map: str):
+        env = SMACv2Env(
+            map_name=map,
+            seed=0,
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    def test_vec_env(self):
+        env = ParallelEnv(
+            num_workers=2,
+            create_env_fn=lambda: SMACv2Env(
+                map_name="3s_vs_5z",
+                seed=0,
+            ),
         )
         check_env_specs(env, seed=None)
         env.close()
