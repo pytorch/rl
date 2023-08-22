@@ -1,14 +1,14 @@
 from typing import Dict, List, Optional, Union
 
 import torch
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDictBase
 
 from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.common import _EnvWrapper, EnvBase
+from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.libs.utils import _check_marl_grouping, MarlGroupMapType
 
@@ -80,6 +80,7 @@ def _get_envs() -> List[str]:
 
 
 class PettingZooWrapper(_EnvWrapper):
+    """PettingZoo wrapper."""
 
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
     libname = "pettingzoo"
@@ -254,11 +255,21 @@ class PettingZooWrapper(_EnvWrapper):
 
     def _init_env(self) -> Optional[int]:
         if self.return_state:
-            self._env.reset()
-            state_example = torch.tensor(self.state(), device=self.device)
-            self.observation_spec["state"] = UnboundedContinuousTensorSpec(
-                shape=state_example.shape, dtype=state_example.dtype, device=self.device
-            )
+            try:
+                state_spec = _gym_to_torchrl_spec_transform(
+                    self.state_space,
+                    remap_state_to_observation=False,
+                    device=self.device,
+                )
+            except AttributeError:
+                self._env.reset()
+                state_example = torch.tensor(self.state(), device=self.device)
+                state_spec = UnboundedContinuousTensorSpec(
+                    shape=state_example.shape,
+                    dtype=state_example.dtype,
+                    device=self.device,
+                )
+            self.observation_spec["state"] = state_spec
 
     def _set_seed(self, seed: Optional[int]):
         if seed is not None:
