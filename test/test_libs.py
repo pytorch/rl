@@ -62,6 +62,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooWrapper
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -99,6 +100,7 @@ if _has_dmc:
 
 if _has_vmas:
     import vmas
+
 
 if _has_envpool:
     import envpool
@@ -1613,6 +1615,20 @@ class TestIsaacGym:
     #     for c in collector:
     #         assert c.shape == torch.Size([num_envs, 20])
     #         break
+
+
+@pytest.mark.skipif(not _has_pettingzoo, reason="PettingZoo not found")
+class TestPettingZoo:
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test(self, parallel):
+        from pettingzoo.butterfly import pistonball_v6
+
+        kwargs = {}
+        if parallel:
+            env = pistonball_v6.parallel_env(**kwargs)
+        else:
+            env = pistonball_v6.env(**kwargs)
+        env = PettingZooWrapper(env, return_state=True)
 
 
 if __name__ == "__main__":
