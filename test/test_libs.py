@@ -1645,10 +1645,12 @@ class TestSmacv2:
         check_env_specs(env, seed=None)
         env.close()
 
+    @pytest.mark.parametrize("categorical_actions", [True, False])
     @pytest.mark.parametrize("map", ["MMM2", "3s_vs_5z"])
-    def test_env(self, map: str):
+    def test_env(self, map: str, categorical_actions):
         env = SMACv2Env(
             map_name=map,
+            categorical_actions=categorical_actions,
             seed=0,
         )
         check_env_specs(env, seed=None)
