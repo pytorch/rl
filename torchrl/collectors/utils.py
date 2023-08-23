@@ -63,10 +63,20 @@ def split_trajectories(
     )
     done = done | truncated
     if traj_ids is None:
-        traj_ids = done.cumsum(rollout_tensordict.ndim - 1)
+        idx = (slice(None),) * (rollout_tensordict.ndim - 1) + (slice(None, -1),)
+        done_sel = done[idx]
+        pads = [1, 0]
+        pads = [0, 0] * (done.ndim - rollout_tensordict.ndim) + pads
+        done_sel = torch.nn.functional.pad(done_sel, pads)
+        if done_sel.shape != done.shape:
+            raise RuntimeError(
+                f"done and done_sel have different shape {done.shape} - {done_sel.shape} "
+            )
+        traj_ids = done_sel.cumsum(rollout_tensordict.ndim - 1)
+        traj_ids = traj_ids.squeeze(-1)
         if rollout_tensordict.ndim > 1:
             for i in range(1, rollout_tensordict.shape[0]):
-                traj_ids[i] += traj_ids[i - 1].max()
+                traj_ids[i] += traj_ids[i - 1].max() + 1
         rollout_tensordict.set(traj_ids_key, traj_ids)
 
     splits = traj_ids.view(-1)

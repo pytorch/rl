@@ -188,11 +188,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if "timeouts" in dataset.keys():
             dataset.rename_key("timeouts", "timeout")
         if self.use_timeout_as_done:
-            dataset.set(
-                "done",
-                dataset.get("terminal")
-                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+            done = dataset.get("terminal") | dataset.get(
+                "timeout", torch.zeros((), dtype=torch.bool)
             )
+            dataset.set("done", done)
         else:
             dataset.set("done", dataset.get("terminal"))
         dataset.rename_key("rewards", "reward")

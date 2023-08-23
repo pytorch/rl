@@ -29,7 +29,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+            DoubleToFloat(),
         ),
     )
     return transformed_env

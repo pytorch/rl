@@ -22,6 +22,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     ProbabilisticTensorDictSequential as ProbSeq,
     TensorDictModule as Mod,
+    TensorDictSequential,
     TensorDictSequential as Seq,
 )
 
@@ -47,6 +48,7 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import ContinuousActionConvMockEnv
 from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
+from tensordict.nn.utils import Buffer
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
@@ -92,7 +94,6 @@ from torchrl.modules.tensordict_module.actors import (
     QValueModule,
     ValueOperator,
 )
-from torchrl.modules.utils import Buffer
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -451,7 +452,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -508,7 +510,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -635,7 +638,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -903,7 +907,8 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += 3
+            if p.requires_grad:
+                p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -913,7 +918,8 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_mixer_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += 3
+            if p.requires_grad:
+                p.data += 3
         target_value2 = loss_fn.target_mixer_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -923,7 +929,8 @@ class TestQMixer(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("n", range(4))
@@ -970,7 +977,8 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_local_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += 3
+            if p.requires_grad:
+                p.data += 3
         target_value2 = loss_fn.target_local_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -980,7 +988,8 @@ class TestQMixer(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_mixer_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += 3
+            if p.requires_grad:
+                p.data += 3
         target_value2 = loss_fn.target_mixer_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -990,7 +999,8 @@ class TestQMixer(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -1386,7 +1396,8 @@ class TestDDPG(LossModuleTestBase):
         target_value = [p.clone() for p in loss_fn.target_value_network_params.values()]
         _i = -1
         for _i, p in enumerate(loss_fn.parameters()):
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert _i >= 0
         target_actor2 = [
             p.clone() for p in loss_fn.target_actor_network_params.values()
@@ -1410,7 +1421,8 @@ class TestDDPG(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -1955,7 +1967,14 @@ class TestTD3(LossModuleTestBase):
             assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -2090,8 +2109,16 @@ class TestTD3(LossModuleTestBase):
 
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
+
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_actor = loss_fn.target_actor_network_params.clone().values(
@@ -2101,7 +2128,8 @@ class TestTD3(LossModuleTestBase):
             include_nested=True, leaves_only=True
         )
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_actor2 = loss_fn.target_actor_network_params.clone().values(
             include_nested=True, leaves_only=True
         )
@@ -2129,7 +2157,8 @@ class TestTD3(LossModuleTestBase):
         assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -2603,7 +2632,14 @@ class TestSAC(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
@@ -2772,7 +2808,14 @@ class TestSAC(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = [
@@ -2795,7 +2838,8 @@ class TestSAC(LossModuleTestBase):
                     )
                 ]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = [
                 p.clone()
                 for p in loss_fn.target_actor_network_params.values(
@@ -2844,7 +2888,8 @@ class TestSAC(LossModuleTestBase):
             # check that policy is updated after parameter update
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -3219,7 +3264,14 @@ class TestDiscreteSAC(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -3287,7 +3339,14 @@ class TestDiscreteSAC(LossModuleTestBase):
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_actor = [
@@ -3303,7 +3362,8 @@ class TestDiscreteSAC(LossModuleTestBase):
             )
         ]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_actor2 = [
             p.clone()
             for p in loss_fn.target_actor_network_params.values(
@@ -3334,7 +3394,8 @@ class TestDiscreteSAC(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -3767,7 +3828,14 @@ class TestREDQ(LossModuleTestBase):
             assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
@@ -4122,7 +4190,14 @@ class TestREDQ(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = loss_fn.target_actor_network_params.clone().values(
@@ -4132,7 +4207,8 @@ class TestREDQ(LossModuleTestBase):
                 include_nested=True, leaves_only=True
             )
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = loss_fn.target_actor_network_params.clone().values(
                 include_nested=True, leaves_only=True
             )
@@ -4162,7 +4238,8 @@ class TestREDQ(LossModuleTestBase):
             assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -4517,7 +4594,14 @@ class TestCQL(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -4587,7 +4671,14 @@ class TestCQL(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = [
@@ -4603,7 +4694,8 @@ class TestCQL(LossModuleTestBase):
                 )
             ]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = [
                 p.clone()
                 for p in loss_fn.target_actor_network_params.values(
@@ -4636,7 +4728,8 @@ class TestCQL(LossModuleTestBase):
             # check that policy is updated after parameter update
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -4877,8 +4970,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -4891,8 +4984,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         assert counter == 2
         actor.zero_grad()
 
@@ -4947,8 +5040,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -4961,8 +5054,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
         assert counter == 4
 
@@ -5231,8 +5324,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target" in name)
+                assert ("critic" not in name) or ("target" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -5245,8 +5338,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target" in name)
+                assert ("critic" in name) or ("target" in name)
         assert counter == 2
         actor.zero_grad()
 
@@ -5525,8 +5618,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         value.zero_grad()
         loss_objective.backward()
@@ -5536,8 +5629,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -5571,8 +5664,8 @@ class TestA2C(LossModuleTestBase):
                     assert "actor" not in name
                     assert "critic" in name
                 if p.grad is None:
-                    assert "actor" in name
-                    assert "critic" not in name
+                    assert ("actor" in name) or ("target_" in name)
+                    assert ("critic" not in name) or ("target_" in name)
             else:
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert ("actor" in name) or ("critic" in name)
@@ -5587,8 +5680,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -5642,8 +5735,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         for param in params:
             param.grad = None
@@ -5654,8 +5747,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         for param in params:
             param.grad = None
 
@@ -5758,8 +5851,8 @@ class TestA2C(LossModuleTestBase):
             if p.grad is not None and p.grad.norm() > 0.0:
                 assert "actor" not in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         value.zero_grad()
         loss_objective.backward()
@@ -5769,8 +5862,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -7333,7 +7426,14 @@ class TestIQL(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_iql_separate_losses(self, separate_losses):
@@ -7555,7 +7655,14 @@ class TestIQL(LossModuleTestBase):
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_qvalue = [
@@ -7565,7 +7672,8 @@ class TestIQL(LossModuleTestBase):
             )
         ]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_qvalue2 = [
             p.clone()
             for p in loss_fn.target_qvalue_network_params.values(
@@ -7584,7 +7692,8 @@ class TestIQL(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -7694,7 +7803,10 @@ class TestIQL(LossModuleTestBase):
 
 
 @pytest.mark.parametrize("create_target_params", [True, False])
-def test_param_buffer_types(create_target_params):
+@pytest.mark.parametrize(
+    "cast", [None, torch.float, torch.double, *get_default_devices()]
+)
+def test_param_buffer_types(create_target_params, cast):
     class MyLoss(LossModule):
         def __init__(self, actor_network):
             super().__init__()
@@ -7713,16 +7825,25 @@ def test_param_buffer_types(create_target_params):
         out_keys=["action"],
     )
     loss = MyLoss(actor_module)
-    assert isinstance(loss.actor_network_params["module", "0", "weight"], nn.Parameter)
-    assert isinstance(
-        loss.target_actor_network_params["module", "0", "weight"], nn.Parameter
-    )
-    assert loss.actor_network_params["module", "0", "weight"].requires_grad
-    assert not loss.target_actor_network_params["module", "0", "weight"].requires_grad
-    assert isinstance(loss.actor_network_params["module", "0", "bias"], nn.Parameter)
-    assert isinstance(
-        loss.target_actor_network_params["module", "0", "bias"], nn.Parameter
-    )
+    if cast is not None:
+        loss.to(cast)
+    for name in ("weight", "bias"):
+        param = loss.actor_network_params["module", "0", name]
+        assert isinstance(param, nn.Parameter)
+        target = loss.target_actor_network_params["module", "0", name]
+        if create_target_params:
+            assert target.data_ptr() != param.data_ptr()
+        else:
+            assert target.data_ptr() == param.data_ptr()
+        assert param.requires_grad
+        assert not target.requires_grad
+        if cast is not None:
+            if isinstance(cast, torch.dtype):
+                assert param.dtype == cast
+                assert target.dtype == cast
+            else:
+                assert param.device == cast
+                assert target.device == cast
 
     if create_target_params:
         assert (
@@ -7817,7 +7938,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     module = custom_module_error().to(device)
     with pytest.raises(
-        RuntimeError, match="Your module seems to have a target tensor list "
+        ValueError, match="The loss_module must be a LossModule instance"
     ):
         if mode == "hard":
             upd = HardUpdate(
@@ -7848,7 +7969,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             pass
 
     module = custom_module(delay_module=False)
-    with pytest.raises(RuntimeError, match="The target and source data are identical"):
+    with pytest.raises(
+        RuntimeError,
+        match="Did not find any target parameters or buffers in the loss module",
+    ):
         if mode == "hard":
             upd = HardUpdate(
                 module, value_network_update_interval=value_network_update_interval
@@ -7861,8 +7985,9 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         else:
             raise NotImplementedError
 
-    with pytest.warns(UserWarning, match="No target network updater has been"):
-        module = custom_module().to(device).to(dtype)
+    # this is now allowed
+    # with pytest.warns(UserWarning, match="No target network updater has been"):
+    #     module = custom_module().to(device).to(dtype)
 
     if mode == "soft":
         with pytest.raises(ValueError, match="One and only one argument"):
@@ -7872,6 +7997,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 tau=0.1,
             )
 
+    module = custom_module(delay_module=True)
     _ = module.module1_params
     with pytest.warns(UserWarning, match="No target network updater has been"):
         _ = module.target_module1_params
@@ -9097,9 +9223,10 @@ def test_shared_params(dest, expected_dtype, expected_device):
     loss = MyLoss(actor_network, value_network)
     # modify params
     for p in loss.parameters():
-        p.data += torch.randn_like(p)
+        if p.requires_grad:
+            p.data += torch.randn_like(p)
 
-    assert len(list(loss.parameters())) == 6
+    assert len([p for p in loss.parameters() if p.requires_grad]) == 6
     assert (
         len(loss.actor_network_params.keys(include_nested=True, leaves_only=True)) == 4
     )
@@ -9646,6 +9773,105 @@ class TestSingleCall:
             value_net, data, params, next_params, single_call, value_key, detach_next
         )
         assert (value != value_).all()
+
+
+class TestBuffer:
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_param_cast(self, dtype):
+    #     param = nn.Parameter(torch.zeros(3))
+    #     idb = param.data_ptr()
+    #     param = param.to(dtype)
+    #     assert param.data_ptr() == idb
+    #     assert param.dtype == dtype
+    #     assert param.data.dtype == dtype
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_buffer_cast(self, dtype):
+    #     buffer = Buffer(torch.zeros(3))
+    #     idb = buffer.data_ptr()
+    #     buffer = buffer.to(dtype)
+    #     assert isinstance(buffer, Buffer)
+    #     assert buffer.data_ptr() == idb
+    #     assert buffer.dtype == dtype
+    #     assert buffer.data.dtype == dtype
+
+    @pytest.mark.parametrize("create_target_params", [True, False])
+    @pytest.mark.parametrize(
+        "dest", [torch.float, torch.double, torch.half, *get_default_devices()]
+    )
+    def test_module_cast(self, create_target_params, dest):
+        # test that when casting a loss module, all the tensors (params and buffers)
+        # are properly cast
+        class DummyModule(LossModule):
+            def __init__(self):
+                common = nn.Linear(3, 4)
+                actor = nn.Linear(4, 4)
+                value = nn.Linear(4, 1)
+                common = TensorDictModule(common, in_keys=["obs"], out_keys=["hidden"])
+                actor = TensorDictSequential(
+                    common,
+                    TensorDictModule(actor, in_keys=["hidden"], out_keys=["action"]),
+                )
+                value = TensorDictSequential(
+                    common,
+                    TensorDictModule(value, in_keys=["hidden"], out_keys=["value"]),
+                )
+                super().__init__()
+                self.convert_to_functional(
+                    actor,
+                    "actor",
+                    expand_dim=None,
+                    create_target_params=False,
+                    compare_against=None,
+                )
+                self.convert_to_functional(
+                    value,
+                    "value",
+                    expand_dim=2,
+                    create_target_params=create_target_params,
+                    compare_against=actor.parameters(),
+                )
+
+        mod = DummyModule()
+        v_p1 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params1 = set(mod.parameters())
+        v_buffers1 = set(mod.buffers())
+        mod.to(dest)
+        v_p2 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params2 = set(mod.parameters())
+        v_buffers2 = set(mod.buffers())
+        assert v_p1 == v_p2
+        assert v_params1 == v_params2
+        assert v_buffers1 == v_buffers2
+        for p in mod.parameters():
+            assert isinstance(p, nn.Parameter)
+        for p in mod.buffers():
+            assert isinstance(p, Buffer)
+        for p in mod.actor_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        for p in mod.value_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        if isinstance(dest, torch.dtype):
+            for p in mod.parameters():
+                assert p.dtype == dest
+            for p in mod.buffers():
+                assert p.dtype == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.dtype == dest
+            for p in mod.value_params.values(True, True):
+                assert p.dtype == dest
+        else:
+            for p in mod.parameters():
+                assert p.device == dest
+            for p in mod.buffers():
+                assert p.device == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.device == dest
+            for p in mod.value_params.values(True, True):
+                assert p.device == dest
 
 
 if __name__ == "__main__":
