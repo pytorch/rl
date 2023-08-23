@@ -118,9 +118,9 @@ def test_step_mdp_speed(
     benchmark(
         step_mdp,
         td,
-        action_key=action_key,
-        reward_key=reward_key,
-        done_key=done_key,
+        action_keys=action_key,
+        reward_keys=reward_key,
+        done_keys=done_key,
         keep_other=keep_other,
         exclude_reward=exclude_reward,
         exclude_done=exclude_done,

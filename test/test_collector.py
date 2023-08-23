@@ -22,10 +22,14 @@ from mocking_classes import (
     HeteroCountingEnv,
     HeteroCountingEnvPolicy,
     MockSerialEnv,
+    MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
+
+from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -47,6 +51,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
+from torchrl.envs.utils import _replace_last
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
@@ -1509,6 +1514,81 @@ class TestHetEnvsCollector:
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
         policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+
+        ccollector = MultiaSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                c1 = d
+            elif i == 1:
+                c2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(c1, c2)
+        ccollector.shutdown()
+
+        ccollector = MultiSyncDataCollector(
+            create_env_fn=[env_fn],
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+        for i, d in enumerate(ccollector):
+            if i == 0:
+                d1 = d
+            elif i == 1:
+                d2 = d
+            else:
+                break
+        assert d.names[-1] == "time"
+        with pytest.raises(AssertionError):
+            assert_allclose_td(d1, d2)
+        ccollector.shutdown()
+
+        assert_allclose_td(c1, d1)
+        assert_allclose_td(c2, d2)
+
+
+class TestMultiKeyEnvsCollector:
+    @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
+    @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
+    @pytest.mark.parametrize("max_steps", [2, 3])
+    def test_collector(self, batch_size, frames_per_batch, max_steps, seed=1):
+        env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(env.input_spec["_action_spec"])
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=policy,
+            frames_per_batch=frames_per_batch,
+            total_frames=100,
+            device="cpu",
+        )
+
+        for _td in ccollector:
+            break
+        ccollector.shutdown()
+        for done_key in env.done_keys:
+            assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
+        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
+
+    def test_multi_collector_consistency(
+        self, seed=1, frames_per_batch=20, batch_dim=10
+    ):
+        env = MultiKeyCountingEnv(batch_size=(batch_dim,))
+        env_fn = lambda: env
+        torch.manual_seed(seed)
+        policy = MultiKeyCountingEnvPolicy(
+            env.input_spec["_action_spec"], deterministic=True
+        )
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],
