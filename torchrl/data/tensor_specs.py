@@ -3212,7 +3212,7 @@ class CompositeSpec(TensorSpec):
 
     def unsqueeze(self, dim: int):
         if dim < 0:
-            dim += len(self.shape)
+            dim += len(self.shape) + 1
 
         shape = _unsqueezed_shape(self.shape, dim)
 
