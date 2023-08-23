@@ -196,10 +196,11 @@ class PettingZooWrapper(_EnvWrapper):
                     map[group_name].append(agent_name)
                 else:
                     map[group_name] = [agent_name]
-        for group_name, agent_names in map.items():
+        for group_name in list(map.keys()):
+            agent_names = map[group_name]
             # If there are groups with one agent only, rename them to the agent's name
             if len(agent_names) == 1 and group_name != agent_names[0]:
-                map[agent_names[0]] = agent_name
+                map[agent_names[0]] = agent_names
                 del map[group_name]
 
         return map
@@ -409,14 +410,18 @@ class PettingZooWrapper(_EnvWrapper):
         for group, agent_names in self.group_map.items():
             group_observation = tensordict_out.get((group, "observation"))
             group_info = tensordict_out.get((group, "info"), None)
+
             for i, agent in enumerate(agent_names):
-                group_observation[i] = torch.tensor(
-                    observation_dict[agent], device=self.device
-                )
+                index = (
+                    i if len(agent_names) > 1 else Ellipsis
+                )  # If group has one agent we index with '...'
+                group_observation[index] = self.observation_spec[group, "observation"][
+                    index
+                ].encode(observation_dict[agent])
                 if group_info is not None:
                     agent_info_dict = info_dict[agent]
                     for agent_info, value in agent_info_dict.items():
-                        group_info.get(agent_info)[i] = torch.tensor(
+                        group_info.get(agent_info)[index] = torch.tensor(
                             value, device=self.device
                         )
 
@@ -434,7 +439,12 @@ class PettingZooWrapper(_EnvWrapper):
             )
             for i, agent in enumerate(agents):
                 if agent in self.agents:
-                    action_dict[agent] = group_action_np[i]
+                    if len(agents) > 1:
+                        action_dict[agent] = group_action_np[i]
+                    else:
+                        action_dict[agent] = group_action_np
+                else:
+                    raise ValueError("Provided action for dead agent")
 
         (
             observation_dict,
@@ -455,17 +465,21 @@ class PettingZooWrapper(_EnvWrapper):
             group_reward = tensordict_out.get((group, "reward"))
             group_done = tensordict_out.get((group, "done"))
             group_info = tensordict_out.get((group, "info"), None)
+
             for i, agent in enumerate(agent_names):
-                if agent in self.agents:  # Live agent
-                    group_observation[i] = torch.tensor(
-                        observation_dict[agent], device=self.device
-                    )
-                    group_reward[i] = torch.tensor(
+                if agent in observation_dict:  # Live agent
+                    index = (
+                        i if len(agent_names) > 1 else Ellipsis
+                    )  # If group has one agent we index with '...'
+                    group_observation[index] = self.observation_spec[
+                        group, "observation"
+                    ][index].encode(observation_dict[agent])
+                    group_reward[index] = torch.tensor(
                         rewards_dict[agent],
                         device=self.device,
                         dtype=torch.float32,
                     )
-                    group_done[i] = torch.tensor(
+                    group_done[index] = torch.tensor(
                         terminations_dict[agent] or truncations_dict[agent],
                         device=self.device,
                         dtype=torch.bool,
@@ -474,7 +488,7 @@ class PettingZooWrapper(_EnvWrapper):
                     if group_info is not None:
                         agent_info_dict = info_dict[agent]
                         for agent_info, value in agent_info_dict.items():
-                            group_info.get(agent_info)[i] = torch.tensor(
+                            group_info.get(agent_info)[index] = torch.tensor(
                                 value, device=self.device
                             )
 
@@ -493,11 +507,14 @@ class PettingZooWrapper(_EnvWrapper):
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for i, agent in enumerate(agents):
-                    if agent in self.agents:  # Live agents
+                    index = (
+                        i if len(agents) > 1 else Ellipsis
+                    )  # If group has one agent we index with '...'
+                    if agent in observation_dict:  # Live agents
                         agent_obs = observation_dict[agent]
                         agent_info = info_dict[agent]
                         if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
-                            group_mask[i] = torch.tensor(
+                            group_mask[index] = torch.tensor(
                                 agent_obs["action_mask"],
                                 device=self.device,
                                 dtype=torch.bool,
@@ -506,13 +523,13 @@ class PettingZooWrapper(_EnvWrapper):
                         elif (
                             isinstance(agent_info, Dict) and "action_mask" in agent_info
                         ):
-                            group_mask[i] = torch.tensor(
+                            group_mask[index] = torch.tensor(
                                 agent_info["action_mask"],
                                 device=self.device,
                                 dtype=torch.bool,
                             )
                     else:  # Dead agent
-                        group_mask[i] = False
+                        group_mask[index] = False
                 group_action_spec = self.input_spec["_action_spec", group, "action"]
                 if isinstance(
                     group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)

@@ -1641,21 +1641,49 @@ class TestPettingZoo:
     @pytest.mark.parametrize(
         "task",
         [
-            "pistonball_v6",
             "multiwalker_v9",
             "waterworld_v4",
-            # "pursuit_v4",
+            "pursuit_v4",
+            "simple_spread_v3",
+            "simple_v3",
+            "rps_v2",
+            "cooperative_pong_v5",
+            "pistonball_v6",
         ],
     )
-    def test_envs_one_group(self, parallel, task):
+    def test_envs_one_group_parallel(self, parallel, task):
         env = PettingZooEnv(
             task=task,
             parallel=parallel,
             seed=0,
-            return_state=False,
-            use_action_mask=True,
+            use_action_mask=False,
         )
         check_env_specs(env)
+        env.rollout(100)
+
+    @pytest.mark.parametrize("parallel", [True])
+    @pytest.mark.parametrize(
+        "task",
+        [
+            "multiwalker_v9",
+            "waterworld_v4",
+            "pursuit_v4",
+            "simple_spread_v3",
+            "simple_v3",
+            "rps_v2",
+            "cooperative_pong_v5",
+            "pistonball_v6",
+        ],
+    )
+    def test_envs_more_groups_parallel(self, parallel, task):
+        env = PettingZooEnv(
+            task=task,
+            parallel=parallel,
+            seed=0,
+            use_action_mask=False,
+        )
+        check_env_specs(env)
+        env.rollout(100)
 
     def test_envs_no_dead(self, parallel, task):
         pass
