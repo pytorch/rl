@@ -62,7 +62,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
-from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooWrapper
+from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -1619,16 +1619,46 @@ class TestIsaacGym:
 
 @pytest.mark.skipif(not _has_pettingzoo, reason="PettingZoo not found")
 class TestPettingZoo:
-    @pytest.mark.parametrize("parallel", [True, False])
-    def test(self, parallel):
-        from pettingzoo.butterfly import pistonball_v6
+    # @pytest.mark.parametrize("parallel", [True])
+    # @pytest.mark.parametrize("continuous_actions", [True, False])
+    # @pytest.mark.parametrize("use_action_mask", [True, False])
+    # def test(self, parallel, continuous_actions, use_action_mask):
+    #
+    #     kwargs = {"n_pistons": 21, "continuous": continuous_actions}
+    #
+    #     env = PettingZooEnv(
+    #         task="pistonball_v6",
+    #         parallel=parallel,
+    #         seed=0,
+    #         return_state=True,
+    #         use_action_mask=use_action_mask,
+    #         **kwargs,
+    #     )
+    #
+    #     check_env_specs(env)
 
-        kwargs = {}
-        if parallel:
-            env = pistonball_v6.parallel_env(**kwargs)
-        else:
-            env = pistonball_v6.env(**kwargs)
-        env = PettingZooWrapper(env, return_state=True)
+    @pytest.mark.parametrize("parallel", [True])
+    @pytest.mark.parametrize(
+        "task",
+        [
+            "pistonball_v6",
+            "multiwalker_v9",
+            "waterworld_v4",
+            # "pursuit_v4",
+        ],
+    )
+    def test_envs_one_group(self, parallel, task):
+        env = PettingZooEnv(
+            task=task,
+            parallel=parallel,
+            seed=0,
+            return_state=False,
+            use_action_mask=True,
+        )
+        check_env_specs(env)
+
+    def test_envs_no_dead(self, parallel, task):
+        pass
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from tensordict.tensordict import TensorDictBase
 from torchrl.data import (
     CompositeSpec,
     DiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
@@ -22,61 +23,126 @@ except ImportError as err:
     _has_pettingzoo = False
     IMPORT_ERR = err
 
-# __all__ = ["VmasWrapper", "VmasEnv"]
+__all__ = ["PettingZooWrapper", "PettingZooEnv"]
+
+
+all_environments = {}
+if _has_pettingzoo:
+    # TODO change this when new petting zoo version lands
+    # from pettingzoo.utlis.all_modules import all_environments
+    from pettingzoo.atari import (
+        basketball_pong_v3,
+        boxing_v2,
+        combat_plane_v2,
+        combat_tank_v2,
+        double_dunk_v3,
+        entombed_competitive_v3,
+        entombed_cooperative_v3,
+        flag_capture_v2,
+        foozpong_v3,
+        ice_hockey_v2,
+        joust_v3,
+        mario_bros_v3,
+        maze_craze_v3,
+        othello_v3,
+        pong_v3,
+        quadrapong_v4,
+        space_invaders_v2,
+        space_war_v2,
+        surround_v2,
+        tennis_v3,
+        video_checkers_v4,
+        volleyball_pong_v3,
+        warlords_v3,
+        wizard_of_wor_v3,
+    )
+    from pettingzoo.butterfly import (
+        cooperative_pong_v5,
+        knights_archers_zombies_v10,
+        pistonball_v6,
+    )
+    from pettingzoo.classic import (
+        chess_v6,
+        connect_four_v3,
+        gin_rummy_v4,
+        go_v5,
+        hanabi_v5,
+        leduc_holdem_v4,
+        rps_v2,
+        texas_holdem_no_limit_v6,
+        texas_holdem_v4,
+        tictactoe_v3,
+    )
+    from pettingzoo.mpe import (
+        simple_adversary_v3,
+        simple_crypto_v3,
+        simple_push_v3,
+        simple_reference_v3,
+        simple_speaker_listener_v4,
+        simple_spread_v3,
+        simple_tag_v3,
+        simple_v3,
+        simple_world_comm_v3,
+    )
+    from pettingzoo.sisl import multiwalker_v9, pursuit_v4, waterworld_v4
+
+    all_environments = {
+        "atari/basketball_pong_v3": basketball_pong_v3,
+        "atari/boxing_v2": boxing_v2,
+        "atari/combat_tank_v2": combat_tank_v2,
+        "atari/combat_plane_v2": combat_plane_v2,
+        "atari/double_dunk_v3": double_dunk_v3,
+        "atari/entombed_competitive_v3": entombed_competitive_v3,
+        "atari/entombed_cooperative_v3": entombed_cooperative_v3,
+        "atari/flag_capture_v2": flag_capture_v2,
+        "atari/foozpong_v3": foozpong_v3,
+        "atari/joust_v3": joust_v3,
+        "atari/ice_hockey_v2": ice_hockey_v2,
+        "atari/maze_craze_v3": maze_craze_v3,
+        "atari/mario_bros_v3": mario_bros_v3,
+        "atari/othello_v3": othello_v3,
+        "atari/pong_v3": pong_v3,
+        "atari/quadrapong_v4": quadrapong_v4,
+        "atari/space_invaders_v2": space_invaders_v2,
+        "atari/space_war_v2": space_war_v2,
+        "atari/surround_v2": surround_v2,
+        "atari/tennis_v3": tennis_v3,
+        "atari/video_checkers_v4": video_checkers_v4,
+        "atari/volleyball_pong_v3": volleyball_pong_v3,
+        "atari/wizard_of_wor_v3": wizard_of_wor_v3,
+        "atari/warlords_v3": warlords_v3,
+        "classic/chess_v6": chess_v6,
+        "classic/rps_v2": rps_v2,
+        "classic/connect_four_v3": connect_four_v3,
+        "classic/tictactoe_v3": tictactoe_v3,
+        "classic/leduc_holdem_v4": leduc_holdem_v4,
+        "classic/texas_holdem_v4": texas_holdem_v4,
+        "classic/texas_holdem_no_limit_v6": texas_holdem_no_limit_v6,
+        "classic/gin_rummy_v4": gin_rummy_v4,
+        "classic/go_v5": go_v5,
+        "classic/hanabi_v5": hanabi_v5,
+        "butterfly/knights_archers_zombies_v10": knights_archers_zombies_v10,
+        "butterfly/pistonball_v6": pistonball_v6,
+        "butterfly/cooperative_pong_v5": cooperative_pong_v5,
+        "mpe/simple_adversary_v3": simple_adversary_v3,
+        "mpe/simple_crypto_v3": simple_crypto_v3,
+        "mpe/simple_push_v3": simple_push_v3,
+        "mpe/simple_reference_v3": simple_reference_v3,
+        "mpe/simple_speaker_listener_v4": simple_speaker_listener_v4,
+        "mpe/simple_spread_v3": simple_spread_v3,
+        "mpe/simple_tag_v3": simple_tag_v3,
+        "mpe/simple_world_comm_v3": simple_world_comm_v3,
+        "mpe/simple_v3": simple_v3,
+        "sisl/multiwalker_v9": multiwalker_v9,
+        "sisl/waterworld_v4": waterworld_v4,
+        "sisl/pursuit_v4": pursuit_v4,
+    }
 
 
 def _get_envs() -> List[str]:
-    return [
-        "atari/basketball_pong_v3",
-        "atari/boxing_v2",
-        "atari/combat_tank_v2",
-        "atari/combat_plane_v2",
-        "atari/double_dunk_v3",
-        "atari/entombed_competitive_v3",
-        "atari/entombed_cooperative_v3",
-        "atari/flag_capture_v2",
-        "atari/foozpong_v3",
-        "atari/joust_v3",
-        "atari/ice_hockey_v2",
-        "atari/maze_craze_v3",
-        "atari/mario_bros_v3",
-        "atari/othello_v3",
-        "atari/pong_v3",
-        "atari/quadrapong_v4",
-        "atari/space_invaders_v2",
-        "atari/space_war_v2",
-        "atari/surround_v2",
-        "atari/tennis_v3",
-        "atari/video_checkers_v4",
-        "atari/volleyball_pong_v3",
-        "atari/wizard_of_wor_v3",
-        "atari/warlords_v3",
-        "classic/chess_v6",
-        "classic/rps_v2",
-        "classic/connect_four_v3",
-        "classic/tictactoe_v3",
-        "classic/leduc_holdem_v4",
-        "classic/texas_holdem_v4",
-        "classic/texas_holdem_no_limit_v6",
-        "classic/gin_rummy_v4",
-        "classic/go_v5",
-        "classic/hanabi_v5",
-        "butterfly/knights_archers_zombies_v10",
-        "butterfly/pistonball_v6",
-        "butterfly/cooperative_pong_v5",
-        "mpe/simple_adversary_v3",
-        "mpe/simple_crypto_v3",
-        "mpe/simple_push_v3",
-        "mpe/simple_reference_v3",
-        "mpe/simple_speaker_listener_v4",
-        "mpe/simple_spread_v3",
-        "mpe/simple_tag_v3",
-        "mpe/simple_world_comm_v3",
-        "mpe/simple_v3",
-        "sisl/multiwalker_v9",
-        "sisl/waterworld_v4",
-        "sisl/pursuit_v4",
-    ]
+    if not _has_pettingzoo:
+        return []
+    return list(all_environments.keys())
 
 
 class PettingZooWrapper(_EnvWrapper):
@@ -93,12 +159,17 @@ class PettingZooWrapper(_EnvWrapper):
         ] = None,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        use_action_mask: bool = True,
+        seed: Optional[int] = None,
         **kwargs,
     ):
         if env is not None:
             kwargs["env"] = env
+
         self.group_map = group_map
         self.return_state = return_state
+        self.seed = seed
+        self.use_action_mask = use_action_mask
 
         super().__init__(**kwargs)
 
@@ -141,6 +212,7 @@ class PettingZooWrapper(_EnvWrapper):
         self,
         env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
     ):
+        self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
         if len(self.batch_size):
             raise RuntimeError(
                 f"PettingZoo does not support custom batch_size {self.batch_size}."
@@ -193,6 +265,7 @@ class PettingZooWrapper(_EnvWrapper):
                         "action": _gym_to_torchrl_spec_transform(
                             self.action_space(agent),
                             remap_state_to_observation=False,
+                            categorical_action_encoding=False,  # Always one hot
                             device=self.device,
                         )
                     },
@@ -211,6 +284,20 @@ class PettingZooWrapper(_EnvWrapper):
             )
         group_action_spec = torch.stack(action_specs, dim=0)
         group_observation_spec = torch.stack(observation_specs, dim=0)
+        group_observation_inner_spec = group_observation_spec["observation"]
+        if (
+            isinstance(group_observation_inner_spec, CompositeSpec)
+            and "action_mask" in group_observation_inner_spec.keys()
+        ):
+            del group_observation_inner_spec["action_mask"]
+        if self.use_action_mask:
+            group_observation_spec["action_mask"] = DiscreteTensorSpec(
+                n=2,
+                shape=group_action_spec["action"].shape,
+                dtype=torch.bool,
+                device=self.device,
+            )
+
         group_reward_spec = CompositeSpec(
             {
                 "reward": UnboundedContinuousTensorSpec(
@@ -254,6 +341,32 @@ class PettingZooWrapper(_EnvWrapper):
             raise TypeError("env is not of type expected.")
 
     def _init_env(self) -> Optional[int]:
+        # Add info
+        _, info_dict = self._env.reset()
+
+        for group, agents in self.group_map.items():
+            info_specs = []
+            for agent in agents:
+                info_specs.append(
+                    CompositeSpec(
+                        {
+                            "info": CompositeSpec(
+                                {
+                                    key: UnboundedContinuousTensorSpec(
+                                        shape=torch.tensor(value).shape
+                                    )
+                                    for key, value in info_dict[agent].items()
+                                    if key != "action_mask"
+                                }
+                            )
+                        },
+                        device=self.device,
+                    )
+                )
+            info_specs = torch.stack(info_specs, dim=0)
+            if len(info_specs["info"].keys()):
+                self.observation_spec[group].update(info_specs)
+
         if self.return_state:
             try:
                 state_spec = _gym_to_torchrl_spec_transform(
@@ -262,7 +375,6 @@ class PettingZooWrapper(_EnvWrapper):
                     device=self.device,
                 )
             except AttributeError:
-                self._env.reset()
                 state_example = torch.tensor(self.state(), device=self.device)
                 state_spec = UnboundedContinuousTensorSpec(
                     shape=state_example.shape,
@@ -272,83 +384,201 @@ class PettingZooWrapper(_EnvWrapper):
             self.observation_spec["state"] = state_spec
 
     def _set_seed(self, seed: Optional[int]):
-        if seed is not None:
-            raise NotImplementedError(
-                "Seed cannot be changed once environment was created."
-            )
+        self.seed = seed
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        pass
+
+        if self.parallel:
+            return self._reset_parallel()
+        else:
+            return self._reset_aec()
+
+    def _reset_parallel(
+        self,
+    ) -> TensorDictBase:
+        self._env.reset(seed=self.seed)
+
+        observation_dict, info_dict = self._env.reset(seed=self.seed)
+        tensordict_out = self.observation_spec.zero()
+        observation_dict, info_dict = self._update_action_mask(
+            tensordict_out, observation_dict, info_dict
+        )
+
+        for group, agent_names in self.group_map.items():
+            group_observation = tensordict_out.get((group, "observation"))
+            group_info = tensordict_out.get((group, "info"), None)
+            for i, agent in enumerate(agent_names):
+                group_observation[i] = torch.tensor(
+                    observation_dict[agent], device=self.device
+                )
+                if group_info is not None:
+                    agent_info_dict = info_dict[agent]
+                    for agent_info, value in agent_info_dict.items():
+                        group_info.get(agent_info)[i] = torch.tensor(
+                            value, device=self.device
+                        )
+
+        return tensordict_out
 
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        pass
+        action_dict = {}
+        for group, agents in self.group_map.items():
+            group_action = tensordict.get((group, "action"))
+            group_action_np = self.input_spec["_action_spec", group, "action"].to_numpy(
+                group_action
+            )
+            for i, agent in enumerate(agents):
+                if agent in self.agents:
+                    action_dict[agent] = group_action_np[i]
+
+        (
+            observation_dict,
+            rewards_dict,
+            terminations_dict,
+            truncations_dict,
+            info_dict,
+        ) = self._env.step(action_dict)
+        tensordict_out = self.observation_spec.zero()
+        tensordict_out.update(self.output_spec["_reward_spec"].zero())
+        tensordict_out.update(self.output_spec["_done_spec"].zero())
+        observation_dict, info_dict = self._update_action_mask(
+            tensordict_out, observation_dict, info_dict
+        )
+
+        for group, agent_names in self.group_map.items():
+            group_observation = tensordict_out.get((group, "observation"))
+            group_reward = tensordict_out.get((group, "reward"))
+            group_done = tensordict_out.get((group, "done"))
+            group_info = tensordict_out.get((group, "info"), None)
+            for i, agent in enumerate(agent_names):
+                if agent in self.agents:  # Live agent
+                    group_observation[i] = torch.tensor(
+                        observation_dict[agent], device=self.device
+                    )
+                    group_reward[i] = torch.tensor(
+                        rewards_dict[agent],
+                        device=self.device,
+                        dtype=torch.float32,
+                    )
+                    group_done[i] = torch.tensor(
+                        terminations_dict[agent] or truncations_dict[agent],
+                        device=self.device,
+                        dtype=torch.bool,
+                    )
+
+                    if group_info is not None:
+                        agent_info_dict = info_dict[agent]
+                        for agent_info, value in agent_info_dict.items():
+                            group_info.get(agent_info)[i] = torch.tensor(
+                                value, device=self.device
+                            )
+
+                elif not self.use_action_mask:
+                    # Dead agent, if we are not masking it out, this is not allowed
+                    raise ValueError(
+                        "Dead agents found in the environment,"
+                        " you need to set use_action_mask=True to allow this."
+                    )
+
+        return tensordict_out.select().set("next", tensordict_out)
+
+    def _update_action_mask(self, td, observation_dict, info_dict):
+        if self.use_action_mask:
+            for group, agents in self.group_map.items():
+                group_mask = td.get((group, "action_mask"))
+                group_mask += True
+                for i, agent in enumerate(agents):
+                    if agent in self.agents:  # Live agents
+                        agent_obs = observation_dict[agent]
+                        agent_info = info_dict[agent]
+                        if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
+                            group_mask[i] = torch.tensor(
+                                agent_obs["action_mask"],
+                                device=self.device,
+                                dtype=torch.bool,
+                            )
+                            del agent_obs["action_mask"]
+                        elif (
+                            isinstance(agent_info, Dict) and "action_mask" in agent_info
+                        ):
+                            group_mask[i] = torch.tensor(
+                                agent_info["action_mask"],
+                                device=self.device,
+                                dtype=torch.bool,
+                            )
+                    else:  # Dead agent
+                        group_mask[i] = False
+                group_action_spec = self.input_spec["_action_spec", group, "action"]
+                if isinstance(
+                    group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)
+                ):
+                    group_action_spec.update_mask(group_mask)
+        return observation_dict, info_dict
+
+    def close(self) -> None:
+        self._env.close()
 
 
-# class _ParallelEnvPettingZooWrapper(PettingZooWrapper):
-#     pass
-#
-#
-# class _AECEnvPettingZooWrapper(PettingZooWrapper):
-#     pass
+class PettingZooEnv(PettingZooWrapper):
+    """PettingZooEnv."""
 
+    def __init__(
+        self,
+        task: str,
+        parallel: bool,
+        return_state: Optional[bool] = False,
+        group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
+        use_action_mask: bool = True,
+        seed: Optional[int] = None,
+        **kwargs,
+    ):
+        if not _has_pettingzoo:
+            raise ImportError(
+                f"pettingzoo python package was not found. Please install this dependency. "
+                f"More info: {self.git_url}."
+            ) from IMPORT_ERR
+        kwargs["task"] = task
+        kwargs["parallel"] = parallel
+        kwargs["return_state"] = return_state
+        kwargs["group_map"] = group_map
+        kwargs["use_action_mask"] = use_action_mask
+        kwargs["seed"] = seed
+        super().__init__(**kwargs)
 
-# class PettingZooEnv(VmasWrapper):
-#     def __init__(
-#         self,
-#         scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],
-#         num_envs: int,
-#         continuous_actions: bool = True,
-#         max_steps: Optional[int] = None,
-#         seed: Optional[int] = None,
-#         **kwargs,
-#     ):
-#         if not _has_pettingzoo:
-#             raise ImportError(
-#                 f"vmas python package was not found. Please install this dependency. "
-#                 f"More info: {self.git_url}."
-#             ) from IMPORT_ERR
-#         kwargs["scenario"] = scenario
-#         kwargs["num_envs"] = num_envs
-#         kwargs["continuous_actions"] = continuous_actions
-#         kwargs["max_steps"] = max_steps
-#         kwargs["seed"] = seed
-#         super().__init__(**kwargs)
-#
-#     def _check_kwargs(self, kwargs: Dict):
-#         if "scenario" not in kwargs:
-#             raise TypeError("Could not find environment key 'scenario' in kwargs.")
-#         if "num_envs" not in kwargs:
-#             raise TypeError("Could not find environment key 'num_envs' in kwargs.")
-#
-#     def _build_env(
-#         self,
-#         scenario: Union[str, "vmas.simulator.scenario.BaseScenario"],
-#         num_envs: int,
-#         continuous_actions: bool,
-#         max_steps: Optional[int],
-#         seed: Optional[int],
-#         **scenario_kwargs,
-#     ) -> "vmas.simulator.environment.environment.Environment":
-#         self.scenario_name = scenario
-#         from_pixels = scenario_kwargs.pop("from_pixels", False)
-#         pixels_only = scenario_kwargs.pop("pixels_only", False)
-#
-#         return super()._build_env(
-#             env=vmas.make_env(
-#                 scenario=scenario,
-#                 num_envs=num_envs,
-#                 device=self.device,
-#                 continuous_actions=continuous_actions,
-#                 max_steps=max_steps,
-#                 seed=seed,
-#                 wrapper=None,
-#                 **scenario_kwargs,
-#             ),
-#             pixels_only=pixels_only,
-#             from_pixels=from_pixels,
-#         )
+    def _check_kwargs(self, kwargs: Dict):
+        if "task" not in kwargs:
+            raise TypeError("Could not find environment key 'task' in kwargs.")
+        if "parallel" not in kwargs:
+            raise TypeError("Could not find environment key 'parallel' in kwargs.")
+
+    def _build_env(
+        self,
+        task: str,
+        parallel: bool,
+        **kwargs,
+    ) -> Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"]:
+        self.task_name = task
+
+        if task not in all_environments:
+            # Try looking at the literal translation of values
+            task_module = None
+            for value in all_environments.values():
+                if value.__name__.split(".")[-1] == task:
+                    task_module = value
+                    break
+            if task_module is None:
+                raise RuntimeError(f"Specified task not in {_get_envs()}")
+        else:
+            task_module = all_environments[task]
+
+        if parallel:
+            petting_zoo_env = task_module.parallel_env(**kwargs)
+        else:
+            petting_zoo_env = task_module.env(**kwargs)
+
+        return super()._build_env(env=petting_zoo_env)
