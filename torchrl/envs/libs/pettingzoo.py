@@ -594,7 +594,7 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _update_action_mask(self, td, observation_dict, info_dict):
-        self.steps += 1
+
         observation_dict = copy.deepcopy(observation_dict)
         info_dict = copy.deepcopy(info_dict)
         agents_acting = self.agents if self.parallel else [self.agent_selection]

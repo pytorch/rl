@@ -1620,8 +1620,8 @@ class TestIsaacGym:
 
 @pytest.mark.skipif(not _has_pettingzoo, reason="PettingZoo not found")
 class TestPettingZoo:
-    @pytest.mark.parametrize("parallel", [True])
-    @pytest.mark.parametrize("continuous_actions", [True])
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("continuous_actions", [True, False])
     @pytest.mark.parametrize("use_action_mask", [True])
     @pytest.mark.parametrize("return_state", [True, False])
     @pytest.mark.parametrize(
@@ -1642,6 +1642,27 @@ class TestPettingZoo:
             use_action_mask=use_action_mask,
             group_map=group_map,
             **kwargs,
+        )
+
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("parallel", [True, False])
+    @pytest.mark.parametrize("use_action_mask", [True])
+    @pytest.mark.parametrize("return_state", [False])
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ALL_IN_ONE_GROUP, MarlGroupMapType.ONE_GROUP_PER_AGENT],
+    )
+    def test_rock_paper_scissors(
+        self, parallel, use_action_mask, return_state, group_map
+    ):
+        env = PettingZooEnv(
+            task="rps_v2",
+            parallel=parallel,
+            seed=0,
+            return_state=return_state,
+            use_action_mask=use_action_mask,
+            group_map=group_map,
         )
 
         check_env_specs(env)
@@ -1667,34 +1688,34 @@ class TestPettingZoo:
             use_action_mask=False,
         )
         check_env_specs(env)
-        env.rollout(100)
+        env.rollout(100, break_when_any_done=False)
 
     @pytest.mark.parametrize(
         "task",
         [
-            # "multiwalker_v9",
-            # "waterworld_v4",
-            # "pursuit_v4",
-            # "simple_spread_v3",
-            # "simple_v3",
-            # "rps_v2",
-            # "cooperative_pong_v5",
-            # "pistonball_v6",
-            # "connect_four_v3",
+            "multiwalker_v9",
+            "waterworld_v4",
+            "pursuit_v4",
+            "simple_spread_v3",
+            "simple_v3",
+            "rps_v2",
+            "cooperative_pong_v5",
+            "pistonball_v6",
+            "connect_four_v3",
+            "tictactoe_v3",
+            # "chess_v6",
             # "gin_rummy_v4",
-            # "tictactoe_v3",
-            "chess_v6",
         ],
     )
     def test_envs_one_group_aec(self, task):
         env = PettingZooEnv(
             task=task,
             parallel=False,
-            seed=2,
+            seed=0,
             use_action_mask=True,
         )
         check_env_specs(env)
-        env.rollout(100)
+        env.rollout(100, break_when_any_done=False)
 
     @pytest.mark.parametrize(
         "task",
@@ -1720,7 +1741,7 @@ class TestPettingZoo:
             use_action_mask=False,
         )
         check_env_specs(env)
-        env.rollout(100)
+        env.rollout(100, break_when_any_done=False)
 
     @pytest.mark.parametrize(
         "task",
@@ -1746,10 +1767,7 @@ class TestPettingZoo:
             use_action_mask=True,
         )
         check_env_specs(env)
-        env.rollout(100)
-
-    def test_envs_no_dead(self, parallel, task):
-        pass
+        env.rollout(100, break_when_any_done=False)
 
 
 if __name__ == "__main__":
