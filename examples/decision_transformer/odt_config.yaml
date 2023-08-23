@@ -40,7 +40,7 @@ replay_buffer:
 
 # Optimization
 optim:
-  device: cuda:0
+  device: cpu
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 256
