@@ -11,7 +11,7 @@ env:
   num_eval_envs: 10
   reward_scaling: 0.001 # for r2g
   noop: 1
-  seed: 2
+  seed: 42
   target_return_mode: reduce
   eval_target_return: 6000
   collect_target_return: 12000
@@ -45,7 +45,7 @@ optim:
   weight_decay: 5.0e-4
   batch_size: 256
   lr_scheduler: ""
-  pretrain_gradient_steps: 55000
+  pretrain_gradient_steps: 10000
   updates_per_episode: 300
   warmup_steps: 10000
   clip_grad: 0.25

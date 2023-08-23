@@ -12,7 +12,8 @@ import torch
 import tqdm
 
 from torchrl.envs.libs.gym import set_gym_backend
-from torchrl.envs.utils import ExplorationType, set_exploration_type
+
+# from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
 from utils import (
@@ -41,7 +42,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     loss_module = make_odt_loss(cfg.loss, policy)
     transformer_optim, temperature_optim, scheduler = make_odt_optimizer(
-        cfg.optim, policy, loss_module
+        cfg.optim, loss_module
     )
     inference_policy = DecisionTransformerInferenceWrapper(
         policy=policy,
@@ -80,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scheduler.step()
 
         # evaluation
-        with set_exploration_type(ExplorationType.MEAN), torch.no_grad():
+        with torch.no_grad():
             inference_policy.eval()
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
