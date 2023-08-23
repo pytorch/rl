@@ -224,6 +224,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
+        allow_done_after_reset: bool = False,
     ):
         self.__dict__["_done_keys"] = None
         self.__dict__["_reward_keys"] = None
@@ -246,6 +247,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # it's already been set
             self.batch_size = torch.Size(batch_size)
         self._run_type_checks = run_type_checks
+        self._allow_done_after_reset = allow_done_after_reset
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -1287,13 +1289,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         self.output_spec["_done_spec"][done_key].zero(leading_dim),
                     )
 
-        for done_key in self.done_keys:
-            if done_key not in _reset_map:
-                if tensordict_reset.get(done_key).any():
-                    raise DONE_AFTER_RESET_ERROR
-            else:
-                if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
-                    raise DONE_AFTER_RESET_ERROR
+        if not self._allow_done_after_reset:
+            for done_key in self.done_keys:
+                if done_key not in _reset_map:
+                    if tensordict_reset.get(done_key).any():
+                        raise DONE_AFTER_RESET_ERROR
+                else:
+                    if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
+                        raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1697,12 +1700,14 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = "cpu",
         batch_size: Optional[torch.Size] = None,
+        allow_done_after_reset: bool = False,
         **kwargs,
     ):
         super().__init__(
             device=device,
             dtype=dtype,
             batch_size=batch_size,
+            allow_done_after_reset=allow_done_after_reset,
         )
         if len(args):
             raise ValueError(

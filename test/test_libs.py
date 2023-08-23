@@ -63,6 +63,7 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
+from torchrl.envs.libs.utils import MarlGroupMapType
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -1619,25 +1620,32 @@ class TestIsaacGym:
 
 @pytest.mark.skipif(not _has_pettingzoo, reason="PettingZoo not found")
 class TestPettingZoo:
-    # @pytest.mark.parametrize("parallel", [True])
-    # @pytest.mark.parametrize("continuous_actions", [True, False])
-    # @pytest.mark.parametrize("use_action_mask", [True, False])
-    # def test(self, parallel, continuous_actions, use_action_mask):
-    #
-    #     kwargs = {"n_pistons": 21, "continuous": continuous_actions}
-    #
-    #     env = PettingZooEnv(
-    #         task="pistonball_v6",
-    #         parallel=parallel,
-    #         seed=0,
-    #         return_state=True,
-    #         use_action_mask=use_action_mask,
-    #         **kwargs,
-    #     )
-    #
-    #     check_env_specs(env)
-
     @pytest.mark.parametrize("parallel", [True])
+    @pytest.mark.parametrize("continuous_actions", [True])
+    @pytest.mark.parametrize("use_action_mask", [True])
+    @pytest.mark.parametrize("return_state", [True, False])
+    @pytest.mark.parametrize(
+        "group_map",
+        [None, MarlGroupMapType.ALL_IN_ONE_GROUP, MarlGroupMapType.ONE_GROUP_PER_AGENT],
+    )
+    def test_pistonball(
+        self, parallel, continuous_actions, use_action_mask, return_state, group_map
+    ):
+
+        kwargs = {"n_pistons": 21, "continuous": continuous_actions}
+
+        env = PettingZooEnv(
+            task="pistonball_v6",
+            parallel=parallel,
+            seed=0,
+            return_state=return_state,
+            use_action_mask=use_action_mask,
+            group_map=group_map,
+            **kwargs,
+        )
+
+        check_env_specs(env)
+
     @pytest.mark.parametrize(
         "task",
         [
@@ -1651,36 +1659,91 @@ class TestPettingZoo:
             "pistonball_v6",
         ],
     )
-    def test_envs_one_group_parallel(self, parallel, task):
+    def test_envs_one_group_parallel(self, task):
         env = PettingZooEnv(
             task=task,
-            parallel=parallel,
+            parallel=True,
             seed=0,
             use_action_mask=False,
         )
         check_env_specs(env)
         env.rollout(100)
 
-    @pytest.mark.parametrize("parallel", [True])
     @pytest.mark.parametrize(
         "task",
         [
-            "multiwalker_v9",
-            "waterworld_v4",
-            "pursuit_v4",
-            "simple_spread_v3",
-            "simple_v3",
-            "rps_v2",
-            "cooperative_pong_v5",
-            "pistonball_v6",
+            # "multiwalker_v9",
+            # "waterworld_v4",
+            # "pursuit_v4",
+            # "simple_spread_v3",
+            # "simple_v3",
+            # "rps_v2",
+            # "cooperative_pong_v5",
+            # "pistonball_v6",
+            # "connect_four_v3",
+            # "gin_rummy_v4",
+            # "tictactoe_v3",
+            "chess_v6",
         ],
     )
-    def test_envs_more_groups_parallel(self, parallel, task):
+    def test_envs_one_group_aec(self, task):
         env = PettingZooEnv(
             task=task,
-            parallel=parallel,
+            parallel=False,
+            seed=2,
+            use_action_mask=True,
+        )
+        check_env_specs(env)
+        env.rollout(100)
+
+    @pytest.mark.parametrize(
+        "task",
+        [
+            "simple_adversary_v3",
+            "simple_crypto_v3",
+            "simple_push_v3",
+            "simple_reference_v3",
+            "simple_speaker_listener_v4",
+            "simple_tag_v3",
+            "simple_world_comm_v3",
+            "knights_archers_zombies_v10",
+            "basketball_pong_v3",
+            "boxing_v2",
+            "foozpong_v3",
+        ],
+    )
+    def test_envs_more_groups_parallel(self, task):
+        env = PettingZooEnv(
+            task=task,
+            parallel=True,
             seed=0,
             use_action_mask=False,
+        )
+        check_env_specs(env)
+        env.rollout(100)
+
+    @pytest.mark.parametrize(
+        "task",
+        [
+            "simple_adversary_v3",
+            "simple_crypto_v3",
+            "simple_push_v3",
+            "simple_reference_v3",
+            "simple_speaker_listener_v4",
+            "simple_tag_v3",
+            "simple_world_comm_v3",
+            "knights_archers_zombies_v10",
+            "basketball_pong_v3",
+            "boxing_v2",
+            "foozpong_v3",
+        ],
+    )
+    def test_envs_more_groups_aec(self, task):
+        env = PettingZooEnv(
+            task=task,
+            parallel=False,
+            seed=0,
+            use_action_mask=True,
         )
         check_env_specs(env)
         env.rollout(100)

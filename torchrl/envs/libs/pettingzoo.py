@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional, Union
+import copy
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from tensordict.tensordict import TensorDictBase
@@ -12,6 +13,7 @@ from torchrl.data import (
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.libs.utils import _check_marl_grouping, MarlGroupMapType
+from torchrl.envs.utils import _replace_last
 
 IMPORT_ERR = None
 try:
@@ -159,7 +161,7 @@ class PettingZooWrapper(_EnvWrapper):
         ] = None,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
-        use_action_mask: bool = True,
+        use_action_mask: bool = False,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -171,7 +173,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.seed = seed
         self.use_action_mask = use_action_mask
 
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, allow_done_after_reset=True)
 
     def _get_default_group_map(self, agent_names: List[str]):
         map = {}
@@ -214,6 +216,10 @@ class PettingZooWrapper(_EnvWrapper):
         env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
     ):
         self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
+        if not self.parallel and not self.use_action_mask:
+            raise ValueError(
+                "For AEC environments you need to set use_action_mask=True"
+            )
         if len(self.batch_size):
             raise RuntimeError(
                 f"PettingZoo does not support custom batch_size {self.batch_size}."
@@ -343,7 +349,10 @@ class PettingZooWrapper(_EnvWrapper):
 
     def _init_env(self) -> Optional[int]:
         # Add info
-        _, info_dict = self._env.reset()
+        if self.parallel:
+            _, info_dict = self._reset_parallel()
+        else:
+            _, info_dict = self._reset_aec()
 
         for group, agents in self.group_map.items():
             info_specs = []
@@ -354,7 +363,8 @@ class PettingZooWrapper(_EnvWrapper):
                             "info": CompositeSpec(
                                 {
                                     key: UnboundedContinuousTensorSpec(
-                                        shape=torch.tensor(value).shape
+                                        shape=torch.tensor(value).shape,
+                                        device=self.device,
                                     )
                                     for key, value in info_dict[agent].items()
                                     if key != "action_mask"
@@ -384,6 +394,14 @@ class PettingZooWrapper(_EnvWrapper):
                 )
             self.observation_spec["state"] = state_spec
 
+        # Caching
+        self.cached_reset_output_zero = self.observation_spec.zero()
+        self.cached_reset_output_zero.update(self.output_spec["_done_spec"].zero())
+
+        self.cached_step_output_zero = self.observation_spec.zero()
+        self.cached_step_output_zero.update(self.output_spec["_reward_spec"].zero())
+        self.cached_step_output_zero.update(self.output_spec["_done_spec"].zero())
+
     def _set_seed(self, seed: Optional[int]):
         self.seed = seed
 
@@ -392,19 +410,15 @@ class PettingZooWrapper(_EnvWrapper):
     ) -> TensorDictBase:
 
         if self.parallel:
-            return self._reset_parallel()
+            observation_dict, info_dict = self._reset_parallel()
         else:
-            return self._reset_aec()
+            observation_dict, info_dict = self._reset_aec(tensordict)
 
-    def _reset_parallel(
-        self,
-    ) -> TensorDictBase:
-        self._env.reset(seed=self.seed)
-
-        observation_dict, info_dict = self._env.reset(seed=self.seed)
-        tensordict_out = self.observation_spec.zero()
+        tensordict_out = self.cached_reset_output_zero.clone()
         observation_dict, info_dict = self._update_action_mask(
-            tensordict_out, observation_dict, info_dict
+            tensordict_out,
+            observation_dict,
+            info_dict,
         )
 
         for group, agent_names in self.group_map.items():
@@ -427,35 +441,61 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out
 
+    def _reset_aec(self, tensordict=None) -> Tuple[Dict, Dict]:
+        all_done = True
+        if tensordict is not None:
+            _reset_map = {}
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is None:
+                    continue
+                _reset_map.update({done_key: _reset})
+            if len(_reset_map.keys()) < len(self.done_keys):
+                all_done = False
+            else:
+                for _reset in _reset_map.values():
+                    if not _reset.all():
+                        all_done = False
+                        break
+
+        if all_done:
+            self._env.reset(seed=self.seed)
+
+        observation_dict = {
+            agent: self._env.observe(agent) for agent in self.possible_agents
+        }
+        info_dict = self._env.infos
+        return observation_dict, info_dict
+
+    def _reset_parallel(
+        self,
+    ) -> Tuple[Dict, Dict]:
+        return self._env.reset(seed=self.seed)
+
     def _step(
         self,
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
-        action_dict = {}
-        for group, agents in self.group_map.items():
-            group_action = tensordict.get((group, "action"))
-            group_action_np = self.input_spec["_action_spec", group, "action"].to_numpy(
-                group_action
-            )
-            for i, agent in enumerate(agents):
-                if agent in self.agents:
-                    if len(agents) > 1:
-                        action_dict[agent] = group_action_np[i]
-                    else:
-                        action_dict[agent] = group_action_np
-                else:
-                    raise ValueError("Provided action for dead agent")
 
-        (
-            observation_dict,
-            rewards_dict,
-            terminations_dict,
-            truncations_dict,
-            info_dict,
-        ) = self._env.step(action_dict)
-        tensordict_out = self.observation_spec.zero()
-        tensordict_out.update(self.output_spec["_reward_spec"].zero())
-        tensordict_out.update(self.output_spec["_done_spec"].zero())
+        if self.parallel:
+            (
+                observation_dict,
+                rewards_dict,
+                terminations_dict,
+                truncations_dict,
+                info_dict,
+            ) = self._step_parallel(tensordict)
+        else:
+            (
+                observation_dict,
+                rewards_dict,
+                terminations_dict,
+                truncations_dict,
+                info_dict,
+            ) = self._step_aec(tensordict)
+
+        tensordict_out = self.cached_step_output_zero.clone()
         observation_dict, info_dict = self._update_action_mask(
             tensordict_out, observation_dict, info_dict
         )
@@ -467,7 +507,7 @@ class PettingZooWrapper(_EnvWrapper):
             group_info = tensordict_out.get((group, "info"), None)
 
             for i, agent in enumerate(agent_names):
-                if agent in observation_dict:  # Live agent
+                if agent in observation_dict:  # Live agents
                     index = (
                         i if len(agent_names) > 1 else Ellipsis
                     )  # If group has one agent we index with '...'
@@ -501,16 +541,72 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out.select().set("next", tensordict_out)
 
+    def _step_parallel(
+        self,
+        tensordict: TensorDictBase,
+    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+        action_dict = {}
+        for group, agents in self.group_map.items():
+            group_action = tensordict.get((group, "action"))
+            group_action_np = self.input_spec["_action_spec", group, "action"].to_numpy(
+                group_action
+            )
+            for i, agent in enumerate(agents):
+                index = i if len(agents) > 1 else Ellipsis
+                action_dict[agent] = group_action_np[index]
+
+        return self._env.step(action_dict)
+
+    def _step_aec(
+        self,
+        tensordict: TensorDictBase,
+    ) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+
+        for group, agents in self.group_map.items():
+            if self.agent_selection in agents:
+                agent_index = (
+                    agents.index(self._env.agent_selection)
+                    if len(agents) > 1
+                    else Ellipsis
+                )
+                group_action = tensordict.get((group, "action"))
+                group_action_np = self.input_spec[
+                    "_action_spec", group, "action"
+                ].to_numpy(group_action)
+                action = group_action_np[agent_index]
+                break
+        print(f"\nStepping agent {self.agent_selection}", f"action {action}")
+        self._env.step(action)
+        terminations_dict = self._env.terminations
+        truncations_dict = self._env.truncations
+        info_dict = self._env.infos
+        rewards_dict = self._env.rewards
+        observation_dict = {
+            agent: self._env.observe(agent) for agent in self.possible_agents
+        }
+        print(f"obs {observation_dict}, don {truncations_dict} {terminations_dict}")
+        return (
+            observation_dict,
+            rewards_dict,
+            terminations_dict,
+            truncations_dict,
+            info_dict,
+        )
+
     def _update_action_mask(self, td, observation_dict, info_dict):
+        self.steps += 1
+        observation_dict = copy.deepcopy(observation_dict)
+        info_dict = copy.deepcopy(info_dict)
+        agents_acting = self.agents if self.parallel else [self.agent_selection]
         if self.use_action_mask:
             for group, agents in self.group_map.items():
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for i, agent in enumerate(agents):
-                    index = (
-                        i if len(agents) > 1 else Ellipsis
-                    )  # If group has one agent we index with '...'
-                    if agent in observation_dict:  # Live agents
+                    if agent in agents_acting:
+                        index = (
+                            i if len(agents) > 1 else Ellipsis
+                        )  # If group has one agent we index with '...'
                         agent_obs = observation_dict[agent]
                         agent_info = info_dict[agent]
                         if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
@@ -519,7 +615,6 @@ class PettingZooWrapper(_EnvWrapper):
                                 device=self.device,
                                 dtype=torch.bool,
                             )
-                            del agent_obs["action_mask"]
                         elif (
                             isinstance(agent_info, Dict) and "action_mask" in agent_info
                         ):
@@ -528,13 +623,26 @@ class PettingZooWrapper(_EnvWrapper):
                                 device=self.device,
                                 dtype=torch.bool,
                             )
-                    else:  # Dead agent
-                        group_mask[index] = False
                 group_action_spec = self.input_spec["_action_spec", group, "action"]
                 if isinstance(
                     group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)
                 ):
-                    group_action_spec.update_mask(group_mask)
+                    print(f"Mask Used {group_mask}")
+                    group_action_spec.update_mask(group_mask.clone())
+
+                for i, agent in enumerate(agents):
+                    index = (
+                        i if len(agents) > 1 else Ellipsis
+                    )  # If group has one agent we index with '...'
+                    agent_obs = observation_dict[agent]
+                    agent_info = info_dict[agent]
+                    if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
+                        del agent_obs["action_mask"]
+                    elif isinstance(agent_info, Dict) and "action_mask" in agent_info:
+                        del agent_info["action_mask"]
+                    if agent not in agents_acting:
+                        group_mask[index] = False
+
         return observation_dict, info_dict
 
     def close(self) -> None:
@@ -550,7 +658,7 @@ class PettingZooEnv(PettingZooWrapper):
         parallel: bool,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
-        use_action_mask: bool = True,
+        use_action_mask: bool = False,
         seed: Optional[int] = None,
         **kwargs,
     ):
