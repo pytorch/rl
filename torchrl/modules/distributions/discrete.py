@@ -201,13 +201,12 @@ class MaskedCategorical(D.Categorical):
         # Python 3.7 doesn't support math.prod
         # outer_dim = prod(sample_shape)
         # inner_dim = prod(self._mask.size()[:-1])
-        outer_dim = torch.empty(sample_shape, device="meta").numel()
-        inner_dim = self._mask.numel() // self._mask.size(-1)
+        outer_dim = sample_shape.numel()
+        inner_dim = self._mask.shape[:-1].numel()
         idx_3d = self._mask.expand(outer_dim, inner_dim, -1)
         ret = idx_3d.gather(dim=-1, index=ret.view(outer_dim, inner_dim, 1))
-        return ret.view(size)
+        return ret.reshape(size)
 
-    # # # TODO: Improve performance here.
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if not self._sparse_mask:
             return super().log_prob(value)
