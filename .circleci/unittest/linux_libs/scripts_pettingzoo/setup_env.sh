@@ -52,3 +52,5 @@ autorom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/AutoROM/roms"
 multi_atari_rom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/multi_agent_ale_py/roms"
 mkdir "${multi_atari_rom_dir}"
 mv "${autorom_dir}" "${multi_atari_rom_dir}"
+ls autorom_dir
+ls multi_atari_rom_dir
