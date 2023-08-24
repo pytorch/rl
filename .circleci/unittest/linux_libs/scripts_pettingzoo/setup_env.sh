@@ -44,4 +44,7 @@ cat "${this_dir}/environment.yml"
 
 pip install pip --upgrade
 
+apt-get install swig3.0
+ln -s /usr/bin/swig3.0 /usr/bin/swig
+
 conda env update --file "${this_dir}/environment.yml" --prune

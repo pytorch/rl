@@ -18,5 +18,4 @@ dependencies:
     - pytest-error-for-skips
     - expecttest
     - pyyaml
-    - swig
     - pettingzoo[all]
