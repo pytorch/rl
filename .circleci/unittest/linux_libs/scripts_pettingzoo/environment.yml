@@ -19,4 +19,5 @@ dependencies:
     - pytest-error-for-skips
     - expecttest
     - pyyaml
+    - autorom[accept-rom-license]
     - pettingzoo[all]
