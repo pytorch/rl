@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import importlib.util
 import re
-from typing import List, Union
+from enum import Enum
+from typing import Dict, List, Union
 
 import torch
 
@@ -32,6 +33,7 @@ __all__ = [
     "check_env_specs",
     "step_mdp",
     "make_composite_from_td",
+    "MarlGroupMapType",
 ]
 
 
@@ -570,3 +572,105 @@ def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
         return new_ending
     else:
         return key[:-1] + (new_ending,)
+
+
+class MarlGroupMapType(Enum):
+    """Marl Group Map Type.
+
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
+    You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
+    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
+
+    Otherwise, you can choose one of the premade grouping strategies from this class.
+
+    - With ``group_map=MarlGroupMapType.ALL_IN_ONE_GROUP`` and
+      agents ``["agent_0", "agent_1", "agent_2", "agent_3"]``,
+      the tensordicts coming and going from your environment will look
+      something like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([4, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([4, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([4]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agents": ["agent_0", "agent_1", "agent_2", "agent_3]}
+
+    - With ``group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT`` and
+      agents ``["agent_0", "agent_1", "agent_2", "agent_3"]``,
+      the tensordicts coming and going from your environment will look
+      something like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agent_0: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_1: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_2: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+                agent_3: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agent_0": ["agent_0"], "agent_1": ["agent_1"], "agent_2": ["agent_2"], "agent_3": ["agent_3"]}
+    """
+
+    ALL_IN_ONE_GROUP = 1
+    ONE_GROUP_PER_AGENT = 2
+
+    def get_group_map(self, agent_names: List[str]):
+        if self == MarlGroupMapType.ALL_IN_ONE_GROUP:
+            return {"agents": agent_names}
+        elif self == MarlGroupMapType.ONE_GROUP_PER_AGENT:
+            return {agent_name: [agent_name] for agent_name in agent_names}
+
+
+def _check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
+    """Check MARL group map.
+
+    Performs checks on the group map of a marl environmeent to assess its validity.
+
+    """
+    n_agents = len(agent_names)
+    if len(group_map.keys()) > n_agents:
+        raise ValueError(
+            f"Number of groups {len(group_map.keys())} greater than number of agents {n_agents}"
+        )
+    found_agents = {agent_name: False for agent_name in agent_names}
+    for group_name, group in group_map.items():
+        if not len(group):
+            raise ValueError(f"Group {group_name} is empty")
+        for agent_name in group:
+            if agent_name not in found_agents:
+                raise ValueError(f"Agent {agent_name} not present in environment")
+            if not found_agents[agent_name]:
+                found_agents[agent_name] = True
+            else:
+                raise ValueError(f"Agent {agent_name} present in more than one group")
+    for agent_name, found in found_agents.items():
+        if not found:
+            raise ValueError(f"Agent {agent_name} not found in any group")

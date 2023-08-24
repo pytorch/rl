@@ -10,8 +10,6 @@
 import collections
 import copy
 from collections.abc import MutableMapping
-from enum import Enum
-from typing import Dict, List
 
 import numpy as np
 
@@ -146,36 +144,3 @@ class GymPixelObservationWrapper(ObservationWrapper):
         observation.update(pixel_observations)
 
         return observation
-
-
-class MarlGroupMapType(Enum):
-    ALL_IN_ONE_GROUP = 1
-    ONE_GROUP_PER_AGENT = 2
-
-    def get_group_map(self, agent_names: List[str]):
-        if self == MarlGroupMapType.ALL_IN_ONE_GROUP:
-            return {"agents": agent_names}
-        elif self == MarlGroupMapType.ONE_GROUP_PER_AGENT:
-            return {agent_name: [agent_name] for agent_name in agent_names}
-
-
-def _check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
-    n_agents = len(agent_names)
-    if len(group_map.keys()) > n_agents:
-        raise ValueError(
-            f"Number of groups {len(group_map.keys())} greater than number of agents {n_agents}"
-        )
-    found_agents = {agent_name: False for agent_name in agent_names}
-    for group_name, group in group_map.items():
-        if not len(group):
-            raise ValueError(f"Group {group_name} is empty")
-        for agent_name in group:
-            if agent_name not in found_agents:
-                raise ValueError(f"Agent {agent_name} not present in environment")
-            if not found_agents[agent_name]:
-                found_agents[agent_name] = True
-            else:
-                raise ValueError(f"Agent {agent_name} present in more than one group")
-    for agent_name, found in found_agents.items():
-        if not found:
-            raise ValueError(f"Agent {agent_name} not found in any group")

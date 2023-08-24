@@ -12,8 +12,7 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.libs.utils import _check_marl_grouping, MarlGroupMapType
-from torchrl.envs.utils import _replace_last
+from torchrl.envs.utils import _check_marl_grouping, _replace_last, MarlGroupMapType
 
 IMPORT_ERR = None
 try:
@@ -169,7 +168,7 @@ class PettingZooWrapper(_EnvWrapper):
     to reflect the latest available actions.
     The environment will be reset only when all agents are done.
 
-    As a feature of torchrl multiagent, you are able to control the grouping of agents in your envrionment.
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
     neural network. You can split agents in different groups where they are heterogenous or should be processed by
     different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
@@ -199,7 +198,7 @@ class PettingZooWrapper(_EnvWrapper):
         {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
 
     Otherwise, a group map can be specified or selected from some premade options.
-    See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+    See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
@@ -212,7 +211,7 @@ class PettingZooWrapper(_EnvWrapper):
             (not available in all environments). Default False.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
-            or selected from some premade options. See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+            or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
         use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
@@ -234,7 +233,7 @@ class PettingZooWrapper(_EnvWrapper):
         >>> # AEC env
         >>> from pettingzoo.classic import tictactoe_v3
         >>> from torchrl.envs.libs.pettingzoo import PettingZooWrapper
-        >>> from torchrl.envs.libs.utils import MarlGroupMapType
+        >>> from torchrl.envs.utils import MarlGroupMapType
         >>> env = PettingZooWrapper(
         ...     env=tictactoe_v3.env(),
         ...     use_action_mask=True, # Must use it since one player plays at a time
@@ -794,7 +793,7 @@ class PettingZooEnv(PettingZooWrapper):
     to reflect the latest available actions.
     The environment will be reset only when all agents are done.
 
-    As a feature of torchrl multiagent, you are able to control the grouping of agents in your envrionment.
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
     neural network. You can split agents in different groups where they are heterogenous or should be processed by
     different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
@@ -824,7 +823,7 @@ class PettingZooEnv(PettingZooWrapper):
         {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
 
     Otherwise, a group map can be specified or selected from some premade options.
-    See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+    See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
     For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
     have its own tensordict (similar to the pettingzoo parallel API).
 
@@ -838,7 +837,7 @@ class PettingZooEnv(PettingZooWrapper):
             (not available in all environments). Default False.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
-            or selected from some premade options. See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+            or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
         use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
@@ -860,7 +859,7 @@ class PettingZooEnv(PettingZooWrapper):
         >>> env.rollout(10)
         >>> # AEC env
         >>> from torchrl.envs.libs.pettingzoo import PettingZooEnv
-        >>> from torchrl.envs.libs.utils import MarlGroupMapType
+        >>> from torchrl.envs.utils import MarlGroupMapType
         >>> env = PettingZooEnv(
         ...     task="tictactoe_v3",
         ...     parallel=False,

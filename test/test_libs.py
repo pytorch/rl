@@ -63,9 +63,8 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
-from torchrl.envs.libs.utils import MarlGroupMapType
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
-from torchrl.envs.utils import check_env_specs, ExplorationType
+from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
