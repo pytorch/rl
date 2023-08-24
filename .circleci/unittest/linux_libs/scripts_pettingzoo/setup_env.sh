@@ -36,6 +36,7 @@ if [ ! -d "${env_dir}" ]; then
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
 fi
 conda activate "${env_dir}"
+conda install swig
 
 # 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
