@@ -1646,26 +1646,53 @@ class TestPettingZoo:
 
         check_env_specs(env)
 
-    @pytest.mark.parametrize("parallel", [True, False])
-    @pytest.mark.parametrize("use_action_mask", [True])
-    @pytest.mark.parametrize("return_state", [False])
     @pytest.mark.parametrize(
-        "group_map",
-        [None, MarlGroupMapType.ALL_IN_ONE_GROUP, MarlGroupMapType.ONE_GROUP_PER_AGENT],
+        "wins_player_0",
+        [True, False],
     )
-    def test_rock_paper_scissors(
-        self, parallel, use_action_mask, return_state, group_map
-    ):
+    def test_tic_tac_toe(self, wins_player_0):
         env = PettingZooEnv(
-            task="rps_v2",
-            parallel=parallel,
+            task="tictactoe_v3",
+            parallel=False,
             seed=0,
-            return_state=return_state,
-            use_action_mask=use_action_mask,
-            group_map=group_map,
+            use_action_mask=True,
         )
 
-        check_env_specs(env)
+        class Policy:
+
+            action = 0
+            t = 0
+
+            def __call__(self, td):
+                new_td = env.input_spec["_action_spec"].zero()
+                if self.t % 2 == 0:
+                    assert td["player", "action_mask"][0].any()
+                    assert not td["player", "action_mask"][1].any()
+                    if not wins_player_0 and self.t == 4:
+                        new_td["player", "action"][0][self.action + 1] = 1
+                    else:
+                        new_td["player", "action"][0][self.action] = 1
+                else:
+                    assert td["player", "action_mask"][1].any()
+                    assert not td["player", "action_mask"][0].any()
+                    new_td["player", "action"][1][self.action + 6] = 1
+                if td["player", "action_mask"][1].any():
+                    self.action += 1
+                self.t += 1
+                return td.update(new_td)
+
+        td = env.rollout(100, policy=Policy())
+
+        assert td.batch_size[0] == (5 if wins_player_0 else 6)
+        assert (td[:-1]["next", "player", "reward"] == 0).all()
+        if wins_player_0:
+            assert (
+                td[-1]["next", "player", "reward"] == torch.tensor([[1], [-1]])
+            ).all()
+        else:
+            assert (
+                td[-1]["next", "player", "reward"] == torch.tensor([[-1], [1]])
+            ).all()
 
     @pytest.mark.parametrize(
         "task",
@@ -1703,8 +1730,12 @@ class TestPettingZoo:
             "pistonball_v6",
             "connect_four_v3",
             "tictactoe_v3",
-            # "chess_v6",
-            # "gin_rummy_v4",
+            "chess_v6",
+            "gin_rummy_v4",
+            "leduc_holdem_v4",
+            "texas_holdem_no_limit_v6",
+            "texas_holdem_v4",
+            "tictactoe_v3",
         ],
     )
     def test_envs_one_group_aec(self, task):
@@ -1757,6 +1788,7 @@ class TestPettingZoo:
             "basketball_pong_v3",
             "boxing_v2",
             "foozpong_v3",
+            "go_v5",
         ],
     )
     def test_envs_more_groups_aec(self, task):
@@ -1768,6 +1800,33 @@ class TestPettingZoo:
         )
         check_env_specs(env)
         env.rollout(100, break_when_any_done=False)
+
+    @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_vec_env(self, task, parallel):
+        env_fun = lambda: PettingZooEnv(
+            task=task,
+            parallel=parallel,
+            seed=0,
+            use_action_mask=not parallel,
+        )
+        vec_env = ParallelEnv(2, create_env_fn=env_fun)
+        vec_env.rollout(100, break_when_any_done=False)
+
+    @pytest.mark.parametrize("task", ["knights_archers_zombies_v10", "pistonball_v6"])
+    @pytest.mark.parametrize("parallel", [True, False])
+    def test_collector(self, task, parallel):
+        env_fun = lambda: PettingZooEnv(
+            task=task,
+            parallel=parallel,
+            seed=0,
+            use_action_mask=not parallel,
+        )
+        coll = SyncDataCollector(
+            create_env_fn=env_fun, frames_per_batch=30, total_frames=60, policy=None
+        )
+        for _ in coll:
+            break
 
 
 if __name__ == "__main__":

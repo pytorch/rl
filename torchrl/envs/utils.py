@@ -440,6 +440,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # Check specs
     last_td = real_tensordict[..., -1]
+    # replace action with one sampled from last spec
+    # (since spec mask might be changed after last step)
+    last_td = env.rand_action(last_td)
     _action_spec = env.input_spec["_action_spec"]
     _state_spec = env.input_spec["_state_spec"]
     _obs_spec = env.output_spec["_observation_spec"]
