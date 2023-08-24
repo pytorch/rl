@@ -1732,9 +1732,6 @@ class TestPettingZoo:
             "tictactoe_v3",
             "chess_v6",
             "gin_rummy_v4",
-            "leduc_holdem_v4",
-            "texas_holdem_no_limit_v6",
-            "texas_holdem_v4",
             "tictactoe_v3",
         ],
     )
