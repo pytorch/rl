@@ -10,9 +10,6 @@ set -e
 eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
-apt-get update && apt-get install swig3.0
-ln -s /usr/bin/swig3.0 /usr/bin/swig
-
 if [ "${CU_VERSION:-}" == cpu ] ; then
     version="cpu"
 else
