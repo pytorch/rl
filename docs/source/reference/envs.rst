@@ -624,5 +624,7 @@ the following function will return ``1`` when queried:
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
+    pettingzoo.PettingZooEnv
+    pettingzoo.PettingZooWrapper
     vmas.VmasEnv
     vmas.VmasWrapper
