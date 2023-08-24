@@ -48,7 +48,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 
 # 5. Download atari roms
-autorom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/AutoROM/rom"
-multi_atari_rom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/multi_agent_ale_py/rom"
+autorom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/AutoROM/roms"
+multi_atari_rom_dir="${env_dir}/lib/python${PYTHON_VERSION}/site-packages/multi_agent_ale_py/roms"
 mkdir "${multi_atari_rom_dir}"
 mv "${autorom_dir}" "${multi_atari_rom_dir}"
