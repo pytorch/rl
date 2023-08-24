@@ -1,0 +1,21 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - cloudpickle
+    - gym
+    - gym-notices
+    - importlib-metadata
+    - six
+    - zipp
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-error-for-skips
+    - expecttest
+    - pyyaml
+    - pettingzoo[all]
