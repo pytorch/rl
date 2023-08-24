@@ -7,8 +7,6 @@
 
 set -e
 
-apt-get update && apt-get install swig3.0
-ln -s /usr/bin/swig3.0 /usr/bin/swig
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
