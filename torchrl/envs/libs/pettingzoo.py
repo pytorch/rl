@@ -148,7 +148,103 @@ def _get_envs() -> List[str]:
 
 
 class PettingZooWrapper(_EnvWrapper):
-    """PettingZoo wrapper."""
+    """PettingZoo environment wrapper.
+
+    To install petting zoo follow the guide `here <https://github.com/Farama-Foundation/PettingZoo#installation>__`.
+
+    This class is a general torchrl wrapper for all PettingZoo environments.
+    It is able to wrap both ``pettingzoo.AECEnv`` and ``pettingzoo.ParallelEnv``.
+
+    Let's see how more in detail:
+
+    In wrapped ``pettingzoo.ParallelEnv`` all agents will step at each environment step.
+    If the number of agents during the task varies, please set ``use_action_mask=True``. "action_mask" will be provided
+    as an output and should be used to mask out dead agents.
+    The environment will be reset as soon as one agent is done.
+
+    In wrapped ``pettingzoo.AECEnv``at each step only one agent will act.
+    For this reason, it is compulsory to set ``use_action_mask=True`` for this type of environment.
+    "action_mask" will be provided as an output and can be used to mask out non-acting agents and unavailable actions
+    for an agent. The environment will also automatically update the mask of its ``action_spec``
+    to reflect the latest available actions.
+    The environment will be reset only when all agents are done.
+
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your envrionment.
+    You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
+    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
+
+    By default, agents in pettingzoo will be grouped by name.
+    For example, with agents ``["agent_0","agent_1","agent_2","adversary_0"]``, the tensordicts will look like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agent: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([3]))},
+                adversary: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
+
+    Otherwise, a group map can be specified or selected from some premade options.
+    See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+    For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
+    have its own tensordict (similar to the pettingzoo parallel API).
+
+    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    neural network.
+
+    Args:
+        env (``pettingzoo.utils.env.ParallelEnv`` or ``pettingzoo.utils.env.AECEnv``): the pettingzoo environment to wrap.
+        return_state (bool, optional): whether to return the global state from pettingzoo
+            (not available in all environments). Default False.
+        group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
+            input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
+            or selected from some premade options. See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+        use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
+            wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
+            for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
+        seed (int, optional): the seed. Default None.
+
+    Examples:
+        >>> # Parallel env
+        >>> from torchrl.envs.libs.pettingzoo import PettingZooWrapper
+        >>> from pettingzoo.butterfly import pistonball_v6
+        >>> kwargs = {"n_pistons": 21, "continuous": True}
+        >>> env = PettingZooWrapper(
+        ...     env=pistonball_v6.parallel_env(**kwargs),
+        ...     return_state=True,
+        ...     group_map=None, # Use default (all pistons grouped together)
+        ... )
+        >>> print(env.group_map)
+        ... {'piston': ['piston_0', 'piston_1', ..., 'piston_20']}
+        >>> env.rollout(10)
+        >>> # AEC env
+        >>> from pettingzoo.classic import tictactoe_v3
+        >>> from torchrl.envs.libs.pettingzoo import PettingZooWrapper
+        >>> from torchrl.envs.libs.utils import MarlGroupMapType
+        >>> env = PettingZooWrapper(
+        ...     env=tictactoe_v3.env(),
+        ...     use_action_mask=True, # Must use it since one player plays at a time
+        ...     group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT,
+        ...     # This time let's split the players (even though since they are both named "player_i" the default would group them together)
+        ... )
+        >>> print(env.group_map)
+        ... {'player_1': ['player_1'], 'player_2': ['player_2']}
+        >>> env.rollout(10)
+    """
 
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
     libname = "pettingzoo"
@@ -175,8 +271,11 @@ class PettingZooWrapper(_EnvWrapper):
 
         super().__init__(**kwargs, allow_done_after_reset=True)
 
-    def _get_default_group_map(self, agent_names: List[str]):
-        map = {}
+    @staticmethod
+    def _get_default_group_map(agent_names: List[str]):
+        # This function performs the default grouping in pettingzoo by agent name
+        # Agents with names "str_int" will be grouped in group name "str"
+        group_map = {}
         for agent_name in agent_names:
             # See if the agent follows the convention "name_int"
             follows_convention = True
@@ -184,22 +283,22 @@ class PettingZooWrapper(_EnvWrapper):
             if len(agent_name_split) == 1:
                 follows_convention = False
             try:
-                agent_name_split[-1] = int(agent_name_split[-1])
+                int(agent_name_split[-1])
             except ValueError:
                 follows_convention = False
 
             # If not, just put it in a single group
             if not follows_convention:
-                map[agent_name] = [agent_name]
+                group_map[agent_name] = [agent_name]
             # Otherwise, group it with other agents that follow the same convention
             else:
                 group_name = "_".join(agent_name_split[:-1])
-                if group_name in map:
-                    map[group_name].append(agent_name)
+                if group_name in group_map:
+                    group_map[group_name].append(agent_name)
                 else:
-                    map[group_name] = [agent_name]
+                    group_map[group_name] = [agent_name]
 
-        return map
+        return group_map
 
     @property
     def lib(self):
@@ -229,7 +328,9 @@ class PettingZooWrapper(_EnvWrapper):
 
         # Create and check group map
         if self.group_map is None:
-            self.group_map = self._get_default_group_map(self.possible_agents)
+            self.group_map = PettingZooWrapper._get_default_group_map(
+                self.possible_agents
+            )
         elif isinstance(self.group_map, MarlGroupMapType):
             self.group_map = self.group_map.get_group_map(self.possible_agents)
         _check_marl_grouping(self.group_map, self.possible_agents)
@@ -285,12 +386,22 @@ class PettingZooWrapper(_EnvWrapper):
             )
         group_action_spec = torch.stack(action_specs, dim=0)
         group_observation_spec = torch.stack(observation_specs, dim=0)
+
+        # Sometimes the observation spec contains an action mask.
+        # Or sometimes the info spec contains an action mask.
+        # We uniform this by removing it from both places and optionally set it in a standard location.
         group_observation_inner_spec = group_observation_spec["observation"]
         if (
             isinstance(group_observation_inner_spec, CompositeSpec)
             and "action_mask" in group_observation_inner_spec.keys()
         ):
+            if not self.use_action_mask:
+                raise ValueError(
+                    "PettingZoo env has action mask but use_action_mask was False at construction time."
+                    "Please set use_action_mask=True"
+                )
             del group_observation_inner_spec["action_mask"]
+
         if self.use_action_mask:
             group_observation_spec["action_mask"] = DiscreteTensorSpec(
                 n=2,
@@ -321,6 +432,7 @@ class PettingZooWrapper(_EnvWrapper):
             shape=torch.Size((n_agents,)),
         )
         if n_agents == 1:
+            # When there is only one agent in the group we remove the singleton corresponding to the group size
             group_observation_spec = group_observation_spec.squeeze(0)
             group_action_spec = group_action_spec.squeeze(0)
             group_reward_spec = group_reward_spec.squeeze(0)
@@ -404,17 +516,22 @@ class PettingZooWrapper(_EnvWrapper):
     ) -> TensorDictBase:
 
         if self.parallel:
+            # This resets when any is done
             observation_dict, info_dict = self._reset_parallel()
         else:
+            # This resets when all are done
             observation_dict, info_dict = self._reset_aec(tensordict)
 
+        # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_reset_output_zero.clone()
+        # Update the action mask for available actions and acting agents
         observation_dict, info_dict = self._update_action_mask(
             tensordict_out,
             observation_dict,
             info_dict,
         )
 
+        # Now we get the data (obs and info)
         for group, agent_names in self.group_map.items():
             group_observation = tensordict_out.get((group, "observation"))
             group_info = tensordict_out.get((group, "info"), None)
@@ -438,17 +555,17 @@ class PettingZooWrapper(_EnvWrapper):
     def _reset_aec(self, tensordict=None) -> Tuple[Dict, Dict]:
         all_done = True
         if tensordict is not None:
-            _reset_map = {}
+            _resets = []
             for done_key in self.done_keys:
                 _reset_key = _replace_last(done_key, "_reset")
                 _reset = tensordict.get(_reset_key, default=None)
                 if _reset is None:
                     continue
-                _reset_map.update({done_key: _reset})
-            if len(_reset_map.keys()) < len(self.done_keys):
+                _resets.append(_reset)
+            if len(_resets) < len(self.done_keys):
                 all_done = False
             else:
-                for _reset in _reset_map.values():
+                for _reset in _resets:
                     if not _reset.all():
                         all_done = False
                         break
@@ -489,11 +606,14 @@ class PettingZooWrapper(_EnvWrapper):
                 info_dict,
             ) = self._step_aec(tensordict)
 
+        # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_step_output_zero.clone()
+        # Update the action mask for available actions and acting agents
         observation_dict, info_dict = self._update_action_mask(
             tensordict_out, observation_dict, info_dict
         )
 
+        # Now we get the data
         for group, agent_names in self.group_map.items():
             group_observation = tensordict_out.get((group, "observation"))
             group_reward = tensordict_out.get((group, "reward"))
@@ -504,7 +624,7 @@ class PettingZooWrapper(_EnvWrapper):
                 if agent in observation_dict:  # Live agents
                     index = (
                         i if len(agent_names) > 1 else Ellipsis
-                    )  # If group has one agent we index with '...'
+                    )  # If group has one agent, we index with '...'
                     group_observation[index] = self.observation_spec[
                         group, "observation"
                     ][index].encode(observation_dict[agent])
@@ -569,7 +689,7 @@ class PettingZooWrapper(_EnvWrapper):
                 ].to_numpy(group_action)
                 action = group_action_np[agent_index]
                 break
-        print(f"\nStepping agent {self.agent_selection}", f"action {action}")
+
         self._env.step(action)
         terminations_dict = self._env.terminations
         truncations_dict = self._env.truncations
@@ -578,7 +698,6 @@ class PettingZooWrapper(_EnvWrapper):
         observation_dict = {
             agent: self._env.observe(agent) for agent in self.possible_agents
         }
-        print(f"obs {observation_dict}, don {truncations_dict} {terminations_dict}")
         return (
             observation_dict,
             rewards_dict,
@@ -588,11 +707,13 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _update_action_mask(self, td, observation_dict, info_dict):
-
-        observation_dict = copy.deepcopy(observation_dict)
-        info_dict = copy.deepcopy(info_dict)
-        agents_acting = self.agents if self.parallel else [self.agent_selection]
         if self.use_action_mask:
+            # Since we remove the action_mask keys we need to copy the data
+            observation_dict = copy.deepcopy(observation_dict)
+            info_dict = copy.deepcopy(info_dict)
+            # In AEC only one agent acts
+            agents_acting = self.agents if self.parallel else [self.agent_selection]
+
             for group, agents in self.group_map.items():
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
@@ -617,13 +738,15 @@ class PettingZooWrapper(_EnvWrapper):
                                 device=self.device,
                                 dtype=torch.bool,
                             )
+
                 group_action_spec = self.input_spec["_action_spec", group, "action"]
                 if isinstance(
                     group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)
                 ):
-                    print(f"Mask Used {group_mask}")
+                    # We update the mask for available actions
                     group_action_spec.update_mask(group_mask.clone())
 
+                # We now add dead agents to the mask
                 for i, agent in enumerate(agents):
                     index = (
                         i if len(agents) > 1 else Ellipsis
@@ -646,7 +769,7 @@ class PettingZooWrapper(_EnvWrapper):
 class PettingZooEnv(PettingZooWrapper):
     """PettingZoo Environment.
 
-    To install petting zoo follow the guide `here <https://github.com/Farama-Foundation/PettingZoo#installation>'__.
+    To install petting zoo follow the guide `here <https://github.com/Farama-Foundation/PettingZoo#installation>__`.
 
     This class is a general torchrl wrapper for all PettingZoo environments.
     It is able to wrap both ``pettingzoo.AECEnv`` and ``pettingzoo.ParallelEnv``.
@@ -671,6 +794,42 @@ class PettingZooEnv(PettingZooWrapper):
     to reflect the latest available actions.
     The environment will be reset only when all agents are done.
 
+    As a feature of torchrl multiagent, you are able to control the grouping of agents in your envrionment.
+    You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
+    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
+
+    By default, agents in pettingzoo will be grouped by name.
+    For example, with agents ``["agent_0","agent_1","agent_2","adversary_0"]``, the tensordicts will look like:
+
+        >>> print(env.rand_action(env.reset()))
+        TensorDict(
+            fields={
+                agent: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([3]))},
+                adversary: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([]))},
+            batch_size=torch.Size([]))
+        >>> print(env.group_map)
+        {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
+
+    Otherwise, a group map can be specified or selected from some premade options.
+    See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
+    For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
+    have its own tensordict (similar to the pettingzoo parallel API).
+
+    Grouping is useful for leveraging vectorisation among agents whose data goes through the same
+    neural network.
 
     Args:
         task (str): the name of the pettingzoo task to create (for example, "multiwalker_v9").
@@ -678,47 +837,40 @@ class PettingZooEnv(PettingZooWrapper):
         return_state (bool, optional): whether to return the global state from pettingzoo
             (not available in all environments). Default False.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
-            input/output.
-
-            By default, agents will be grouped by their name.
-
-            For example, with agents ``["agent_0","agent_1","agent_2","adversary_0"]``, the tensordicts will look like:
-            >>> print(env.rand_action(env.reset()))
-            TensorDict(
-                fields={
-                    agent: TensorDict(
-                        fields={
-                            action: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.int64, is_shared=False),
-                            action_mask: Tensor(shape=torch.Size([3, 9]), device=cpu, dtype=torch.bool, is_shared=False),
-                            done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                            observation: Tensor(shape=torch.Size([3, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
-                        batch_size=torch.Size([3]))},
-                    adversary: TensorDict(
-                        fields={
-                            action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
-                            action_mask: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.bool, is_shared=False),
-                            done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                            observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
-                        batch_size=torch.Size([]))},
-                batch_size=torch.Size([]))
-            >>> print(env.group_map)
-            {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
-
-            Otherwise a group map can be specified or selected from some premade options.
-            See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
-            For example, you can provide ``MarlGroupMapType.ONE_GROUP_PER_AGENT``, telling that each agent should
-            have its own tensordict (similar to the pettingzoo parallel API).
-
-            Grouping is useful for leveraging vectorisation among agents whose data goes through the same
-            neural network.
-
+            input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
+            or selected from some premade options. See :class:`torchrl.env.libs.utils.MarlGroupMapType` for more info.
         use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
         seed (int, optional): the seed. Default None.
 
-
-
+    Examples:
+        >>> # Parallel env
+        >>> from torchrl.envs.libs.pettingzoo import PettingZooEnv
+        >>> kwargs = {"n_pistons": 21, "continuous": True}
+        >>> env = PettingZooEnv(
+        ...     task="pistonball_v6",
+        ...     parallel=True,
+        ...     return_state=True,
+        ...     group_map=None, # Use default (all pistons grouped together)
+        ...     **kwargs,
+        ... )
+        >>> print(env.group_map)
+        ... {'piston': ['piston_0', 'piston_1', ..., 'piston_20']}
+        >>> env.rollout(10)
+        >>> # AEC env
+        >>> from torchrl.envs.libs.pettingzoo import PettingZooEnv
+        >>> from torchrl.envs.libs.utils import MarlGroupMapType
+        >>> env = PettingZooEnv(
+        ...     task="tictactoe_v3",
+        ...     parallel=False,
+        ...     use_action_mask=True, # Must use it since one player plays at a time
+        ...     group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT,
+        ...     # This time let's split the players (even though since they are both named "player_i" the default would group them together)
+        ... )
+        >>> print(env.group_map)
+        ... {'player_1': ['player_1'], 'player_2': ['player_2']}
+        >>> env.rollout(10)
     """
 
     def __init__(
