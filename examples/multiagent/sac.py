@@ -7,7 +7,6 @@ import time
 
 import hydra
 import torch
-from objectives import DiscreteSACLoss, SACLoss
 
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
@@ -23,7 +22,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
-from torchrl.objectives import SoftUpdate, ValueEstimators
+from torchrl.objectives import DiscreteSACLoss, SACLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
 
 
