@@ -296,7 +296,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             and cfg.logger.backend
         ):
             evaluation_start = time.time()
-            with torch.no_grad() and set_exploration_type(ExplorationType.MEAN):
+            with torch.no_grad() and set_exploration_type(ExplorationType.MODE):
                 env_test.frames = []
                 rollouts = env_test.rollout(
                     max_steps=cfg.env.max_steps,
