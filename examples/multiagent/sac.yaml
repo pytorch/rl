@@ -29,7 +29,7 @@ train:
   num_epochs: 45  # optimization steps per batch of data collected
   minibatch_size: 4096 # size of minibatches used in each epoch
   lr: 5e-5
-  max_grad_norm: 40.0
+  max_grad_norm: 2.0
   device: ???
 
 eval:
