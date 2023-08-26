@@ -534,14 +534,13 @@ class SACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
+        entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).mean().detach()
         out = {
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_alpha": loss_alpha.mean(),
             "alpha": self._alpha,
-            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
-            .mean()
-            .detach(),
+            "entropy": entropy,
         }
         if self._version == 1:
             out["loss_value"] = loss_value.mean()
@@ -1084,14 +1083,13 @@ class DiscreteSACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
+        entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).mean().detach()
         out = {
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_value.mean(),
             "loss_alpha": loss_alpha.mean(),
             "alpha": self._alpha,
-            "entropy": -tensordict_reshape.get(self.tensor_keys.log_prob)
-            .mean()
-            .detach(),
+            "entropy": entropy,
         }
         return TensorDict(out, [])
 
