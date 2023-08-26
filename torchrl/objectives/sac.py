@@ -523,8 +523,8 @@ class SACLoss(LossModule):
         else:
             loss_qvalue, value_metadata = self._qvalue_v2_loss(tensordict_reshape)
             loss_value = None
-        loss_actor, _ = self._actor_loss(tensordict_reshape)
-        loss_alpha = self._alpha_loss(tensordict_reshape)
+        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
+        loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
         tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -534,7 +534,7 @@ class SACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).mean().detach()
+        entropy = -metadata_actor["log_prob"].mean()
         out = {
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_qvalue.mean(),
@@ -576,9 +576,7 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
 
-        # write log_prob in tensordict for alpha loss
-        tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return self._alpha * log_prob - min_q_logprob, {}
+        return self._alpha * log_prob - min_q_logprob, {"log_prob": log_prob.detach()}
 
     @property
     @_cache_values
@@ -738,14 +736,14 @@ class SACLoss(LossModule):
         )
         return loss_value, {}
 
-    def _alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
-        log_pi = tensordict.get(self.tensor_keys.log_prob)
+    def _alpha_loss(self, log_prob: Tensor) -> Tensor:
+
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
         else:
             # placeholder
-            alpha_loss = torch.zeros_like(log_pi)
+            alpha_loss = torch.zeros_like(log_prob)
         return alpha_loss
 
     @property
@@ -1073,8 +1071,11 @@ class DiscreteSACLoss(LossModule):
             tensordict_reshape = tensordict
 
         loss_value, metadata_value = self._value_loss(tensordict_reshape)
-        loss_actor, _ = self._actor_loss(tensordict_reshape)
-        loss_alpha = self._alpha_loss(tensordict_reshape)
+        loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
+        loss_alpha = self._alpha_loss(
+            log_prob=metadata_actor["log_prob"],
+            prob=metadata_actor["prob"],
+        )
 
         tensordict_reshape.set(self.tensor_keys.priority, metadata_value["td_error"])
         if loss_actor.shape != loss_value.shape:
@@ -1083,7 +1084,7 @@ class DiscreteSACLoss(LossModule):
             )
         if shape:
             tensordict.update(tensordict_reshape.view(shape))
-        entropy = -tensordict_reshape.get(self.tensor_keys.log_prob).mean().detach()
+        entropy = -metadata_actor["log_prob"].mean()
         out = {
             "loss_actor": loss_actor.mean(),
             "loss_qvalue": loss_value.mean(),
@@ -1111,12 +1112,11 @@ class DiscreteSACLoss(LossModule):
             next_tensordict = tensordict.get("next").clone(False)
 
             # get probs and log probs for actions computed from "next"
-            with set_exploration_type(ExplorationType.RANDOM):
-                next_dist = self.actor_network.get_dist(
-                    next_tensordict, params=self.actor_network_params
-                )
-                next_prob = next_dist.probs
-                next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
+            next_dist = self.actor_network.get_dist(
+                next_tensordict, params=self.actor_network_params
+            )
+            next_prob = next_dist.probs
+            next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
 
             # get q-values for all actions
             next_tensordict_expand = self._vmap_qnetworkN0(
@@ -1179,13 +1179,12 @@ class DiscreteSACLoss(LossModule):
         self, tensordict: TensorDictBase
     ) -> Tuple[Tensor, Dict[str, Tensor]]:
         # get probs and log probs for actions
-        with set_exploration_type(ExplorationType.RANDOM):
-            dist = self.actor_network.get_dist(
-                tensordict,
-                params=self.actor_network_params,
-            )
-            prob = dist.probs
-            log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
+        dist = self.actor_network.get_dist(
+            tensordict,
+            params=self.actor_network_params,
+        )
+        prob = dist.probs
+        log_prob = torch.log(torch.where(prob == 0, 1e-8, prob))
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q = self._vmap_qnetworkN0(
@@ -1203,18 +1202,17 @@ class DiscreteSACLoss(LossModule):
         # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
         loss = (prob * loss).sum(-1)
 
-        # write log_prob in tensordict for alpha loss
-        tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
-        return loss, {}
+        return loss, {"log_prob": log_prob.detach(), "prob": prob.detach()}
 
-    def _alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
-        log_pi = tensordict.get(self.tensor_keys.log_prob)
+    def _alpha_loss(self, log_prob: Tensor, prob: Tensor) -> Tensor:
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (log_pi.detach() + self.target_entropy)
+            alpha_loss = -self.log_alpha * (
+                torch.sum(prob * log_prob, dim=-1) + self.target_entropy
+            )
         else:
             # placeholder
-            alpha_loss = torch.zeros_like(log_pi)
+            alpha_loss = torch.zeros_like(log_prob)
         return alpha_loss
 
     @property
