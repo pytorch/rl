@@ -1074,7 +1074,6 @@ class DiscreteSACLoss(LossModule):
         loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
         loss_alpha = self._alpha_loss(
             log_prob=metadata_actor["log_prob"],
-            prob=metadata_actor["prob"],
         )
 
         tensordict_reshape.set(self.tensor_keys.priority, metadata_value["td_error"])
@@ -1202,14 +1201,12 @@ class DiscreteSACLoss(LossModule):
         # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
         loss = (prob * loss).sum(-1)
 
-        return loss, {"log_prob": log_prob.detach(), "prob": prob.detach()}
+        return loss, {"log_prob": (log_prob * prob).sum(-1).detach()}
 
-    def _alpha_loss(self, log_prob: Tensor, prob: Tensor) -> Tensor:
+    def _alpha_loss(self, log_prob: Tensor) -> Tensor:
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (
-                torch.sum(prob * log_prob, dim=-1) + self.target_entropy
-            )
+            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
