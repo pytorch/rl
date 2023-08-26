@@ -961,7 +961,7 @@ class DiscreteSACLoss(LossModule):
             actor_network,
             "actor_network",
             create_target_params=self.delay_actor,
-            funs_to_decorate=["forward", "get_dist_params"],
+            funs_to_decorate=["forward", "get_dist"],
         )
         if separate_losses:
             # we want to make sure there are no duplicates in the params: the
@@ -1150,7 +1150,7 @@ class DiscreteSACLoss(LossModule):
         action = tensordict.get(self.tensor_keys.action)
         action = action.expand((action_value.shape[0], *action.shape))  # Add vmap dim
 
-        # TODO this block comes from the dqn loss, we need to swap all thse with a proper
+        # TODO this block comes from the dqn loss, we need to swap all these with a proper
         #  helper function which selects the value given the action for all discrete spaces
         if self.action_space == "categorical":
             if action.shape != action_value.shape:
