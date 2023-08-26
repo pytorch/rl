@@ -254,6 +254,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
                     loss_vals["loss_actor"]
                     + loss_vals["loss_alpha"]
                     + loss_vals["loss_qvalue"]
+                    + loss_vals["loss_alpha"]
                 )
 
                 loss_value.backward()
