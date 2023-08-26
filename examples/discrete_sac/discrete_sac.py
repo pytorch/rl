@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import torch.cuda
 import tqdm
-from tensordict.nn import InteractionType
+from tensordict.nn import InteractionType, TensorDictModule
 
 from torch import nn, optim
 from torchrl.collectors import SyncDataCollector
@@ -27,7 +27,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, SafeModule
 from torchrl.modules.distributions import OneHotCategorical
 
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator
+from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 
 from torchrl.objectives import DiscreteSACLoss, SoftUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -150,8 +150,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         **qvalue_net_kwargs,
     )
 
-    qvalue = ValueOperator(
+    qvalue = TensorDictModule(
         in_keys=in_keys,
+        out_keys=["action_value"],
         module=qvalue_net,
     ).to(device)
 
@@ -171,6 +172,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create SAC loss
     loss_module = DiscreteSACLoss(
         actor_network=model[0],
+        action_space=test_env.action_spec,
         qvalue_network=model[1],
         num_actions=num_actions,
         num_qvalue_nets=2,
