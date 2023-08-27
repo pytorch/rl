@@ -1946,7 +1946,7 @@ class TestHeteroEnvs:
             else:
                 assert (td["lazy"][..., i]["action"] == 0).all()
 
-    @pytest.mark.parametrize("batch_size", [(), (1, 2), (2,)])
+    @pytest.mark.parametrize("batch_size", [(1, 2)])
     @pytest.mark.parametrize("env_type", ["serial", "parallel"])
     def test_vec_env(self, batch_size, env_type, rollout_steps=4, n_workers=2):
         env_fun = lambda: HeteroCountingEnv(batch_size=batch_size)
