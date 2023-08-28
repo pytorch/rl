@@ -1,51 +1,8 @@
-""" PyTorch Lamb optimizer w/ behaviour similar to NVIDIA FusedLamb
-This optimizer code was adapted from the following (starting with latest)
-* https://github.com/HabanaAI/Model-References/blob/2b435114fe8e31f159b1d3063b8280ae37af7423/PyTorch/nlp/bert/pretraining/lamb.py
-* https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/LanguageModeling/Transformer-XL/pytorch/lamb.py
-* https://github.com/cybertronai/pytorch-lamb
-Use FusedLamb if you can (GPU). The reason for including this variant of Lamb is to have a version that is
-similar in behaviour to APEX FusedLamb if you aren't using NVIDIA GPUs or cannot install/use APEX.
-In addition to some cleanup, this Lamb impl has been modified to support PyTorch XLA and has been tested on TPU.
-Original copyrights for above sources are below.
-Modifications Copyright 2021 Ross Wightman
-"""
-# Copyright (c) 2021, Habana Labs Ltd.  All rights reserved.
-
-# Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#       http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# MIT License
-#
-# Copyright (c) 2019 cybertronai
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+# Lamb optimizer directly copied from https://github.com/facebookresearch/online-dt
 import math
 
 import torch

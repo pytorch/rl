@@ -35,12 +35,12 @@ replay_buffer:
   buffer_prefetch: 64
   capacity: 1_000_000
   buffer_scratch_dir: "/tmp/"
-  device: cpu
+  device: cuda:0
   prefetch: 3
 
 # Optimization
 optim:
-  device: cpu
+  device: cuda:0
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 256

@@ -1289,14 +1289,14 @@ class DTActor(nn.Module):
             transformer_config["n_embd"], action_dim, device=device
         )
 
-        # def weight_init(m):
-        #     """Custom weight init for Conv2D and Linear layers."""
-        #     if isinstance(m, torch.nn.Linear):
-        #         nn.init.orthogonal_(m.weight.data)
-        #         if hasattr(m.bias, "data"):
-        #             m.bias.data.fill_(0.0)
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
 
-        # self.apply(weight_init)
+        self.action_layer.apply(weight_init)
 
     def forward(
         self,

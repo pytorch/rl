@@ -13,7 +13,7 @@ import tqdm
 
 from torchrl.envs.libs.gym import set_gym_backend
 
-# from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module import DecisionTransformerInferenceWrapper
 
 from utils import (
@@ -81,7 +81,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         scheduler.step()
 
         # evaluation
-        with torch.no_grad():
+        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             inference_policy.eval()
             if i % pretrain_log_interval == 0:
                 eval_td = test_env.rollout(
