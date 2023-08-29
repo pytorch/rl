@@ -54,7 +54,7 @@ class SMACv2Wrapper(_EnvWrapper):
                     fields={
                         action: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.bool, is_shared=False),
-                        obs: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([5, 10]),
                     device=cpu,
                     is_shared=False),
@@ -73,7 +73,7 @@ class SMACv2Wrapper(_EnvWrapper):
                         agents: TensorDict(
                             fields={
                                 action_mask: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.bool, is_shared=False),
-                                obs: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                observation: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
                             batch_size=torch.Size([5, 10]),
                             device=cpu,
                             is_shared=False),
@@ -128,7 +128,7 @@ class SMACv2Wrapper(_EnvWrapper):
                     fields={
                         action: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.bool, is_shared=False),
-                        obs: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([4, 5]),
                     device=cpu,
                     is_shared=False),
@@ -147,7 +147,7 @@ class SMACv2Wrapper(_EnvWrapper):
                         agents: TensorDict(
                             fields={
                                 action_mask: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.bool, is_shared=False),
-                                obs: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                observation: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
                             batch_size=torch.Size([4, 5]),
                             device=cpu,
                             is_shared=False),
@@ -211,6 +211,7 @@ class SMACv2Wrapper(_EnvWrapper):
         return env
 
     def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:
+        self.group_map = {"agents": [str(i) for i in range(self.n_agents)]}
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=torch.Size((1,)),
             device=self.device,
@@ -293,7 +294,7 @@ class SMACv2Wrapper(_EnvWrapper):
         spec = CompositeSpec(
             {
                 "agents": CompositeSpec(
-                    {"obs": obs_spec, "action_mask": mask_spec},
+                    {"observation": obs_spec, "action_mask": mask_spec},
                     shape=torch.Size((self.n_agents,)),
                 ),
                 "state": BoundedTensorSpec(
@@ -340,7 +341,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         # build results
         agents_td = TensorDict(
-            {"obs": obs, "action_mask": mask}, batch_size=(self.n_agents,)
+            {"observation": obs, "action_mask": mask}, batch_size=(self.n_agents,)
         )
         tensordict_out = TensorDict(
             source={"agents": agents_td, "state": state, "info": info},
@@ -376,7 +377,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         # build results
         agents_td = TensorDict(
-            {"obs": obs, "action_mask": mask}, batch_size=(self.n_agents,)
+            {"observation": obs, "action_mask": mask}, batch_size=(self.n_agents,)
         )
 
         tensordict_out = TensorDict(
@@ -463,7 +464,7 @@ class SMACv2Env(SMACv2Wrapper):
                     fields={
                         action: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.bool, is_shared=False),
-                        obs: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([5, 10]),
                     device=cpu,
                     is_shared=False),
@@ -482,7 +483,7 @@ class SMACv2Env(SMACv2Wrapper):
                         agents: TensorDict(
                             fields={
                                 action_mask: Tensor(shape=torch.Size([5, 10, 18]), device=cpu, dtype=torch.bool, is_shared=False),
-                                obs: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                observation: Tensor(shape=torch.Size([5, 10, 176]), device=cpu, dtype=torch.float32, is_shared=False)},
                             batch_size=torch.Size([5, 10]),
                             device=cpu,
                             is_shared=False),
@@ -535,7 +536,7 @@ class SMACv2Env(SMACv2Wrapper):
                     fields={
                         action: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.int64, is_shared=False),
                         action_mask: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.bool, is_shared=False),
-                        obs: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
                     batch_size=torch.Size([4, 5]),
                     device=cpu,
                     is_shared=False),
@@ -554,7 +555,7 @@ class SMACv2Env(SMACv2Wrapper):
                         agents: TensorDict(
                             fields={
                                 action_mask: Tensor(shape=torch.Size([4, 5, 12]), device=cpu, dtype=torch.bool, is_shared=False),
-                                obs: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                observation: Tensor(shape=torch.Size([4, 5, 88]), device=cpu, dtype=torch.float32, is_shared=False)},
                             batch_size=torch.Size([4, 5]),
                             device=cpu,
                             is_shared=False),
