@@ -200,11 +200,11 @@ def step_mdp(
 
     excluded = set()
     if exclude_reward:
-        excluded = {*reward_keys}
+        excluded = excluded.union(reward_keys)
     if exclude_done:
-        excluded = excluded.union({*done_keys})
+        excluded = excluded.union(done_keys)
     if exclude_action:
-        excluded = excluded.union({*action_keys})
+        excluded = excluded.union(action_keys)
     next_td = tensordict.get("next")
     out = next_td.empty()
 

@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict import unravel_key
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl._utils import prod, seed_generator
@@ -1161,7 +1162,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             expected_done_shape = torch.Size(
                 [
                     *leading_batch_size,
-                    *self.output_spec["_done_spec"][done_key].shape,
+                    *self.output_spec[unravel_key(("_done_spec", done_key))].shape,
                 ]
             )
             actual_done_shape = done.shape
@@ -1179,10 +1180,12 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             for reward_key in self.reward_keys:
                 if (
                     next_tensordict_out.get(reward_key).dtype
-                    is not self.output_spec["_reward_spec"][reward_key].dtype
+                    is not self.output_spec[
+                        unravel_key(("_reward_spec", reward_key))
+                    ].dtype
                 ):
                     raise TypeError(
-                        f"expected reward.dtype to be {self.output_spec['_reward_spec'][reward_key]} "
+                        f"expected reward.dtype to be {self.output_spec[unravel_key(('_reward_spec',reward_key))]} "
                         f"but got {tensordict_out.get(reward_key).dtype}"
                     )
 
