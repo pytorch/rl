@@ -60,27 +60,27 @@ class _MockEnv(EnvBase):
         *args,
         **kwargs,
     ):
-        for key, item in list(cls._output_spec["_observation_spec"].items()):
-            cls._output_spec["_observation_spec"][key] = item.to(
+        for key, item in list(cls._output_spec["full_observation_spec"].items()):
+            cls._output_spec["full_observation_spec"][key] = item.to(
                 torch.get_default_dtype()
             )
-        cls._output_spec["_reward_spec"] = cls._output_spec["_reward_spec"].to(
+        cls._output_spec["full_reward_spec"] = cls._output_spec["full_reward_spec"].to(
             torch.get_default_dtype()
         )
-        if not isinstance(cls._output_spec["_reward_spec"], CompositeSpec):
-            cls._output_spec["_reward_spec"] = CompositeSpec(
-                reward=cls._output_spec["_reward_spec"],
-                shape=cls._output_spec["_reward_spec"].shape[:-1],
+        if not isinstance(cls._output_spec["full_reward_spec"], CompositeSpec):
+            cls._output_spec["full_reward_spec"] = CompositeSpec(
+                reward=cls._output_spec["full_reward_spec"],
+                shape=cls._output_spec["full_reward_spec"].shape[:-1],
             )
-        if not isinstance(cls._output_spec["_done_spec"], CompositeSpec):
-            cls._output_spec["_done_spec"] = CompositeSpec(
-                done=cls._output_spec["_done_spec"],
-                shape=cls._output_spec["_done_spec"].shape[:-1],
+        if not isinstance(cls._output_spec["full_done_spec"], CompositeSpec):
+            cls._output_spec["full_done_spec"] = CompositeSpec(
+                done=cls._output_spec["full_done_spec"],
+                shape=cls._output_spec["full_done_spec"].shape[:-1],
             )
-        if not isinstance(cls._input_spec["_action_spec"], CompositeSpec):
-            cls._input_spec["_action_spec"] = CompositeSpec(
-                action=cls._input_spec["_action_spec"],
-                shape=cls._input_spec["_action_spec"].shape[:-1],
+        if not isinstance(cls._input_spec["full_action_spec"], CompositeSpec):
+            cls._input_spec["full_action_spec"] = CompositeSpec(
+                action=cls._input_spec["full_action_spec"],
+                shape=cls._input_spec["full_action_spec"].shape[:-1],
             )
         return super().__new__(cls, *args, **kwargs)
 
@@ -163,25 +163,25 @@ class MockSerialEnv(EnvBase):
         if state_spec is None:
             state_spec = CompositeSpec(shape=batch_size)
         input_spec = CompositeSpec(
-            _action_spec=action_spec, _state_spec=state_spec, shape=batch_size
+            full_action_spec=action_spec, full_state_spec=state_spec, shape=batch_size
         )
         cls._output_spec = CompositeSpec(shape=batch_size)
-        cls._output_spec["_reward_spec"] = reward_spec
-        cls._output_spec["_done_spec"] = done_spec
-        cls._output_spec["_observation_spec"] = observation_spec
+        cls._output_spec["full_reward_spec"] = reward_spec
+        cls._output_spec["full_done_spec"] = done_spec
+        cls._output_spec["full_observation_spec"] = observation_spec
         cls._input_spec = input_spec
 
-        if not isinstance(cls._output_spec["_reward_spec"], CompositeSpec):
-            cls._output_spec["_reward_spec"] = CompositeSpec(
-                reward=cls._output_spec["_reward_spec"], shape=batch_size
+        if not isinstance(cls._output_spec["full_reward_spec"], CompositeSpec):
+            cls._output_spec["full_reward_spec"] = CompositeSpec(
+                reward=cls._output_spec["full_reward_spec"], shape=batch_size
             )
-        if not isinstance(cls._output_spec["_done_spec"], CompositeSpec):
-            cls._output_spec["_done_spec"] = CompositeSpec(
-                done=cls._output_spec["_done_spec"], shape=batch_size
+        if not isinstance(cls._output_spec["full_done_spec"], CompositeSpec):
+            cls._output_spec["full_done_spec"] = CompositeSpec(
+                done=cls._output_spec["full_done_spec"], shape=batch_size
             )
-        if not isinstance(cls._input_spec["_action_spec"], CompositeSpec):
-            cls._input_spec["_action_spec"] = CompositeSpec(
-                action=cls._input_spec["_action_spec"], shape=batch_size
+        if not isinstance(cls._input_spec["full_action_spec"], CompositeSpec):
+            cls._input_spec["full_action_spec"] = CompositeSpec(
+                action=cls._input_spec["full_action_spec"], shape=batch_size
             )
         return super().__new__(*args, **kwargs)
 
@@ -277,25 +277,25 @@ class MockBatchedLockedEnv(EnvBase):
         if done_spec is None:
             done_spec = DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1))
         cls._output_spec = CompositeSpec(shape=batch_size)
-        cls._output_spec["_reward_spec"] = reward_spec
-        cls._output_spec["_done_spec"] = done_spec
-        cls._output_spec["_observation_spec"] = observation_spec
+        cls._output_spec["full_reward_spec"] = reward_spec
+        cls._output_spec["full_done_spec"] = done_spec
+        cls._output_spec["full_observation_spec"] = observation_spec
         cls._input_spec = CompositeSpec(
-            _action_spec=action_spec,
-            _state_spec=state_spec,
+            full_action_spec=action_spec,
+            full_state_spec=state_spec,
             shape=batch_size,
         )
-        if not isinstance(cls._output_spec["_reward_spec"], CompositeSpec):
-            cls._output_spec["_reward_spec"] = CompositeSpec(
-                reward=cls._output_spec["_reward_spec"], shape=batch_size
+        if not isinstance(cls._output_spec["full_reward_spec"], CompositeSpec):
+            cls._output_spec["full_reward_spec"] = CompositeSpec(
+                reward=cls._output_spec["full_reward_spec"], shape=batch_size
             )
-        if not isinstance(cls._output_spec["_done_spec"], CompositeSpec):
-            cls._output_spec["_done_spec"] = CompositeSpec(
-                done=cls._output_spec["_done_spec"], shape=batch_size
+        if not isinstance(cls._output_spec["full_done_spec"], CompositeSpec):
+            cls._output_spec["full_done_spec"] = CompositeSpec(
+                done=cls._output_spec["full_done_spec"], shape=batch_size
             )
-        if not isinstance(cls._input_spec["_action_spec"], CompositeSpec):
-            cls._input_spec["_action_spec"] = CompositeSpec(
-                action=cls._input_spec["_action_spec"], shape=batch_size
+        if not isinstance(cls._input_spec["full_action_spec"], CompositeSpec):
+            cls._input_spec["full_action_spec"] = CompositeSpec(
+                action=cls._input_spec["full_action_spec"], shape=batch_size
             )
         return super().__new__(cls, *args, **kwargs)
 
@@ -451,12 +451,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 shape=batch_size,
             )
         cls._output_spec = CompositeSpec(shape=batch_size)
-        cls._output_spec["_reward_spec"] = reward_spec
-        cls._output_spec["_done_spec"] = done_spec
-        cls._output_spec["_observation_spec"] = observation_spec
+        cls._output_spec["full_reward_spec"] = reward_spec
+        cls._output_spec["full_done_spec"] = done_spec
+        cls._output_spec["full_observation_spec"] = observation_spec
         cls._input_spec = CompositeSpec(
-            _action_spec=action_spec,
-            _state_spec=state_spec,
+            full_action_spec=action_spec,
+            full_state_spec=state_spec,
             shape=batch_size,
         )
         cls.from_pixels = from_pixels
@@ -553,12 +553,12 @@ class ContinuousActionVecMockEnv(_MockEnv):
                 shape=batch_size,
             )
         cls._output_spec = CompositeSpec(shape=batch_size)
-        cls._output_spec["_reward_spec"] = reward_spec
-        cls._output_spec["_done_spec"] = done_spec
-        cls._output_spec["_observation_spec"] = observation_spec
+        cls._output_spec["full_reward_spec"] = reward_spec
+        cls._output_spec["full_done_spec"] = done_spec
+        cls._output_spec["full_observation_spec"] = observation_spec
         cls._input_spec = CompositeSpec(
-            _action_spec=action_spec,
-            _state_spec=state_spec,
+            full_action_spec=action_spec,
+            full_state_spec=state_spec,
             shape=batch_size,
         )
         cls.from_pixels = from_pixels
@@ -1451,7 +1451,7 @@ class HeteroCountingEnv(EnvBase):
 
         reset_td = self.observation_spec.zero()
         reset_td.apply_(lambda x: x + expand_right(self.count, x.shape))
-        reset_td.update(self.output_spec["_done_spec"].zero())
+        reset_td.update(self.output_spec["full_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
 
@@ -1471,8 +1471,8 @@ class HeteroCountingEnv(EnvBase):
 
         td = self.observation_spec.zero()
         td.apply_(lambda x: x + expand_right(self.count, x.shape))
-        td.update(self.output_spec["_done_spec"].zero())
-        td.update(self.output_spec["_reward_spec"].zero())
+        td.update(self.output_spec["full_done_spec"].zero())
+        td.update(self.output_spec["full_reward_spec"].zero())
 
         assert td.batch_size == self.batch_size
         td[self.done_key] = expand_right(
@@ -1671,7 +1671,7 @@ class MultiKeyCountingEnv(EnvBase):
             self.count_nested_2, reset_td["nested_2", "observation"].shape
         )
 
-        reset_td.update(self.output_spec["_done_spec"].zero())
+        reset_td.update(self.output_spec["full_done_spec"].zero())
 
         assert reset_td.batch_size == self.batch_size
 
@@ -1683,8 +1683,8 @@ class MultiKeyCountingEnv(EnvBase):
     ) -> TensorDictBase:
 
         # Each action has a corresponding reward, done, and observation
-        reward = self.output_spec["_reward_spec"].zero()
-        done = self.output_spec["_done_spec"].zero()
+        reward = self.output_spec["full_reward_spec"].zero()
+        done = self.output_spec["full_done_spec"].zero()
         td = self.observation_spec.zero()
 
         one_hot_action = tensordict["action"].argmax(-1).unsqueeze(-1)

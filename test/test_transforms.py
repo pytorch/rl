@@ -245,7 +245,7 @@ class TestBinarizeReward(TransformBase):
         orig_env = NestedCountingEnv()
         env = TransformedEnv(orig_env, BinarizeReward(in_keys=[orig_env.reward_key]))
         env.rollout(3)
-        assert "data" in env._output_spec["_reward_spec"]
+        assert "data" in env._output_spec["full_reward_spec"]
 
     def test_transform_compose(self):
         torch.manual_seed(0)
@@ -1934,7 +1934,7 @@ class TestDoubleToFloat(TransformBase):
         if len(keys_total) == 1 and len(keys_inv) and keys[0] == "action":
             action_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
             input_spec = CompositeSpec(
-                _action_spec=CompositeSpec(action=action_spec), _state_spec=None
+                full_action_spec=CompositeSpec(action=action_spec), full_state_spec=None
             )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
@@ -7162,11 +7162,11 @@ class TestTransforms:
         _ = env.reward_spec
 
         assert env._input_spec is not None
-        assert "_action_spec" in env._input_spec
-        assert env._input_spec["_action_spec"] is not None
-        assert env._output_spec["_observation_spec"] is not None
-        assert env._output_spec["_reward_spec"] is not None
-        assert env._output_spec["_done_spec"] is not None
+        assert "full_action_spec" in env._input_spec
+        assert env._input_spec["full_action_spec"] is not None
+        assert env._output_spec["full_observation_spec"] is not None
+        assert env._output_spec["full_reward_spec"] is not None
+        assert env._output_spec["full_done_spec"] is not None
 
         env.insert_transform(0, CatFrames(N=4, dim=-1, in_keys=[key]))
 

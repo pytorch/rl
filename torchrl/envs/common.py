@@ -147,8 +147,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         torch.Size([])
         >>> env.input_spec
         CompositeSpec(
-            _state_spec: None,
-            _action_spec: CompositeSpec(
+            full_state_spec: None,
+            full_action_spec: CompositeSpec(
                 action: BoundedTensorSpec(
                     shape=torch.Size([1]),
                     space=ContinuousBox(
@@ -193,14 +193,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         >>> # the output_spec contains all the expected outputs
         >>> env.output_spec
         CompositeSpec(
-            _reward_spec: CompositeSpec(
+            full_reward_spec: CompositeSpec(
                 reward: UnboundedContinuousTensorSpec(
                     shape=torch.Size([1]),
                     space=None,
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])),
-            _observation_spec: CompositeSpec(
+            full_observation_spec: CompositeSpec(
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
@@ -209,7 +209,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])),
-            _done_spec: CompositeSpec(
+            full_done_spec: CompositeSpec(
                 done: DiscreteTensorSpec(
                     shape=torch.Size([1]),
                     space=DiscreteBox(n=2),
@@ -280,7 +280,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
-        if key in ("_input_spec", "_observation_spec", "_action_spec", "_reward_spec"):
+        if key in (
+            "_input_spec",
+            "_observation_spec",
+            "_action_spec",
+            "_reward_spec",
+            "_output_spec",
+            "_state_spec",
+            "_done_spec",
+        ):
             raise AttributeError(
                 "To set an environment spec, please use `env.observation_spec = obs_spec` (without the leading"
                 " underscore)."
@@ -361,8 +369,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         It contains:
 
-        - "_action_spec": the spec of the input actions
-        - "_state_spec": the spec of all other environment inputs
+        - "full_action_spec": the spec of the input actions
+        - "full_state_spec": the spec of all other environment inputs
 
         This attibute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
@@ -372,8 +380,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             >>> env = GymEnv("Pendulum-v1")
             >>> env.input_spec
             CompositeSpec(
-                _state_spec: None,
-                _action_spec: CompositeSpec(
+                full_state_spec: None,
+                full_action_spec: CompositeSpec(
                     action: BoundedTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
@@ -388,7 +396,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         input_spec = self.__dict__.get("_input_spec", None)
         if input_spec is None:
             input_spec = CompositeSpec(
-                _state_spec=None,
+                full_state_spec=None,
                 shape=self.batch_size,
                 device=self.device,
             ).lock_()
@@ -407,9 +415,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         It contains:
 
-        - "_reward_spec": the spec of reward
-        - "_done_spec": the spec of done
-        - "_observation_spec": the spec of all other environment outputs
+        - "full_reward_spec": the spec of reward
+        - "full_done_spec": the spec of done
+        - "full_observation_spec": the spec of all other environment outputs
 
         This attibute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
@@ -419,14 +427,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             >>> env = GymEnv("Pendulum-v1")
             >>> env.output_spec
             CompositeSpec(
-                _reward_spec: CompositeSpec(
+                full_reward_spec: CompositeSpec(
                     reward: UnboundedContinuousTensorSpec(
                         shape=torch.Size([1]),
                         space=None,
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])),
-                _observation_spec: CompositeSpec(
+                full_observation_spec: CompositeSpec(
                     observation: BoundedTensorSpec(
                         shape=torch.Size([3]),
                         space=ContinuousBox(
@@ -435,7 +443,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])),
-                _done_spec: CompositeSpec(
+                full_done_spec: CompositeSpec(
                     done: DiscreteTensorSpec(
                         shape=torch.Size([1]),
                         space=DiscreteBox(n=2),
@@ -460,7 +468,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # Action spec
     def _get_action_keys(self):
-        keys = self.input_spec["_action_spec"].keys(True, True)
+        keys = self.input_spec["full_action_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find action spec")
         keys = list(keys)
@@ -550,7 +558,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         To retrieve the full spec passed, use:
 
-            >>> env.input_spec["_action_spec"]
+            >>> env.input_spec["full_action_spec"]
 
         This property is mutable.
 
@@ -568,7 +576,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 domain=continuous)
         """
         try:
-            action_spec = self.input_spec["_action_spec"]
+            action_spec = self.input_spec["full_action_spec"]
         except (KeyError, AttributeError):
             raise KeyError("Failed to find the action_spec.")
 
@@ -620,14 +628,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action=value.to(device), shape=self.batch_size, device=device
                 )
 
-            self.input_spec["_action_spec"] = value.to(device)
+            self.input_spec["full_action_spec"] = value.to(device)
             self._get_action_keys()
         finally:
             self.input_spec.lock_()
 
     # Reward spec
     def _get_reward_keys(self):
-        keys = self.output_spec["_reward_spec"].keys(True, True)
+        keys = self.output_spec["full_reward_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find reward spec")
         keys = list(keys)
@@ -717,7 +725,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         To retrieve the full spec passed, use:
 
-            >>> env.output_spec["_reward_spec"]
+            >>> env.output_spec["full_reward_spec"]
 
         This property is mutable.
 
@@ -733,17 +741,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 domain=continuous)
         """
         try:
-            reward_spec = self.output_spec["_reward_spec"]
+            reward_spec = self.output_spec["full_reward_spec"]
         except (KeyError, AttributeError):
             # populate the "reward" entry
-            # this will be raised if there is not _reward_spec (unlikely) or no reward_key
+            # this will be raised if there is not full_reward_spec (unlikely) or no reward_key
             # Since output_spec is lazily populated with an empty composite spec for
             # reward_spec, the second case is much more likely to occur.
             self.reward_spec = out = UnboundedContinuousTensorSpec(
                 shape=(*self.batch_size, 1),
                 device=self.device,
             )
-            reward_spec = self.output_spec["_reward_spec"]
+            reward_spec = self.output_spec["full_reward_spec"]
 
         if len(self.reward_keys) > 1:
             out = reward_spec
@@ -800,14 +808,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         " with a null number of dimensions. Try using a multidimensional"
                         " spec instead, for instance with a singleton dimension at the tail)."
                     )
-            self.output_spec["_reward_spec"] = value.to(device)
+            self.output_spec["full_reward_spec"] = value.to(device)
             self._get_reward_keys()
         finally:
             self.output_spec.lock_()
 
     # done spec
     def _get_done_keys(self):
-        keys = self.output_spec["_done_spec"].keys(True, True)
+        keys = self.output_spec["full_done_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find done spec")
         keys = list(keys)
@@ -891,7 +899,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         To always retrieve the full spec passed, use:
 
-            >>> env.output_spec["_done_spec"]
+            >>> env.output_spec["full_done_spec"]
 
         This property is mutable.
 
@@ -907,16 +915,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 domain=discrete)
         """
         try:
-            done_spec = self.output_spec["_done_spec"]
+            done_spec = self.output_spec["full_done_spec"]
         except (KeyError, AttributeError):
             # populate the "done" entry
-            # this will be raised if there is not _done_spec (unlikely) or no done_key
+            # this will be raised if there is not full_done_spec (unlikely) or no done_key
             # Since output_spec is lazily populated with an empty composite spec for
             # done_spec, the second case is much more likely to occur.
             self.done_spec = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
-            done_spec = self.output_spec["_done_spec"]
+            done_spec = self.output_spec["full_done_spec"]
         if len(self.done_keys) > 1:
             out = done_spec
         else:
@@ -979,7 +987,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         " with a null number of dimensions. Try using a multidimensional"
                         " spec instead, for instance with a singleton dimension at the tail)."
                     )
-            self.output_spec["_done_spec"] = value.to(device)
+            self.output_spec["full_done_spec"] = value.to(device)
             self._get_done_keys()
         finally:
             self.output_spec.lock_()
@@ -1014,11 +1022,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        observation_spec = self.output_spec["_observation_spec"]
+        observation_spec = self.output_spec["full_observation_spec"]
         if observation_spec is None:
             observation_spec = CompositeSpec(shape=self.batch_size, device=self.device)
             self.output_spec.unlock_()
-            self.output_spec["_observation_spec"] = observation_spec
+            self.output_spec["full_observation_spec"] = observation_spec
             self.output_spec.lock_()
         return observation_spec
 
@@ -1037,7 +1045,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            self.output_spec["_observation_spec"] = value.to(device)
+            self.output_spec["full_observation_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()
 
@@ -1065,11 +1073,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             , device=cpu, shape=torch.Size([]))
 
         """
-        state_spec = self.input_spec["_state_spec"]
+        state_spec = self.input_spec["full_state_spec"]
         if state_spec is None:
             state_spec = CompositeSpec(shape=self.batch_size, device=self.device)
             self.input_spec.unlock_()
-            self.input_spec["_state_spec"] = state_spec
+            self.input_spec["full_state_spec"] = state_spec
             self.input_spec.lock_()
         return state_spec
 
@@ -1078,7 +1086,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         try:
             self.input_spec.unlock_()
             if value is None:
-                self.input_spec["_state_spec"] = CompositeSpec(
+                self.input_spec["full_state_spec"] = CompositeSpec(
                     device=self.device, shape=self.batch_size
                 )
             else:
@@ -1093,7 +1101,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     raise ValueError(
                         f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                     )
-                self.input_spec["_state_spec"] = value.to(device)
+                self.input_spec["full_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
 
@@ -1148,7 +1156,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             expected_reward_shape = torch.Size(
                 [
                     *leading_batch_size,
-                    *self.output_spec["_reward_spec"][reward_key].shape,
+                    *self.output_spec["full_reward_spec"][reward_key].shape,
                 ]
             )
             actual_reward_shape = reward.shape
@@ -1162,7 +1170,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             expected_done_shape = torch.Size(
                 [
                     *leading_batch_size,
-                    *self.output_spec[unravel_key(("_done_spec", done_key))].shape,
+                    *self.output_spec[unravel_key(("full_done_spec", done_key))].shape,
                 ]
             )
             actual_done_shape = done.shape
@@ -1181,18 +1189,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 if (
                     next_tensordict_out.get(reward_key).dtype
                     is not self.output_spec[
-                        unravel_key(("_reward_spec", reward_key))
+                        unravel_key(("full_reward_spec", reward_key))
                     ].dtype
                 ):
                     raise TypeError(
-                        f"expected reward.dtype to be {self.output_spec[unravel_key(('_reward_spec',reward_key))]} "
+                        f"expected reward.dtype to be {self.output_spec[unravel_key(('full_reward_spec',reward_key))]} "
                         f"but got {tensordict_out.get(reward_key).dtype}"
                     )
 
             for done_key in self.done_keys:
                 if (
                     next_tensordict_out.get(done_key).dtype
-                    is not self.output_spec["_done_spec"].get(done_key).dtype
+                    is not self.output_spec["full_done_spec"].get(done_key).dtype
                 ):
                     raise TypeError(
                         f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
@@ -1253,8 +1261,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 if _reset is None:
                     continue
                 if (
-                    _reset.shape[-len(self.output_spec["_done_spec"][done_key].shape) :]
-                    != self.output_spec["_done_spec"][done_key].shape
+                    _reset.shape[
+                        -len(self.output_spec["full_done_spec"][done_key].shape) :
+                    ]
+                    != self.output_spec["full_done_spec"][done_key].shape
                 ):
                     raise RuntimeError(
                         "_reset flag in tensordict should follow env.done_spec"
@@ -1287,7 +1297,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 if done_key not in td_reset_keys:
                     tensordict_reset.set(
                         done_key,
-                        self.output_spec["_done_spec"][done_key].zero(leading_dim),
+                        self.output_spec["full_done_spec"][done_key].zero(leading_dim),
                     )
 
         for done_key in self.done_keys:
@@ -1369,7 +1379,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Non batch-locked environment require the env batch-size to be either empty or to"
                 f" match the tensordict one."
             )
-        r = self.input_spec["_action_spec"].rand(shape)
+        r = self.input_spec["full_action_spec"].rand(shape)
         if tensordict is None:
             return r
         tensordict.update(r)
@@ -1643,13 +1653,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         state_spec = self.state_spec
         observation_spec = self.observation_spec
-        action_spec = self.input_spec["_action_spec"]
+        action_spec = self.input_spec["full_action_spec"]
         # instantiates reward_spec if needed
         _ = self.reward_spec
-        reward_spec = self.output_spec["_reward_spec"]
+        reward_spec = self.output_spec["full_reward_spec"]
         # instantiates done_spec if needed
         _ = self.done_spec
-        done_spec = self.output_spec["_done_spec"]
+        done_spec = self.output_spec["full_done_spec"]
 
         fake_obs = observation_spec.zero()
 

@@ -440,16 +440,16 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # Check specs
     last_td = real_tensordict[..., -1]
-    _action_spec = env.input_spec["_action_spec"]
-    _state_spec = env.input_spec["_state_spec"]
-    _obs_spec = env.output_spec["_observation_spec"]
-    _reward_spec = env.output_spec["_reward_spec"]
-    _done_spec = env.output_spec["_done_spec"]
+    full_action_spec = env.input_spec["full_action_spec"]
+    full_state_spec = env.input_spec["full_state_spec"]
+    full_observation_spec = env.output_spec["full_observation_spec"]
+    full_reward_spec = env.output_spec["full_reward_spec"]
+    full_done_spec = env.output_spec["full_done_spec"]
     for name, spec in (
-        ("action", _action_spec),
-        ("state", _state_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("action", full_action_spec),
+        ("state", full_state_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
@@ -465,9 +465,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
     for name, spec in (
-        ("reward", _reward_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("reward", full_reward_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)

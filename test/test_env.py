@@ -285,10 +285,10 @@ class TestModelBasedEnvBase:
             ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
         }
         expected_keys = expected_keys.union(
-            set(mb_env.input_spec["_action_spec"].keys())
+            set(mb_env.input_spec["full_action_spec"].keys())
         )
         expected_keys = expected_keys.union(
-            set(mb_env.input_spec["_state_spec"].keys())
+            set(mb_env.input_spec["full_state_spec"].keys())
         )
         expected_keys = expected_keys.union({"done", "next"})
         assert set(rollout.keys(True)) == expected_keys
@@ -1826,11 +1826,13 @@ class TestNestedSpecs:
         assert not isinstance(env.reward_spec, CompositeSpec)
         assert (
             env.done_spec
-            == env.output_spec[("_done_spec", *_unravel_key_to_tuple(env.done_key))]
+            == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(env.done_key))]
         )
         assert (
             env.reward_spec
-            == env.output_spec[("_reward_spec", *_unravel_key_to_tuple(env.reward_key))]
+            == env.output_spec[
+                ("full_reward_spec", *_unravel_key_to_tuple(env.reward_key))
+            ]
         )
         if envclass == "NestedCountingEnv":
             assert env.done_key == ("data", "done")
@@ -1942,7 +1944,9 @@ class TestHeteroEnvs:
     @pytest.mark.parametrize("count", [True, False])
     def test_rollout_policy(self, batch_size, rollout_steps, count):
         env = HeteroCountingEnv(batch_size=batch_size)
-        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"], count=count)
+        policy = HeteroCountingEnvPolicy(
+            env.input_spec["full_action_spec"], count=count
+        )
         td = env.rollout(rollout_steps, policy=policy, return_contiguous=False)
         td = dense_stack_tds(td)
         for i in range(env.n_nested_dim):
@@ -1965,7 +1969,7 @@ class TestHeteroEnvs:
             vec_env = ParallelEnv(n_workers, env_fun)
         vec_batch_size = (n_workers,) + batch_size
         # check_env_specs(vec_env, return_contiguous=False)
-        policy = HeteroCountingEnvPolicy(vec_env.input_spec["_action_spec"])
+        policy = HeteroCountingEnvPolicy(vec_env.input_spec["full_action_spec"])
         vec_env.reset()
         td = vec_env.rollout(
             rollout_steps,
@@ -2106,7 +2110,7 @@ class TestMultiKeyEnvs:
 
         # check_env_specs(vec_env)
         policy = MultiKeyCountingEnvPolicy(
-            full_action_spec=vec_env.input_spec["_action_spec"]
+            full_action_spec=vec_env.input_spec["full_action_spec"]
         )
         vec_env.reset()
         td = vec_env.rollout(

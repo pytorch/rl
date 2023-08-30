@@ -264,11 +264,11 @@ class _BatchedEnv(EnvBase):
             input_spec = meta_data.specs["input_spec"].to(device)
             output_spec = meta_data.specs["output_spec"].to(device)
 
-            self.action_spec = input_spec["_action_spec"]
-            self.state_spec = input_spec["_state_spec"]
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.action_spec = input_spec["full_action_spec"]
+            self.state_spec = input_spec["full_state_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
@@ -287,12 +287,12 @@ class _BatchedEnv(EnvBase):
                 output_spec.append(md.specs["output_spec"])
             output_spec = torch.stack(output_spec, 0)
 
-            self.action_spec = input_spec["_action_spec"]
-            self.state_spec = input_spec["_state_spec"]
+            self.action_spec = input_spec["full_action_spec"]
+            self.state_spec = input_spec["full_state_spec"]
 
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
@@ -325,13 +325,13 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             self.env_input_keys = sorted(
-                list(self.input_spec["_action_spec"].keys(True, True))
+                list(self.input_spec["full_action_spec"].keys(True, True))
                 + list(self.state_spec.keys(True, True)),
                 key=_sort_keys,
             )
             self.env_output_keys = []
             self.env_obs_keys = []
-            for key in self.output_spec["_observation_spec"].keys(True, True):
+            for key in self.output_spec["full_observation_spec"].keys(True, True):
                 self.env_output_keys.append(unravel_key(("next", key)))
                 self.env_obs_keys.append(key)
             self.env_output_keys += [
@@ -340,27 +340,29 @@ class _BatchedEnv(EnvBase):
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
-                if meta_data.specs["input_spec", "_state_spec"] is not None:
+                if meta_data.specs["input_spec", "full_state_spec"] is not None:
                     env_input_keys = env_input_keys.union(
-                        meta_data.specs["input_spec", "_state_spec"].keys(True, True)
+                        meta_data.specs["input_spec", "full_state_spec"].keys(
+                            True, True
+                        )
                     )
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec", "_action_spec"].keys(True, True)
+                    meta_data.specs["input_spec", "full_action_spec"].keys(True, True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
-                        True, True
-                    )
+                    for key in meta_data.specs["output_spec"][
+                        "full_observation_spec"
+                    ].keys(True, True)
                 )
                 env_output_keys = env_output_keys.union(
                     unravel_key(("next", key))
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
-                        True, True
-                    )
+                    for key in meta_data.specs["output_spec"][
+                        "full_observation_spec"
+                    ].keys(True, True)
                 )
             env_output_keys = env_output_keys.union(
                 {
@@ -1197,9 +1199,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         with set_gym_backend("gym"):
             self.action_spec = self._get_action_spec()
             output_spec = self._get_output_spec()
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
     def _init_env(self) -> Optional[int]:
         pass
@@ -1244,9 +1246,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(
-            _observation_spec=self._get_observation_spec(),
-            _reward_spec=self._get_reward_spec(),
-            _done_spec=self._get_done_spec(),
+            full_observation_spec=self._get_observation_spec(),
+            full_reward_spec=self._get_reward_spec(),
+            full_done_spec=self._get_done_spec(),
             shape=(self.num_workers,),
             device=self.device,
         )

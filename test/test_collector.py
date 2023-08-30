@@ -1482,7 +1482,7 @@ class TestHetEnvsCollector:
         batch_size = torch.Size(batch_size)
         env = HeteroCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         torch.manual_seed(seed)
-        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
@@ -1513,7 +1513,7 @@ class TestHetEnvsCollector:
         env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
-        policy = HeteroCountingEnvPolicy(env.input_spec["_action_spec"])
+        policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
 
         ccollector = MultiaSyncDataCollector(
             create_env_fn=[env_fn],
@@ -1564,7 +1564,7 @@ class TestMultiKeyEnvsCollector:
     def test_collector(self, batch_size, frames_per_batch, max_steps, seed=1):
         env = MultiKeyCountingEnv(batch_size=batch_size, max_steps=max_steps)
         torch.manual_seed(seed)
-        policy = MultiKeyCountingEnvPolicy(env.input_spec["_action_spec"])
+        policy = MultiKeyCountingEnvPolicy(env.input_spec["full_action_spec"])
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
@@ -1587,7 +1587,7 @@ class TestMultiKeyEnvsCollector:
         env_fn = lambda: env
         torch.manual_seed(seed)
         policy = MultiKeyCountingEnvPolicy(
-            env.input_spec["_action_spec"], deterministic=True
+            env.input_spec["full_action_spec"], deterministic=True
         )
 
         ccollector = MultiaSyncDataCollector(
