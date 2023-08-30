@@ -2136,9 +2136,7 @@ class DiscreteTensorSpec(TensorSpec):
         else:
             mask_flat = mask
         shape_out = mask.shape[:-1]
-        print("mask in spec", mask_flat)
         out = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
-        print("out", out)
         return out
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:

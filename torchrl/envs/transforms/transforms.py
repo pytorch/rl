@@ -4651,7 +4651,8 @@ class ActionMask(Transform):
     Examples:
         >>> import torch
         >>> from torchrl.data.tensor_specs import DiscreteTensorSpec, BinaryDiscreteTensorSpec, UnboundedContinuousTensorSpec, CompositeSpec
-        >>> from torchrl.envs.transforms import ActionMask, TransformedEnv, EnvBase
+        >>> from torchrl.envs.transforms import ActionMask, TransformedEnv
+        >>> from torchrl.envs.common import EnvBase
         >>> class MaskedEnv(EnvBase):
         ...     def __init__(self, *args, **kwargs):
         ...         super().__init__(*args, **kwargs)
@@ -4678,23 +4679,29 @@ class ActionMask(Transform):
         ...
         ...     def _set_seed(self, seed):
         ...         return seed
+        ...
+        >>> torch.manual_seed(0)
         >>> base_env = MaskedEnv()
         >>> env = TransformedEnv(base_env, ActionMask())
         >>> r = env.rollout(10)
         >>> env = TransformedEnv(base_env, ActionMask())
         >>> r = env.rollout(10)
         >>> r["mask"]
+        tensor([[ True,  True,  True,  True],
+                [ True,  True,  True, False],
+                [False,  True,  True, False],
+                [False,  True, False, False]])
 
     """
 
-    def __init__(self, action_key="action", mask_key="mask"):
-        if not isinstance(action_key, str):
+    def __init__(self, action_key: NestedKey = "action", mask_key: NestedKey = "mask"):
+        if not isinstance(action_key, (tuple, str)):
             raise ValueError(
-                f"The action key must be a string. Got {type(action_key)} instead."
+                f"The action key must be a nested key. Got {type(action_key)} instead."
             )
-        if not isinstance(mask_key, str):
+        if not isinstance(mask_key, (tuple, str)):
             raise ValueError(
-                f"The mask key must be a string. Got {type(mask_key)} instead."
+                f"The mask key must be a nested key. Got {type(mask_key)} instead."
             )
         super().__init__(
             in_keys=[action_key, mask_key], out_keys=[], in_keys_inv=[], out_keys_inv=[]
@@ -4718,4 +4725,4 @@ class ActionMask(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         action_spec = self._container.action_spec
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
-        return action_spec
+        return tensordict
