@@ -2761,18 +2761,18 @@ class DeviceCastTransform(Transform):
 
     Args:
         device (torch.device or equivalent): the destination device.
+        orig_device (torch.device or equivalent): the origin device. If not specified and
+            a parent environment exists, it it retrieved from it. In all other cases,
+            it remains unspecified.
 
     Examples:
         >>> td = TensorDict(
         ...     {'obs': torch.ones(1, dtype=torch.double),
-        ...     'not_transformed': torch.ones(1, dtype=torch.double),
-        ... }, [])
-        >>> transform = DeviceTransform(torch.device("cpu:2"))
-        >>> _ = transform(td)
-        >>> print(td.get("obs").device)
-        torch.cpu:2
-        >>> print(td.get("not_transformed").device)
-        torch.cpu:2
+        ... }, [], device="cpu:0")
+        >>> transform = DeviceCastTransform(device=torch.device("cpu:2"))
+        >>> td = transform(td)
+        >>> print(td.device)
+        cpu:2
 
     """
 
