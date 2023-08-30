@@ -31,7 +31,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
-      pre-script: ""
+      pre-script: .github/scripts/pre_build_script_m1.sh
       post-script: ""
       package-name: torchrl
       runner-type: macos-m1-12
