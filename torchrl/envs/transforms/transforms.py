@@ -2771,6 +2771,19 @@ class DeviceCastTransform(Transform):
         )
         super().__init__(in_keys=[])
 
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        if self.orig_device is None:
+            if isinstance(container, EnvBase):
+                device = container.device
+            else:
+                parent = container.parent
+                if parent is not None:
+                    device = parent.device
+                else:
+                    device = torch.device("cpu")
+            self.orig_device = device
+        return super().set_container(container)
+
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.to(self.device, non_blocking=True)
