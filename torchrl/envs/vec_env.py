@@ -593,7 +593,7 @@ class SerialEnv(_BatchedEnv):
                     break
 
         if tensordict is None or missing_reset:
-            needs_resetting = [True for _ in range(self.num_workers)]
+            needs_resetting = [True] * self.num_workers
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
