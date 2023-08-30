@@ -112,7 +112,7 @@ class VmasWrapper(_EnvWrapper):
             if "device" in kwargs.keys() and kwargs["device"] != str(env.device):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, allow_done_after_reset=True)
 
     @property
     def lib(self):
