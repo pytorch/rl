@@ -91,7 +91,7 @@ class _MockEnv(EnvBase):
         **kwargs,
     ):
         super().__init__(
-            device="cpu",
+            device=kwargs.pop("device", "cpu"),
             dtype=torch.get_default_dtype(),
         )
         self.set_seed(seed)
