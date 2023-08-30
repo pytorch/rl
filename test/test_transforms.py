@@ -44,6 +44,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
+    ActionMask,
     BinarizeReward,
     CatFrames,
     CatTensors,
@@ -8131,6 +8132,107 @@ class TestKLRewardTransform(TransformBase):
         klt = KLRewardTransform(policy)
         # check that this runs: it can only run if the params are nn.Parameter instances
         klt(env.rollout(3, policy))
+
+
+class TestActionMask(TransformBase):
+    @property
+    def _env_class(self):
+        from torchrl.data import BinaryDiscreteTensorSpec, DiscreteTensorSpec
+
+        class MaskedEnv(EnvBase):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.action_spec = DiscreteTensorSpec(4)
+                self.state_spec = CompositeSpec(
+                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool)
+                )
+                self.observation_spec = CompositeSpec(
+                    obs=UnboundedContinuousTensorSpec(3),
+                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool),
+                )
+                self.reward_spec = UnboundedContinuousTensorSpec(1)
+
+            def _reset(self, tensordict):
+                td = self.observation_spec.rand()
+                td.update(torch.ones_like(self.state_spec.rand()))
+                return td
+
+            def _step(self, data):
+                td = self.observation_spec.rand()
+                mask = data.get("mask")
+                action = data.get("action")
+                mask = mask.scatter(-1, action.unsqueeze(-1), 0)
+
+                td.set("mask", mask)
+                td.set("reward", self.reward_spec.rand())
+                td.set("done", ~mask.any().view(1))
+                return td.empty().set("next", td)
+
+            def _set_seed(self, seed):
+                return seed
+
+        return MaskedEnv
+
+    def test_single_trans_env_check(self):
+        env = self._env_class()
+        env = TransformedEnv(env, ActionMask())
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, lambda: TransformedEnv(self._env_class(), ActionMask()))
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(2, lambda: TransformedEnv(self._env_class(), ActionMask()))
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(SerialEnv(2, self._env_class), ActionMask())
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(ParallelEnv(2, self._env_class), ActionMask())
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        t = ActionMask()
+        with pytest.raises(RuntimeError, match="parent cannot be None"):
+            t._call(TensorDict({}, []))
+
+    def test_transform_compose(self):
+        env = self._env_class()
+        env = TransformedEnv(env, Compose(ActionMask()))
+        check_env_specs(env)
+
+    def test_transform_env(self):
+        env = self._env_class()
+        env = TransformedEnv(env, ActionMask())
+        td = env.reset()
+        for t in range(10):
+            td = env.rand_action(td)
+            assert env.action_spec.is_in(td.get("action"))
+            td = env.step(td)
+            if td.get(("next", "done")):
+                break
+            td = step_mdp(td)
+        assert not td.get("mask").any()
+
+    def test_transform_model(self):
+        t = ActionMask()
+        with pytest.raises(RuntimeError, match="ActionMask must be executed within an environment"):
+            t(TensorDict({}, []))
+
+    def test_transform_rb(self):
+        t = ActionMask()
+        rb = ReplayBuffer()
+        rb.append_transform(t)
+        rb.extend(TensorDict({}, []))
+        with pytest.raises(RuntimeError, match="ActionMask must be executed within an environment"):
+            rb.sample(3)
+
+    def test_transform_inverse(self):
+        # no inverse transform
+        return
 
 
 if __name__ == "__main__":

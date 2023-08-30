@@ -4707,14 +4707,19 @@ class ActionMask(Transform):
             in_keys=[action_key, mask_key], out_keys=[], in_keys_inv=[], out_keys_inv=[]
         )
 
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            "ActionMask must be executed within an environment."
+        )
+
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        mask = tensordict.get(self.in_keys[1])
         parent = self.parent
         if parent is None:
             raise RuntimeError(
                 f"{type(self)}.parent cannot be None: make sure this transform is executed within an environment."
             )
-        action_spec = self._container.action_spec
+        mask = tensordict.get(self.in_keys[1])
+        action_spec = self.container.action_spec
         if not isinstance(action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec)):
             raise ValueError(
                 f"The action spec must be one of (OneHotDiscreteTensorSpec, DiscreteTensorSpec). Got {type(action_spec)} instead."
@@ -4723,6 +4728,6 @@ class ActionMask(Transform):
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action_spec = self._container.action_spec
+        action_spec = self.container.action_spec
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
         return tensordict

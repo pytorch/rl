@@ -440,6 +440,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # Check specs
     last_td = real_tensordict[..., -1]
+    last_td = env.rand_action(last_td)
     full_action_spec = env.input_spec["full_action_spec"]
     full_state_spec = env.input_spec["full_state_spec"]
     full_observation_spec = env.output_spec["full_observation_spec"]
