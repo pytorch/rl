@@ -4096,30 +4096,55 @@ class TestRewardScaling(TransformBase):
 
 class TestRewardSum(TransformBase):
     def test_single_trans_env_check(self):
-        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_serial_trans_env_check(self):
         def make_env():
-            return TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+            )
 
         env = SerialEnv(2, make_env)
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_parallel_trans_env_check(self):
         def make_env():
-            return TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+            )
 
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_trans_serial_env_check(self):
-        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), RewardSum())
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_trans_parallel_env_check(self):
-        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), RewardSum())
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
