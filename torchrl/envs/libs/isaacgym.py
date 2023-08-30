@@ -64,7 +64,7 @@ class IsaacGymWrapper(GymWrapper):
         obs_spec.unlock_()
         obs_spec.update(specs)
         obs_spec.lock_()
-        self.__dict__["_observation_spec"] = obs_spec
+        self.__dict__["full_observation_spec"] = obs_spec
 
     @classmethod
     def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):

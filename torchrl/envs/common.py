@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
+from tensordict import unravel_key
 from tensordict.tensordict import TensorDictBase
-
+from tensordict.utils import NestedKey
 from torchrl._utils import prod, seed_generator
 
 from torchrl.data.tensor_specs import (
@@ -22,8 +23,13 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import get_available_libraries, step_mdp
+from torchrl.data.utils import _check_only_one_entry, DEVICE_TYPING
+from torchrl.envs.utils import (
+    _replace_last,
+    DONE_AFTER_RESET_ERROR,
+    get_available_libraries,
+    step_mdp,
+)
 
 LIBRARIES = get_available_libraries()
 
@@ -77,7 +83,12 @@ class EnvMetaData:
     @staticmethod
     def metadata_from_env(env) -> EnvMetaData:
         tensordict = env.fake_tensordict().clone()
-        tensordict.set("_reset", torch.zeros_like(tensordict.get(env.done_key)))
+
+        for done_key in env.done_keys:
+            tensordict.set(
+                _replace_last(done_key, "_reset"),
+                torch.zeros_like(tensordict.get(("next", done_key))),
+            )
 
         specs = env.specs.to("cpu")
 
@@ -121,62 +132,6 @@ class EnvMetaData:
 class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     """Abstract environment parent class.
 
-    Properties:
-        observation_spec (CompositeSpec): sampling spec of the observations. Must be a
-            :class:`torchrl.data.CompositeSpec` instance. The keys listed in the
-            spec are directly accessible after reset.
-            In TorchRL, even though they are not properly speaking "observations"
-            all info, states, results of transforms etc. are stored in the
-            observation_spec. Therefore, "observation_spec" should be thought as
-            a generic data container for environment outputs that are not done
-            or reward data.
-        reward_spec (TensorSpec): the (leaf) spec of the reward. If the reward
-            is nested within a tensordict, its location can be accessed via
-            the ``reward_key`` attribute:
-
-                >>> # accessing reward spec:
-                >>> reward_spec = env.reward_spec
-                >>> reward_spec = env.output_spec['_reward_spec'][env.reward_key]
-                >>> # accessing reward:
-                >>> reward = env.fake_tensordict()[('next', *env.reward_key)]
-
-        done_spec (TensorSpec): the (leaf) spec of the done. If the done
-            is nested within a tensordict, its location can be accessed via
-            the ``done_key`` attribute.
-
-                >>> # accessing done spec:
-                >>> done_spec = env.done_spec
-                >>> done_spec = env.output_spec['_done_spec'][env.done_key]
-                >>> # accessing done:
-                >>> done = env.fake_tensordict()[('next', *env.done_key)]
-
-        action_spec (TensorSpec): the ampling spec of the actions. This attribute
-            is contained in input_spec.
-
-                >>> # accessing action spec:
-                >>> action_spec = env.action_spec
-                >>> action_spec = env.input_spec['_action_spec'][env.action_key]
-                >>> # accessing action:
-                >>> action = env.fake_tensordict()[env.action_key]
-
-        output_spec (CompositeSpec): The container for all output specs (reward,
-            done and observation).
-        input_spec (CompositeSpec): the container for all input specs (actions
-            and possibly others).
-        batch_size (torch.Size): number of environments contained in the instance;
-        device (torch.device): device where the env input and output are expected to live
-        run_type_checks (bool): if ``True``, the observation and reward dtypes
-            will be compared against their respective spec and an exception
-            will be raised if they don't match.
-            Defaults to False.
-
-    .. note::
-      The usage of ``done_key``, ``reward_key`` and ``action_key`` is aimed at
-      facilitating the custom placement of done, reward and action data within
-      the tensordict structures produced and read by the environment.
-      In most cases, these attributes can be ignored and the default values
-      (``"done"``, ``"reward"`` and ``"action"``) can be used.
-
     Methods:
         step (TensorDictBase -> TensorDictBase): step in the environment
         reset (TensorDictBase, optional -> TensorDictBase): reset the environment
@@ -192,14 +147,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         torch.Size([])
         >>> env.input_spec
         CompositeSpec(
-            action: BoundedTensorSpec(
-                shape=torch.Size([1]),
-                space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
-                device=cpu,
-                dtype=torch.float32,
-                domain=continuous), device=cpu, shape=torch.Size([]))
+            full_state_spec: None,
+            full_action_spec: CompositeSpec(
+                action: BoundedTensorSpec(
+                    shape=torch.Size([1]),
+                    space=ContinuousBox(
+                        minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                        maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> env.action_spec
         BoundedTensorSpec(
             shape=torch.Size([1]),
@@ -236,7 +193,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         >>> # the output_spec contains all the expected outputs
         >>> env.output_spec
         CompositeSpec(
-            observation: CompositeSpec(
+            full_reward_spec: CompositeSpec(
+                reward: UnboundedContinuousTensorSpec(
+                    shape=torch.Size([1]),
+                    space=None,
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([])),
+            full_observation_spec: CompositeSpec(
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
@@ -245,14 +209,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])),
-            reward: CompositeSpec(
-                reward: UnboundedContinuousTensorSpec(
-                    shape=torch.Size([1]),
-                    space=None,
-                    device=cpu,
-                    dtype=torch.float32,
-                    domain=continuous), device=cpu, shape=torch.Size([])),
-            done: CompositeSpec(
+            full_done_spec: CompositeSpec(
                 done: DiscreteTensorSpec(
                     shape=torch.Size([1]),
                     space=DiscreteBox(n=2),
@@ -269,9 +226,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
     ):
-        self.__dict__["_done_key"] = None
-        self.__dict__["_reward_key"] = None
-        self.__dict__["_action_key"] = None
+        self.__dict__["_done_keys"] = None
+        self.__dict__["_reward_keys"] = None
+        self.__dict__["_action_keys"] = None
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -323,7 +280,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return super().__new__(cls)
 
     def __setattr__(self, key, value):
-        if key in ("_input_spec", "_observation_spec", "_action_spec", "_reward_spec"):
+        if key in (
+            "_input_spec",
+            "_observation_spec",
+            "_action_spec",
+            "_reward_spec",
+            "_output_spec",
+            "_state_spec",
+            "_done_spec",
+        ):
             raise AttributeError(
                 "To set an environment spec, please use `env.observation_spec = obs_spec` (without the leading"
                 " underscore)."
@@ -332,7 +297,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_locked(self) -> bool:
-        """Whether the environnement can be used with a batch size different from the one it was initialized with or not.
+        """Whether the environment can be used with a batch size different from the one it was initialized with or not.
 
         If True, the env needs to be used with a tensordict having the same batch size as the env.
         batch_locked is an immutable property.
@@ -398,10 +363,40 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     # Parent specs: input and output spec.
     @property
     def input_spec(self) -> TensorSpec:
+        """Input spec.
+
+        The composite spec containing all specs for data input to the environments.
+
+        It contains:
+
+        - "full_action_spec": the spec of the input actions
+        - "full_state_spec": the spec of all other environment inputs
+
+        This attibute is locked and should be read-only.
+        Instead, to set the specs contained in it, use the respective properties.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.input_spec
+            CompositeSpec(
+                full_state_spec: None,
+                full_action_spec: CompositeSpec(
+                    action: BoundedTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+
+        """
         input_spec = self.__dict__.get("_input_spec", None)
         if input_spec is None:
             input_spec = CompositeSpec(
-                _state_spec=None,
+                full_state_spec=None,
                 shape=self.batch_size,
                 device=self.device,
             ).lock_()
@@ -414,6 +409,50 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def output_spec(self) -> TensorSpec:
+        """Output spec.
+
+        The composite spec containing all specs for data output from the environments.
+
+        It contains:
+
+        - "full_reward_spec": the spec of reward
+        - "full_done_spec": the spec of done
+        - "full_observation_spec": the spec of all other environment outputs
+
+        This attibute is locked and should be read-only.
+        Instead, to set the specs contained in it, use the respective properties.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.output_spec
+            CompositeSpec(
+                full_reward_spec: CompositeSpec(
+                    reward: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=None,
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous), device=cpu, shape=torch.Size([])),
+                full_observation_spec: CompositeSpec(
+                    observation: BoundedTensorSpec(
+                        shape=torch.Size([3]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous), device=cpu, shape=torch.Size([])),
+                full_done_spec: CompositeSpec(
+                    done: DiscreteTensorSpec(
+                        shape=torch.Size([1]),
+                        space=DiscreteBox(n=2),
+                        device=cpu,
+                        dtype=torch.bool,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+
+        """
         output_spec = self.__dict__.get("_output_spec", None)
         if output_spec is None:
             output_spec = CompositeSpec(
@@ -428,60 +467,133 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         raise RuntimeError("output_spec is protected.")
 
     # Action spec
-    def _get_action_key(self):
-        keys = self.input_spec["_action_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the action
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
+    def _get_action_keys(self):
+        keys = self.input_spec["full_action_spec"].keys(True, True)
+        if not len(keys):
             raise AttributeError("Could not find action spec")
-        self.__dict__["_action_key"] = key
-        return key
+        keys = list(keys)
+        self.__dict__["_action_keys"] = keys
+        return keys
 
     @property
-    def action_key(self):
+    def action_keys(self) -> List[NestedKey]:
+        """The action keys of an environment.
+
+        By default, there will only be one key named "action".
+        """
+        out = self._action_keys
+        if out is None:
+            out = self._get_action_keys()
+        return out
+
+    @property
+    def action_key(self) -> NestedKey:
         """The action key of an environment.
 
-        By default, non-nested keys are stored in the 'action' key.
+        By default, this will be "action".
 
-        If the action is in a nested tensordict, this property will return its
-        location.
+        If there is more than one action key in the environment, this function will raise an exception.
         """
-        out = self._action_key
-        if out is None:
-            out = self._get_action_key()
-        return out
+        if len(self.action_keys) > 1:
+            raise KeyError(
+                "action_key requested but more than one key present in the environment"
+            )
+        return self.action_keys[0]
 
     # Action spec: action specs belong to input_spec
     @property
     def action_spec(self) -> TensorSpec:
-        """The ``action`` leaf spec.
+        """The ``action`` spec.
 
-        This property will always return the leaf spec of the action attribute,
-        which can be accessed in a typical rollout via
+        The ``action_spec`` is always stored as a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> action = fake_td[env.action_key]
+        If the action spec is provided as a simple spec, this will be returned.
+
+            >>> env.action_spec = UnboundedContinuousTensorSpec(1)
+            >>> env.action_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the action spec is provided as a composite spec and contains only one leaf,
+        this function will return just the leaf.
+
+            >>> env.action_spec = CompositeSpec({"nested": {"action": UnboundedContinuousTensorSpec(1)}})
+            >>> env.action_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the action spec is provided as a composite spec and has more than one leaf,
+        this function will return the whole spec.
+
+            >>> env.action_spec = CompositeSpec({"nested": {"action": UnboundedContinuousTensorSpec(1), "another_action": DiscreteTensorSpec(1)}})
+            >>> env.action_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    action: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous),
+                    another_action: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=1),
+                        device=cpu,
+                        dtype=torch.int64,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To retrieve the full spec passed, use:
+
+            >>> env.input_spec["full_action_spec"]
 
         This property is mutable.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.action_spec
+            BoundedTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
         """
         try:
-            action_spec = self.input_spec["_action_spec"]
+            action_spec = self.input_spec["full_action_spec"]
         except (KeyError, AttributeError):
             raise KeyError("Failed to find the action_spec.")
-        try:
-            out = action_spec[self.action_key]
-        except KeyError:
-            # the key may have changed
-            raise KeyError(
-                "The action_key attribute seems to have changed. "
-                "This occurs when a action_spec is updated without "
-                "calling `env.action_spec = new_spec`. "
-                "Make sure you rely on this  type of command "
-                "to set the action and other specs."
-            )
+
+        if len(self.action_keys) > 1:
+            out = action_spec
+        else:
+            try:
+                out = action_spec[self.action_key]
+            except KeyError:
+                # the key may have changed
+                raise KeyError(
+                    "The action_key attribute seems to have changed. "
+                    "This occurs when a action_spec is updated without "
+                    "calling `env.action_spec = new_spec`. "
+                    "Make sure you rely on this  type of command "
+                    "to set the action and other specs."
+                )
 
         return out
 
@@ -491,9 +603,17 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.input_spec.unlock_()
             device = self.input_spec.device
             try:
-                delattr(self, "_action_key")
+                delattr(self, "_action_keys")
             except AttributeError:
                 pass
+            if not hasattr(value, "shape"):
+                raise TypeError(
+                    f"action_spec of type {type(value)} do not have a shape attribute."
+                )
+            if value.shape[: len(self.batch_size)] != self.batch_size:
+                raise ValueError(
+                    "The value of spec.shape must match the env batch size."
+                )
 
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
@@ -508,64 +628,134 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action=value.to(device), shape=self.batch_size, device=device
                 )
 
-            self.input_spec["_action_spec"] = value.to(device)
-            self._get_action_key()
+            self.input_spec["full_action_spec"] = value.to(device)
+            self._get_action_keys()
         finally:
             self.input_spec.lock_()
 
     # Reward spec
-    def _get_reward_key(self):
-        keys = self.output_spec["_reward_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the reward
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
+    def _get_reward_keys(self):
+        keys = self.output_spec["full_reward_spec"].keys(True, True)
+        if not len(keys):
             raise AttributeError("Could not find reward spec")
-        self.__dict__["_reward_key"] = key
-        return key
+        keys = list(keys)
+        self.__dict__["_reward_keys"] = keys
+        return keys
+
+    @property
+    def reward_keys(self) -> List[NestedKey]:
+        """The reward keys of an environment.
+
+        By default, there will only be one key named "reward".
+        """
+        out = self._reward_keys
+        if out is None:
+            out = self._get_reward_keys()
+        return out
 
     @property
     def reward_key(self):
         """The reward key of an environment.
 
-        By default, non-nested keys are stored in the ``'reward'`` entry.
+        By default, this will be "reward".
 
-        If the reward is in a nested tensordict, this property will return its
-        location.
+        If there is more than one reward key in the environment, this function will raise an exception.
         """
-        out = self._reward_key
-        if out is None:
-            out = self._get_reward_key()
-        return out
+        if len(self.reward_keys) > 1:
+            raise KeyError(
+                "reward_key requested but more than one key present in the environment"
+            )
+        return self.reward_keys[0]
 
-    # Done spec: reward specs belong to output_spec
+    # Reward spec: reward specs belong to output_spec
     @property
     def reward_spec(self) -> TensorSpec:
-        """The ``reward`` leaf spec.
+        """The ``reward`` spec.
 
-        This property will always return the leaf spec of the reward attribute,
-        which can be accessed in a typical rollout via
+        The ``reward_spec`` is always stored as a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> reward = fake_td[("next", *env.reward_key)]
+        If the reward spec is provided as a simple spec, this will be returned.
+
+            >>> env.reward_spec = UnboundedContinuousTensorSpec(1)
+            >>> env.reward_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the reward spec is provided as a composite spec and contains only one leaf,
+        this function will return just the leaf.
+
+            >>> env.reward_spec = CompositeSpec({"nested": {"reward": UnboundedContinuousTensorSpec(1)}})
+            >>> env.reward_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=ContinuousBox(
+                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
+
+        If the reward spec is provided as a composite spec and has more than one leaf,
+        this function will return the whole spec.
+
+            >>> env.reward_spec = CompositeSpec({"nested": {"reward": UnboundedContinuousTensorSpec(1), "another_reward": DiscreteTensorSpec(1)}})
+            >>> env.reward_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    reward: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous),
+                    another_reward: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=1),
+                        device=cpu,
+                        dtype=torch.int64,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To retrieve the full spec passed, use:
+
+            >>> env.output_spec["full_reward_spec"]
 
         This property is mutable.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.reward_spec
+            UnboundedContinuousTensorSpec(
+                shape=torch.Size([1]),
+                space=None,
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous)
         """
         try:
-            reward_spec = self.output_spec["_reward_spec"]
+            reward_spec = self.output_spec["full_reward_spec"]
         except (KeyError, AttributeError):
             # populate the "reward" entry
-            # this will be raised if there is not _reward_spec (unlikely) or no reward_key
+            # this will be raised if there is not full_reward_spec (unlikely) or no reward_key
             # Since output_spec is lazily populated with an empty composite spec for
             # reward_spec, the second case is much more likely to occur.
             self.reward_spec = out = UnboundedContinuousTensorSpec(
                 shape=(*self.batch_size, 1),
                 device=self.device,
             )
-            reward_spec = self.output_spec["_reward_spec"]
-        finally:
+            reward_spec = self.output_spec["full_reward_spec"]
+
+        if len(self.reward_keys) > 1:
+            out = reward_spec
+        else:
             try:
                 out = reward_spec[self.reward_key]
             except KeyError:
@@ -586,7 +776,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.output_spec.unlock_()
             device = self.output_spec.device
             try:
-                delattr(self, "_reward_key")
+                delattr(self, "_reward_keys")
             except AttributeError:
                 pass
             if not hasattr(value, "shape"):
@@ -599,7 +789,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     "The value of spec.shape must match the env batch size."
                 )
             if isinstance(value, CompositeSpec):
-                for nestedval in value.values(True, True):  # noqa: B007
+                for _ in value.values(True, True):  # noqa: B007
                     break
                 else:
                     raise RuntimeError(
@@ -607,76 +797,137 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "This is currently not permitted."
                     )
             else:
-                nestedval = value
                 value = CompositeSpec(
                     reward=value.to(device), shape=self.batch_size, device=device
                 )
-            if len(nestedval.shape) == 0:
-                raise RuntimeError(
-                    "the reward_spec shape cannot be empty (this error"
-                    " usually comes from trying to set a reward_spec"
-                    " with a null number of dimensions. Try using a multidimensional"
-                    " spec instead, for instance with a singleton dimension at the tail)."
-                )
-            self.output_spec["_reward_spec"] = value.to(device)
-            self._get_reward_key()
+            for leaf in value.values(True, True):
+                if len(leaf.shape) == 0:
+                    raise RuntimeError(
+                        "the reward_spec's leafs shape cannot be empty (this error"
+                        " usually comes from trying to set a reward_spec"
+                        " with a null number of dimensions. Try using a multidimensional"
+                        " spec instead, for instance with a singleton dimension at the tail)."
+                    )
+            self.output_spec["full_reward_spec"] = value.to(device)
+            self._get_reward_keys()
         finally:
             self.output_spec.lock_()
 
     # done spec
-    def _get_done_key(self):
-        keys = self.output_spec["_done_spec"].keys(True, True)
-        for key in keys:
-            # the first key is the reward
-            if not isinstance(key, tuple):
-                key = (key,)
-            break
-        else:
-            raise AttributeError(
-                f"Could not find done spec: {self.output_spec['_done_spec']}"
-            )
-        self.__dict__["_done_key"] = key
-        return key
+    def _get_done_keys(self):
+        keys = self.output_spec["full_done_spec"].keys(True, True)
+        if not len(keys):
+            raise AttributeError("Could not find done spec")
+        keys = list(keys)
+        self.__dict__["_done_keys"] = keys
+        return keys
+
+    @property
+    def done_keys(self) -> List[NestedKey]:
+        """The done keys of an environment.
+
+        By default, there will only be one key named "done".
+        """
+        out = self._done_keys
+        if out is None:
+            out = self._get_done_keys()
+        return out
 
     @property
     def done_key(self):
         """The done key of an environment.
 
-        By default, non-nested keys are stored in the ``'done'`` entry.
+        By default, this will be "done".
 
-        If the done is in a nested tensordict, this property will return its
-        location.
+        If there is more than one done key in the environment, this function will raise an exception.
         """
-        out = self._done_key
-        if out is None:
-            out = self._get_done_key()
-        return out
+        if len(self.done_keys) > 1:
+            raise KeyError(
+                "done_key requested but more than one key present in the environment"
+            )
+        return self.done_keys[0]
 
     # Done spec: done specs belong to output_spec
     @property
     def done_spec(self) -> TensorSpec:
-        """The ``done`` leaf spec.
+        """The ``done`` spec.
 
-        This property will always return the leaf spec of the done attribute,
-        which can be accessed in a typical rollout via
+        The ``done_spec`` is always stored as a composite spec.
 
-            >>> fake_td = env.fake_tensordict()  # a typical tensordict
-            >>> done = fake_td[("next", *env.done_key)]
+        If the done spec is provided as a simple spec, this will be returned.
+
+            >>> env.done_spec = DiscreteTensorSpec(2, dtype=torch.bool)
+            >>> env.done_spec
+            DiscreteTensorSpec(
+                shape=torch.Size([]),
+                space=DiscreteBox(n=2),
+                device=cpu,
+                dtype=torch.bool,
+                domain=discrete)
+
+        If the done spec is provided as a composite spec and contains only one leaf,
+        this function will return just the leaf.
+
+            >>> env.done_spec = CompositeSpec({"nested": {"done": DiscreteTensorSpec(2, dtype=torch.bool)}})
+            >>> env.done_spec
+            DiscreteTensorSpec(
+                shape=torch.Size([]),
+                space=DiscreteBox(n=2),
+                device=cpu,
+                dtype=torch.bool,
+                domain=discrete)
+
+        If the done spec is provided as a composite spec and has more than one leaf,
+        this function will return the whole spec.
+
+            >>> env.done_spec = CompositeSpec({"nested": {"done": DiscreteTensorSpec(2, dtype=torch.bool), "another_done": DiscreteTensorSpec(2, dtype=torch.bool)}})
+            >>> env.done_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    done: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=2),
+                        device=cpu,
+                        dtype=torch.bool,
+                        domain=discrete),
+                    another_done: DiscreteTensorSpec(
+                        shape=torch.Size([]),
+                        space=DiscreteBox(n=2),
+                        device=cpu,
+                        dtype=torch.bool,
+                        domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        To always retrieve the full spec passed, use:
+
+            >>> env.output_spec["full_done_spec"]
 
         This property is mutable.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.done_spec
+            DiscreteTensorSpec(
+                shape=torch.Size([1]),
+                space=DiscreteBox(n=2),
+                device=cpu,
+                dtype=torch.bool,
+                domain=discrete)
         """
         try:
-            done_spec = self.output_spec["_done_spec"]
+            done_spec = self.output_spec["full_done_spec"]
         except (KeyError, AttributeError):
             # populate the "done" entry
-            # this will be raised if there is not _done_spec (unlikely) or no done_key
+            # this will be raised if there is not full_done_spec (unlikely) or no done_key
             # Since output_spec is lazily populated with an empty composite spec for
             # done_spec, the second case is much more likely to occur.
             self.done_spec = DiscreteTensorSpec(
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
-            done_spec = self.output_spec["_done_spec"]
-        finally:
+            done_spec = self.output_spec["full_done_spec"]
+        if len(self.done_keys) > 1:
+            out = done_spec
+        else:
             try:
                 out = done_spec[self.done_key]
             except KeyError:
@@ -697,7 +948,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             self.output_spec.unlock_()
             device = self.output_spec.device
             try:
-                delattr(self, "_done_key")
+                delattr(self, "_done_keys")
             except AttributeError:
                 pass
             if not hasattr(value, "shape"):
@@ -710,40 +961,72 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     "The value of spec.shape must match the env batch size."
                 )
             if isinstance(value, CompositeSpec):
-                for nestedval in value.values(True, True):  # noqa: B007
+                for _ in value.values(True, True):  # noqa: B007
                     break
                 else:
                     raise RuntimeError(
                         "An empty CompositeSpec was passed for the done spec. "
                         "This is currently not permitted."
                     )
+                _check_only_one_entry(
+                    value,
+                    error=RuntimeError(
+                        "done_spec has more than one leaf entry for a CompositeSpec. "
+                        "Only one leaf entry per composite spec is currently allowed"
+                    ),
+                )
             else:
-                nestedval = value
                 value = CompositeSpec(
                     done=value.to(device), shape=self.batch_size, device=device
                 )
-            if len(nestedval.shape) == 0:
-                raise RuntimeError(
-                    "the done_spec shape cannot be empty (this error"
-                    " usually comes from trying to set a done_spec"
-                    " with a null number of dimensions. Try using a multidimensional"
-                    " spec instead, for instance with a singleton dimension at the tail)."
-                )
-            if len(list(value.keys())) == 0:
-                raise RuntimeError
-            self.output_spec["_done_spec"] = value.to(device)
-            self._get_done_key()
+            for leaf in value.values(True, True):
+                if len(leaf.shape) == 0:
+                    raise RuntimeError(
+                        "the done_spec's leafs shape cannot be empty (this error"
+                        " usually comes from trying to set a reward_spec"
+                        " with a null number of dimensions. Try using a multidimensional"
+                        " spec instead, for instance with a singleton dimension at the tail)."
+                    )
+            self.output_spec["full_done_spec"] = value.to(device)
+            self._get_done_keys()
         finally:
             self.output_spec.lock_()
 
     # observation spec: observation specs belong to output_spec
     @property
     def observation_spec(self) -> CompositeSpec:
-        observation_spec = self.output_spec["_observation_spec"]
+        """Observation spec.
+
+        Must be a :class:`torchrl.data.CompositeSpec` instance.
+        The keys listed in the spec are directly accessible after reset and step.
+
+        In TorchRL, even though they are not properly speaking "observations"
+        all info, states, results of transforms etc. outputs from the environment are stored in the
+        ``observation_spec``.
+
+        Therefore, ``"observation_spec"`` should be thought as
+        a generic data container for environment outputs that are not done or reward data.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> env.observation_spec
+            CompositeSpec(
+                observation: BoundedTensorSpec(
+                    shape=torch.Size([3]),
+                    space=ContinuousBox(
+                        minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    device=cpu,
+                    dtype=torch.float32,
+                    domain=continuous), device=cpu, shape=torch.Size([]))
+
+        """
+        observation_spec = self.output_spec["full_observation_spec"]
         if observation_spec is None:
             observation_spec = CompositeSpec(shape=self.batch_size, device=self.device)
             self.output_spec.unlock_()
-            self.output_spec["_observation_spec"] = observation_spec
+            self.output_spec["full_observation_spec"] = observation_spec
             self.output_spec.lock_()
         return observation_spec
 
@@ -762,18 +1045,39 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 raise ValueError(
                     f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
-            self.output_spec["_observation_spec"] = value.to(device)
+            self.output_spec["full_observation_spec"] = value.to(device)
         finally:
             self.output_spec.lock_()
 
     # state spec: state specs belong to input_spec
     @property
     def state_spec(self) -> CompositeSpec:
-        state_spec = self.input_spec["_state_spec"]
+        """State spec.
+
+        Must be a :class:`torchrl.data.CompositeSpec` instance.
+        The keys listed here should be provided as input alongside actions to the environment.
+
+        In TorchRL, even though they are not properly speaking "state"
+        all inputs to the environment that are not actions are stored in the
+        ``state_spec``.
+
+        Therefore, ``"state_spec"`` should be thought as
+        a generic data container for environment inputs that are not action data.
+
+        Examples:
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> env = GymEnv("Pendulum-v1")
+            >>> # Gym has not state input so this is empty
+            >>> env.state_spec
+            CompositeSpec(
+            , device=cpu, shape=torch.Size([]))
+
+        """
+        state_spec = self.input_spec["full_state_spec"]
         if state_spec is None:
             state_spec = CompositeSpec(shape=self.batch_size, device=self.device)
             self.input_spec.unlock_()
-            self.input_spec["_state_spec"] = state_spec
+            self.input_spec["full_state_spec"] = state_spec
             self.input_spec.lock_()
         return state_spec
 
@@ -782,7 +1086,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         try:
             self.input_spec.unlock_()
             if value is None:
-                self.input_spec["_state_spec"] = CompositeSpec(
+                self.input_spec["full_state_spec"] = CompositeSpec(
                     device=self.device, shape=self.batch_size
                 )
             else:
@@ -797,7 +1101,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     raise ValueError(
                         f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                     )
-                self.input_spec["_state_spec"] = value.to(device)
+                self.input_spec["full_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
 
@@ -837,7 +1141,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
 
         # TODO: Refactor this using reward spec
-        reward = next_tensordict_out.get(self.reward_key)
         # unsqueeze rewards if needed
         # the input tensordict may have more leading dimensions than the batch_size
         # e.g. in model-based contexts.
@@ -848,22 +1151,33 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if dims
             else next_tensordict_out.shape
         )
-        expected_reward_shape = torch.Size(
-            [*leading_batch_size, *self.reward_spec.shape]
-        )
-        actual_reward_shape = reward.shape
-        if actual_reward_shape != expected_reward_shape:
-            reward = reward.view(expected_reward_shape)
-            next_tensordict_out.set(self.reward_key, reward)
+        for reward_key in self.reward_keys:
+            reward = next_tensordict_out.get(reward_key)
+            expected_reward_shape = torch.Size(
+                [
+                    *leading_batch_size,
+                    *self.output_spec["full_reward_spec"][reward_key].shape,
+                ]
+            )
+            actual_reward_shape = reward.shape
+            if actual_reward_shape != expected_reward_shape:
+                reward = reward.view(expected_reward_shape)
+                next_tensordict_out.set(reward_key, reward)
 
         # TODO: Refactor this using done spec
-        done = next_tensordict_out.get(self.done_key)
-        # unsqueeze done if needed
-        expected_done_shape = torch.Size([*leading_batch_size, *self.done_spec.shape])
-        actual_done_shape = done.shape
-        if actual_done_shape != expected_done_shape:
-            done = done.view(expected_done_shape)
-            next_tensordict_out.set(self.done_key, done)
+        for done_key in self.done_keys:
+            done = next_tensordict_out.get(done_key)
+            expected_done_shape = torch.Size(
+                [
+                    *leading_batch_size,
+                    *self.output_spec[unravel_key(("full_done_spec", done_key))].shape,
+                ]
+            )
+            actual_done_shape = done.shape
+            if actual_done_shape != expected_done_shape:
+                done = done.view(expected_done_shape)
+                next_tensordict_out.set(done_key, done)
+
         tensordict_out.set("next", next_tensordict_out)
 
         if self.run_type_checks:
@@ -871,19 +1185,26 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 obs = tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
-            if (
-                next_tensordict_out.get(self.reward_key).dtype
-                is not self.reward_spec.dtype
-            ):
-                raise TypeError(
-                    f"expected reward.dtype to be {self.reward_spec.dtype} "
-                    f"but got {tensordict_out.get(self.reward_key).dtype}"
-                )
+            for reward_key in self.reward_keys:
+                if (
+                    next_tensordict_out.get(reward_key).dtype
+                    is not self.output_spec[
+                        unravel_key(("full_reward_spec", reward_key))
+                    ].dtype
+                ):
+                    raise TypeError(
+                        f"expected reward.dtype to be {self.output_spec[unravel_key(('full_reward_spec',reward_key))]} "
+                        f"but got {tensordict_out.get(reward_key).dtype}"
+                    )
 
-            if next_tensordict_out.get(self.done_key).dtype is not self.done_spec.dtype:
-                raise TypeError(
-                    f"expected done.dtype to be torch.bool but got {tensordict_out.get(self.done_key).dtype}"
-                )
+            for done_key in self.done_keys:
+                if (
+                    next_tensordict_out.get(done_key).dtype
+                    is not self.output_spec["full_done_spec"].get(done_key).dtype
+                ):
+                    raise TypeError(
+                        f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
+                    )
         # tensordict could already have a "next" key
         tensordict.update(tensordict_out)
 
@@ -931,15 +1252,26 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             a tensordict (or the input tensordict, if any), modified in place with the resulting observations.
 
         """
-        if tensordict is not None and "_reset" in tensordict.keys():
+        if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset")
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
+            _reset_map = {}
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is None:
+                    continue
+                if (
+                    _reset.shape[
+                        -len(self.output_spec["full_done_spec"][done_key].shape) :
+                    ]
+                    != self.output_spec["full_done_spec"][done_key].shape
+                ):
+                    raise RuntimeError(
+                        "_reset flag in tensordict should follow env.done_spec"
+                    )
+                _reset_map.update({done_key: _reset})
         else:
-            _reset = None
+            _reset_map = {}
 
         tensordict_reset = self._reset(tensordict, **kwargs)
         if tensordict_reset.device != self.device:
@@ -959,20 +1291,23 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
         else:
             leading_dim = tensordict_reset.shape
-        if self.done_spec is not None and self.done_key not in tensordict_reset.keys(
-            True, True
-        ):
-            tensordict_reset.set(
-                self.done_key,
-                self.done_spec.zero(leading_dim),
-            )
+        if self.done_spec is not None:
+            td_reset_keys = tensordict_reset.keys(True, True)
+            for done_key in self.done_keys:
+                if done_key not in td_reset_keys:
+                    tensordict_reset.set(
+                        done_key,
+                        self.output_spec["full_done_spec"][done_key].zero(leading_dim),
+                    )
 
-        if (_reset is None and tensordict_reset.get(self.done_key).any()) or (
-            _reset is not None and tensordict_reset.get(self.done_key)[_reset].any()
-        ):
-            raise RuntimeError(
-                f"Env {self} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-            )
+        for done_key in self.done_keys:
+            if done_key not in _reset_map:
+                if tensordict_reset.get(done_key).any():
+                    raise DONE_AFTER_RESET_ERROR
+            else:
+                if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
+                    raise DONE_AFTER_RESET_ERROR
+
         if tensordict is not None:
             tensordict.update(tensordict_reset)
         else:
@@ -1044,7 +1379,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Non batch-locked environment require the env batch-size to be either empty or to"
                 f" match the tensordict one."
             )
-        r = self.input_spec["_action_spec"].rand(shape)
+        r = self.input_spec["full_action_spec"].rand(shape)
         if tensordict is None:
             return r
         tensordict.update(r)
@@ -1238,28 +1573,40 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.step(tensordict)
 
             tensordicts.append(tensordict.clone(False))
-            done = tensordict.get(("next", self.done_key))
-            truncated = tensordict.get(
-                ("next", "truncated"),
-                default=torch.zeros((), device=done.device, dtype=torch.bool),
-            )
-            done = done | truncated
-            if (break_when_any_done and done.any()) or i == max_steps - 1:
+
+            any_done = False
+            _reset_map = {}
+            for done_key in self.done_keys:
+                done = tensordict.get(("next", done_key))
+                truncated = tensordict.get(
+                    ("next", _replace_last(done_key, "truncated")),
+                    default=torch.zeros((), device=done.device, dtype=torch.bool),
+                )
+                done = done | truncated
+                any_sub_done = done.any().item()
+                if any_sub_done and not break_when_any_done:
+                    # Add this done to the map, we will need it to reset
+                    _reset_map.update({_replace_last(done_key, "_reset"): done})
+                any_done += any_sub_done
+
+            if (break_when_any_done and any_done) or i == max_steps - 1:
                 break
             tensordict = step_mdp(
                 tensordict,
                 keep_other=True,
                 exclude_action=False,
                 exclude_reward=True,
-                reward_key=self.reward_key,
-                action_key=self.action_key,
-                done_key=self.done_key,
+                reward_keys=self.reward_keys,
+                action_keys=self.action_keys,
+                done_keys=self.done_keys,
             )
-            if not break_when_any_done and done.any():
-                _reset = done.clone()
-                tensordict.set("_reset", _reset)
+
+            if not break_when_any_done and any_done:
+                for _reset_key, done in _reset_map.items():
+                    tensordict.set(_reset_key, done.clone())
                 self.reset(tensordict)
-                del tensordict["_reset"]
+                for _reset_key in _reset_map.keys():
+                    del tensordict[_reset_key]
 
             if callback is not None:
                 callback(self, tensordict)
@@ -1306,13 +1653,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """Returns a fake tensordict with key-value pairs that match in shape, device and dtype what can be expected during an environment rollout."""
         state_spec = self.state_spec
         observation_spec = self.observation_spec
-        action_spec = self.input_spec["_action_spec"]
+        action_spec = self.input_spec["full_action_spec"]
         # instantiates reward_spec if needed
         _ = self.reward_spec
-        reward_spec = self.output_spec["_reward_spec"]
+        reward_spec = self.output_spec["full_reward_spec"]
         # instantiates done_spec if needed
         _ = self.done_spec
-        done_spec = self.output_spec["_done_spec"]
+        done_spec = self.output_spec["full_done_spec"]
 
         fake_obs = observation_spec.zero()
 
