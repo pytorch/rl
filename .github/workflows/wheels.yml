@@ -90,11 +90,10 @@ jobs:
       matrix:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
-      - name: Setup miniconda (for pytorch_pkg_helpers)
-        uses: conda-incubator/setup-miniconda@v2.1.1
-        with:
-          miniconda-version: "py39_4.12.0"
-          python-version: 3.9
+      # - name: Setup miniconda
+      #   uses: conda-incubator/setup-miniconda@v2.1.1
+      #   with:
+      #     python-version: 3.9
       - name: Create Conda Environment for Binary Build
         run: |
           set -euxo pipefail
