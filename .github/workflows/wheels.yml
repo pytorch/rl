@@ -102,7 +102,7 @@ jobs:
             --yes \
             --quiet \
             -n buildenv \
-            python="${matrix.python_version[0]}"
+            python="${{ matrix.python_version[0] }}"
 
           echo "CONDA_RUN=conda run -p buildenv" >> "${GITHUB_ENV}"
       - name: Checkout torchrl
