@@ -46,7 +46,7 @@ class FasterTransformedDistribution(TransformedDistribution):
                 transforms,
             ]
         elif isinstance(transforms, list):
-            raise ValueError("Mae a ComposeTransform first.")
+            raise ValueError("Make a ComposeTransform first.")
         else:
             raise ValueError(
                 "transforms must be a Transform or list, but was {}".format(transforms)

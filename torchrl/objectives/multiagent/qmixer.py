@@ -18,11 +18,11 @@ from torch import nn
 
 from torchrl.data.tensor_specs import TensorSpec
 
+from torchrl.data.utils import _find_action_space
+
 from torchrl.modules import SafeSequential
 from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
-from torchrl.modules.utils.utils import _find_action_space
 
 from torchrl.objectives.common import LossModule
 

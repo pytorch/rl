@@ -8,12 +8,18 @@ from typing import Any, Callable, List, Tuple, Union
 
 import numpy as np
 import torch
+
 from torch import Tensor
 
 from torchrl.data.tensor_specs import (
+    BinaryDiscreteTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     LazyStackedCompositeSpec,
     LazyStackedTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
     TensorSpec,
 )
 
@@ -40,6 +46,27 @@ else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+
+
+ACTION_SPACE_MAP = {
+    OneHotDiscreteTensorSpec: "one_hot",
+    MultiOneHotDiscreteTensorSpec: "mult_one_hot",
+    BinaryDiscreteTensorSpec: "binary",
+    DiscreteTensorSpec: "categorical",
+    "one_hot": "one_hot",
+    "one-hot": "one_hot",
+    "mult_one_hot": "mult_one_hot",
+    "mult-one-hot": "mult_one_hot",
+    "multi_one_hot": "mult_one_hot",
+    "multi-one-hot": "mult_one_hot",
+    "binary": "binary",
+    "categorical": "categorical",
+    MultiDiscreteTensorSpec: "multi_categorical",
+    "multi_categorical": "multi_categorical",
+    "multi-categorical": "multi_categorical",
+    "multi_discrete": "multi_categorical",
+    "multi-discrete": "multi_categorical",
+}
 
 
 def consolidate_spec(
@@ -128,7 +155,7 @@ def _empty_like_spec(specs: List[TensorSpec], shape):
         shape = list(shape[: spec.stack_dim]) + list(shape[spec.stack_dim + 1 :])
         return LazyStackedTensorSpec(
             *[_empty_like_spec(spec._specs, shape) for _ in spec._specs],
-            dim=spec.stack_dim
+            dim=spec.stack_dim,
         )
     else:
         # the exclusive key has values which are TensorSpecs ->
@@ -179,6 +206,38 @@ def check_no_exclusive_keys(spec: TensorSpec, recurse: bool = True):
     return True
 
 
+def contains_lazy_spec(spec: TensorSpec) -> bool:
+    """Returns true if a spec contains lazy stacked specs.
+
+    Args:
+        spec (TensorSpec): the spec to check
+
+    """
+    if isinstance(spec, (LazyStackedTensorSpec, LazyStackedCompositeSpec)):
+        return True
+    elif isinstance(spec, CompositeSpec):
+        for inner_spec in spec.values():
+            if contains_lazy_spec(inner_spec):
+                return True
+    return False
+
+
+def _check_only_one_entry(
+    spec: CompositeSpec,
+    error: RuntimeError,
+    recursive: bool = True,
+):
+    found_entry = False
+    for value in spec.values():
+        if isinstance(value, CompositeSpec):
+            _check_only_one_entry(value, error, recursive)
+        else:
+            if not found_entry:
+                found_entry = True
+            else:
+                raise error
+
+
 class CloudpickleWrapper(object):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 
@@ -205,3 +264,79 @@ class CloudpickleWrapper(object):
         kwargs = {k: item for k, item in kwargs.items()}
         kwargs.update(self.kwargs)
         return self.fn(**kwargs)
+
+
+def _process_action_space_spec(action_space, spec):
+    original_spec = spec
+    composite_spec = False
+    if isinstance(spec, CompositeSpec):
+        # this will break whenever our action is more complex than a single tensor
+        try:
+            if "action" in spec.keys():
+                _key = "action"
+            else:
+                # the first key is the action
+                for _key in spec.keys(True, True):
+                    if isinstance(_key, tuple) and _key[-1] == "action":
+                        break
+                else:
+                    raise KeyError
+            spec = spec[_key]
+            composite_spec = True
+        except KeyError:
+            raise KeyError(
+                "action could not be found in the spec. Make sure "
+                "you pass a spec that is either a native action spec or a composite action spec "
+                "with a leaf 'action' entry. Otherwise, simply remove the spec and use the action_space only."
+            )
+    if action_space is not None:
+        if isinstance(action_space, CompositeSpec):
+            raise ValueError("action_space cannot be of type CompositeSpec.")
+        if (
+            spec is not None
+            and isinstance(action_space, TensorSpec)
+            and action_space is not spec
+        ):
+            raise ValueError(
+                "Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match."
+            )
+        if isinstance(action_space, TensorSpec):
+            spec = action_space
+        action_space = _find_action_space(action_space)
+        # check that the spec and action_space match
+        if spec is not None and _find_action_space(spec) != action_space:
+            raise ValueError(
+                f"The action spec and the action space do not match: got action_space={action_space} and spec={spec}."
+            )
+    elif spec is not None:
+        action_space = _find_action_space(spec)
+    else:
+        raise ValueError(
+            "Neither action_space nor spec was defined. The action space cannot be inferred."
+        )
+    if composite_spec:
+        spec = original_spec
+    return action_space, spec
+
+
+def _find_action_space(action_space):
+    if isinstance(action_space, TensorSpec):
+        if isinstance(action_space, CompositeSpec):
+            if "action" in action_space.keys():
+                _key = "action"
+            else:
+                # the first key is the action
+                for _key in action_space.keys(True, True):
+                    if isinstance(_key, tuple) and _key[-1] == "action":
+                        break
+                else:
+                    raise KeyError
+            action_space = action_space[_key]
+        action_space = type(action_space)
+    try:
+        action_space = ACTION_SPACE_MAP[action_space]
+    except KeyError:
+        raise ValueError(
+            f"action_space was not specified/not compatible and could not be retrieved from the value network. Got action_space={action_space}."
+        )
+    return action_space
