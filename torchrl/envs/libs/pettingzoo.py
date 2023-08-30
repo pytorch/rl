@@ -501,11 +501,11 @@ class PettingZooWrapper(_EnvWrapper):
 
         # Caching
         self.cached_reset_output_zero = self.observation_spec.zero()
-        self.cached_reset_output_zero.update(self.output_spec["_done_spec"].zero())
+        self.cached_reset_output_zero.update(self.output_spec["full_done_spec"].zero())
 
         self.cached_step_output_zero = self.observation_spec.zero()
-        self.cached_step_output_zero.update(self.output_spec["_reward_spec"].zero())
-        self.cached_step_output_zero.update(self.output_spec["_done_spec"].zero())
+        self.cached_step_output_zero.update(self.output_spec["full_reward_spec"].zero())
+        self.cached_step_output_zero.update(self.output_spec["full_done_spec"].zero())
 
     def _set_seed(self, seed: Optional[int]):
         self.seed = seed
@@ -661,9 +661,9 @@ class PettingZooWrapper(_EnvWrapper):
         action_dict = {}
         for group, agents in self.group_map.items():
             group_action = tensordict.get((group, "action"))
-            group_action_np = self.input_spec["_action_spec", group, "action"].to_numpy(
-                group_action
-            )
+            group_action_np = self.input_spec[
+                "full_action_spec", group, "action"
+            ].to_numpy(group_action)
             for i, agent in enumerate(agents):
                 index = i if len(agents) > 1 else Ellipsis
                 action_dict[agent] = group_action_np[index]
@@ -684,7 +684,7 @@ class PettingZooWrapper(_EnvWrapper):
                 )
                 group_action = tensordict.get((group, "action"))
                 group_action_np = self.input_spec[
-                    "_action_spec", group, "action"
+                    "full_action_spec", group, "action"
                 ].to_numpy(group_action)
                 action = group_action_np[agent_index]
                 break
@@ -738,7 +738,7 @@ class PettingZooWrapper(_EnvWrapper):
                                 dtype=torch.bool,
                             )
 
-                group_action_spec = self.input_spec["_action_spec", group, "action"]
+                group_action_spec = self.input_spec["full_action_spec", group, "action"]
                 if isinstance(
                     group_action_spec, (DiscreteTensorSpec, OneHotDiscreteTensorSpec)
                 ):

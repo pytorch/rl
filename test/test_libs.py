@@ -1663,7 +1663,7 @@ class TestPettingZoo:
             t = 0
 
             def __call__(self, td):
-                new_td = env.input_spec["_action_spec"].zero()
+                new_td = env.input_spec["full_action_spec"].zero()
                 if self.t % 2 == 0:
                     assert td["player", "action_mask"][0].any()
                     assert not td["player", "action_mask"][1].any()
