@@ -10,7 +10,7 @@ from typing import Iterable, Optional, Union
 
 import torch
 from tensordict.nn import TensorDictModule
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch import nn, Tensor
 from torch.nn import functional as F
 
@@ -141,32 +141,19 @@ class TargetNetUpdater:
         self,
         loss_module: "LossModule",  # noqa: F821
     ):
+        from torchrl.objectives.common import LossModule
+
+        if not isinstance(loss_module, LossModule):
+            raise ValueError("The loss_module must be a LossModule instance.")
         _has_update_associated = getattr(loss_module, "_has_update_associated", None)
-        loss_module._has_update_associated = True
+        for k in loss_module._has_update_associated.keys():
+            loss_module._has_update_associated[k] = True
         try:
             _target_names = []
-            # for properties
-            for name in loss_module.__class__.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
+            for name, _ in loss_module.named_children():
+                # the TensorDictParams is a nn.Module instance
+                if name.startswith("target_") and name.endswith("_params"):
                     _target_names.append(name)
-
-            # for regular lists: raise an exception
-            for name in loss_module.__dict__:
-                if (
-                    name.startswith("target_")
-                    and (name.endswith("params") or name.endswith("buffers"))
-                    and (getattr(loss_module, name) is not None)
-                ):
-                    raise RuntimeError(
-                        "Your module seems to have a target tensor list contained "
-                        "in a non-dynamic structure (such as a list). If the "
-                        "module is cast onto a device, the reference to these "
-                        "tensors will be lost."
-                    )
 
             if len(_target_names) == 0:
                 raise RuntimeError(
@@ -178,11 +165,11 @@ class TargetNetUpdater:
             for _source in _source_names:
                 try:
                     getattr(loss_module, _source)
-                except AttributeError:
+                except AttributeError as err:
                     raise RuntimeError(
                         f"Incongruent target and source parameter lists: "
                         f"{_source} is not an attribute of the loss_module"
-                    )
+                    ) from err
 
             self._target_names = _target_names
             self._source_names = _source_names
@@ -191,7 +178,8 @@ class TargetNetUpdater:
             self.init_()
             _has_update_associated = True
         finally:
-            loss_module._has_update_associated = _has_update_associated
+            for k in loss_module._has_update_associated.keys():
+                loss_module._has_update_associated[k] = _has_update_associated
 
     @property
     def _targets(self):
@@ -450,3 +438,28 @@ def next_state_value(
     rewards = rewards.to(torch.float)
     target_value = rewards + (gamma**steps_to_next_obs) * target_value
     return target_value
+
+
+def _cache_values(fun):
+    """Caches the tensordict returned by a property."""
+    name = fun.__name__
+
+    def new_fun(self, netname=None):
+        __dict__ = self.__dict__
+        _cache = __dict__["_cache"]
+        attr_name = name
+        if netname is not None:
+            attr_name += "_" + netname
+        if attr_name in _cache:
+            out = _cache[attr_name]
+            return out
+        if netname is not None:
+            out = fun(self, netname)
+        else:
+            out = fun(self)
+        if is_tensor_collection(out):
+            out.lock_()
+        _cache[attr_name] = out
+        return out
+
+    return new_fun

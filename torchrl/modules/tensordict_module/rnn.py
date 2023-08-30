@@ -5,6 +5,7 @@
 from typing import Optional, Tuple
 
 import torch
+from tensordict import unravel_key_list
 
 from tensordict.nn import TensorDictModuleBase as ModuleBase
 
@@ -187,6 +188,8 @@ class LSTMModule(ModuleBase):
         elif out_key:
             out_keys = [out_key, *self.DEFAULT_OUT_KEYS]
 
+        in_keys = unravel_key_list(in_keys)
+        out_keys = unravel_key_list(out_keys)
         if not isinstance(in_keys, (tuple, list)) or (
             len(in_keys) != 3 and not (len(in_keys) == 4 and in_keys[-1] == "is_init")
         ):
@@ -298,7 +301,7 @@ class LSTMModule(ModuleBase):
                     batch_size=[nelts, tensordict_shaped.shape[-1]],
                 )
         else:
-            tensordict_shaped = tensordict.view(-1).unsqueeze(-1)
+            tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
         is_init = tensordict_shaped.get("is_init").squeeze(-1)
         splits = None
@@ -337,7 +340,7 @@ class LSTMModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[2], hidden1)
         if splits is not None:
             # let's recover our original shape
-            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).view(
+            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
                 tensordict_shaped_shape
             )
 

@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
 
@@ -68,15 +69,16 @@ class RandomPolicy:
         >>> from tensordict import TensorDict
         >>> from torchrl.data.tensor_specs import BoundedTensorSpec
         >>> action_spec = BoundedTensorSpec(-torch.ones(3), torch.ones(3))
-        >>> actor = RandomPolicy(spec=action_spec)
-        >>> td = actor(TensorDict(batch_size=[])) # selects a random action in the cube [-1; 1]
+        >>> actor = RandomPolicy(action_spec=action_spec)
+        >>> td = actor(TensorDict({}, batch_size=[])) # selects a random action in the cube [-1; 1]
     """
 
-    def __init__(self, action_spec: TensorSpec):
+    def __init__(self, action_spec: TensorSpec, action_key: NestedKey = "action"):
         self.action_spec = action_spec
+        self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set("action", self.action_spec.rand())
+        return td.set(self.action_key, self.action_spec.rand())
 
 
 class _Interruptor:
@@ -208,7 +210,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec)
+            policy = RandomPolicy(self.env.action_spec, self.env.action_key)
         elif isinstance(policy, nn.Module):
             # TODO: revisit these checks when we have determined whether arbitrary
             # callables should be supported as policies.
@@ -240,7 +242,10 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 # we check if all the mandatory params are there
                 if not required_params.difference(set(next_observation)):
                     in_keys = [str(k) for k in sig.parameters if k in next_observation]
-                    out_keys = ["action"]
+                    if not hasattr(self, "env") or self.env is None:
+                        out_keys = ["action"]
+                    else:
+                        out_keys = [self.env.action_key]
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
@@ -262,7 +267,7 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
         try:
             policy_device = next(policy.parameters()).device
-        except:  # noqa
+        except Exception:
             policy_device = (
                 torch.device(device) if device is not None else torch.device("cpu")
             )
@@ -441,25 +446,28 @@ class SyncDataCollector(DataCollectorBase):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        "traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> del collector
@@ -542,6 +550,7 @@ class SyncDataCollector(DataCollectorBase):
             device=device,
             observation_spec=self.env.observation_spec,
         )
+
         if isinstance(self.policy, nn.Module):
             self.policy_weights = TensorDict(dict(self.policy.named_parameters()), [])
             self.policy_weights.update(
@@ -711,9 +720,11 @@ class SyncDataCollector(DataCollectorBase):
         Examples:
             >>> from torchrl.envs import ParallelEnv
             >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from tensordict.nn import TensorDictModule
             >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = ParallelEnv(6, env_fn)
-            >>> collector = SyncDataCollector(env_fn_parallel)
+            >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+            >>> collector = SyncDataCollector(env_fn_parallel, policy, total_frames=300, frames_per_batch=100)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -725,52 +736,70 @@ class SyncDataCollector(DataCollectorBase):
         Yields: TensorDictBase objects containing (chunks of) trajectories
 
         """
-        total_frames = self.total_frames
-        i = -1
-        self._frames = 0
-        while True:
-            i += 1
-            self._iter = i
-            tensordict_out = self.rollout()
-            self._frames += tensordict_out.numel()
-            if self._frames >= total_frames:
-                self.env.close()
+        if self.storing_device.type == "cuda":
+            stream = torch.cuda.Stream(self.storing_device, priority=-1)
+            event = stream.record_event()
+        else:
+            event = None
+            stream = None
+        with torch.cuda.stream(stream):
+            total_frames = self.total_frames
+            i = -1
+            self._frames = 0
+            while True:
+                i += 1
+                self._iter = i
+                tensordict_out = self.rollout()
+                self._frames += tensordict_out.numel()
+                if self._frames >= total_frames:
+                    self.env.close()
 
-            if self.split_trajs:
-                tensordict_out = split_trajectories(tensordict_out, prefix="collector")
-            if self.postproc is not None:
-                tensordict_out = self.postproc(tensordict_out)
-            if self._exclude_private_keys:
-                excluded_keys = [
-                    key for key in tensordict_out.keys() if key.startswith("_")
-                ]
-                tensordict_out = tensordict_out.exclude(*excluded_keys, inplace=True)
-            if self.return_same_td:
-                # This is used with multiprocessed collectors to use the buffers
-                # stored in the tensordict.
-                yield tensordict_out
-            else:
-                # we must clone the values, as the tensordict is updated in-place.
-                # otherwise the following code may break:
-                # >>> for i, data in enumerate(collector):
-                # >>>      if i == 0:
-                # >>>          data0 = data
-                # >>>      elif i == 1:
-                # >>>          data1 = data
-                # >>>      else:
-                # >>>          break
-                # >>> assert data0["done"] is not data1["done"]
-                yield tensordict_out.clone()
+                if self.split_trajs:
+                    tensordict_out = split_trajectories(
+                        tensordict_out, prefix="collector"
+                    )
+                if self.postproc is not None:
+                    tensordict_out = self.postproc(tensordict_out)
+                if self._exclude_private_keys:
+                    excluded_keys = [
+                        key for key in tensordict_out.keys() if key.startswith("_")
+                    ]
+                    tensordict_out = tensordict_out.exclude(
+                        *excluded_keys, inplace=True
+                    )
+                if self.return_same_td:
+                    # This is used with multiprocessed collectors to use the buffers
+                    # stored in the tensordict.
+                    if event is not None:
+                        event.record()
+                        event.synchronize()
+                    yield tensordict_out
+                else:
+                    # we must clone the values, as the tensordict is updated in-place.
+                    # otherwise the following code may break:
+                    # >>> for i, data in enumerate(collector):
+                    # >>>      if i == 0:
+                    # >>>          data0 = data
+                    # >>>      elif i == 1:
+                    # >>>          data1 = data
+                    # >>>      else:
+                    # >>>          break
+                    # >>> assert data0["done"] is not data1["done"]
+                    yield tensordict_out.clone()
 
-            if self._frames >= self.total_frames:
-                break
+                if self._frames >= self.total_frames:
+                    break
 
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", "done"))
+        done = self._tensordict.get(("next", self.env.done_key))
         truncated = self._tensordict.get(("next", "truncated"), None)
-        traj_ids = self._tensordict.get(("collector", "traj_ids"))
 
-        self._tensordict = step_mdp(self._tensordict)
+        self._tensordict = step_mdp(
+            self._tensordict,
+            reward_key=self.env.reward_key,
+            done_key=self.env.done_key,
+            action_key=self.env.action_key,
+        )
 
         if not self.reset_when_done:
             return
@@ -778,25 +807,30 @@ class SyncDataCollector(DataCollectorBase):
         done_or_terminated = (
             (done | truncated) if truncated is not None else done.clone()
         )
-
         if done_or_terminated.any():
+            traj_ids = self._tensordict.get(("collector", "traj_ids"))
+            traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
             _reset = done_or_terminated
             td_reset = self._tensordict.select().set("_reset", _reset)
             td_reset = self.env.reset(td_reset)
+            td_reset.del_("_reset")
             traj_done_or_terminated = done_or_terminated.sum(
                 tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
                 dtype=torch.bool,
             )
             if td_reset.batch_dims:
-                self._tensordict.get_sub_tensordict(traj_done_or_terminated).update(
-                    td_reset[traj_done_or_terminated], inplace=True
-                )
+                # better cloning here than when passing the td for stacking
+                # cloning is necessary to avoid modifying dones in-place
+                self._tensordict = self._tensordict.clone()
+                self._tensordict[traj_done_or_terminated] = td_reset[
+                    traj_done_or_terminated
+                ]
             else:
-                self._tensordict.update(td_reset, inplace=True)
+                self._tensordict.update(td_reset)
 
-            done = self._tensordict.get("done")
+            done = self._tensordict.get(self.env.done_key)
             if done.any():
                 raise RuntimeError(
                     f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
@@ -804,9 +838,7 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
-            self._tensordict.set_(
-                ("collector", "traj_ids"), traj_ids
-            )  # no ops if they already match
+            self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
     def rollout(self) -> TensorDictBase:
@@ -817,40 +849,54 @@ class SyncDataCollector(DataCollectorBase):
 
         """
         if self.reset_at_each_iter:
-            self._tensordict.update(self.env.reset(), inplace=True)
+            self._tensordict.update(self.env.reset())
 
         # self._tensordict.fill_(("collector", "step_count"), 0)
         self._tensordict_out.fill_(("collector", "traj_ids"), -1)
-
+        tensordicts = []
         with set_exploration_type(self.exploration_type):
-            for j in range(self.frames_per_batch):
+            for t in range(self.frames_per_batch):
                 if self._frames < self.init_random_frames:
                     self.env.rand_step(self._tensordict)
                 else:
                     self.policy(self._tensordict)
                     self.env.step(self._tensordict)
-
                 # we must clone all the values, since the step / traj_id updates are done in-place
-                try:
-                    self._tensordict_out[..., j] = self._tensordict
-                except RuntimeError:
-                    # unlock the output tensordict to allow for new keys to be written
-                    # these will be missed during the sync but at least we won't get an error during the update
-                    is_shared = self._tensordict_out.is_shared()
-                    self._tensordict_out.unlock_()
-                    self._tensordict_out[..., j] = self._tensordict
-                    if is_shared:
-                        self._tensordict_out.share_memory_()
-                    else:
-                        self._tensordict_out.lock()
+                tensordicts.append(self._tensordict.to(self.storing_device))
 
                 self._step_and_maybe_reset()
                 if (
                     self.interruptor is not None
                     and self.interruptor.collection_stopped()
                 ):
+                    try:
+                        torch.stack(
+                            tensordicts,
+                            self._tensordict_out.ndim - 1,
+                            out=self._tensordict_out[: t + 1],
+                        )
+                    except RuntimeError:
+                        with self._tensordict_out.unlock_():
+                            torch.stack(
+                                tensordicts,
+                                self._tensordict_out.ndim - 1,
+                                out=self._tensordict_out[: t + 1],
+                            )
                     break
-
+            else:
+                try:
+                    self._tensordict_out = torch.stack(
+                        tensordicts,
+                        self._tensordict_out.ndim - 1,
+                        out=self._tensordict_out,
+                    )
+                except RuntimeError:
+                    with self._tensordict_out.unlock_():
+                        self._tensordict_out = torch.stack(
+                            tensordicts,
+                            self._tensordict_out.ndim - 1,
+                            out=self._tensordict_out,
+                        )
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
@@ -1351,9 +1397,13 @@ also that the state dict is synchronised across processes if needed."""
             environment.
 
         Examples:
-            >>> env_fn = lambda: GymEnv("Pendulum-v0")
+            >>> from torchrl.envs import ParallelEnv
+            >>> from torchrl.envs.libs.gym import GymEnv
+            >>> from tensordict.nn import TensorDictModule
+            >>> env_fn = lambda: GymEnv("Pendulum-v1")
             >>> env_fn_parallel = lambda: ParallelEnv(6, env_fn)
-            >>> collector = SyncDataCollector(env_fn_parallel)
+            >>> policy = TensorDictModule(nn.Linear(3, 1), in_keys=["observation"], out_keys=["action"])
+            >>> collector = SyncDataCollector(env_fn_parallel, policy, frames_per_batch=100, total_frames=300)
             >>> out_seed = collector.set_seed(1)  # out_seed = 6
 
         """
@@ -1491,25 +1541,28 @@ class MultiSyncDataCollector(_MultiDataCollector):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> collector.shutdown()
@@ -1525,6 +1578,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
+        if hasattr(self, "out_buffer"):
+            del self.out_buffer
+        if hasattr(self, "buffers"):
+            del self.buffers
         return super().shutdown()
 
     # for RPC
@@ -1565,11 +1622,11 @@ class MultiSyncDataCollector(_MultiDataCollector):
     def iterator(self) -> Iterator[TensorDictBase]:
         i = -1
         frames = 0
-        buffers = {}
+        self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
-        out_buffer = None
+        self.out_buffer = None
 
         while not all(dones) and frames < self.total_frames:
             _check_for_faulty_process(self.procs)
@@ -1601,16 +1658,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
-                    buffers[idx] = data
+                    self.buffers[idx] = data
                 else:
                     idx = new_data
-                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
+                workers_frames[idx] = workers_frames[idx] + self.buffers[idx].numel()
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
             # we have to correct the traj_ids to make sure that they don't overlap
             for idx in range(self.num_workers):
-                traj_ids = buffers[idx].get(("collector", "traj_ids"))
+                traj_ids = self.buffers[idx].get(("collector", "traj_ids"))
                 if max_traj_idx is not None:
                     traj_ids[traj_ids != -1] += max_traj_idx
                     # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
@@ -1619,26 +1676,28 @@ class MultiSyncDataCollector(_MultiDataCollector):
             if same_device is None:
                 prev_device = None
                 same_device = True
-                for item in buffers.values():
+                for item in self.buffers.values():
                     if prev_device is None:
                         prev_device = item.device
                     else:
                         same_device = same_device and (item.device == prev_device)
 
             if same_device:
-                out_buffer = torch.cat(list(buffers.values()), 0, out=out_buffer)
+                self.out_buffer = torch.cat(
+                    list(self.buffers.values()), 0, out=self.out_buffer
+                )
             else:
-                out_buffer = torch.cat(
-                    [item.cpu() for item in buffers.values()],
+                self.out_buffer = torch.cat(
+                    [item.cpu() for item in self.buffers.values()],
                     0,
-                    out=out_buffer,
+                    out=self.out_buffer,
                 )
 
             if self.split_trajs:
-                out = split_trajectories(out_buffer, prefix="collector")
+                out = split_trajectories(self.out_buffer, prefix="collector")
                 frames += out.get(("collector", "mask")).sum().item()
             else:
-                out = out_buffer.clone()
+                out = self.out_buffer.clone()
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
@@ -1650,7 +1709,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
             yield out
             del out
 
-        del buffers
+        del self.buffers
         # We shall not call shutdown just yet as user may want to retrieve state_dict
         # self._shutdown_main()
 
@@ -1716,25 +1775,28 @@ class MultiaSyncDataCollector(_MultiDataCollector):
         ...         break
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                 collector: TensorDict(
                     fields={
-                        step_count: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False),
-                        traj_ids: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.int64, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        traj_ids: Tensor(shape=torch.Size([200]), device=cpu, dtype=torch.int64, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                done: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                mask: Tensor(shape=torch.Size([4, 50]), device=cpu, dtype=torch.bool, is_shared=False),
+                done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([4, 50]),
+                        done: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([200]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([4, 50, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([4, 50, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([4, 50]),
+                observation: Tensor(shape=torch.Size([200, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([200, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([200]),
             device=cpu,
             is_shared=False)
         >>> collector.shutdown()
@@ -1762,6 +1824,8 @@ class MultiaSyncDataCollector(_MultiDataCollector):
 
     # for RPC
     def shutdown(self):
+        if hasattr(self, "out_tensordicts"):
+            del self.out_tensordicts
         return super().shutdown()
 
     # for RPC
@@ -2000,10 +2064,6 @@ def _main_async_collector(
     verbose: bool = VERBOSE,
     interruptor=None,
 ) -> None:
-    if storing_device.type == "cuda":
-        event = torch.cuda.Event()
-    else:
-        event = None
     pipe_parent.close()
     # init variables that will be cleared when closing
     tensordict = data = d = data_in = inner_collector = dc_iter = None
@@ -2108,9 +2168,6 @@ def _main_async_collector(
                         "SyncDataCollector should return the same tensordict modified in-place."
                     )
                 data = idx  # flag the worker that has sent its data
-            if event is not None:
-                event.record()
-                event.synchronize()
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
                 if verbose:
@@ -2155,6 +2212,7 @@ def _main_async_collector(
         elif msg == "load_state_dict":
             state_dict = data_in
             inner_collector.load_state_dict(state_dict)
+            del state_dict
             pipe_child.send((j, "loaded"))
             has_timed_out = False
             continue

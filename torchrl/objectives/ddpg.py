@@ -18,10 +18,10 @@ from tensordict.utils import NestedKey
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
-    hold_out_params,
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
@@ -38,6 +38,10 @@ class DDPGLoss(LossModule):
             data collection. Default is ``False``.
         delay_value (bool, optional): whether to separate the target value networks from the value networks used for
             data collection. Default is ``True``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -178,6 +182,7 @@ class DDPGLoss(LossModule):
         delay_actor: bool = False,
         delay_value: bool = True,
         gamma: float = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         super().__init__()
@@ -195,11 +200,17 @@ class DDPGLoss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=self.delay_value,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
         self.actor_critic.module[0] = self.actor_network
         self.actor_critic.module[1] = self.value_network
@@ -288,11 +299,10 @@ class DDPGLoss(LossModule):
             td_copy,
             params=self.actor_network_params,
         )
-        with hold_out_params(self.value_network_params) as params:
-            td_copy = self.value_network(
-                td_copy,
-                params=params,
-            )
+        td_copy = self.value_network(
+            td_copy,
+            params=self._cached_detached_value_params,
+        )
         return -td_copy.get(self.tensor_keys.state_action_value)
 
     def _loss_value(
@@ -307,18 +317,8 @@ class DDPGLoss(LossModule):
         )
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
-        target_params = TensorDict(
-            {
-                "module": {
-                    "0": self.target_actor_network_params,
-                    "1": self.target_value_network_params,
-                }
-            },
-            batch_size=self.target_actor_network_params.batch_size,
-            device=self.target_actor_network_params.device,
-        )
         target_value = self.value_estimator.value_estimate(
-            tensordict, target_params=target_params
+            tensordict, target_params=self._cached_target_params
         ).squeeze(-1)
 
         # td_error = pred_val - target_value
@@ -357,3 +357,23 @@ class DDPGLoss(LossModule):
             "done": self.tensor_keys.done,
         }
         self._value_estimator.set_keys(**tensor_keys)
+
+    @property
+    @_cache_values
+    def _cached_target_params(self):
+        target_params = TensorDict(
+            {
+                "module": {
+                    "0": self.target_actor_network_params,
+                    "1": self.target_value_network_params,
+                }
+            },
+            batch_size=self.target_actor_network_params.batch_size,
+            device=self.target_actor_network_params.device,
+        )
+        return target_params
+
+    @property
+    @_cache_values
+    def _cached_detached_value_params(self):
+        return self.value_network_params.detach()

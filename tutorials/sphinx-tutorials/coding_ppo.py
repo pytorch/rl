@@ -111,6 +111,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
+
 from torchrl.collectors import SyncDataCollector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -143,7 +144,7 @@ from tqdm import tqdm
 #
 
 device = "cpu" if not torch.has_cuda else "cuda:0"
-num_cells = 256  # number of cells in each layer
+num_cells = 256  # number of cells in each layer i.e. output dim.
 lr = 3e-4
 max_grad_norm = 1.0
 
@@ -232,7 +233,7 @@ base_env = GymEnv("InvertedDoublePendulum-v4", device=device, frame_skip=frame_s
 # the policy. In Gym, this is usually achieved via wrappers. TorchRL takes a different
 # approach, more similar to other pytorch domain libraries, through the use of transforms.
 # To add transforms to an environment, one should simply wrap it in a :class:`TransformedEnv`
-# instance, and append the sequence of transforms to it. The transformed env will inherit
+# instance and append the sequence of transforms to it. The transformed env will inherit
 # the device and meta-data of the wrapped env, and transform these depending on the sequence
 # of transforms it contains.
 #
@@ -317,7 +318,7 @@ print("action_spec:", env.action_spec)
 print("state_spec:", env.state_spec)
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environemnt
+# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -342,10 +343,10 @@ print("rollout of three steps:", rollout)
 print("Shape of the rollout TensorDict:", rollout.batch_size)
 
 ######################################################################
-# Our rollout data has a shape of ``torch.Size([3])`, which matches the number of steps
+# Our rollout data has a shape of ``torch.Size([3])``, which matches the number of steps
 # we ran it for. The ``"next"`` entry points to the data coming after the current step.
 # In most cases, the ``"next""`` data at time `t` matches the data at ``t+1``, but this
-# may not be the case if we are using some specific transformations (e.g. mutli-step).
+# may not be the case if we are using some specific transformations (e.g. multi-step).
 #
 # Policy
 # ------
@@ -369,12 +370,12 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 #
 # We design the policy in three steps:
 #
-# 1. Define a neural network ``D_obs`` -> ``2 * D_action``. Indeed, our ``loc`` (mu) and ``scale`` (sigma) both have dimension ``D_action``;
+# 1. Define a neural network ``D_obs`` -> ``2 * D_action``. Indeed, our ``loc`` (mu) and ``scale`` (sigma) both have dimension ``D_action``.
 #
 # 2. Append a :class:`NormalParamExtractor` to extract a location and a scale (ie splits the input in two equal parts
-#   and applies a positive transformation to the scale parameter);
+#   and applies a positive transformation to the scale parameter).
 #
-# 3. Create a probabilistic :class:`TensorDictModule` that can create this distribution and sample from it.
+# 3. Create a probabilistic :class:`TensorDictModule` that can generate this distribution and sample from it.
 #
 
 actor_net = nn.Sequential(
@@ -469,7 +470,7 @@ print("Running value:", value_module(env.reset()))
 # TorchRL provides a set of :class:`DataCollector` classes. Briefly, these
 # classes execute three operations: reset an environment, compute an action
 # given the latest observation, execute a step in the environment, and repeat
-# the last two steps until the environment reaches a stop signal (or ``"done"``
+# the last two steps until the environment signals a stop (or reaches a done
 # state).
 #
 # They allow you to control how many frames to collect at each iteration
@@ -541,7 +542,7 @@ replay_buffer = ReplayBuffer(
 # To compute the advantage, one just needs to (1) build the advantage module, which
 # utilizes our value operator, and (2) pass each batch of data through it before each
 # epoch.
-# The GAE module will update the input tensordict with new ``"advantage"`` and
+# The GAE module will update the input :class:`TensorDict` with new ``"advantage"`` and
 # ``"value_target"`` entries.
 # The ``"value_target"`` is a gradient-free tensor that represents the empirical
 # value that the value network should represent with the input observation.
@@ -556,7 +557,6 @@ advantage_module = GAE(
 loss_module = ClipPPOLoss(
     actor=policy_module,
     critic=value_module,
-    advantage_key="advantage",
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
     entropy_coef=entropy_eps,
