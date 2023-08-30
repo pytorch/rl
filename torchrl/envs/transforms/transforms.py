@@ -2793,8 +2793,8 @@ class DeviceCastTransform(Transform):
         if parent is None:
             if self.orig_device is None:
                 return tensordict
-            return tensordict.to(self.orig_device)
-        return tensordict.to(parent.device)
+            return tensordict.to(self.orig_device, non_blocking=True)
+        return tensordict.to(parent.device, non_blocking=True)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         return input_spec.to(self.device)
