@@ -30,7 +30,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
@@ -299,6 +299,7 @@ class _BatchedEnv(EnvBase):
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
+        self.has_lazy_inputs = contains_lazy_spec(self.input_spec)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -712,6 +713,7 @@ class ParallelEnv(_BatchedEnv):
                     self.env_input_keys,
                     self.device,
                     self.allow_step_when_done,
+                    self.has_lazy_inputs,
                 ),
             )
             w.daemon = True
@@ -759,7 +761,7 @@ class ParallelEnv(_BatchedEnv):
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         self._assert_tensordict_shape(tensordict)
-        if self._single_task:
+        if self._single_task and not self.has_lazy_inputs:
             # this is faster than update_ but won't work for lazy stacks
             for key in self.env_input_keys:
                 # self.shared_tensordict_parent.set(
@@ -983,6 +985,7 @@ def _run_worker_pipe_shared_mem(
     env_input_keys: Dict[str, Any],
     device: DEVICE_TYPING = None,
     allow_step_when_done: bool = False,
+    has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1064,15 +1067,20 @@ def _run_worker_pipe_shared_mem(
                 raise RuntimeError("called 'init' before step")
             i += 1
             if local_tensordict is not None:
-                for key in env_input_keys:
-                    # local_tensordict.set(key, shared_tensordict.get(key))
-                    key = _unravel_key_to_tuple(key)
-                    local_tensordict._set_tuple(
-                        key,
-                        shared_tensordict._get_tuple(key, None),
-                        inplace=False,
-                        validated=True,
+                if has_lazy_inputs:
+                    local_tensordict.update(
+                        shared_tensordict.select(*env_input_keys, strict=False)
                     )
+                else:
+                    for key in env_input_keys:
+                        # local_tensordict.set(key, shared_tensordict.get(key))
+                        key = _unravel_key_to_tuple(key)
+                        local_tensordict._set_tuple(
+                            key,
+                            shared_tensordict._get_tuple(key, None),
+                            inplace=False,
+                            validated=True,
+                        )
             else:
                 local_tensordict = shared_tensordict.clone(recurse=False)
             local_tensordict = env._step(local_tensordict)
