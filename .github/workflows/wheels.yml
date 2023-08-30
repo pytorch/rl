@@ -90,10 +90,6 @@ jobs:
       matrix:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
-      # - name: Setup miniconda
-      #   uses: conda-incubator/setup-miniconda@v2.1.1
-      #   with:
-      #     python-version: 3.9
       - name: Create Conda Environment for Binary Build
         run: |
           set -euxo pipefail
@@ -104,17 +100,16 @@ jobs:
             -n buildenv \
             python="${{ matrix.python_version[0] }}"
 
-          echo "CONDA_RUN=conda run -p buildenv" >> "${GITHUB_ENV}"
       - name: Checkout torchrl
         uses: actions/checkout@v2
       - name: Install PyTorch RC
         run: |
-          "${CONDA_RUN}" python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+          conda run -p buildenv python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Build wheel
         run: |
-          "${CONDA_RUN}" export CC=clang CXX=clang++
-          "${CONDA_RUN}" python3 -mpip install wheel
-          "${CONDA_RUN}" BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+          conda run -p buildenv export CC=clang CXX=clang++
+          conda run -p buildenv python3 -mpip install wheel
+          conda run -p buildenv BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
