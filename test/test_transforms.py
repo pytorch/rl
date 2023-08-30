@@ -93,7 +93,7 @@ from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
 from torchrl.envs.utils import check_env_specs, step_mdp
-from torchrl.modules import ProbabilisticActor, TanhNormal
+from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
 
@@ -1954,6 +1954,67 @@ class TestDoubleToFloat(TransformBase):
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
                 assert observation_spec[key].dtype == torch.float
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ["observation", ("some_other", "nested_key")],
+            ["observation_pixels"],
+            ["action"],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "keys_inv",
+        [
+            ["action", ("some_other", "nested_key")],
+            ["action"],
+            [],
+        ],
+    )
+    def test_double2float_auto(self, keys, keys_inv, device):
+        torch.manual_seed(0)
+        double2float = DoubleToFloat()
+        d = {
+            key: torch.zeros(1, 3, 3, dtype=torch.double, device=device) for key in keys
+        }
+        d.update(
+            {
+                key: torch.zeros(1, 3, 3, dtype=torch.float32, device=device)
+                for key in keys_inv
+            }
+        )
+        td = TensorDict(d, [1], device=device)
+        # check that the transform does change the dtype in forward
+        double2float(td)
+        for key in keys:
+            assert td.get(key).dtype == torch.float
+
+        # check that inv does not affect the tensordict in-place
+        td = td.apply(lambda x: x.float())
+        td_modif = double2float.inv(td)
+        for key in keys_inv:
+            assert td.get(key).dtype != torch.double
+            assert td_modif.get(key).dtype == torch.double
+
+    def test_single_env_no_inkeys(self):
+        base_env = ContinuousActionVecMockEnv()
+        for key, spec in list(base_env.observation_spec.items(True, True)):
+            base_env.observation_spec[key] = spec.to(torch.float64)
+        for key, spec in list(base_env.state_spec.items(True, True)):
+            base_env.state_spec[key] = spec.to(torch.float64)
+        if base_env.action_spec.dtype == torch.float32:
+            base_env.action_spec = base_env.action_spec.to(torch.float64)
+        env = TransformedEnv(
+            base_env,
+            DoubleToFloat(),
+        )
+        for spec in env.observation_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        for spec in env.state_spec.values(True, True):
+            assert spec.dtype == torch.float32
+        assert env.action_spec.dtype != torch.float64
+        check_env_specs(env)
 
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
         env = TransformedEnv(
@@ -8026,6 +8087,50 @@ class TestKLRewardTransform(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for KLRewardTransform")
+
+    @pytest.mark.parametrize("requires_grad", [True, False])
+    def test_kl_diff(self, requires_grad):
+        actor = self._make_actor()
+        t = KLRewardTransform(
+            actor, in_keys="reward", out_keys="reward", requires_grad=requires_grad
+        )
+        assert t.frozen_params.requires_grad is requires_grad
+
+    def test_kl_lstm(self):
+        from tensordict.nn import (
+            NormalParamExtractor,
+            ProbabilisticTensorDictModule,
+            ProbabilisticTensorDictSequential,
+            TensorDictModule,
+        )
+
+        env = TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+        lstm_module = LSTMModule(
+            input_size=env.observation_spec["observation"].shape[-1],
+            hidden_size=2,
+            in_keys=["observation", "rs_h", "rs_c"],
+            out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+        )
+        mlp = MLP(num_cells=[2], out_features=env.action_spec.shape[-1] * 2)
+        policy = ProbabilisticTensorDictSequential(
+            lstm_module,
+            TensorDictModule(mlp, in_keys=["intermediate"], out_keys=["intermediate"]),
+            TensorDictModule(
+                NormalParamExtractor(),
+                in_keys=["intermediate"],
+                out_keys=["loc", "scale"],
+            ),
+            ProbabilisticTensorDictModule(
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            ),
+        )
+        policy(env.reset())
+        klt = KLRewardTransform(policy)
+        # check that this runs: it can only run if the params are nn.Parameter instances
+        klt(env.rollout(3, policy))
 
 
 if __name__ == "__main__":

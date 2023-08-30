@@ -18,12 +18,18 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.utils import set_exploration_type, step_mdp
 from torchrl.modules import (
     AdditiveGaussianWrapper,
+    DecisionTransformerInferenceWrapper,
+    DTActor,
     LSTMModule,
     NormalParamWrapper,
+    OnlineDTActor,
+    ProbabilisticActor,
     SafeModule,
+    TanhDelta,
     TanhNormal,
     ValueOperator,
 )
+from torchrl.modules.models.decision_transformer import _has_transformers
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
@@ -857,7 +863,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -939,7 +946,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1014,7 +1022,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1103,7 +1112,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1184,7 +1194,8 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1802,6 +1813,73 @@ def test_vmapmodule():
     vm = VmapModule(lam, 0)
     vm(sample_in_td)
     assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
+
+
+@pytest.mark.skipif(
+    not _has_transformers, reason="transformers needed to test DT classes"
+)
+class TestDecisionTransformerInferenceWrapper:
+    @pytest.mark.parametrize("online", [True, False])
+    def test_dt_inference_wrapper(self, online):
+        action_key = ("nested", ("action",))
+        if online:
+            dtactor = OnlineDTActor(
+                state_dim=4, action_dim=2, transformer_config=DTActor.default_config()
+            )
+            in_keys = ["loc", "scale"]
+            actor_module = TensorDictModule(
+                dtactor,
+                in_keys=["observation", action_key, "return_to_go"],
+                out_keys=in_keys,
+            )
+            dist_class = TanhNormal
+        else:
+            dtactor = DTActor(
+                state_dim=4, action_dim=2, transformer_config=DTActor.default_config()
+            )
+            in_keys = ["param"]
+            actor_module = TensorDictModule(
+                dtactor,
+                in_keys=["observation", action_key, "return_to_go"],
+                out_keys=in_keys,
+            )
+            dist_class = TanhDelta
+        dist_kwargs = {
+            "min": -1.0,
+            "max": 1.0,
+        }
+        actor = ProbabilisticActor(
+            in_keys=in_keys,
+            out_keys=[action_key],
+            module=actor_module,
+            distribution_class=dist_class,
+            distribution_kwargs=dist_kwargs,
+        )
+        inference_actor = DecisionTransformerInferenceWrapper(actor)
+        sequence_length = 20
+        td = TensorDict(
+            {
+                "observation": torch.randn(1, sequence_length, 4),
+                action_key: torch.randn(1, sequence_length, 2),
+                "return_to_go": torch.randn(1, sequence_length, 1),
+            },
+            [1],
+        )
+        with pytest.raises(
+            ValueError,
+            match="The action key action was not found in the policy out_keys",
+        ):
+            result = inference_actor(td)
+        inference_actor.set_tensor_keys(action=action_key)
+        result = inference_actor(td)
+        # checks that the seq length has disappeared
+        assert result.get(action_key).shape == torch.Size([1, 2])
+        assert inference_actor.out_keys == unravel_key_list(
+            sorted([action_key, *in_keys, "observation", "return_to_go"], key=str)
+        )
+        assert set(result.keys(True, True)) - set(td.keys(True, True)) == set(
+            inference_actor.out_keys
+        ) - set(inference_actor.in_keys)
 
 
 if __name__ == "__main__":

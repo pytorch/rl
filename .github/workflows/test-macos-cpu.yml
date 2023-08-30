@@ -22,7 +22,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        python_version: ["3.8", "3.9", "3.10"]
+        python_version: ["3.8", "3.9", "3.10", "3.11"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
@@ -32,6 +32,7 @@ jobs:
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
+        export SYSTEM_VERSION_COMPAT=0
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
