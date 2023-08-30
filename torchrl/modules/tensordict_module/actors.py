@@ -20,6 +20,7 @@ from torch import nn
 from torch.distributions import Categorical
 
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
+from torchrl.data.utils import _process_action_space_spec
 from torchrl.modules.models.models import DistributionalDQNnet
 from torchrl.modules.tensordict_module.common import SafeModule
 from torchrl.modules.tensordict_module.probabilistic import (
@@ -27,7 +28,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.modules.utils.utils import _find_action_space
 
 
 class Actor(SafeModule):
@@ -680,59 +680,6 @@ class DistributionalQValueModule(QValueModule):
         raise NotImplementedError(
             "'binary' is currently not supported for DistributionalQValueModule."
         )
-
-
-def _process_action_space_spec(action_space, spec):
-    original_spec = spec
-    composite_spec = False
-    if isinstance(spec, CompositeSpec):
-        # this will break whenever our action is more complex than a single tensor
-        try:
-            if "action" in spec.keys():
-                _key = "action"
-            else:
-                # the first key is the action
-                for _key in spec.keys(True, True):
-                    if isinstance(_key, tuple) and _key[-1] == "action":
-                        break
-                else:
-                    raise KeyError
-            spec = spec[_key]
-            composite_spec = True
-        except KeyError:
-            raise KeyError(
-                "action could not be found in the spec. Make sure "
-                "you pass a spec that is either a native action spec or a composite action spec "
-                "with a leaf 'action' entry. Otherwise, simply remove the spec and use the action_space only."
-            )
-    if action_space is not None:
-        if isinstance(action_space, CompositeSpec):
-            raise ValueError("action_space cannot be of type CompositeSpec.")
-        if (
-            spec is not None
-            and isinstance(action_space, TensorSpec)
-            and action_space is not spec
-        ):
-            raise ValueError(
-                "Passing an action_space as a TensorSpec and a spec isn't allowed, unless they match."
-            )
-        if isinstance(action_space, TensorSpec):
-            spec = action_space
-        action_space = _find_action_space(action_space)
-        # check that the spec and action_space match
-        if spec is not None and _find_action_space(spec) != action_space:
-            raise ValueError(
-                f"The action spec and the action space do not match: got action_space={action_space} and spec={spec}."
-            )
-    elif spec is not None:
-        action_space = _find_action_space(spec)
-    else:
-        raise ValueError(
-            "Neither action_space nor spec was defined. The action space cannot be inferred."
-        )
-    if composite_spec:
-        spec = original_spec
-    return action_space, spec
 
 
 class QValueHook:

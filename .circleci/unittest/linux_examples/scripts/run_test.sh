@@ -270,6 +270,12 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/q
   train.num_epochs=3 \
   train.minibatch_size=100 \
   logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
 
 
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/bandits/dqn.py --n_steps=100
