@@ -581,7 +581,7 @@ class SerialEnv(_BatchedEnv):
 
         missing_reset = False
         if tensordict is not None:
-            needs_resetting = [False for _ in range(self.num_workers)]
+            needs_resetting = [False] * self.num_workers
             for done_key in self.done_keys:
                 _reset_key = _replace_last(done_key, "_reset")
                 _reset = tensordict.get(_reset_key, default=None)
