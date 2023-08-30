@@ -994,7 +994,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         In TorchRL, even though they are not properly speaking "observations"
         all info, states, results of transforms etc. outputs from the environment are stored in the
-        observation_spec.
+        ``observation_spec``.
 
         Therefore, ``"observation_spec"`` should be thought as
         a generic data container for environment outputs that are not done or reward data.
