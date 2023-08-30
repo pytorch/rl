@@ -1051,9 +1051,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         In TorchRL, even though they are not properly speaking "state"
         all inputs to the environment that are not actions are stored in the
-        state_spec.
+        ``state_spec``.
 
-        Therefore, "state_spec" should be thought as
+        Therefore, ``"state_spec"`` should be thought as
         a generic data container for environment inputs that are not action data.
 
         Examples:
