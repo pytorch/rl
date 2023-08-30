@@ -388,24 +388,6 @@ class Transform(nn.Module):
                         "A transform parent must be either another Compose transform or an environment object."
                     )
                 out, _ = container._rebuild_up_to(self)
-                # compose = container
-                # meta_container = compose.__dict__["_container"]
-                # if meta_container is not None:
-                #     # the parent of the compose must be a TransformedEnv
-                #     compose_parent = TransformedEnv(
-                #         meta_container.base_env
-                #     )
-                #     comp_parent_trans = compose_parent.transform.clone()
-                #     out = TransformedEnv(
-                #         compose_parent.base_env,
-                #         transform=comp_parent_trans,
-                #     )
-                #     for orig_trans in compose.transforms:
-                #         if orig_trans is self:
-                #             break
-                #         transform = orig_trans.clone()
-                #         transform.reset_parent()
-                #         out.append_transform(transform)
             elif isinstance(container, TransformedEnv):
                 out = TransformedEnv(container.base_env)
             else:
