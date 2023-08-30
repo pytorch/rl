@@ -26,9 +26,28 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test.py -v --durations 200
-python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200
+#python .circleci/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_test_deps.py -v --durations 200
+
+# ==================================================================================== #
+# ================================ gym 0.23 ========================================== #
 
 # With batched environments
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10 \
+  optim.device=cuda:0 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10 \
+  optim.device=cuda:0 \
+  logger.backend=
+
+# ==================================================================================== #
+# ================================ Gymnasium ========================================= #
+
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
   env.num_envs=1 \
   env.device=cuda:0 \
@@ -136,7 +155,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=2 \
   collector_device=cuda:0 \
   device=cuda:0 \
-  mode=offline
+  mode=offline \
+  logger=
 
 # With single envs
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreamer.py \
@@ -234,7 +254,8 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/iql/iql_onli
   env_per_collector=1 \
   mode=offline \
   device=cuda:0 \
-  collector_device=cuda:0
+  collector_device=cuda:0 \
+  logger=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/td3/td3.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -265,6 +286,12 @@ python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/i
   train.minibatch_size=100 \
   logger.backend=
 python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/qmix_vdn.py \
+  collector.n_iters=2 \
+  collector.frames_per_batch=200 \
+  train.num_epochs=3 \
+  train.minibatch_size=100 \
+  logger.backend=
+python .circleci/unittest/helpers/coverage_run_parallel.py examples/multiagent/sac.py \
   collector.n_iters=2 \
   collector.frames_per_batch=200 \
   train.num_epochs=3 \

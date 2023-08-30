@@ -202,11 +202,11 @@ def step_mdp(
 
     excluded = set()
     if exclude_reward:
-        excluded = {*reward_keys}
+        excluded = excluded.union(reward_keys)
     if exclude_done:
-        excluded = excluded.union({*done_keys})
+        excluded = excluded.union(done_keys)
     if exclude_action:
-        excluded = excluded.union({*action_keys})
+        excluded = excluded.union(action_keys)
     next_td = tensordict.get("next")
     out = next_td.empty()
 
@@ -445,16 +445,16 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     # replace action with one sampled from last spec
     # (since spec mask might be changed after last step)
     last_td = env.rand_action(last_td)
-    _action_spec = env.input_spec["_action_spec"]
-    _state_spec = env.input_spec["_state_spec"]
-    _obs_spec = env.output_spec["_observation_spec"]
-    _reward_spec = env.output_spec["_reward_spec"]
-    _done_spec = env.output_spec["_done_spec"]
+    full_action_spec = env.input_spec["full_action_spec"]
+    full_state_spec = env.input_spec["full_state_spec"]
+    full_observation_spec = env.output_spec["full_observation_spec"]
+    full_reward_spec = env.output_spec["full_reward_spec"]
+    full_done_spec = env.output_spec["full_done_spec"]
     for name, spec in (
-        ("action", _action_spec),
-        ("state", _state_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("action", full_action_spec),
+        ("state", full_state_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
@@ -470,9 +470,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
     for name, spec in (
-        ("reward", _reward_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("reward", full_reward_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)

@@ -257,3 +257,4 @@ Utils
     MultiStep
     consolidate_spec
     check_no_exclusive_keys
+    contains_lazy_spec
