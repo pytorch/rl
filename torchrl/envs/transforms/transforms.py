@@ -4688,9 +4688,9 @@ class ActionMask(Transform):
         >>> r = env.rollout(10)
         >>> r["mask"]
         tensor([[ True,  True,  True,  True],
-                [ True,  True,  True, False],
-                [False,  True,  True, False],
-                [False,  True, False, False]])
+                [ True,  True, False,  True],
+                [ True,  True, False, False],
+                [ True, False, False, False]])
 
     """
 
