@@ -3705,7 +3705,7 @@ class RewardSum(Transform):
         return tensordict
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        state_spec = input_spec["_state_spec"]
+        state_spec = input_spec["full_state_spec"]
         if state_spec is None:
             state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         reward_spec = self.parent.reward_spec
@@ -3717,7 +3717,7 @@ class RewardSum(Transform):
                 dtype=reward_spec.dtype,
             )
             state_spec[out_key] = episode_spec
-        input_spec["_state_spec"] = state_spec
+        input_spec["full_state_spec"] = state_spec
         return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
