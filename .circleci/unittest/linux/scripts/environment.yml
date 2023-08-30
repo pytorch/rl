@@ -28,3 +28,4 @@ dependencies:
     - av
     - coverage
     - ray
+    - transformers

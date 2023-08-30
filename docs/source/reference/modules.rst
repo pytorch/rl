@@ -261,7 +261,7 @@ without shared parameters. It is mainly intended as a replacement for
     ActorCriticWrapper
     ActorValueOperator
     ValueOperator
-
+    DecisionTransformerInferenceWrapper
 
 Domain-specific TensorDict modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -322,18 +322,21 @@ algorithms, such as DQN, DDPG or Dreamer.
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
-    DuelingCnnDQNet
-    DistributionalDQNnet
+    DTActor
     DdpgCnnActor
     DdpgCnnQNet
     DdpgMlpActor
     DdpgMlpQNet
+    DecisionTransformer
+    DistributionalDQNnet
     DreamerActor
+    DuelingCnnDQNet
     LSTMModule
-    ObsEncoder
     ObsDecoder
-    RSSMPrior
+    ObsEncoder
+    OnlineDTActor
     RSSMPosterior
+    RSSMPrior
 
 Multi-agent-specific modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

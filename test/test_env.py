@@ -1955,6 +1955,32 @@ class TestHeteroEnvs:
             else:
                 assert (td["lazy"][..., i]["action"] == 0).all()
 
+    @pytest.mark.parametrize("batch_size", [(1, 2)])
+    @pytest.mark.parametrize("env_type", ["serial", "parallel"])
+    def test_vec_env(self, batch_size, env_type, rollout_steps=4, n_workers=2):
+        env_fun = lambda: HeteroCountingEnv(batch_size=batch_size)
+        if env_type == "serial":
+            vec_env = SerialEnv(n_workers, env_fun)
+        else:
+            vec_env = ParallelEnv(n_workers, env_fun)
+        vec_batch_size = (n_workers,) + batch_size
+        # check_env_specs(vec_env, return_contiguous=False)
+        policy = HeteroCountingEnvPolicy(vec_env.input_spec["_action_spec"])
+        vec_env.reset()
+        td = vec_env.rollout(
+            rollout_steps,
+            policy=policy,
+            return_contiguous=False,
+            break_when_any_done=False,
+        )
+        td = dense_stack_tds(td)
+        for i in range(env_fun().n_nested_dim):
+            agent_obs = td["lazy"][(0,) * len(vec_batch_size)][..., i][f"tensor_{i}"]
+            for _ in range(i + 1):
+                agent_obs = agent_obs.mean(-1)
+            assert (agent_obs == torch.arange(rollout_steps)).all()
+            assert (td["lazy"][..., i]["action"] == 1).all()
+
 
 @pytest.mark.parametrize("seed", [0])
 class TestMultiKeyEnvs:

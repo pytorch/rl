@@ -99,7 +99,7 @@ class EnvMetaData:
         return EnvMetaData(tensordict, specs, batch_size, env_str, device, batch_locked)
 
     def expand(self, *size: int) -> EnvMetaData:
-        tensordict = self.tensordict.expand(*size).to_tensordict()
+        tensordict = self.tensordict.expand(*size).clone()
         batch_size = torch.Size(list(size))
         return EnvMetaData(
             tensordict,
@@ -1581,7 +1581,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = step_mdp(
                 tensordict,
                 keep_other=True,
-                exclude_action=True,
+                exclude_action=False,
                 exclude_reward=True,
                 reward_keys=self.reward_keys,
                 action_keys=self.action_keys,
