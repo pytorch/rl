@@ -2778,16 +2778,6 @@ class DeviceCastTransform(Transform):
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.to(self.device, non_blocking=True)
 
-    def set_container(self, container: Union[Transform, EnvBase]) -> None:
-        if self.orig_device is None:
-            if isinstance(container, EnvBase):
-                self.orig_device = container.device
-                container._device = self.device
-            elif container.parent is not None:
-                self.orig_device = container.parent.device
-                raise RuntimeError("How can we change the device of the container?")
-        return super().set_container(container)
-
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
         if parent is None:
