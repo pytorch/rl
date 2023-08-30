@@ -834,7 +834,7 @@ class ParallelEnv(_BatchedEnv):
                     break
 
         if tensordict is None or missing_reset:
-            needs_resetting = [True for _ in range(self.num_workers)]
+            needs_resetting = [True] * self.num_workers
 
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
