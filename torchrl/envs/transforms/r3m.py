@@ -111,7 +111,7 @@ class _R3MNet(Transform):
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -169,15 +169,6 @@ class _R3MNet(Transform):
         else:
             model_name = R3M_MODEL_MAP[self.model_name]
             self._load_weights(model_name, self, dir_prefix)
-
-
-def _init_first(fun):
-    def new_fun(self, *args, **kwargs):
-        if not self.initialized:
-            self._init()
-        return fun(self, *args, **kwargs)
-
-    return new_fun
 
 
 class R3MTransform(Compose):

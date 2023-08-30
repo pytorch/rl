@@ -13,6 +13,7 @@ from .transforms import (
     Compose,
     DiscreteActionProjection,
     DoubleToFloat,
+    DTypeCastTransform,
     ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
@@ -43,4 +44,5 @@ from .transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
+from .vc1 import VC1Transform
 from .vip import VIPRewardTransform, VIPTransform

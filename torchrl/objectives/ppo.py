@@ -14,6 +14,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
@@ -146,7 +147,7 @@ class PPOLoss(LossModule):
         >>> data = TensorDict({
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
-        ...         "sample_log_prob": torch.randn_like(action[..., 1]) / 10,
+        ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
@@ -265,12 +266,6 @@ class PPOLoss(LossModule):
         self._in_keys = None
         self._out_keys = None
         super().__init__()
-        self._set_deprecated_ctor_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-        )
-
         self.convert_to_functional(
             actor, "actor", funs_to_decorate=["forward", "get_dist"]
         )
@@ -284,17 +279,24 @@ class PPOLoss(LossModule):
         self.samples_mc_entropy = samples_mc_entropy
         self.entropy_bonus = entropy_bonus
         self.separate_losses = separate_losses
-        self.register_buffer(
-            "entropy_coef", torch.tensor(entropy_coef, device=self.device)
-        )
-        self.register_buffer(
-            "critic_coef", torch.tensor(critic_coef, device=self.device)
-        )
+
+        try:
+            device = next(self.parameters()).device
+        except AttributeError:
+            device = torch.device("cpu")
+
+        self.register_buffer("entropy_coef", torch.tensor(entropy_coef, device=device))
+        self.register_buffer("critic_coef", torch.tensor(critic_coef, device=device))
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._set_deprecated_ctor_keys(
+            advantage=advantage_key,
+            value_target=value_target_key,
+            value=value_key,
+        )
 
     def _set_in_keys(self):
         keys = [
@@ -334,7 +336,7 @@ class PPOLoss(LossModule):
         self._out_keys = values
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
+        if hasattr(self, "_value_estimator") and self._value_estimator is not None:
             self._value_estimator.set_keys(
                 advantage=self.tensor_keys.advantage,
                 value_target=self.tensor_keys.value_target,
@@ -411,6 +413,11 @@ class PPOLoss(LossModule):
         )
         return self.critic_coef * loss_value
 
+    @property
+    @_cache_values
+    def _cached_critic_params_detached(self):
+        return self.critic_params.detach()
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -418,7 +425,7 @@ class PPOLoss(LossModule):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
@@ -615,7 +622,7 @@ class ClipPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
@@ -826,7 +833,7 @@ class KLPENPPOLoss(PPOLoss):
         if advantage is None:
             self.value_estimator(
                 tensordict,
-                params=self.critic_params.detach(),
+                params=self._cached_critic_params_detached,
                 target_params=self.target_critic_params,
             )
             advantage = tensordict.get(self.tensor_keys.advantage)
