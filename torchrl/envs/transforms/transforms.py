@@ -2739,7 +2739,7 @@ class DoubleToFloat(DTypeCastTransform):
 
 
 class DeviceCastTransform(Transform):
-    """Casts the env device.
+    """Moves data from one device to another.
 
     Args:
         device (torch.device or equivalent): the destination device.
