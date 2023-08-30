@@ -137,6 +137,16 @@ CQL
 
     CQLLoss
 
+DT
+----
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    DTLoss
+    OnlineDTLoss
+
 TD3
 ----
 
