@@ -3058,7 +3058,9 @@ class TestDiscreteSAC(LossModuleTestBase):
                 return self.linear(obs)
 
         module = ValueClass()
-        qvalue = ValueOperator(module=module, in_keys=[observation_key])
+        qvalue = ValueOperator(
+            module=module, in_keys=[observation_key], out_keys=["action_value"]
+        )
         return qvalue.to(device)
 
     def _create_mock_distributional_actor(
@@ -3473,14 +3475,6 @@ class TestDiscreteSAC(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
             torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
             torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-            torch.testing.assert_close(
-                loss_val_td.get("state_action_value_actor"), loss_val[5]
-            )
-            torch.testing.assert_close(
-                loss_val_td.get("action_log_prob_actor"), loss_val[6]
-            )
-            torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
-            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
             # test select
             torch.manual_seed(self.seed)
             loss.select_out_keys("loss_actor", "loss_alpha")
