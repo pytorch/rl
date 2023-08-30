@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euxo pipefail
           conda clean --all --quiet --yes
-          conda create
+          conda create \
             --yes \
             --quiet \
             -n buildenv \
