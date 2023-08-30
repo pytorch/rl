@@ -2725,7 +2725,7 @@ class DeviceCastTransform(Transform):
         device,
         orig_device=None,
     ):
-        self.device
+        self.device = device
         self.orig_device = orig_device
         super().__init__(in_keys=[])
 
@@ -2734,6 +2734,16 @@ class DeviceCastTransform(Transform):
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         return tensordict.to(self.device, non_blocking=True)
 
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        if self.orig_device is None:
+            if isinstance(container, EnvBase):
+                self.orig_device = container.device
+                container._device = self.device
+            elif container.parent is not None:
+                self.orig_device = container.parent.device
+                raise RuntimeError("How can we change the device of the container?")
+        return super().set_container(container)
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
         if parent is None:
@@ -2741,68 +2751,21 @@ class DeviceCastTransform(Transform):
                 return tensordict
             return tensordict.to(self.orig_device)
 
-    def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        return obs.to(self.dtype_out)
-
-    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        return obs.to(self.dtype_in)
-
-    def _transform_spec(self, spec: TensorSpec) -> None:
-        if isinstance(spec, CompositeSpec):
-            for key in spec:
-                self._transform_spec(spec[key])
-        else:
-            spec.dtype = self.dtype_out
-            space = spec.space
-            if isinstance(space, ContinuousBox):
-                space.minimum = space.minimum.to(self.dtype_out)
-                space.maximum = space.maximum.to(self.dtype_out)
-
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        if self._keys_inv_unset:
-            self._set_in_keys()
-        action_spec = input_spec["_action_spec"]
-        state_spec = input_spec["_state_spec"]
-        for key in self.in_keys_inv:
-            if key in action_spec.keys(True):
-                _spec = action_spec
-            elif state_spec is not None and key in state_spec.keys(True):
-                _spec = state_spec
-            else:
-                raise KeyError(f"Key {key} not found in state_spec and action_spec.")
-            if _spec[key].dtype != self.dtype_in:
-                raise TypeError(
-                    f"input_spec[{key}].dtype is not {self.dtype_in}: {input_spec[key].dtype}"
-                )
-            self._transform_spec(_spec[key])
+        if self.orig_device is not None:
+            return input_spec.to(self.orig_device)
         return input_spec
 
     @_apply_to_composite
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        reward_key = self.parent.reward_key if self.parent is not None else "reward"
-        if unravel_key(reward_key) in self.in_keys:
-            if reward_spec.dtype != self.dtype_in:
-                raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
-
-            self._transform_spec(reward_spec)
-        return reward_spec
+        return reward_spec.to(self.device)
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        return self._transform_observation_spec(observation_spec)
-
-    @_apply_to_composite
-    def _transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._transform_spec(observation_spec)
-        return observation_spec
+        return observation_spec.to(self.device)
 
     def __repr__(self) -> str:
         s = (
-            f"{self.__class__.__name__}(in_keys={self.in_keys}, out_keys={self.out_keys}, "
-            f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
+            f"{self.__class__.__name__}(device={self.device}, orig_device={self.orig_device})"
         )
         return s
 
