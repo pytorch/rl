@@ -364,7 +364,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - "_action_spec": the spec of the input actions
         - "_state_spec": the spec of all other environment inputs
 
-        This attibute is locked and should be read-oonly.
+        This attibute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
