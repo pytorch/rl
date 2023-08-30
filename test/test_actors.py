@@ -773,7 +773,7 @@ def test_lmhead_actorvalueoperator(device):
     from transformers import AutoModelForCausalLM
 
     base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
-    aco = LMHeadActorValueOperator(base_model)
+    aco = LMHeadActorValueOperator(base_model).to(device)
 
     # check common
     assert aco.module[0][0].module is base_model.transformer
@@ -800,7 +800,8 @@ def test_lmhead_actorvalueoperator(device):
         batch_size=[
             4,
         ],
-    ).to(device)
+        device=device,
+    )
     td_total = aco(td.clone())
     policy_op = aco.get_policy_operator()
     td_policy = policy_op(td.clone())

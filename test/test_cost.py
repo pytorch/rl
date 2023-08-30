@@ -13,6 +13,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
+from tensordict._tensordict import unravel_keys
+
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -70,7 +72,11 @@ from torchrl.modules import (
     SafeSequential,
     WorldModelWrapper,
 )
-from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+from torchrl.modules.distributions.continuous import (
+    NormalParamWrapper,
+    TanhDelta,
+    TanhNormal,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -99,8 +105,10 @@ from torchrl.objectives import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
+    DTLoss,
     IQLLoss,
     KLPENPPOLoss,
+    OnlineDTLoss,
     PPOLoss,
     QMixerLoss,
     SACLoss,
@@ -164,6 +172,12 @@ def get_devices():
 
 
 class LossModuleTestBase:
+    def _flatten_in_keys(self, in_keys):
+        return [
+            in_key if isinstance(in_key, str) else "_".join(list(unravel_keys(in_key)))
+            for in_key in in_keys
+        ]
+
     def tensordict_keys_test(self, loss_fn, default_keys, td_est=None):
         self.tensordict_keys_unknown_key_test(loss_fn)
         self.tensordict_keys_default_values_test(loss_fn, default_keys)
@@ -6722,6 +6736,358 @@ class TestDreamer(LossModuleTestBase):
             "value": "state_value",
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+
+class TestOnlineDT(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        return actor.to(device)
+
+    def _create_mock_data_odt(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, 1, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+                "reward2go": reward2go,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_odt(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, T, 1, device=device)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "reward": reward2go,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_seq_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    def test_onlinedt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = OnlineDTLoss(actor)
+
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_onlinedt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_odt(device=device)
+        loss_fn = OnlineDTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        torch.manual_seed(0)
+        loss_val_td = loss_fn(td)
+        torch.manual_seed(0)
+        loss_log_likelihood, loss_entropy, loss_alpha, alpha, entropy = loss_fn(
+            **kwargs
+        )
+        torch.testing.assert_close(
+            loss_val_td.get("loss_log_likelihood"), loss_log_likelihood
+        )
+        torch.testing.assert_close(loss_val_td.get("loss_entropy"), loss_entropy)
+        torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_alpha)
+        # test select
+        torch.manual_seed(0)
+        loss_fn.select_out_keys("loss_entropy")
+        if torch.__version__ >= "2.0.0":
+            loss_entropy = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_entropy = loss_fn(**kwargs)
+            return
+        assert loss_entropy == loss_val_td["loss_entropy"]
+
+
+class TestDT(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhDelta,
+            in_keys=["param"],
+            spec=action_spec,
+        )
+        return actor.to(device)
+
+    def _create_mock_data_dt(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, 1, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_dt(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def test_dt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = DTLoss(actor)
+
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_dt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_dt(device=device)
+        loss_fn = DTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        loss_val_td = loss_fn(td)
+        loss_val = loss_fn(**kwargs)
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        # test select
+        loss_fn.select_out_keys("loss")
+        if torch.__version__ >= "2.0.0":
+            loss_actor = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor = loss_fn(**kwargs)
+            return
+        assert loss_actor == loss_val_td["loss"]
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_dt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = DTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_seq_dt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_dt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = DTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
 
 @pytest.mark.skipif(
