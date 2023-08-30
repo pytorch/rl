@@ -411,7 +411,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         - "_done_spec": the spec of done
         - "_observation_spec": the spec of all other environment outputs
 
-        This attibute is locked and should be read-oonly.
+        This attibute is locked and should be read-only.
         Instead, to set the specs contained in it, use the respective properties.
 
         Examples:
