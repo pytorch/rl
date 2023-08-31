@@ -24,11 +24,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    NestedKey,
-    TensorDictBase,
-)
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
 __all__ = [
     "exploration_mode",

@@ -34,11 +34,7 @@ from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TY
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import (
-    _set_single_key,
-    _sort_keys,
-    clear_mpi_env_vars,
-)
+from torchrl.envs.utils import _set_single_key, _sort_keys, clear_mpi_env_vars
 
 _has_envpool = importlib.util.find_spec("envpool")
 
