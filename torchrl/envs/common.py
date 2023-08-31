@@ -823,6 +823,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return keys
 
     @property
+    def reset_keys(self) -> List[NestedKey]:
+        return [_replace_last(done_key, "_reset") for done_key in self.done_keys]
+
+    @property
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 

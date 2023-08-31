@@ -365,23 +365,23 @@ class _BatchedEnv(EnvBase):
                     ].keys(True, True)
                 )
                 env_output_keys = env_output_keys.union(
-                    key
-                    for key in meta_data.specs["output_spec"][
-                        "full_observation_spec"
-                    ].keys(True, True)
+                    meta_data.specs["output_spec"]["full_observation_spec"].keys(
+                        True, True
+                    )
                 )
             env_output_keys = env_output_keys.union(self.reward_keys + self.done_keys)
             self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
             self._env_output_keys = sorted(env_output_keys, key=_sort_keys)
 
+        reset_keys = self.reset_keys
         self._selected_keys = (
             set(self._env_output_keys)
             .union(self._env_input_keys)
             .union(self._env_obs_keys)
             .union(set(self.done_keys))
         )
-        self._selected_keys.add("_reset")
+        self._selected_keys = self._selected_keys.union(reset_keys)
 
         # input keys
         self._selected_input_keys = {
@@ -390,7 +390,7 @@ class _BatchedEnv(EnvBase):
         # output keys after reset
         self._selected_reset_keys = {
             _unravel_key_to_tuple(key)
-            for key in self._env_obs_keys + self.done_keys + ["_reset"]
+            for key in self._env_obs_keys + self.done_keys + reset_keys
         }
         # output keys after step
         self._selected_step_keys = {
@@ -594,8 +594,7 @@ class SerialEnv(_BatchedEnv):
         missing_reset = False
         if tensordict is not None:
             needs_resetting = [False] * self.num_workers
-            for done_key in self.done_keys:
-                _reset_key = _replace_last(done_key, "_reset")
+            for _reset_key in self.reset_keys:
                 _reset = tensordict.get(_reset_key, default=None)
                 if _reset is not None:
                     for i in range(self.num_workers):
@@ -838,8 +837,7 @@ class ParallelEnv(_BatchedEnv):
         missing_reset = False
         if tensordict is not None:
             needs_resetting = [False for _ in range(self.num_workers)]
-            for done_key in self.done_keys:
-                _reset_key = _replace_last(done_key, "_reset")
+            for _reset_key in self.reset_keys:
                 _reset = tensordict.get(_reset_key, default=None)
                 if _reset is not None:
                     for i in range(self.num_workers):
