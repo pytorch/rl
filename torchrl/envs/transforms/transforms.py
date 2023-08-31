@@ -3333,7 +3333,7 @@ class TensorDictPrimer(Transform):
     #     return observation_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
-        state_spec = input_spec['_state_spec']
+        state_spec = input_spec['full_state_spec']
         if state_spec is None:
             state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         for key, spec in self.primers.items():
@@ -3348,7 +3348,7 @@ class TensorDictPrimer(Transform):
                 device = self.device
             print('state spec key', key)
             state_spec[key] = spec.to(device)
-        input_spec["_state_spec"] = state_spec
+        input_spec["full_state_spec"] = state_spec
         return input_spec
 
     @property
