@@ -146,15 +146,14 @@ class GymLikeEnv(_EnvWrapper):
         """
         return done, done
 
-    def read_reward(self, total_reward, step_reward):
-        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
+    def read_reward(self, reward):
+        """Reads the reward and maps it to the reward space.
 
         Args:
-            total_reward (torch.Tensor or TensorDict): total reward so far in the step
-            step_reward (reward in the format provided by the inner env): reward of this particular step
+            reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
-        return total_reward + self.reward_spec.encode(step_reward, ignore_device=True)
+        return self.reward_spec.encode(reward)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -166,7 +165,6 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {key: value for key, value in observations.items()}
             if "state" in observations and "observation" not in observations:
                 # we rename "state" in "observation" as "observation" is the conventional name
                 # for single observation in torchrl.
@@ -184,7 +182,7 @@ class GymLikeEnv(_EnvWrapper):
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         action_np = self.read_action(action)
 
         reward = 0
@@ -213,34 +211,29 @@ class GymLikeEnv(_EnvWrapper):
             if _reward is None:
                 _reward = self.reward_spec.zero()
 
-            reward = self.read_reward(reward, _reward)
+            reward = reward + _reward
 
             if isinstance(done, bool) or (
                 isinstance(done, np.ndarray) and not len(done)
             ):
                 done = torch.tensor([done])
-
             done, do_break = self.read_done(done)
             if do_break:
                 break
 
+        reward = self.read_reward(reward)
         obs_dict = self.read_obs(obs)
 
         if reward is None:
             reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
-        # reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        # done = self._to_tensor(done, dtype=torch.bool)
-        obs_dict["reward"] = reward
-        obs_dict["done"] = done
-        obs_dict = {("next", key): val for key, val in obs_dict.items()}
+        obs_dict[self.reward_key] = reward
+        obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
+        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
         if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out.get("next"))
-
+            self.info_dict_reader(info, tensordict_out)
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
@@ -254,10 +247,13 @@ class GymLikeEnv(_EnvWrapper):
         if len(other) == 1:
             info = other[0]
 
+        source = self.read_obs(obs)
+
+        # if self.done_key not in source:
+        #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
-            source=self.read_obs(obs),
+            source=source,
             batch_size=self.batch_size,
-            device=self.device,
         )
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
@@ -265,12 +261,8 @@ class GymLikeEnv(_EnvWrapper):
             # populate the reset with the items we have not seen from info
             for key, item in self.observation_spec.items():
                 if key not in tensordict_out.keys():
-                    tensordict_out[key] = item.zero()
-
-        tensordict_out.setdefault(
-            "done",
-            self.done_spec.zero(),
-        )
+                    source[key] = item.zero()
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:

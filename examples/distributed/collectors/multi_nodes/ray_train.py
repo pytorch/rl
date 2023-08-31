@@ -58,9 +58,7 @@ if __name__ == "__main__":
         Compose(
             # normalize observations
             ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(
-                in_keys=["observation"],
-            ),
+            DoubleToFloat(),
             StepCounter(),
         ),
     )

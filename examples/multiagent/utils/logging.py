@@ -6,7 +6,6 @@ import os
 
 import numpy as np
 import torch
-import wandb
 from tensordict import TensorDictBase
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.record.loggers import generate_exp_name, get_logger, Logger
@@ -134,6 +133,8 @@ def log_evaluation(
     ).unsqueeze(0)
 
     if isinstance(logger, WandbLogger):
+        import wandb
+
         logger.experiment.log(to_log, commit=False)
         logger.experiment.log(
             {
