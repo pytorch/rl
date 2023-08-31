@@ -1175,17 +1175,9 @@ class TargetReturn(Transform):
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
         if self.mode == "reduce":
-            # if reward.ndim == 1 and target_return.ndim == 2:
-            #     # if target is stacked
-            #     target_return = target_return[-1] - reward
-            # else:
             target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
-            # if reward.ndim == 1 and target_return.ndim == 2:
-            #     # if target is stacked
-            #     target_return = target_return[-1]
-            # else:
             target_return = target_return
             return target_return
         else:
