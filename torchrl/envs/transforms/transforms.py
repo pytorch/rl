@@ -3178,7 +3178,10 @@ class NoopResetEnv(Transform):
 
             trial += 1
             if trial > _MAX_NOOPS_TRIALS:
-                trials_exceeded_message = "Parent env was repeatedly done or truncated before the sampled number of noops could be applied. "
+                trials_exceeded_message = (
+                    "Parent env was repeatedly done or truncated"
+                    " before the sampled number of noops could be applied. "
+                )
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
                 if tensordict.get(done_key) or tensordict.get(
