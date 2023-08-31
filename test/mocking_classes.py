@@ -1703,7 +1703,7 @@ class MultiKeyCountingEnv(EnvBase):
         td.update(reward)
 
         assert td.batch_size == self.batch_size
-        return td.select().set("next", td)
+        return td
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
