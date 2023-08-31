@@ -1174,6 +1174,10 @@ class TargetReturn(Transform):
     def _apply_transform(
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
+        if target_return.shape != reward.shape:
+            raise ValueError(
+                f"The shape of the reward ({reward.shape}) and target return ({target_return.shape}) must match."
+            )
         if self.mode == "reduce":
             target_return = target_return - reward
             return target_return
