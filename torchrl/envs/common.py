@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import abc
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict import unravel_key
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
@@ -31,8 +30,6 @@ from torchrl.envs.utils import (
     get_available_libraries,
     step_mdp,
 )
-from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.utils import _fuse_tensordicts, get_available_libraries, step_mdp
 
 LIBRARIES = get_available_libraries()
 
