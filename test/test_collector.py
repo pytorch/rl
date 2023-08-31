@@ -375,7 +375,6 @@ def test_collector_done_persist(num_env, env_name, seed=5):
                 num_workers=num_env,
                 create_env_fn=make_env,
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
             )
             env.set_seed(seed)
             return env
@@ -424,7 +423,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
                 num_workers=num_env,
                 create_env_fn=make_env,
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
             )
             env.set_seed(seed)
             return env
