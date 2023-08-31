@@ -3159,10 +3159,11 @@ class NoopResetEnv(Transform):
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
-        trial = 0
 
+        trial = 0
         while trial <= _MAX_NOOPS_TRIALS:
             i = 0
+
             while i < noops:
                 i += 1
                 tensordict = parent.rand_step(tensordict)
@@ -3176,6 +3177,7 @@ class NoopResetEnv(Transform):
                 break
 
             trial += 1
+
         else:
             raise RuntimeError(
                 f"Parent env was repeatedly done or truncated"
