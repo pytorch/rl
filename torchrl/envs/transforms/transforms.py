@@ -3114,7 +3114,7 @@ class NoopResetEnv(Transform):
         noops (int, optional): upper-bound on the number of actions
             performed after reset. Default is `30`.
             If noops is too high such that it results in the env being
-            done or truncated before the all noops are applied,
+            done or truncated before the all the noops are applied,
             in multiple trials, the transform raises a RuntimeError.
         random (bool, optional): if False, the number of random ops will
             always be equal to the noops value. If True, the number of
