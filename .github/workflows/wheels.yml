@@ -92,6 +92,9 @@ jobs:
     steps:
       - name: Checkout torchrl
         uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.python-version[1] }}
       - name: Binary Build in Conda Environment
         run: |
           set -euxo pipefail
