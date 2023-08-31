@@ -1,4 +1,10 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import copy
+import importlib
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -14,17 +20,10 @@ from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
 from torchrl.envs.utils import _check_marl_grouping, _replace_last, MarlGroupMapType
 
-IMPORT_ERR = None
-try:
+
+_has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
+if _has_pettingzoo:
     import pettingzoo
-
-    _has_pettingzoo = True
-
-except ImportError as err:
-    _has_pettingzoo = False
-    IMPORT_ERR = err
-
-__all__ = ["PettingZooWrapper", "PettingZooEnv"]
 
 
 all_environments = {}
@@ -154,16 +153,17 @@ class PettingZooWrapper(_EnvWrapper):
     This class is a general torchrl wrapper for all PettingZoo environments.
     It is able to wrap both ``pettingzoo.AECEnv`` and ``pettingzoo.ParallelEnv``.
 
-    Let's see how more in detail:
+    Let's see how more in details:
 
     In wrapped ``pettingzoo.ParallelEnv`` all agents will step at each environment step.
-    If the number of agents during the task varies, please set ``use_action_mask=True``. "action_mask" will be provided
+    If the number of agents during the task varies, please set ``use_action_mask=True``.
+    ``"action_mask"`` will be provided
     as an output and should be used to mask out dead agents.
     The environment will be reset as soon as one agent is done.
 
-    In wrapped ``pettingzoo.AECEnv``at each step only one agent will act.
+    In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
     For this reason, it is compulsory to set ``use_action_mask=True`` for this type of environment.
-    "action_mask" will be provided as an output and can be used to mask out non-acting agents and unavailable actions
+    ``"action_mask"`` will be provided as an output and can be used to mask out non-acting agents and unavailable actions
     for an agent. The environment will also automatically update the mask of its ``action_spec``
     to reflect the latest available actions.
     The environment will be reset only when all agents are done.
@@ -208,14 +208,14 @@ class PettingZooWrapper(_EnvWrapper):
     Args:
         env (``pettingzoo.utils.env.ParallelEnv`` or ``pettingzoo.utils.env.AECEnv``): the pettingzoo environment to wrap.
         return_state (bool, optional): whether to return the global state from pettingzoo
-            (not available in all environments). Default False.
+            (not available in all environments). Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
             or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
-        use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
+        use_action_mask (bool, optional): whether the environment should output an ``"action_mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
-            for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
-        seed (int, optional): the seed. Default None.
+            for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
+        seed (int, optional): the seed. Defaults to ``None``.
 
     Examples:
         >>> # Parallel env
@@ -773,22 +773,23 @@ class PettingZooEnv(PettingZooWrapper):
     This class is a general torchrl wrapper for all PettingZoo environments.
     It is able to wrap both ``pettingzoo.AECEnv`` and ``pettingzoo.ParallelEnv``.
 
-    Let's see how more in detail:
+    Let's see how more in details:
 
     For wrapping ``pettingzoo.ParallelEnv`` provide the name of your petting zoo task (in the ``task`` argument)
     and specify ``parallel=True``. This will construct the ``pettingzoo.ParallelEnv`` version of that task
     (if it is supported in pettingzoo) and wrap it for torchrl.
     In wrapped ``pettingzoo.ParallelEnv`` all agents will step at each environment step.
-    If the number of agents during the task varies, please set ``use_action_mask=True``. "action_mask" will be provided
+    If the number of agents during the task varies, please set ``use_action_mask=True``.
+    ``"action_mask"`` will be provided
     as an output and should be used to mask out dead agents.
     The environment will be reset as soon as one agent is done.
 
     For wrapping ``pettingzoo.AECEnv`` provide the name of your petting zoo task (in the ``task`` argument)
     and specify ``parallel=False``. This will construct the ``pettingzoo.AECEnv`` version of that task
     and wrap it for torchrl.
-    In wrapped ``pettingzoo.AECEnv``at each step only one agent will act.
+    In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
     For this reason, it is compulsory to set ``use_action_mask=True`` for this type of environment.
-    "action_mask" will be provided as an output and can be used to mask out non-acting agents and unavailable actions
+    ``"action_mask"`` will be provided as an output and can be used to mask out non-acting agents and unavailable actions
     for an agent. The environment will also automatically update the mask of its ``action_spec``
     to reflect the latest available actions.
     The environment will be reset only when all agents are done.
@@ -834,14 +835,14 @@ class PettingZooEnv(PettingZooWrapper):
         task (str): the name of the pettingzoo task to create (for example, "multiwalker_v9").
         parallel (bool): if to construct the ``pettingzoo.ParallelEnv`` version of the task or the ``pettingzoo.AECEnv``.
         return_state (bool, optional): whether to return the global state from pettingzoo
-            (not available in all environments). Default False.
+            (not available in all environments).  Defaults to ``False``.
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
             or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
-        use_action_mask (bool, optional): whether the environment should ouptut an "action_mask". This is compulsory in
+        use_action_mask (bool, optional): whether the environment should output an ``"action_mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
-            for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Default False.
-        seed (int, optional): the seed. Default None.
+            for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
+        seed (int, optional): the seed.  Defaults to ``None``.
 
     Examples:
         >>> # Parallel env
@@ -886,7 +887,7 @@ class PettingZooEnv(PettingZooWrapper):
             raise ImportError(
                 f"pettingzoo python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
-            ) from IMPORT_ERR
+            )
         kwargs["task"] = task
         kwargs["parallel"] = parallel
         kwargs["return_state"] = return_state
