@@ -3177,7 +3177,7 @@ class TestNoop(TransformBase):
         check_env_specs(env)
         noop_reset_env = NoopResetEnv(noops=noops, random=False)
         transformed_env = TransformedEnv(env, noop_reset_env)
-        if noops <= max_steps:  # Normal behaviour.
+        if noops <= max_steps:  # Normal behavior.
             result = transformed_env.reset()
             assert result["observation"] == noops
         elif noops > max_steps:  # Raise error as reset limit exceeded.
