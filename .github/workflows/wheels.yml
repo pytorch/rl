@@ -90,7 +90,9 @@ jobs:
       matrix:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
-      - name: Create Conda Environment for Binary Build
+      - name: Checkout torchrl
+        uses: actions/checkout@v2
+      - name: Binary Build in Conda Environment
         run: |
           set -euxo pipefail
           conda clean --all --quiet --yes
@@ -98,18 +100,17 @@ jobs:
             --yes \
             --quiet \
             -n buildenv \
-            python="${{ matrix.python_version[0] }}"
+            python=${{ matrix.python_version[1] }}
 
-      - name: Checkout torchrl
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        run: |
-          conda run -p buildenv python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Build wheel
-        run: |
-          conda run -p buildenv export CC=clang CXX=clang++
-          conda run -p buildenv python3 -mpip install wheel
-          conda run -p buildenv BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
+          conda activate buildenv
+
+          # Install PyTorch RC
+          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
+
+          # Build Wheel
+          export CC=clang CXX=clang++
+          python3 -mpip install wheel
+          BUILD_VERSION=0.1.1 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
