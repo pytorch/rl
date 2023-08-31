@@ -3346,7 +3346,6 @@ class TensorDictPrimer(Transform):
                 device = state_spec.device
             except RuntimeError:
                 device = self.device
-            print('state spec key', key)
             state_spec[key] = spec.to(device)
         input_spec["full_state_spec"] = state_spec
         return input_spec

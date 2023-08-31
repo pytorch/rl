@@ -1565,9 +1565,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
-            print("before", tensordict["next", "recurrent_state_c"])
             tensordict = self.step(tensordict)
-            print("after", tensordict["next", "recurrent_state_c"])
 
             tensordicts.append(tensordict.clone(False))
 

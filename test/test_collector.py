@@ -352,6 +352,7 @@ def test_collector_env_reset():
     _data = split_trajectories(_data, prefix="collector")
     assert _data["next", "reward"].sum(-2).min() == -21
 
+
 # Deprecated reset_when_done
 # @pytest.mark.parametrize("num_env", [1, 2])
 # @pytest.mark.parametrize("env_name", ["vec"])
