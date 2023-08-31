@@ -3113,10 +3113,9 @@ class NoopResetEnv(Transform):
             TransformedEnv class
         noops (int, optional): upper-bound on the number of actions
             performed after reset. Default is `30`.
-            If noops is too high such that the env is done or truncated before
-            the end of the noops on multiple trials, the transform
-            will perform a single random step, and raises an error if
-            even a single random step leads to a done environment.
+            If noops is too high such that it results in the env being
+            done or truncated before the all noops are applied,
+            in multiple trials, the transform raises a RuntimeError.
         random (bool, optional): if False, the number of random ops will
             always be equal to the noops value. If True, the number of
             random actions will be randomly selected between 0 and noops.
@@ -3162,7 +3161,7 @@ class NoopResetEnv(Transform):
         )
         trial = 0
 
-        while True:
+        while trial <= _MAX_NOOPS_TRIALS:
             i = 0
             while i < noops:
                 i += 1
@@ -3177,30 +3176,11 @@ class NoopResetEnv(Transform):
                 break
 
             trial += 1
-            if trial > _MAX_NOOPS_TRIALS:
-                trials_exceeded_message = (
-                    "Parent env was repeatedly done or truncated"
-                    " before the sampled number of noops could be applied. "
-                )
-                tensordict = parent.rand_step(tensordict)
-                tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get(done_key) or tensordict.get(
-                    "truncated", torch.tensor(False)
-                ):
-                    raise RuntimeError(
-                        trials_exceeded_message
-                        + "The last trial resulted in a termination after a single noop step."
-                    )
-                else:
-                    warnings.warn(
-                        trials_exceeded_message + "A single noop step was applied."
-                    )
-                    # TODO: up to discussion. Could also be reset instead of doing a single noop.
-                break
-
-        if tensordict.get(done_key):
-            # TODO: This will never be reached. It should be removed.
-            raise RuntimeError("NoopResetEnv concluded with done environment")
+        else:
+            raise RuntimeError(
+                f"Parent env was repeatedly done or truncated"
+                f" before the sampled number of noops (={noops}) could be applied. "
+            )
 
         return tensordict.exclude(reward_key, inplace=True)
 
