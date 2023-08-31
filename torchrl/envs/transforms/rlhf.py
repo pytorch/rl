@@ -196,23 +196,23 @@ class KLRewardTransform(Transform):
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
-                shape=output_spec["_reward_spec"][parent.reward_key].shape,
+                shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
-            output_spec["_reward_spec"] = CompositeSpec(
+            output_spec["full_reward_spec"] = CompositeSpec(
                 {parent.reward_key: reward_spec},
-                shape=output_spec["_reward_spec"].shape,
+                shape=output_spec["full_reward_spec"].shape,
             )
         elif in_key == "reward":
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
-                shape=output_spec["_reward_spec"][parent.reward_key].shape,
+                shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
             # then we need to populate the output keys
-            observation_spec = output_spec["_observation_spec"]
+            observation_spec = output_spec["full_observation_spec"]
             observation_spec[out_key] = reward_spec
         else:
-            observation_spec = output_spec["_observation_spec"]
+            observation_spec = output_spec["full_observation_spec"]
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device, shape=observation_spec[in_key].shape
             )

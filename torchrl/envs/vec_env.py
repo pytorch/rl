@@ -30,7 +30,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
@@ -40,6 +40,7 @@ from torchrl.envs.utils import (
     _sort_keys,
     clear_mpi_env_vars,
 )
+from torchrl.envs.utils import _replace_last, _set_single_key, _sort_keys
 
 _has_envpool = importlib.util.find_spec("envpool")
 
@@ -270,11 +271,11 @@ class _BatchedEnv(EnvBase):
             input_spec = meta_data.specs["input_spec"].to(device)
             output_spec = meta_data.specs["output_spec"].to(device)
 
-            self.action_spec = input_spec["_action_spec"]
-            self.state_spec = input_spec["_state_spec"]
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.action_spec = input_spec["full_action_spec"]
+            self.state_spec = input_spec["full_state_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = meta_data.env_str
             self._env_tensordict = meta_data.tensordict
@@ -293,18 +294,19 @@ class _BatchedEnv(EnvBase):
                 output_spec.append(md.specs["output_spec"])
             output_spec = torch.stack(output_spec, 0)
 
-            self.action_spec = input_spec["_action_spec"]
-            self.state_spec = input_spec["_state_spec"]
+            self.action_spec = input_spec["full_action_spec"]
+            self.state_spec = input_spec["full_state_spec"]
 
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
             self._dummy_env_str = str(meta_data[0])
             self._env_tensordict = torch.stack(
                 [meta_data.tensordict for meta_data in meta_data], 0
             )
             self._batch_locked = meta_data[0].batch_locked
+        self.has_lazy_inputs = contains_lazy_spec(self.input_spec)
 
     def state_dict(self) -> OrderedDict:
         raise NotImplementedError
@@ -330,47 +332,47 @@ class _BatchedEnv(EnvBase):
 
         if self._single_task:
             self._env_input_keys = sorted(
-                list(self.input_spec["_action_spec"].keys(True, True))
+                list(self.input_spec["full_action_spec"].keys(True, True))
                 + list(self.state_spec.keys(True, True)),
                 key=_sort_keys,
             )
             self._env_output_keys = []
             self._env_obs_keys = []
-            for key in self.output_spec["_observation_spec"].keys(True, True):
+            for key in self.output_spec["full_observation_spec"].keys(True, True):
                 self._env_output_keys.append(key)
                 self._env_obs_keys.append(key)
-            self._env_output_keys.append(self.reward_key)
-            self._env_output_keys.append(self.done_key)
+            self._env_output_keys += [
+                unravel_key(("next", key)) for key in self.reward_keys + self.done_keys
+            ]
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:
-                if meta_data.specs["input_spec", "_state_spec"] is not None:
+                if meta_data.specs["input_spec", "full_state_spec"] is not None:
                     env_input_keys = env_input_keys.union(
-                        meta_data.specs["input_spec", "_state_spec"].keys(True, True)
+                        meta_data.specs["input_spec", "full_state_spec"].keys(
+                            True, True
+                        )
                     )
                 env_input_keys = env_input_keys.union(
-                    meta_data.specs["input_spec", "_action_spec"].keys(True, True)
+                    meta_data.specs["input_spec", "full_action_spec"].keys(True, True)
                 )
             env_output_keys = set()
             env_obs_keys = set()
             for meta_data in self.meta_data:
                 env_obs_keys = env_obs_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
-                        True, True
-                    )
+                    for key in meta_data.specs["output_spec"][
+                        "full_observation_spec"
+                    ].keys(True, True)
                 )
                 env_output_keys = env_output_keys.union(
                     key
-                    for key in meta_data.specs["output_spec"]["_observation_spec"].keys(
-                        True, True
-                    )
+                    for key in meta_data.specs["output_spec"][
+                        "full_observation_spec"
+                    ].keys(True, True)
                 )
             env_output_keys = env_output_keys.union(
-                {
-                    self.reward_key,
-                    self.done_key,
-                }
+                self.reward_keys + self.done_keys
             )
             self._env_obs_keys = sorted(env_obs_keys, key=_sort_keys)
             self._env_input_keys = sorted(env_input_keys, key=_sort_keys)
@@ -380,14 +382,14 @@ class _BatchedEnv(EnvBase):
             set(self._env_output_keys)
             .union(self._env_input_keys)
             .union(self._env_obs_keys)
+            .union(set(self.done_keys))
         )
-        self._selected_keys.add(self.done_key)
         self._selected_keys.add("_reset")
 
         # input keys
         self._selected_input_keys = {_unravel_key_to_tuple(key) for key in self._env_input_keys}
         # output keys after reset
-        self._selected_reset_keys = {_unravel_key_to_tuple(key) for key in self._env_obs_keys + [self.done_key] + ["_reset"]}
+        self._selected_reset_keys = {_unravel_key_to_tuple(key) for key in self._env_obs_keys + self.done_keys + ["_reset"]}
         # output keys after step
         self._selected_step_keys = {_unravel_key_to_tuple(key) for key in self._env_output_keys}
 
@@ -584,18 +586,22 @@ class SerialEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        _reset = None
+
+        missing_reset = False
         if tensordict is not None:
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset", None)
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        if _reset is None:
-            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
-                self.done_spec.shape
-            )
+            needs_resetting = [False] * self.num_workers
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is not None:
+                    for i in range(self.num_workers):
+                        needs_resetting[i] += _reset[i].any()
+                else:
+                    missing_reset = True
+                    break
+
+        if tensordict is None or missing_reset:
+            needs_resetting = [True] * self.num_workers
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -604,7 +610,8 @@ class SerialEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            if not _reset[i].any():
+
+            if not needs_resetting[i]:
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
                 # If we don't do this, the result of calling reset and skipping one env
@@ -632,12 +639,12 @@ class SerialEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if key != ("_reset",):
+                if _unravel_key_to_tuple(key)[-1] != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *[key for key in self._selected_reset_keys if key != "_reset"],
+                *self._selected_reset_keys,
                 strict=False,
             ).clone()
 
@@ -733,7 +740,7 @@ class ParallelEnv(_BatchedEnv):
                         self._selected_input_keys,
                         self._selected_reset_keys,
                         self._selected_step_keys,
-                    ),
+                    self.has_lazy_inputs,),
                 )
                 process.daemon = True
                 process.start()
@@ -777,7 +784,7 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._single_task:
+        if self._single_task and not self.has_lazy_inputs:
             # this is faster than update_ but won't work for lazy stacks
             for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
@@ -822,19 +829,24 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-        _reset = None
+
+        missing_reset = False
         if tensordict is not None:
-            self._assert_tensordict_shape(tensordict)
-            _reset = tensordict.get("_reset", None)
-            if _reset.shape[-len(self.done_spec.shape) :] != self.done_spec.shape:
-                raise RuntimeError(
-                    "_reset flag in tensordict should follow env.done_spec"
-                )
-        if _reset is None:
-            _reset = torch.ones((), dtype=torch.bool, device=self.device).expand(
-                self.done_spec.shape
-            )
+            needs_resetting = [False for _ in range(self.num_workers)]
+            for done_key in self.done_keys:
+                _reset_key = _replace_last(done_key, "_reset")
+                _reset = tensordict.get(_reset_key, default=None)
+                if _reset is not None:
+                    for i in range(self.num_workers):
+                        needs_resetting[i] += _reset[i].any()
+                else:
+                    missing_reset = True
+                    break
+
+        if tensordict is None or missing_reset:
+            needs_resetting = [True] * self.num_workers
         workers = []
+
         for i, channel in enumerate(self.parent_channels):
             if tensordict is not None:
                 tensordict_ = tensordict[i]
@@ -842,7 +854,7 @@ class ParallelEnv(_BatchedEnv):
                     tensordict_ = None
             else:
                 tensordict_ = None
-            if not _reset[i].any():
+            if not needs_resetting[i]:
                 # We update the stored tensordict with the value of the "next"
                 # key as one may be surprised to receive data that is not up-to-date
                 # If we don't do this, the result of calling reset and skipping one env
@@ -879,12 +891,12 @@ class ParallelEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if key != ("_reset",):
+                if _unravel_key_to_tuple(key)[-1] != "_reset":
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *[key for key in self._selected_reset_keys if key != "_reset"],
+                *self._selected_reset_keys,
                 strict=False,
             ).clone()
 
@@ -997,6 +1009,7 @@ def _run_worker_pipe_shared_mem(
     _selected_input_keys=None,
     _selected_reset_keys=None,
     _selected_step_keys=None,
+    has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
     if device is None:
@@ -1065,9 +1078,6 @@ def _run_worker_pipe_shared_mem(
             if not initialized:
                 raise RuntimeError("call 'init' before resetting")
             cur_td = env._reset(tensordict=data)
-
-            if "_reset" in cur_td.keys():
-                cur_td.del_("_reset")
             shared_tensordict.update_(cur_td)
             if event is not None:
                 event.record()
@@ -1177,9 +1187,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         with set_gym_backend("gym"):
             self.action_spec = self._get_action_spec()
             output_spec = self._get_output_spec()
-            self.observation_spec = output_spec["_observation_spec"]
-            self.reward_spec = output_spec["_reward_spec"]
-            self.done_spec = output_spec["_done_spec"]
+            self.observation_spec = output_spec["full_observation_spec"]
+            self.reward_spec = output_spec["full_reward_spec"]
+            self.done_spec = output_spec["full_done_spec"]
 
     def _init_env(self) -> Optional[int]:
         pass
@@ -1224,9 +1234,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
 
     def _get_output_spec(self) -> TensorSpec:
         return CompositeSpec(
-            _observation_spec=self._get_observation_spec(),
-            _reward_spec=self._get_reward_spec(),
-            _done_spec=self._get_done_spec(),
+            full_observation_spec=self._get_observation_spec(),
+            full_reward_spec=self._get_reward_spec(),
+            full_done_spec=self._get_done_spec(),
             shape=(self.num_workers,),
             device=self.device,
         )
