@@ -1654,11 +1654,9 @@ class TestUpdateParams:
             self.state += action
             return TensorDict(
                 {
-                    "next": {
-                        "state": self.state.clone(),
-                        "reward": self.reward_spec.zero(),
-                        "done": self.done_spec.zero(),
-                    }
+                    "state": self.state.clone(),
+                    "reward": self.reward_spec.zero(),
+                    "done": self.done_spec.zero(),
                 },
                 self.batch_size,
             )

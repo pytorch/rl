@@ -5220,8 +5220,8 @@ class TestTargetReturn(TransformBase):
         t = TargetReturn(
             target_return=10.0, mode=mode, in_keys=[in_key], out_keys=[out_key]
         )
-        reward = torch.randn(10)
-        td = TensorDict({("next", in_key): reward}, [])
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", in_key): reward}, [10])
         td = t.reset(td)
         td_next = t._step(td, td.get("next"))
         td.set("next", td_next)
@@ -5235,8 +5235,8 @@ class TestTargetReturn(TransformBase):
     ):
         t = TargetReturn(target_return=10.0)
         model = nn.Sequential(t, nn.Identity())
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", "reward"): reward}, [10])
         with pytest.raises(
             NotImplementedError, match="cannot be executed without a parent"
         ):
@@ -5249,8 +5249,8 @@ class TestTargetReturn(TransformBase):
     ):
         t = TargetReturn(target_return=10.0)
         rb = rbclass(storage=LazyTensorStorage(10))
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", "reward"): reward}, [10])
         rb.append_transform(t)
         rb.extend(td)
         with pytest.raises(
