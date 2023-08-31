@@ -26,6 +26,7 @@ from mocking_classes import (
     CountingBatchedEnv,
     CountingEnvCountPolicy,
     DiscreteActionConvMockEnvNumpy,
+    IncrementingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     NestedCountingEnv,
@@ -3168,6 +3169,26 @@ class TestNoop(TransformBase):
             match="The parent environment batch-size is non-null",
         ):
             transformed_env.reset()
+
+    @pytest.mark.parametrize("noops", [0, 2, 7, 15])
+    @pytest.mark.parametrize("max_steps", [0, 5])
+    def test_noop_reset_limit_exceeded(self, noops, max_steps):
+        env = IncrementingEnv(max_steps=max_steps)
+        check_env_specs(env)
+        noop_reset_env = NoopResetEnv(noops=noops, random=False)
+        transformed_env = TransformedEnv(env, noop_reset_env)
+        if noops <= max_steps:  # Normal behaviour.
+            result = transformed_env.reset()
+            assert result["observation"] == noops
+        elif max_steps == 0:  # Error as env is done after a single step.
+            with pytest.raises(RuntimeError):
+                transformed_env.reset()
+        elif noops > max_steps:  # Warn noop reset limit exceeded.
+            with pytest.warns(UserWarning):
+                result = transformed_env.reset()
+                assert result["observation"] == 1  # A single noop is applied.
+        else:
+            raise RuntimeError("This should never happen.")
 
 
 class TestObservationNorm(TransformBase):
