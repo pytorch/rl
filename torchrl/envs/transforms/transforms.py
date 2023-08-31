@@ -151,8 +151,10 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
-        if isinstance(in_keys, str):
+        if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
+        if isinstance(out_keys, (str, tuple)):
+            out_keys = [out_keys]
 
         self.in_keys = in_keys
         if out_keys is None:
@@ -1132,17 +1134,17 @@ class TargetReturn(Transform):
         self.mode = mode
 
     def reset(self, tensordict: TensorDict):
-        init_target_return = torch.full(
-            size=(*tensordict.batch_size, 1),
-            fill_value=self.target_return,
-            dtype=torch.float32,
-            device=tensordict.device,
-        )
 
         for out_key in self.out_keys:
             target_return = tensordict.get(out_key, default=None)
 
             if target_return is None:
+                init_target_return = torch.full(
+                    size=(*tensordict.batch_size, 1),
+                    fill_value=self.target_return,
+                    dtype=torch.float32,
+                    device=tensordict.device,
+                )
                 target_return = init_target_return
 
             tensordict.set(
@@ -1173,18 +1175,18 @@ class TargetReturn(Transform):
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
         if self.mode == "reduce":
-            if reward.ndim == 1 and target_return.ndim == 2:
-                # if target is stacked
-                target_return = target_return[-1] - reward
-            else:
-                target_return = target_return - reward
+            # if reward.ndim == 1 and target_return.ndim == 2:
+            #     # if target is stacked
+            #     target_return = target_return[-1] - reward
+            # else:
+            target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
-            if reward.ndim == 1 and target_return.ndim == 2:
-                # if target is stacked
-                target_return = target_return[-1]
-            else:
-                target_return = target_return
+            # if reward.ndim == 1 and target_return.ndim == 2:
+            #     # if target is stacked
+            #     target_return = target_return[-1]
+            # else:
+            target_return = target_return
             return target_return
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
@@ -2127,7 +2129,7 @@ class CatFrames(ObservationTransform):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
-            data = tensordict[in_key]
+            data = tensordict.get(in_key)
             d = data.size(self.dim)
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
@@ -2297,11 +2299,15 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
-        super().__init__(in_keys=in_keys)
+        if out_keys is None:
+            out_keys = in_keys
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not isinstance(standard_normal, torch.Tensor):
             standard_normal = torch.tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)

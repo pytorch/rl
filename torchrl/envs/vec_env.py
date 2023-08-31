@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, VERBOSE
@@ -35,7 +35,6 @@ from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
 from torchrl.envs.utils import (
-    _replace_last,
     _set_single_key,
     _sort_keys,
     clear_mpi_env_vars,
@@ -340,9 +339,7 @@ class _BatchedEnv(EnvBase):
             for key in self.output_spec["full_observation_spec"].keys(True, True):
                 self._env_output_keys.append(key)
                 self._env_obs_keys.append(key)
-            self._env_output_keys += [
-                unravel_keys(("next", key)) for key in self.reward_keys + self.done_keys
-            ]
+            self._env_output_keys += self.reward_keys + self.done_keys
         else:
             env_input_keys = set()
             for meta_data in self.meta_data:

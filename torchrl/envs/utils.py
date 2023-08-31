@@ -27,7 +27,6 @@ from tensordict.nn.probabilistic import (  # noqa
 from tensordict.tensordict import (
     LazyStackedTensorDict,
     NestedKey,
-    TensorDict,
     TensorDictBase,
 )
 

@@ -146,17 +146,14 @@ class GymLikeEnv(_EnvWrapper):
         """
         return done, done
 
-    def read_reward(self, total_reward, step_reward):
-        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
+    def read_reward(self, reward):
+        """Reads the reward and maps it to the reward space.
 
         Args:
-            total_reward (torch.Tensor or TensorDict): total reward so far in the step
-            step_reward (reward in the format provided by the inner env): reward of this particular step
+            reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
-        return (
-            total_reward + step_reward
-        )  # self.reward_spec.encode(step_reward, ignore_device=True)
+        return self.reward_spec.encode(reward)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -214,7 +211,7 @@ class GymLikeEnv(_EnvWrapper):
             if _reward is None:
                 _reward = self.reward_spec.zero()
 
-            reward = self.read_reward(reward, _reward)
+            reward = reward + _reward
 
             if isinstance(done, bool) or (
                 isinstance(done, np.ndarray) and not len(done)
@@ -224,6 +221,7 @@ class GymLikeEnv(_EnvWrapper):
             if do_break:
                 break
 
+        reward = self.read_reward(reward)
         obs_dict = self.read_obs(obs)
 
         if reward is None:
