@@ -4,13 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-from mocking_classes import DiscreteActionVecMockEnv
-from tensordict.nn import TensorDictSequential
-from torchrl.modules import MLP, ProbabilisticActor
+
 import pytest
 import torch
+from mocking_classes import DiscreteActionVecMockEnv
 from tensordict import pad, TensorDict, unravel_key_list
-from tensordict.nn import InteractionType, make_functional, TensorDictModule
+from tensordict.nn import (
+    InteractionType,
+    make_functional,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from torch import nn
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -23,6 +27,7 @@ from torchrl.modules import (
     DecisionTransformerInferenceWrapper,
     DTActor,
     LSTMModule,
+    MLP,
     NormalParamWrapper,
     OnlineDTActor,
     ProbabilisticActor,
@@ -1768,21 +1773,20 @@ class TestLSTMModule:
         )
 
     def test_lstm_parallel_env(self):
-        from torchrl.envs import ParallelEnv, TransformedEnv, InitTracker
+        from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
+
         # tests that hidden states are carried over with parallel envs
         lstm_module = LSTMModule(
-                input_size=7,
-                hidden_size=12,
-                num_layers=2,
-                in_key="observation",
-                out_key="features",
-            )
+            input_size=7,
+            hidden_size=12,
+            num_layers=2,
+            in_key="observation",
+            out_key="features",
+        )
 
         def create_transformed_env():
             primer = lstm_module.make_tensordict_primer()
-            env = DiscreteActionVecMockEnv(
-                categorical_action_encoding=True
-                )
+            env = DiscreteActionVecMockEnv(categorical_action_encoding=True)
             env = TransformedEnv(env)
             env.append_transform(InitTracker())
             env.append_transform(primer)
