@@ -3,21 +3,75 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import contextlib
 import os
+
+import os.path
 import time
 from functools import wraps
 
 # Get relative file path
 # this returns relative path from current file.
-import pytest
-import torch.cuda
-from tensordict.tensordict import TensorDictBase
-from torchrl._utils import seed_generator
-from torchrl.envs import EnvBase
 
+import pytest
+import torch
+import torch.cuda
+
+from tensordict import tensorclass
+from torchrl._utils import implement_for, seed_generator
+
+from torchrl.envs import ObservationNorm
+from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.transforms import (
+    Compose,
+    RewardClipping,
+    ToTensorImage,
+    TransformedEnv,
+)
+from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnv, ParallelEnv, SerialEnv
 
 # Specified for test_utils.py
 __version__ = "0.3"
+
+# Default versions of the environments.
+CARTPOLE_VERSIONED = "CartPole-v1"
+HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+PENDULUM_VERSIONED = "Pendulum-v1"
+PONG_VERSIONED = "ALE/Pong-v5"
+
+
+@implement_for("gym", None, "0.21.0")
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v0"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v2"
+    PENDULUM_VERSIONED = "Pendulum-v0"
+    PONG_VERSIONED = "Pong-v4"
+
+
+@implement_for("gym", "0.21.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
+
+@implement_for("gymnasium", "0.27.0", None)
+def _set_gym_environments():  # noqa: F811
+    global CARTPOLE_VERSIONED, HALFCHEETAH_VERSIONED, PENDULUM_VERSIONED, PONG_VERSIONED
+
+    CARTPOLE_VERSIONED = "CartPole-v1"
+    HALFCHEETAH_VERSIONED = "HalfCheetah-v4"
+    PENDULUM_VERSIONED = "Pendulum-v1"
+    PONG_VERSIONED = "ALE/Pong-v5"
+
+
+if _has_gym:
+    _set_gym_environments()
 
 
 def get_relative_path(curr_file, *path_components):
@@ -33,54 +87,23 @@ def get_available_devices():
     return devices
 
 
+def get_default_devices():
+    num_cuda = torch.cuda.device_count()
+    if num_cuda == 0:
+        return [torch.device("cpu")]
+    elif num_cuda == 1:
+        return [torch.device("cuda:0")]
+    else:
+        # then run on all devices
+        return get_available_devices()
+
+
 def generate_seeds(seed, repeat):
     seeds = [seed]
     for _ in range(repeat - 1):
         seed = seed_generator(seed)
         seeds.append(seed)
     return seeds
-
-
-def _test_fake_tensordict(env: EnvBase):
-    fake_tensordict = env.fake_tensordict().flatten_keys(".")
-    real_tensordict = env.rollout(3).flatten_keys(".")
-
-    keys1 = set(fake_tensordict.keys())
-    keys2 = set(real_tensordict.keys())
-    assert keys1 == keys2
-    fake_tensordict = fake_tensordict.expand(3).to_tensordict()
-    fake_tensordict.zero_()
-    real_tensordict.zero_()
-    assert (fake_tensordict == real_tensordict).all()
-    for key in keys2:
-        assert fake_tensordict[key].shape == real_tensordict[key].shape
-
-    # test dtypes
-    for key, value in real_tensordict.unflatten_keys(".").items():
-        _check_dtype(key, value, env.observation_spec, env.input_spec)
-
-
-def _check_dtype(key, value, obs_spec, input_spec):
-    if isinstance(value, TensorDictBase) and key == "next":
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec, input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in obs_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=obs_spec[key], input_spec=None)
-    elif isinstance(value, TensorDictBase) and key in input_spec.keys():
-        for _key, _value in value.items():
-            _check_dtype(_key, _value, obs_spec=None, input_spec=input_spec[key])
-    else:
-        if obs_spec is not None and key in obs_spec.keys():
-            assert (
-                obs_spec[key].dtype is value.dtype
-            ), f"{obs_spec[key].dtype} vs {value.dtype} for {key}"
-        elif input_spec is not None and key in input_spec.keys():
-            assert (
-                input_spec[key].dtype is value.dtype
-            ), f"{input_spec[key].dtype} vs {value.dtype} for {key}"
-        else:
-            assert key in {"done", "reward"}, (key, obs_spec, input_spec)
 
 
 # Decorator to retry upon certain Exceptions.
@@ -118,3 +141,182 @@ def dtype_fixture():
     torch.set_default_dtype(torch.double)
     yield dtype
     torch.set_default_dtype(dtype)
+
+
+@contextlib.contextmanager
+def set_global_var(module, var_name, value):
+    old_value = getattr(module, var_name)
+    setattr(module, var_name, value)
+    try:
+        yield
+    finally:
+        setattr(module, var_name, old_value)
+
+
+def _make_envs(
+    env_name,
+    frame_skip,
+    transformed_in,
+    transformed_out,
+    N,
+    device="cpu",
+    kwargs=None,
+):
+    torch.manual_seed(0)
+    if not transformed_in:
+
+        def create_env_fn():
+            return GymEnv(env_name, frame_skip=frame_skip, device=device)
+
+    else:
+        if env_name == PONG_VERSIONED:
+
+            def create_env_fn():
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
+                return TransformedEnv(
+                    base_env,
+                    Compose(*[ToTensorImage(in_keys=in_keys), RewardClipping(0, 0.1)]),
+                )
+
+        else:
+
+            def create_env_fn():
+
+                base_env = GymEnv(env_name, frame_skip=frame_skip, device=device)
+                in_keys = list(base_env.observation_spec.keys(True, True))[:1]
+
+                return TransformedEnv(
+                    base_env,
+                    Compose(
+                        ObservationNorm(in_keys=in_keys, loc=0.5, scale=1.1),
+                        RewardClipping(0, 0.1),
+                    ),
+                )
+
+    env0 = create_env_fn()
+    env_parallel = ParallelEnv(N, create_env_fn, create_env_kwargs=kwargs)
+    env_serial = SerialEnv(N, create_env_fn, create_env_kwargs=kwargs)
+
+    for key in env0.observation_spec.keys(True, True):
+        obs_key = key
+        break
+    else:
+        obs_key = None
+
+    if transformed_out:
+        t_out = get_transform_out(env_name, transformed_in, obs_key=obs_key)
+
+        env0 = TransformedEnv(
+            env0,
+            t_out(),
+        )
+        env_parallel = TransformedEnv(
+            env_parallel,
+            t_out(),
+        )
+        env_serial = TransformedEnv(
+            env_serial,
+            t_out(),
+        )
+    else:
+        t_out = None
+
+    if _has_envpool:
+        env_multithread = _make_multithreaded_env(
+            env_name,
+            frame_skip,
+            t_out,
+            N,
+            device="cpu",
+            kwargs=None,
+        )
+    else:
+        env_multithread = None
+
+    return env_parallel, env_serial, env_multithread, env0
+
+
+def _make_multithreaded_env(
+    env_name,
+    frame_skip,
+    transformed_out,
+    N,
+    device="cpu",
+    kwargs=None,
+):
+
+    torch.manual_seed(0)
+    multithreaded_kwargs = (
+        {"frame_skip": frame_skip} if env_name == PONG_VERSIONED else {}
+    )
+    env_multithread = MultiThreadedEnv(
+        N,
+        env_name,
+        create_env_kwargs=multithreaded_kwargs,
+        device=device,
+    )
+
+    if transformed_out:
+        for key in env_multithread.observation_spec.keys(True, True):
+            obs_key = key
+            break
+        else:
+            obs_key = None
+        env_multithread = TransformedEnv(
+            env_multithread,
+            get_transform_out(env_name, transformed_in=False, obs_key=obs_key)(),
+        )
+    return env_multithread
+
+
+def get_transform_out(env_name, transformed_in, obs_key=None):
+
+    if env_name == PONG_VERSIONED:
+        if obs_key is None:
+            obs_key = "pixels"
+
+        def t_out():
+            return (
+                Compose(*[ToTensorImage(in_keys=[obs_key]), RewardClipping(0, 0.1)])
+                if not transformed_in
+                else Compose(*[ObservationNorm(in_keys=[obs_key], loc=0, scale=1)])
+            )
+
+    elif env_name == HALFCHEETAH_VERSIONED:
+        if obs_key is None:
+            obs_key = ("observation", "velocity")
+
+        def t_out():
+            return Compose(
+                ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
+                RewardClipping(0, 0.1),
+            )
+
+    else:
+        if obs_key is None:
+            obs_key = "observation"
+
+        def t_out():
+            return (
+                Compose(
+                    ObservationNorm(in_keys=[obs_key], loc=0.5, scale=1.1),
+                    RewardClipping(0, 0.1),
+                )
+                if not transformed_in
+                else Compose(ObservationNorm(in_keys=[obs_key], loc=1.0, scale=1.0))
+            )
+
+    return t_out
+
+
+def make_tc(td):
+    """Makes a tensorclass from a tensordict instance."""
+
+    class MyClass:
+        pass
+
+    MyClass.__annotations__ = {}
+    for key in td.keys():
+        MyClass.__annotations__[key] = torch.Tensor
+    return tensorclass(MyClass)

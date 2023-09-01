@@ -5,46 +5,154 @@
 
 from __future__ import annotations
 
-from typing import Iterator, Optional, Tuple, List, Union
+import warnings
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Iterator, List, Optional, Tuple
 
-import torch
+from tensordict import TensorDictBase
 
-from torchrl.modules.functional_modules import FunctionalModuleWithBuffers
-
-_has_functorch = False
-try:
-    import functorch
-    from functorch._src.make_functional import _swap_state
-
-    _has_functorch = True
-except ImportError:
-    print(
-        "failed to import functorch. TorchRL's features that do not require "
-        "functional programming should work, but functionality and performance "
-        "may be affected. Consider installing functorch and/or upgrating pytorch."
-    )
-    FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
-
-from tensordict.tensordict import TensorDictBase, TensorDict
-from torch import nn, Tensor
+from tensordict.nn import (
+    make_functional,
+    repopulate_module,
+    TensorDictModule,
+    TensorDictModuleBase,
+    TensorDictParams,
+)
+from torch import nn
 from torch.nn import Parameter
 
-from torchrl.modules import TensorDictModule
+from torchrl._utils import RL_WARNINGS
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.value import ValueEstimatorBase
 
 
-class LossModule(nn.Module):
+def _updater_check_forward_prehook(module, *args, **kwargs):
+    if not all(v for v in module._has_update_associated.values()) and RL_WARNINGS:
+        warnings.warn(
+            module.TARGET_NET_WARNING,
+            category=UserWarning,
+        )
+
+
+class LossModule(TensorDictModuleBase):
     """A parent class for RL losses.
 
-    LossModule inherits from nn.Module. It is designed to read an input TensorDict and return another tensordict
-    with loss keys named "loss_*".
-    Splitting the loss in its component can then be used by the trainer to log the various loss values throughout
+    LossModule inherits from nn.Module. It is designed to read an input
+    TensorDict and return another tensordict
+    with loss keys named ``"loss_*"``.
+
+    Splitting the loss in its component can then be used by the trainer to log
+    the various loss values throughout
     training. Other scalars present in the output tensordict will be logged too.
 
+    :cvar default_value_estimator: The default value type of the class.
+        Losses that require a value estimation are equipped with a default value
+        pointer. This class attribute indicates which value estimator will be
+        used if none other is specified.
+        The value estimator can be changed using the :meth:`~.make_value_estimator` method.
+
+    By default, the forward method is always decorated with a
+    gh :class:`torchrl.envs.ExplorationType.MODE`
+
+    To utilize the ability configuring the tensordict keys via
+    :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
+    This dataclass should include all keys that are intended to be configurable.
+    In addition, the subclass must implement the
+    :meth:._forward_value_estimator_keys() method. This function is crucial for
+    forwarding any altered tensordict keys to the underlying value_estimator.
+
+    Examples:
+        >>> class MyLoss(LossModule):
+        >>>     @dataclass
+        >>>     class _AcceptedKeys:
+        >>>         action = "action"
+        >>>
+        >>>     def _forward_value_estimator_keys(self, **kwargs) -> None:
+        >>>         pass
+        >>>
+        >>> loss = MyLoss()
+        >>> loss.set_keys(action="action2")
     """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values.
+        """
+
+        pass
+
+    default_value_estimator: ValueEstimators = None
+    SEP = "_sep_"
+    TARGET_NET_WARNING = (
+        "No target network updater has been associated "
+        "with this loss module, but target parameters have been found. "
+        "While this is supported, it is expected that the target network "
+        "updates will be manually performed. You can deactivate this warning "
+        "by turning the RL_WARNINGS env variable to False."
+    )
+
+    @property
+    def tensor_keys(self) -> _AcceptedKeys:
+        return self._tensor_keys
+
+    def __new__(cls, *args, **kwargs):
+        cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
+        cls._tensor_keys = cls._AcceptedKeys()
+        self = super().__new__(cls)
+        return self
 
     def __init__(self):
         super().__init__()
-        self._param_maps = dict()
+        self._cache = {}
+        self._param_maps = {}
+        self._value_estimator = None
+        self._has_update_associated = {}
+        self.value_type = self.default_value_estimator
+        self.register_forward_pre_hook(_updater_check_forward_prehook)
+        # self.register_forward_pre_hook(_parameters_to_tensordict)
+
+    def _set_deprecated_ctor_keys(self, **kwargs) -> None:
+        """Helper function to set a tensordict key from a constructor and raise a warning simultaneously."""
+        for key, value in kwargs.items():
+            if value is not None:
+                warnings.warn(
+                    f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
+                    category=DeprecationWarning,
+                )
+                self.set_keys(**{key: value})
+
+    def set_keys(self, **kwargs) -> None:
+        """Set tensordict key names.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+        """
+        for key, value in kwargs.items():
+            if key not in self._AcceptedKeys.__dict__:
+                raise ValueError(f"{key} it not an accepted tensordict key")
+            if value is not None:
+                setattr(self.tensor_keys, key, value)
+            else:
+                setattr(self.tensor_keys, key, self.default_keys.key)
+
+        try:
+            self._forward_value_estimator_keys(**kwargs)
+        except AttributeError as err:
+            raise AttributeError(
+                "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
+                "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
+                "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
+                "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
+            ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """It is designed to read an input TensorDict and return another tensordict with loss keys named "loss*".
@@ -70,396 +178,190 @@ class LossModule(nn.Module):
         expand_dim: Optional[int] = None,
         create_target_params: bool = False,
         compare_against: Optional[List[Parameter]] = None,
+        funs_to_decorate=None,
     ) -> None:
-        if _has_functorch:
-            return self._convert_to_functional_functorch(
-                module,
-                module_name,
-                expand_dim,
-                create_target_params,
-                compare_against,
-            )
-        else:
-            return self._convert_to_functional_native(
-                module,
-                module_name,
-                expand_dim,
-                create_target_params,
-                compare_against,
-            )
+        """Converts a module to functional to be used in the loss.
 
-    def _convert_to_functional_functorch(
-        self,
-        module: TensorDictModule,
-        module_name: str,
-        expand_dim: Optional[int] = None,
-        create_target_params: bool = False,
-        compare_against: Optional[List[Parameter]] = None,
-    ) -> None:
+        Args:
+            module (TensorDictModule or compatible): a stateful tensordict module.
+                This module will be made functional, yet still stateful, meaning
+                that it will be callable with the following alternative signatures:
+
+                >>> module(tensordict)
+                >>> module(tensordict, params=params)
+
+                ``params`` is a :class:`tensordict.TensorDict` instance with parameters
+                stuctured as the output of :func:`tensordict.nn.make_functional`
+                is.
+            module_name (str): name where the module will be found.
+                The parameters of the module will be found under ``loss_module.<module_name>_params``
+                whereas the module will be found under ``loss_module.<module_name>``.
+            expand_dim (int, optional): if provided, the parameters of the module
+                will be expanded ``N`` times, where ``N = expand_dim`` along the
+                first dimension. This option is to be used whenever a target
+                network with more than one configuration is to be used.
+
+                .. note::
+                  If a ``compare_against`` list of values is provided, the
+                  resulting parameters will simply be a detached expansion
+                  of the original parameters. If ``compare_against`` is not
+                  provided, the value of the parameters will be resampled uniformly
+                  between the minimum and maximum value of the parameter content.
+
+             create_target_params (bool, optional): if ``True``, a detached
+                copy of the parameter will be available to feed a target network
+                under the name ``loss_module.<module_name>_target_params``.
+                If ``False`` (default), this attribute will still be available
+                but it will be a detached instance of the parameters, not a copy.
+                In other words, any modification of the parameter value
+                will directly be reflected in the target parameters.
+            compare_against (iterable of parameters, optional): if provided,
+                this list of parameters will be used as a comparison set for
+                the parameters of the module. If the parameters are expanded
+                (``expand_dim > 0``), the resulting parameters for the module
+                will be a simple expansion of the original parameter. Otherwise,
+                the resulting parameters will be a detached version of the
+                original parameters. If ``None``, the resulting parameters
+                will carry gradients as expected.
+            funs_to_decorate (list of str, optional): if provided, the list of
+                methods of ``module`` to make functional, ie the list of
+                methods that will accept the ``params`` keyword argument.
+
+        """
+        if funs_to_decorate is None:
+            funs_to_decorate = ["forward"]
         # To make it robust to device casting, we must register list of
         # tensors as lazy calls to `getattr(self, name_of_tensor)`.
         # Otherwise, casting the module to a device will keep old references
         # to uncast tensors
+        sep = self.SEP
+        params = make_functional(module, funs_to_decorate=funs_to_decorate)
+        # buffer_names = next(itertools.islice(zip(*module.named_buffers()), 1))
+        buffer_names = []
+        for key, value in params.items(True, True):
+            # we just consider all that is not param as a buffer, but if the module has been made
+            # functional and the params have been replaced this may break
+            if not isinstance(value, nn.Parameter):
+                key = sep.join(key) if not isinstance(key, str) else key
+                buffer_names.append(key)
+        functional_module = deepcopy(module)
+        repopulate_module(module, params)
 
-        network_orig = module
-        if hasattr(module, "make_functional_with_buffers"):
-            functional_module, (
-                _,
-                module_buffers,
-            ) = module.make_functional_with_buffers(clone=True)
+        params_and_buffers = params
+        # we transform the buffers in params to make sure they follow the device
+        # as tensor = nn.Parameter(tensor) keeps its identity when moved to another device
+
+        # separate params and buffers
+        params_and_buffers = TensorDictParams(params_and_buffers, no_convert=True)
+        # sanity check
+        for key in params_and_buffers.keys(True):
+            if sep in key:
+                raise KeyError(
+                    f"The key {key} contains the '_sep_' pattern which is prohibited. Consider renaming the parameter / buffer."
+                )
+        params_and_buffers_flat = params_and_buffers.flatten_keys(sep)
+        buffers = params_and_buffers_flat.select(*buffer_names)
+        params = params_and_buffers_flat.exclude(*buffer_names)
+        if compare_against is not None:
+            compare_against = set(compare_against)
         else:
-            (
-                functional_module,
-                module_params,
-                module_buffers,
-            ) = functorch.make_functional_with_buffers(module)
-
-            for _ in functional_module.parameters():
-                # Erase meta params
-                none_state = [None for _ in module_params + module_buffers]
-                if hasattr(functional_module, "all_names_map"):
-                    # functorch >= 0.2.0
-                    _swap_state(
-                        functional_module.stateless_model,
-                        functional_module.all_names_map,
-                        none_state,
-                    )
-                else:
-                    # functorch < 0.2.0
-                    _swap_state(
-                        functional_module.stateless_model,
-                        functional_module.split_names,
-                        none_state,
-                    )
-                break
-            del module_params
-
-        param_name = module_name + "_params"
-
-        # we keep the original parameters and not the copy returned by functorch
-        params = network_orig.parameters()
-
-        # unless we need to expand them, in that case we'll delete the weights to make sure that the user does not
-        # run anything with them expecting them to be updated
-        params = list(params)
-        module_buffers = list(module_buffers)
-
+            compare_against = set()
         if expand_dim:
-            if compare_against is not None:
-                compare_against = set(compare_against)
-            else:
-                compare_against = set()
-            for i, p in enumerate(params):
-                if p in compare_against:
-                    # expanded parameters are 'detached': the parameter will not
-                    # be trained to minimize loss involving this network.
-                    p_out = p.data.expand(expand_dim, *p.shape)
+            # Expands the dims of params and buffers.
+            # If the param already exist in the module, we return a simple expansion of the
+            # original one. Otherwise, we expand and resample it.
+            # For buffers, a cloned expansion (or equivalently a repeat) is returned.
+
+            def _compare_and_expand(param):
+                if param in compare_against:
+                    expanded_param = param.data.expand(expand_dim, *param.shape)
                     # the expanded parameter must be sent to device when to()
                     # is called:
-                    self._param_maps[p_out] = p
+                    return expanded_param
                 else:
-                    p_out = p.repeat(expand_dim, *[1 for _ in p.shape])
+                    p_out = param.repeat(expand_dim, *[1 for _ in param.shape])
                     p_out = nn.Parameter(
                         p_out.uniform_(
                             p_out.min().item(), p_out.max().item()
                         ).requires_grad_()
                     )
-                params[i] = p_out
+                    return p_out
 
-            for i, b in enumerate(module_buffers):
-                b = b.expand(expand_dim, *b.shape).clone()
-                module_buffers[i] = b
-
-            # # delete weights of original model as they do not correspond to the optimized weights
-            # network_orig.to("meta")
-
-        params_list = params
-        set_params = set(self.parameters())
-        setattr(
-            self,
-            "_" + param_name,
-            nn.ParameterList(
-                [
-                    p
-                    for p in params_list
-                    if isinstance(p, nn.Parameter) and p not in set_params
-                ]
-            ),
-        )
-        setattr(self, param_name, params)
-
-        buffer_name = module_name + "_buffers"
-        # we register each buffer independently
-        for i, p in enumerate(module_buffers):
-            _name = module_name + f"_buffer_{i}"
-            self.register_buffer(_name, p)
-            # replace buffer by its name
-            module_buffers[i] = _name
-        setattr(
-            self.__class__,
-            buffer_name,
-            property(lambda _self: [getattr(_self, _name) for _name in module_buffers]),
-        )
-
-        # we set the functional module
-        setattr(self, module_name, functional_module)
-
-        name_params_target = "_target_" + param_name
-        name_buffers_target = "_target_" + buffer_name
-        if create_target_params:
-            target_params = [p.detach().clone() for p in getattr(self, param_name)]
-            for i, p in enumerate(target_params):
-                name = "_".join([name_params_target, str(i)])
-                self.register_buffer(name, p)
-                target_params[i] = name
-            setattr(
-                self.__class__,
-                name_params_target,
-                property(
-                    lambda _self: [getattr(_self, _name) for _name in target_params]
-                ),
+            params = params.apply(
+                _compare_and_expand, batch_size=[expand_dim, *params.shape]
             )
 
-            target_buffers = [p.detach().clone() for p in getattr(self, buffer_name)]
-            for i, p in enumerate(target_buffers):
-                name = "_".join([name_buffers_target, str(i)])
-                self.register_buffer(name, p)
-                target_buffers[i] = name
-            setattr(
-                self.__class__,
-                name_buffers_target,
-                property(
-                    lambda _self: [getattr(_self, _name) for _name in target_buffers]
-                ),
+            buffers = buffers.apply(
+                lambda buffer: buffer.expand(expand_dim, *buffer.shape).clone(),
+                batch_size=[expand_dim, *buffers.shape],
             )
 
-        else:
-            setattr(self.__class__, name_params_target, None)
-            setattr(self.__class__, name_buffers_target, None)
+            params_and_buffers.update(params.unflatten_keys(sep))
+            params_and_buffers.update(buffers.unflatten_keys(sep))
+            params_and_buffers.batch_size = params.batch_size
 
-        setattr(
-            self.__class__,
-            name_params_target[1:],
-            property(lambda _self: self._target_param_getter(module_name)),
-        )
-        setattr(
-            self.__class__,
-            name_buffers_target[1:],
-            property(lambda _self: self._target_buffer_getter(module_name)),
-        )
-
-    def _convert_to_functional_native(
-        self,
-        module: TensorDictModule,
-        module_name: str,
-        expand_dim: Optional[int] = None,
-        create_target_params: bool = False,
-        compare_against: Optional[List[Parameter]] = None,
-    ) -> None:
-        # To make it robust to device casting, we must register list of
-        # tensors as lazy calls to `getattr(self, name_of_tensor)`.
-        # Otherwise, casting the module to a device will keep old references
-        # to uncast tensors
-
-        network_orig = module
-        if hasattr(module, "make_functional_with_buffers"):
-            functional_module, (
-                params,
-                module_buffers,
-            ) = module.make_functional_with_buffers(clone=True)
-        else:
-            (
-                functional_module,
-                params,
-                module_buffers,
-            ) = FunctionalModuleWithBuffers._create_from(module)
+            # self.params_to_map = params_to_map
 
         param_name = module_name + "_params"
 
-        # params must be retrieved directly because make_functional will copy the content
-        params_vals = TensorDict(
-            {name: value for name, value in network_orig.named_parameters()}, []
-        )
-        # rename params_vals keys to match params: otherwise we'll have to deal with
-        # module.module.param or such names. We assume that there is a constant prefix
-        # and that, when sorted, all keys will match. We could check that the values
-        # do match too.
-        keys1 = sorted(list(params.flatten_keys(".").keys()))
-        keys2 = sorted(list(params_vals.keys()))
-        for key1, key2 in zip(keys1, keys2):
-            params_vals.rename_key(key2, key1)
-        params = params_vals.unflatten_keys(".")
+        prev_set_params = set(self.parameters())
 
-        if expand_dim:
-            raise ImportError(
-                "expanding params is only possible when functorch is installed,"
-                "as this feature requires calls to the vmap operator."
-            )
+        # register parameters and buffers
+        for key, parameter in list(params_and_buffers.items(True, True)):
+            if parameter not in prev_set_params:
+                pass
+            elif compare_against is not None and parameter in compare_against:
+                params_and_buffers.set(key, parameter.data)
 
-        params_list = list(params.flatten_keys(".").values())
-        set_params = set(self.parameters())
-        setattr(
-            self,
-            "_" + param_name,
-            nn.ParameterList(
-                [
-                    p
-                    for p in params_list
-                    if isinstance(p, nn.Parameter) and p not in set_params
-                ]
-            ),
-        )
-        setattr(self, param_name, params)
+        setattr(self, param_name, params_and_buffers)
 
-        buffer_name = module_name + "_buffers"
-        buffers_iter = list(module_buffers.flatten_keys(".").items())
-        module_buffers_list = []
-        for i, (key, value) in enumerate(sorted(buffers_iter)):
-            _name = module_name + f"_buffer_{i}"
-            self.register_buffer(_name, value)
-            # replace buffer by its name
-            module_buffers_list.append((_name, key))
-        setattr(
-            self.__class__,
-            buffer_name,
-            property(
-                lambda _self: TensorDict(
-                    {
-                        key: getattr(_self, _name)
-                        for (_name, key) in module_buffers_list
-                    },
-                    [],
-                    device=self.device,
-                ).unflatten_keys(".")
-            ),
-        )
-
-        # we set the functional module
+        # set the functional module
         setattr(self, module_name, functional_module)
 
-        name_params_target = "_target_" + param_name
-        name_buffers_target = "_target_" + buffer_name
+        name_params_target = "target_" + module_name
         if create_target_params:
-            target_params = getattr(self, param_name).detach().clone()
-            target_params_items = sorted(list(target_params.flatten_keys(".").items()))
-            target_params_list = []
-            for i, (key, val) in enumerate(target_params_items):
-                name = "_".join([name_params_target, str(i)])
-                self.register_buffer(name, val)
-                target_params_list.append((name, key))
-            setattr(
-                self.__class__,
-                name_params_target,
-                property(
-                    lambda _self: TensorDict(
-                        {
-                            key: getattr(_self, _name)
-                            for (_name, key) in target_params_list
-                        },
-                        [],
-                        device=self.device,
-                    ).unflatten_keys(".")
+            # if create_target_params:
+            # we create a TensorDictParams to keep the target params as Buffer instances
+            target_params = TensorDictParams(
+                params_and_buffers.apply(
+                    _make_target_param(clone=create_target_params)
                 ),
+                no_convert=True,
             )
+            setattr(self, name_params_target + "_params", target_params)
+        self._has_update_associated[module_name] = not create_target_params
 
-            target_buffers = getattr(self, buffer_name).detach().clone()
-            target_buffers_items = sorted(
-                list(target_buffers.flatten_keys(".").items())
-            )
-            target_buffers_list = []
-            for i, (key, val) in enumerate(target_buffers_items):
-                name = "_".join([name_buffers_target, str(i)])
-                self.register_buffer(name, val)
-                target_buffers_list.append((name, key))
-            setattr(
-                self.__class__,
-                name_buffers_target,
-                property(
-                    lambda _self: TensorDict(
-                        {
-                            key: getattr(_self, _name)
-                            for (_name, key) in target_buffers_list
-                        },
-                        [],
-                        device=self.device,
-                    ).unflatten_keys(".")
-                ),
-            )
+    def __getattr__(self, item):
+        if item.startswith("target_") and item.endswith("_params"):
+            params = self._modules.get(item, None)
+            if params is None:
+                # no target param, take detached data
+                params = getattr(self, item[7:])
+                params = params.data
+            elif not self._has_update_associated[item[7:-7]] and RL_WARNINGS:
+                # no updater associated
+                warnings.warn(
+                    self.TARGET_NET_WARNING,
+                    category=UserWarning,
+                )
+            return params
+        return super().__getattr__(item)
 
-        else:
-            setattr(self.__class__, name_params_target, None)
-            setattr(self.__class__, name_buffers_target, None)
+    def _apply(self, fn):
+        # any call to apply erases the cache: the reason is that detached
+        # params will fail to be cast so we need to get the cache back
+        self._erase_cache()
+        return super()._apply(fn)
 
-        setattr(
-            self.__class__,
-            name_params_target[1:],
-            property(lambda _self: self._target_param_getter(module_name)),
-        )
-        setattr(
-            self.__class__,
-            name_buffers_target[1:],
-            property(lambda _self: self._target_buffer_getter(module_name)),
-        )
-
-    def _target_param_getter(self, network_name):
-        target_name = "_target_" + network_name + "_params"
-        param_name = network_name + "_params"
-        if hasattr(self, target_name):
-            target_params = getattr(self, target_name)
-            if target_params is not None:
-                if isinstance(target_params, TensorDictBase):
-                    return target_params
-                return tuple(target_params)
-            else:
-                params = getattr(self, param_name)
-                if isinstance(params, TensorDictBase):
-                    return params.detach()
-                else:
-                    # detach params as a surrogate for targets
-                    return tuple(p.detach() for p in params)
-
-        else:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not have the target param {target_name}"
-            )
-
-    def _target_buffer_getter(self, network_name):
-        target_name = "_target_" + network_name + "_buffers"
-        buffer_name = network_name + "_buffers"
-        if hasattr(self, target_name):
-            target_buffers = getattr(self, target_name)
-            if target_buffers is not None:
-                if isinstance(target_buffers, TensorDictBase):
-                    return target_buffers
-                return tuple(target_buffers)
-            else:
-                buffers = getattr(self, buffer_name)
-                if isinstance(buffers, TensorDictBase):
-                    return buffers.detach()
-                else:
-                    return tuple(p.detach() for p in buffers)
-
-        else:
-            raise RuntimeError(
-                f"{self.__class__.__name__} does not have the target buffer {target_name}"
-            )
+    def _erase_cache(self):
+        for key in list(self.__dict__):
+            if key.startswith("_cache"):
+                del self.__dict__[key]
 
     def _networks(self) -> Iterator[nn.Module]:
         for item in self.__dir__():
             if isinstance(item, nn.Module):
                 yield item
-
-    @property
-    def device(self) -> torch.device:
-        for p in self.parameters():
-            return p.device
-        return torch.device("cpu")
-
-    def register_buffer(
-        self, name: str, tensor: Optional[Tensor], persistent: bool = True
-    ) -> None:
-        tensor = tensor.to(self.device)
-        return super().register_buffer(name, tensor, persistent)
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
         for _, param in self.named_parameters(recurse=recurse):
@@ -476,35 +378,170 @@ class LossModule(nn.Module):
         # mainly used for PPO with KL target
         pass
 
-    def to(self, *args, **kwargs):
-        # get the names of the parameters to map
-        out = super().to(*args, **kwargs)
-        lists_of_params = {
-            name: value
-            for name, value in self.__dict__.items()
-            if name.endswith("_params") and (type(value) is list)
-        }
-        for _, list_of_params in lists_of_params.items():
-            for i, param in enumerate(list_of_params):
-                # we replace the param by the expanded form if needs be
-                if param in self._param_maps:
-                    list_of_params[i] = self._param_maps[param].data.expand_as(param)
+    @property
+    def value_estimator(self) -> ValueEstimatorBase:
+        """The value function blends in the reward and value estimate(s) from upcoming state(s)/state-action pair(s) into a target value estimate for the value network."""
+        out = self._value_estimator
+        if out is None:
+            self._default_value_estimator()
+            return self._value_estimator
         return out
 
-    def cuda(self, device: Optional[Union[int, device]] = None) -> LossModule:
-        if device is None:
-            return self.to("cuda")
+    @value_estimator.setter
+    def value_estimator(self, value):
+        self._value_estimator = value
+
+    def _default_value_estimator(self):
+        """A value-function constructor when none is provided.
+
+        No kwarg should be present as default parameters should be retrieved
+        from :obj:`torchrl.objectives.utils.DEFAULT_VALUE_FUN_PARAMS`.
+
+        """
+        self.make_value_estimator(self.default_value_estimator)
+
+    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        """Value-function constructor.
+
+        If the non-default value function is wanted, it must be built using
+        this method.
+
+        Args:
+            value_type (ValueEstimators): A :class:`~torchrl.objectives.utils.ValueEstimators`
+                enum type indicating the value function to use. If none is provided,
+                the default stored in the ``default_value_estimator``
+                attribute will be used. The resulting value estimator class
+                will be registered in ``self.value_type``, allowing
+                future refinements.
+            **hyperparams: hyperparameters to use for the value function.
+                If not provided, the value indicated by
+                :func:`~torchrl.objectives.utils.default_value_kwargs` will be
+                used.
+
+        Examples:
+            >>> from torchrl.objectives import DQNLoss
+            >>> # initialize the DQN loss
+            >>> actor = torch.nn.Linear(3, 4)
+            >>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+            >>> # updating the parameters of the default value estimator
+            >>> dqn_loss.make_value_estimator(gamma=0.9)
+            >>> dqn_loss.make_value_estimator(
+            ...     ValueEstimators.TD1,
+            ...     gamma=0.9)
+            >>> # if we want to change the gamma value
+            >>> dqn_loss.make_value_estimator(dqn_loss.value_type, gamma=0.9)
+
+        """
+        if value_type is None:
+            value_type = self.default_value_estimator
+        self.value_type = value_type
+        if value_type == ValueEstimators.TD1:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TD0:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.GAE:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
+        elif value_type == ValueEstimators.TDLambda:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         else:
-            return self.to(device)
+            raise NotImplementedError(f"Unknown value type {value_type}")
 
-    def double(self) -> LossModule:
-        return self.to(torch.double)
+        # def _apply(self, fn, recurse=True):
+        #     """Modifies torch.nn.Module._apply to work with Buffer class."""
+        #     if recurse:
+        #         for module in self.children():
+        #             module._apply(fn)
+        #
+        #     def compute_should_use_set_data(tensor, tensor_applied):
+        #         if torch._has_compatible_shallow_copy_type(tensor, tensor_applied):
+        #             # If the new tensor has compatible tensor type as the existing tensor,
+        #             # the current behavior is to change the tensor in-place using `.data =`,
+        #             # and the future behavior is to overwrite the existing tensor. However,
+        #             # changing the current behavior is a BC-breaking change, and we want it
+        #             # to happen in future releases. So for now we introduce the
+        #             # `torch.__future__.get_overwrite_module_params_on_conversion()`
+        #             # global flag to let the user control whether they want the future
+        #             # behavior of overwriting the existing tensor or not.
+        #             return not torch.__future__.get_overwrite_module_params_on_conversion()
+        #         else:
+        #             return False
+        #
+        #     for key, param in self._parameters.items():
+        #         if param is None:
+        #             continue
+        #         # Tensors stored in modules are graph leaves, and we don't want to
+        #         # track autograd history of `param_applied`, so we have to use
+        #         # `with torch.no_grad():`
+        #         with torch.no_grad():
+        #             param_applied = fn(param)
+        #         should_use_set_data = compute_should_use_set_data(param, param_applied)
+        #         if should_use_set_data:
+        #             param.data = param_applied
+        #             out_param = param
+        #         else:
+        #             assert isinstance(param, Parameter)
+        #             assert param.is_leaf
+        #             out_param = Parameter(param_applied, param.requires_grad)
+        #             self._parameters[key] = out_param
+        #
+        #         if param.grad is not None:
+        #             with torch.no_grad():
+        #                 grad_applied = fn(param.grad)
+        #             should_use_set_data = compute_should_use_set_data(param.grad, grad_applied)
+        #             if should_use_set_data:
+        #                 assert out_param.grad is not None
+        #                 out_param.grad.data = grad_applied
+        #             else:
+        #                 assert param.grad.is_leaf
+        #                 out_param.grad = grad_applied.requires_grad_(param.grad.requires_grad)
+        #
+        #     for key, buffer in self._buffers.items():
+        #         if buffer is None:
+        #             continue
+        #         # Tensors stored in modules are graph leaves, and we don't want to
+        #         # track autograd history of `buffer_applied`, so we have to use
+        #         # `with torch.no_grad():`
+        #         with torch.no_grad():
+        #             buffer_applied = fn(buffer)
+        #         should_use_set_data = compute_should_use_set_data(buffer, buffer_applied)
+        #         if should_use_set_data:
+        #             buffer.data = buffer_applied
+        #             out_buffer = buffer
+        #         else:
+        #             assert isinstance(buffer, Buffer)
+        #             assert buffer.is_leaf
+        #             out_buffer = Buffer(buffer_applied, buffer.requires_grad)
+        #             self._buffers[key] = out_buffer
+        #
+        #         if buffer.grad is not None:
+        #             with torch.no_grad():
+        #                 grad_applied = fn(buffer.grad)
+        #             should_use_set_data = compute_should_use_set_data(buffer.grad, grad_applied)
+        #             if should_use_set_data:
+        #                 assert out_buffer.grad is not None
+        #                 out_buffer.grad.data = grad_applied
+        #             else:
+        #                 assert buffer.grad.is_leaf
+        #                 out_buffer.grad = grad_applied.requires_grad_(buffer.grad.requires_grad)
 
-    def float(self) -> LossModule:
-        return self.to(torch.float)
+        return self
 
-    def half(self) -> LossModule:
-        return self.to(torch.half)
 
-    def cpu(self) -> LossModule:
-        return self.to(torch.device("cpu"))
+class _make_target_param:
+    def __init__(self, clone):
+        self.clone = clone
+
+    def __call__(self, x):
+        if isinstance(x, nn.Parameter):
+            return nn.Parameter(
+                x.data.clone() if self.clone else x.data, requires_grad=False
+            )
+        return x.data.clone() if self.clone else x.data

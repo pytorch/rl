@@ -4,16 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from copy import deepcopy
-from typing import Optional, Union, List
+import warnings
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
-from torchrl.modules.tensordict_module import TensorDictModule
 
 
 class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
@@ -28,26 +28,26 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
-        ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...         self.state_spec = CompositeSpec(
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
         ...         )
-        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...         self.action_spec = UnboundedContinuousTensorSpec((1,))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
         ...         tensordict = TensorDict({},
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(self.state_spec.rand())
+        ...         tensordict = tensordict.update(self.observation_spec.rand())
         ...         return tensordict
         >>> # This environment is used as follows:
         >>> import torch.nn as nn
@@ -91,7 +91,6 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
         - input_spec (CompositeSpec): sampling spec of the inputs;
         - batch_size (torch.Size): batch_size to be used by the env. If not set, the env accept tensordicts of all batch sizes.
         - device (torch.device): device where the env input and output are expected to live
-        - is_done (torch.Tensor): boolean value(s) indicating if the environment has reached a done state since the last reset
 
     Args:
         world_model (nn.Module): model that generates world states and its corresponding rewards;
@@ -140,9 +139,11 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
 
     def set_specs_from_env(self, env: EnvBase):
         """Sets the specs of the environment from the specs of the given environment."""
-        self.observation_spec = deepcopy(env.observation_spec).to(self.device)
-        self.reward_spec = deepcopy(env.reward_spec).to(self.device)
-        self.input_spec = deepcopy(env.input_spec).to(self.device)
+        self.observation_spec = env.observation_spec.clone().to(self.device)
+        self.reward_spec = env.reward_spec.clone().to(self.device)
+        self.action_spec = env.action_spec.clone().to(self.device)
+        self.done_spec = env.done_spec.clone().to(self.device)
+        self.state_spec = env.state_spec.clone().to(self.device)
 
     def _step(
         self,
@@ -166,11 +167,12 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
                 dtype=torch.bool,
                 device=tensordict_out.device,
             )
-        return tensordict_out
+        return tensordict_out.select(*self.observation_spec.keys(), "reward", "done")
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
         raise NotImplementedError
 
     def _set_seed(self, seed: Optional[int]) -> int:
-        raise Warning("Set seed isn't needed for model based environments")
+        warnings.warn("Set seed isn't needed for model based environments")
+        return seed

@@ -8,23 +8,24 @@ dependencies:
     - hypothesis
     - future
     - cloudpickle
-    - gym
     - pygame
-    - gym[accept-rom-license]
-    - gym[atari]
     - moviepy
     - tqdm
     - pytest
     - pytest-cov
     - pytest-mock
     - pytest-instafail
+    - pytest-rerunfailures
     - expecttest
     - pyyaml
     - scipy
     - hydra-core
     - tensorboard
+    - imageio==2.26.0
     - wandb
     - dm_control
     - mlflow
     - av
     - coverage
+    - ray
+    - transformers

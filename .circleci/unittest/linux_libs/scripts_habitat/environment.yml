@@ -11,7 +11,10 @@ dependencies:
     - pytest-cov
     - pytest-mock
     - pytest-instafail
+    - pytest-error-for-skips
+    - pytest-rerunfailures
     - expecttest
     - pyyaml
-    - scipy
+    - scipy==1.9.1
     - hydra-core
+    - ninja

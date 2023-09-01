@@ -4,27 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 
-from torchrl.modules import ActorValueOperator, ActorCriticOperator
-from torchrl.objectives import (
-    ClipPPOLoss,
-    DDPGLoss,
-    DistributionalDQNLoss,
-    DQNLoss,
-    HardUpdate,
-    KLPENPPOLoss,
-    PPOLoss,
-    SACLoss,
-    SoftUpdate,
-)
+from torchrl.modules import ActorCriticOperator, ActorValueOperator
+from torchrl.objectives import DistributionalDQNLoss, DQNLoss, HardUpdate, SoftUpdate
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.deprecated import REDQLoss_deprecated
 
-# from torchrl.objectives.redq import REDQLoss
-
 from torchrl.objectives.utils import TargetNetUpdater
-from torchrl.objectives.value.advantages import GAE
 
 
 def make_target_updater(
@@ -34,14 +21,13 @@ def make_target_updater(
     if cfg.loss == "double":
         if not cfg.hard_update:
             target_net_updater = SoftUpdate(
-                loss_module, 1 - 1 / cfg.value_network_update_interval
+                loss_module, eps=1 - 1 / cfg.value_network_update_interval
             )
         else:
             target_net_updater = HardUpdate(
-                loss_module, cfg.value_network_update_interval
+                loss_module,
+                value_network_update_interval=cfg.value_network_update_interval,
             )
-        # assert len(target_net_updater.net_pairs) == 3, "length of target_net_updater nets should be 3"
-        target_net_updater.init_()
     else:
         if cfg.hard_update:
             raise RuntimeError(
@@ -50,56 +36,6 @@ def make_target_updater(
             )
         target_net_updater = None
     return target_net_updater
-
-
-def make_sac_loss(model, cfg) -> Tuple[SACLoss, Optional[TargetNetUpdater]]:
-    """Builds the SAC loss module."""
-    loss_kwargs = {}
-    if hasattr(cfg, "distributional") and cfg.distributional:
-        raise NotImplementedError
-    else:
-        loss_kwargs.update({"loss_function": cfg.loss_function})
-        loss_kwargs.update(
-            {
-                "target_entropy": cfg.target_entropy
-                if cfg.target_entropy is not None
-                else "auto"
-            }
-        )
-        loss_class = SACLoss
-        if cfg.loss == "double":
-            loss_kwargs.update(
-                {
-                    "delay_actor": False,
-                    "delay_qvalue": True,
-                    "delay_value": True,
-                }
-            )
-        elif cfg.loss == "single":
-            loss_kwargs.update(
-                {
-                    "delay_actor": False,
-                    "delay_qvalue": False,
-                    "delay_value": False,
-                }
-            )
-        else:
-            raise NotImplementedError(
-                f"cfg.loss {cfg.loss} unsupported. Consider chosing from 'double' or 'single'"
-            )
-
-    actor_model, qvalue_model, value_model = model
-
-    loss_module = loss_class(
-        actor_network=actor_model,
-        qvalue_network=qvalue_model,
-        value_network=value_model,
-        num_qvalue_nets=cfg.num_q_values,
-        gamma=cfg.gamma,
-        **loss_kwargs,
-    )
-    target_net_updater = make_target_updater(cfg, loss_module)
-    return loss_module, target_net_updater
 
 
 def make_redq_loss(
@@ -130,28 +66,10 @@ def make_redq_loss(
         actor_network=actor_model,
         qvalue_network=qvalue_model,
         num_qvalue_nets=cfg.num_q_values,
-        gamma=cfg.gamma,
         gSDE=cfg.gSDE,
         **loss_kwargs,
     )
-    target_net_updater = make_target_updater(cfg, loss_module)
-    return loss_module, target_net_updater
-
-
-def make_ddpg_loss(model, cfg) -> Tuple[DDPGLoss, Optional[TargetNetUpdater]]:
-    """Builds the DDPG loss module."""
-    actor, value_net = model
-    loss_kwargs = {}
-    if cfg.distributional:
-        raise NotImplementedError
-    else:
-        loss_kwargs.update({"loss_function": cfg.loss_function})
-        loss_class = DDPGLoss
-    if cfg.loss not in ("single", "double"):
-        raise NotImplementedError
-    double_loss = cfg.loss == "double"
-    loss_kwargs.update({"delay_actor": double_loss, "delay_value": double_loss})
-    loss_module = loss_class(actor, value_net, gamma=cfg.gamma, **loss_kwargs)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
 
@@ -167,40 +85,10 @@ def make_dqn_loss(model, cfg) -> Tuple[DQNLoss, Optional[TargetNetUpdater]]:
     if cfg.loss not in ("single", "double"):
         raise NotImplementedError
     loss_kwargs.update({"delay_value": cfg.loss == "double"})
-    loss_module = loss_class(model, gamma=cfg.gamma, **loss_kwargs)
+    loss_module = loss_class(model, **loss_kwargs)
+    loss_module.make_value_estimator(gamma=cfg.gamma)
     target_net_updater = make_target_updater(cfg, loss_module)
     return loss_module, target_net_updater
-
-
-def make_ppo_loss(model, cfg) -> PPOLoss:
-    """Builds the PPO loss module."""
-    loss_dict = {
-        "clip": ClipPPOLoss,
-        "kl": KLPENPPOLoss,
-        "base": PPOLoss,
-        "": PPOLoss,
-    }
-    actor_model = model.get_policy_operator()
-    critic_model = model.get_value_operator()
-
-    if cfg.advantage_in_loss:
-        advantage = GAE(
-            cfg.gamma,
-            cfg.lmbda,
-            value_network=critic_model,
-            average_rewards=True,
-            gradient_mode=False,
-        )
-    else:
-        advantage = None
-    loss_module = loss_dict[cfg.loss](
-        actor=actor_model,
-        critic=critic_model,
-        advantage_module=advantage,
-        loss_critic_type=cfg.loss_function,
-        entropy_coef=cfg.entropy_coef,
-    )
-    return loss_module
 
 
 @dataclass
@@ -229,18 +117,54 @@ class LossConfig:
 
 
 @dataclass
+class A2CLossConfig:
+    """A2C Loss config struct."""
+
+    gamma: float = 0.99
+    # Decay factor for return computation. Default=0.99.
+    entropy_coef: float = 1e-3
+    # Entropy factor for the A2C loss
+    critic_coef: float = 1.0
+    # Critic factor for the A2C loss
+    critic_loss_function: str = "smooth_l1"
+    # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
+
+
+@dataclass
 class PPOLossConfig:
     """PPO Loss config struct."""
 
     loss: str = "clip"
     # PPO loss class, either clip or kl or base/<empty>. Default=clip
+
+    # PPOLoss base parameters:
     gamma: float = 0.99
     # Decay factor for return computation. Default=0.99.
     lmbda: float = 0.95
     # lambda factor in GAE (using 'lambda' as attribute is prohibited in python, hence the misspelling)
+    entropy_bonus: bool = True
+    # Whether or not to add an entropy term to the PPO loss.
     entropy_coef: float = 1e-3
     # Entropy factor for the PPO loss
+    samples_mc_entropy: int = 1
+    # Number of samples to use for a Monte-Carlo estimate if the policy distribution has not closed formula.
     loss_function: str = "smooth_l1"
     # loss function for the value network. Either one of l1, l2 or smooth_l1 (default).
-    advantage_in_loss: bool = False
-    # if True, the advantage is computed on the sub-batch.
+    critic_coef: float = 1.0
+    # Critic loss multiplier when computing the total loss.
+
+    # ClipPPOLoss parameters:
+    clip_epsilon: float = 0.2
+    # weight clipping threshold in the clipped PPO loss equation.
+
+    # KLPENPPOLoss parameters:
+    dtarg: float = 0.01
+    # target KL divergence.
+    beta: float = 1.0
+    # initial KL divergence multiplier.
+    increment: float = 2
+    # how much beta should be incremented if KL > dtarg. Valid range: increment >= 1.0
+    decrement: float = 0.5
+    # how much beta should be decremented if KL < dtarg. Valid range: decrement <= 1.0
+    samples_mc_kl: int = 1
+    # Number of samples to use for a Monte-Carlo estimate of KL if necessary

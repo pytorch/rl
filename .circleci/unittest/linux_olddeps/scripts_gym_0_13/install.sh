@@ -4,6 +4,7 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++ gcc
 
 set -e
 
@@ -36,13 +37,20 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cpuonly -c pytorch -y
+    conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 cpuonly -c pytorch
 else
-    conda install pytorch==1.10.0 torchvision==0.11.0 torchaudio==0.10.0 cudatoolkit=11.3 -c pytorch -c conda-forge -y
+    conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.6 -c pytorch -c nvidia -y
 fi
 
+# Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
+pip install -U --force-reinstall charset-normalizer
+
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict
+pip install git+https://github.com/pytorch-labs/tensordict.git
+
+# smoke test
+python -c "import tensordict"
 
 printf "* Installing torchrl\n"
 python setup.py develop
+python -c "import torchrl"

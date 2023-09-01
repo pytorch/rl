@@ -10,6 +10,7 @@ import torch
 from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
+
 from .exploration import NoisyLazyLinear, NoisyLinear
 
 LazyMapping = {

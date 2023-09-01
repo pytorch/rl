@@ -1,31 +1,46 @@
-env_name: cheetah
-env_task: run
-env_library: dm_control
-async_collection: 0
-record_video: 1
-normalize_rewards_online: 1
-normalize_rewards_online_scale: 1
-normalize_rewards_online_decay: 0.0  # normalize rewards with latest collected batch
-frame_skip: 2
-frames_per_batch: 1000
-optim_steps_per_batch: 20
-batch_size: 256  # each training batch will have 256 frames
-sub_traj_len: 64  # we want 4 trajectories of length 64 = 256 frames
-total_frames: 1000000
-lr: 2e-4
-from_pixels: 0
-#collector_devices: [cuda:1]
-collector_devices: [cpu]
-env_per_collector: 2
-num_workers: 2
-lr_scheduler: cosine
-record_interval: 20
-max_frames_per_traj: 1000
-weight_decay: 0.0
-init_env_steps: 1000
-record_frames: 1000
-loss_function: smooth_l1
-batch_transform: 1
-entropy_coef: 0.1
-default_policy_scale: 1.0
-advantage_in_loss: 1
+# task and env
+defaults:
+  - hydra/job_logging: disabled
+
+env:
+  env_name: PongNoFrameskip-v4
+  env_task: ""
+  env_library: gym
+  frame_skip: 4
+  num_envs: 8
+  noop: 1
+  reward_scaling: 1.0
+  from_pixels: True
+  n_samples_stats: 1000
+  device: cuda:0
+
+# collector
+collector:
+  frames_per_batch: 4096
+  total_frames: 40_000_000
+  collector_device: cuda:0  # cpu
+  max_frames_per_traj: -1
+
+# logger
+logger:
+  backend: wandb
+  exp_name: ppo_pong_gym
+  log_interval: 10000
+
+# Optim
+optim:
+  device: cuda:0
+  lr: 2.5e-4
+  weight_decay: 0.0
+  lr_scheduler: True
+
+# loss
+loss:
+  gamma: 0.99
+  mini_batch_size: 1024
+  ppo_epochs: 10
+  gae_lamdda: 0.95
+  clip_epsilon: 0.1
+  critic_coef: 0.5
+  entropy_coef: 0.01
+  loss_critic_type: l2

@@ -19,9 +19,6 @@ if [[ "$(uname)" == Darwin || "$OSTYPE" == "msys" ]]; then
     if [[ "$(uname)" == Darwin ]]; then
         # Install delocate to relocate the required binaries
         pip_install "delocate>=0.9"
-    else
-        cp "$bin_path/Library/bin/libpng16.dll" torchvision
-        cp "$bin_path/Library/bin/libjpeg.dll" torchvision
     fi
 else
     # Install auditwheel to get some inspection utilities
@@ -32,7 +29,7 @@ else
 fi
 
 if [[ "$OSTYPE" == "msys" ]]; then
-  echo "ERROR: Windows installation is not supported yet." && exit 100
+    IS_WHEEL=1 "$script_dir/windows/internal/vc_env_helper.bat" python setup.py bdist_wheel
 else
     python setup.py bdist_wheel
     if [[ "$(uname)" != Darwin ]]; then

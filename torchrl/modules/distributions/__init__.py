@@ -4,16 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 from .continuous import (
-    NormalParamWrapper,
-    TanhNormal,
+    __all__ as _all_continuous,
     Delta,
-    TanhDelta,
-    TruncatedNormal,
     IndependentNormal,
+    NormalParamWrapper,
+    TanhDelta,
+    TanhNormal,
+    TruncatedNormal,
 )
-from .continuous import __all__ as _all_continuous
-from .discrete import OneHotCategorical
-from .discrete import __all__ as _all_discrete
+from .discrete import __all__ as _all_discrete, MaskedCategorical, OneHotCategorical
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)

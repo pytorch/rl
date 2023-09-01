@@ -2,62 +2,201 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
 import warnings
+from copy import copy
 from types import ModuleType
-from typing import List, Dict
+from typing import Dict, List
 from warnings import warn
 
 import torch
 
-from torchrl.data import (
+try:
+    from torch.utils._contextlib import _DecoratorContextManager
+except ModuleNotFoundError:
+    from torchrl._utils import _DecoratorContextManager
+
+from torchrl._utils import implement_for
+from torchrl.data.tensor_specs import (
     BinaryDiscreteTensorSpec,
+    BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultOneHotDiscreteTensorSpec,
-    NdBoundedTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from ...data.utils import numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv, default_info_dict_reader
-from ..utils import _classproperty
+from torchrl.data.utils import numpy_to_torch_dtype_dict
 
-try:
-    import gym
-    from packaging import version
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+from torchrl.envs.utils import _classproperty
 
-    _has_gym = True
-except ImportError:
-    _has_gym = False
+DEFAULT_GYM = None
+IMPORT_ERROR = None
+# check gym presence without importing it
+_has_gym = importlib.util.find_spec("gym") is not None
+if not _has_gym:
+    _has_gym = importlib.util.find_spec("gymnasium") is not None
+
+_has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
 
-if _has_gym:
-    try:
-        from gym.wrappers.pixel_observation import PixelObservationWrapper
+class set_gym_backend(_DecoratorContextManager):
+    """Sets the gym-backend to a certain value.
 
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
-        )
-    except ModuleNotFoundError:
-        warnings.warn(
-            f"gym {gym.__version__} does not provide the PixelObservationWrapper"
-            f"used by torchrl, which will be using a patched version. "
-            f"Consider updating gym to a newer version."
-        )
-        from torchrl.envs.libs.utils import (
-            GymPixelObservationWrapper as PixelObservationWrapper,
-        )
-    gym_version = version.parse(gym.__version__)
-    if gym_version >= version.parse("0.26.0"):
-        from gym.wrappers.compatibility import EnvCompatibility
+    Args:
+        backend (python module, string or callable returning a module): the
+            gym backend to use. Use a string or callable whenever you wish to
+            avoid importing gym at loading time.
+
+    Examples:
+        >>> import gym
+        >>> import gymnasium
+        >>> with set_gym_backend("gym"):
+        ...     assert gym_backend() == gym
+        >>> with set_gym_backend(lambda: gym):
+        ...     assert gym_backend() == gym
+        >>> with set_gym_backend(gym):
+        ...     assert gym_backend() == gym
+        >>> with set_gym_backend("gymnasium"):
+        ...     assert gym_backend() == gymnasium
+        >>> with set_gym_backend(lambda: gymnasium):
+        ...     assert gym_backend() == gymnasium
+        >>> with set_gym_backend(gymnasium):
+        ...     assert gym_backend() == gymnasium
+
+    This class can also be used as a function decorator.
+
+    Examples:
+        >>> @set_gym_backend("gym")
+        ... def fun():
+        ...     gym = gym_backend()
+        ...     print(gym)
+        >>> fun()
+        <module 'gym' from '/path/to/env/site-packages/gym/__init__.py'>
+        >>> @set_gym_backend("gymnasium")
+        ... def fun():
+        ...     gym = gym_backend()
+        ...     print(gym)
+        >>> fun()
+        <module 'gymnasium' from '/path/to/env/site-packages/gymnasium/__init__.py'>
+
+
+    """
+
+    def __init__(self, backend):
+        self.backend = backend
+
+    def _call(self):
+        global DEFAULT_GYM
+        DEFAULT_GYM = self.backend
+        # implement_for.reset()
+        setters = copy(implement_for._setters)
+        found_setter = False
+        for setter in setters:
+            check_module = (
+                callable(setter.module_name)
+                and setter.module_name.__name__ == self.backend.__name__
+            ) or setter.module_name == self.backend.__name__
+            check_version = setter.check_version(
+                self.backend.__version__, setter.from_version, setter.to_version
+            )
+            if check_module and check_version:
+                setter(setter.fn)
+                found_setter = True
+        if not found_setter:
+            raise ImportError(
+                f"could not set anything related to gym backend "
+                f"{self.backend.__name__} with version={self.backend.__version__}."
+            )
+
+    def __enter__(self):
+        self._setters = copy(implement_for._setters)
+        self._call()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        implement_for.reset(setters=self._setters)
+        delattr(self, "_setters")
+
+    def clone(self):
+        # override this method if your children class takes __init__ parameters
+        return self.__class__(self.backend)
+
+    @property
+    def backend(self):
+        if isinstance(self._backend, str):
+            return importlib.import_module(self._backend)
+        elif callable(self._backend):
+            return self._backend()
+        return self._backend
+
+    @backend.setter
+    def backend(self, value):
+        self._backend = value
+
+
+def gym_backend(submodule=None):
+    """Returns the gym backend, or a sumbodule of it.
+
+    Args:
+        submodule (str): the submodule to import. If ``None``, the backend
+            itself is returned.
+
+    Examples:
+        >>> import mo_gymnasium
+        >>> with set_gym_backend("gym"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+        >>> with set_gym_backend("gymnasium"):
+        ...     wrappers = gym_backend('wrappers')
+        ...     print(wrappers)
+    """
+    global IMPORT_ERROR
+    global DEFAULT_GYM
+    if DEFAULT_GYM is None:
+        try:
+            # rule of thumbs: gymnasium precedes
+            import gymnasium as gym
+        except ImportError as err:
+            IMPORT_ERROR = err
+            try:
+                import gym as gym
+            except ImportError as err:
+                IMPORT_ERROR = err
+                gym = None
+        DEFAULT_GYM = gym
+    if submodule is not None:
+        if not submodule.startswith("."):
+            submodule = "." + submodule
+            submodule = importlib.import_module(submodule, package=DEFAULT_GYM.__name__)
+            return submodule
+    return DEFAULT_GYM
+
 
 __all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(
-    spec, dtype=None, device="cpu", categorical_action_encoding=False
+    spec,
+    dtype=None,
+    device="cpu",
+    categorical_action_encoding=False,
+    remap_state_to_observation: bool = True,
 ) -> TensorSpec:
+    """Maps the gym specs to the TorchRL specs.
+
+    Args:
+        spec: the gym space to transform
+        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
+        device: the device for the spec. Defaults to "cpu".
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
+
+    """
+    gym = gym_backend()
     if isinstance(spec, gym.spaces.tuple.Tuple):
         raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
     if isinstance(spec, gym.spaces.discrete.Discrete):
@@ -66,28 +205,66 @@ def _gym_to_torchrl_spec_transform(
             if categorical_action_encoding
             else OneHotDiscreteTensorSpec
         )
-        return action_space_cls(spec.n, device=device)
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return action_space_cls(spec.n, device=device, dtype=dtype)
     elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
-        return BinaryDiscreteTensorSpec(spec.n, device=device)
+        return BinaryDiscreteTensorSpec(
+            spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
+        )
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        return MultOneHotDiscreteTensorSpec(spec.nvec, device=device)
+        dtype = (
+            numpy_to_torch_dtype_dict[spec.dtype]
+            if categorical_action_encoding
+            else torch.long
+        )
+        return (
+            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            if categorical_action_encoding
+            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+        )
     elif isinstance(spec, gym.spaces.Box):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            torch.tensor(spec.low, device=device, dtype=dtype),
-            torch.tensor(spec.high, device=device, dtype=dtype),
-            torch.Size(spec.shape),
-            dtype=dtype,
-            device=device,
+        low = torch.tensor(spec.low, device=device, dtype=dtype)
+        high = torch.tensor(spec.high, device=device, dtype=dtype)
+        is_unbounded = low.isinf().all() and high.isinf().all()
+        return (
+            UnboundedContinuousTensorSpec(shape, device=device, dtype=dtype)
+            if is_unbounded
+            else BoundedTensorSpec(
+                low,
+                high,
+                shape,
+                dtype=dtype,
+                device=device,
+            )
         )
     elif isinstance(spec, (Dict,)):
         spec_out = {}
         for k in spec.keys():
-            spec_out[k] = _gym_to_torchrl_spec_transform(
+            key = k
+            if (
+                remap_state_to_observation
+                and k == "state"
+                and "observation" not in spec.keys()
+            ):
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                key = "observation"
+            spec_out[key] = _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
+                remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
     elif isinstance(spec, gym.spaces.dict.Dict):
@@ -95,6 +272,7 @@ def _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
             categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
         )
     else:
         raise NotImplementedError(
@@ -103,25 +281,46 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
-    if gym_version < version.parse("0.26.0"):
-        envs = gym.envs.registration.registry.env_specs.keys()
-    else:
-        envs = gym.envs.registration.registry.keys()
-
+    envs = _get_gym_envs()
     envs = list(envs)
     envs = sorted(envs)
     return envs
 
 
-def _get_gym():
-    if _has_gym:
-        return gym
-    else:
-        return None
+@implement_for("gym", None, "0.26.0")
+def _get_gym_envs():  # noqa: F811
+    gym = gym_backend()
+    return gym.envs.registration.registry.env_specs.keys()
+
+
+@implement_for("gym", "0.26.0", None)
+def _get_gym_envs():  # noqa: F811
+    gym = gym_backend()
+    return gym.envs.registration.registry.keys()
+
+
+@implement_for("gymnasium", "0.27.0", None)
+def _get_gym_envs():  # noqa: F811
+    gym = gym_backend()
+    return gym.envs.registration.registry.keys()
 
 
 def _is_from_pixels(env):
+    gym = gym_backend()
     observation_spec = env.observation_space
+    try:
+        PixelObservationWrapper = gym_backend(
+            "wrappers.pixel_observation.PixelObservationWrapper"
+        )
+    except ModuleNotFoundError:
+
+        class PixelObservationWrapper:
+            pass
+
+    from torchrl.envs.libs.utils import (
+        GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+    )
+
     if isinstance(observation_spec, (Dict,)):
         if "pixels" in set(observation_spec.keys()):
             return True
@@ -136,7 +335,7 @@ def _is_from_pixels(env):
         and observation_spec.low.ndim == 3
     ):
         return True
-    elif isinstance(env, PixelObservationWrapper):
+    elif isinstance(env, (LegacyPixelObservationWrapper, PixelObservationWrapper)):
         return True
     return False
 
@@ -156,12 +355,37 @@ class GymWrapper(GymLikeEnv):
     git_url = "https://github.com/openai/gym"
     libname = "gym"
 
+    @staticmethod
+    def get_library_name(env):
+        # try gym
+        try:
+            import gym
+
+            if isinstance(env.action_space, gym.spaces.space.Space):
+                return gym
+        except ImportError:
+            pass
+        try:
+            import gymnasium
+
+            if isinstance(env.action_space, gymnasium.spaces.space.Space):
+                return gymnasium
+        except ImportError:
+            pass
+        raise RuntimeError(
+            f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
+        )
+
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
-        super().__init__(**kwargs)
+        if "env" in kwargs:
+            with set_gym_backend(self.get_library_name(kwargs["env"])):
+                super().__init__(**kwargs)
+        else:
+            super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -175,30 +399,84 @@ class GymWrapper(GymLikeEnv):
         env,
         from_pixels: bool = False,
         pixels_only: bool = False,
-    ) -> "gym.core.Env":
+    ) -> "gym.core.Env":  # noqa: F821
         env_from_pixels = _is_from_pixels(env)
         from_pixels = from_pixels or env_from_pixels
         self.from_pixels = from_pixels
         self.pixels_only = pixels_only
         if from_pixels and not env_from_pixels:
-            if isinstance(env, PixelObservationWrapper):
-                raise TypeError(
-                    "PixelObservationWrapper cannot be used to wrap an environment"
-                    "that is already a PixelObservationWrapper instance."
+            try:
+                PixelObservationWrapper = gym_backend(
+                    "wrappers.pixel_observation.PixelObservationWrapper"
                 )
-            if gym_version >= version.parse("0.26.0") and not env.render_mode:
-                warnings.warn(
-                    "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
-                    "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
-                    'where mode is either "rgb_array" or any other supported mode.'
-                )
-                # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
-                env = EnvCompatibility(env)
-                env.reset()
-                env = LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
-            else:
-                env = PixelObservationWrapper(env, pixels_only=pixels_only)
+                if isinstance(env, PixelObservationWrapper):
+                    raise TypeError(
+                        "PixelObservationWrapper cannot be used to wrap an environment"
+                        "that is already a PixelObservationWrapper instance."
+                    )
+            except ModuleNotFoundError:
+                pass
+            env = self._build_gym_env(env, pixels_only)
         return env
+
+    @implement_for("gym", None, "0.19.0")
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        from .utils import GymPixelObservationWrapper as PixelObservationWrapper
+
+        return PixelObservationWrapper(env, pixels_only=pixels_only)
+
+    @implement_for("gym", "0.19.0", "0.26.0")
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        pixel_observation = gym_backend("wrappers.pixel_observation")
+        return pixel_observation.PixelObservationWrapper(env, pixels_only=pixels_only)
+
+    @implement_for("gym", "0.26.0", None)
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        compatibility = gym_backend("wrappers.compatibility")
+        pixel_observation = gym_backend("wrappers.pixel_observation")
+
+        if env.render_mode:
+            return pixel_observation.PixelObservationWrapper(
+                env, pixels_only=pixels_only
+            )
+
+        warnings.warn(
+            "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+            "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+            'where mode is either "rgb_array" or any other supported mode.'
+        )
+        # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+        env = compatibility.EnvCompatibility(env)
+        env.reset()
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+        )
+
+        return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def _build_gym_env(self, env, pixels_only):  # noqa: F811
+        compatibility = gym_backend("wrappers.compatibility")
+        pixel_observation = gym_backend("wrappers.pixel_observation")
+
+        if env.render_mode:
+            return pixel_observation.PixelObservationWrapper(
+                env, pixels_only=pixels_only
+            )
+
+        warnings.warn(
+            "Environments provided to GymWrapper that need to be wrapped in PixelObservationWrapper "
+            "should be created with `gym.make(env_name, render_mode=mode)` where possible,"
+            'where mode is either "rgb_array" or any other supported mode.'
+        )
+        # resetting as 0.26 comes with a very 'nice' OrderEnforcing wrapper
+        env = compatibility.EnvCompatibility(env)
+        env.reset()
+        from torchrl.envs.libs.utils import (
+            GymPixelObservationWrapper as LegacyPixelObservationWrapper,
+        )
+
+        return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
     @_classproperty
     def available_envs(cls) -> List[str]:
@@ -206,53 +484,89 @@ class GymWrapper(GymLikeEnv):
 
     @property
     def lib(self) -> ModuleType:
-        return gym
+        return gym_backend()
 
-    def _set_seed(self, seed: int) -> int:
-        skip = False
+    def _set_seed(self, seed: int) -> int:  # noqa: F811
         if self._seed_calls_reset is None:
-            if gym_version < version.parse("0.19.0"):
-                self._seed_calls_reset = False
-                self._env.seed(seed=seed)
-            else:
-                try:
-                    self.reset(seed=seed)
-                    skip = True
-                    self._seed_calls_reset = True
-                except TypeError as err:
-                    warnings.warn(
-                        f"reset with seed kwarg returned an exception: {err}.\n"
-                        f"Calling env.seed from now on."
-                    )
-                    self._seed_calls_reset = False
-        if self._seed_calls_reset and not skip:
+            # Determine basing on gym version whether `reset` is called when setting seed.
+            self._set_seed_initial(seed)
+        elif self._seed_calls_reset:
             self.reset(seed=seed)
-        elif not self._seed_calls_reset:
+        else:
             self._env.seed(seed=seed)
+
         return seed
 
-    def _make_specs(self, env: "gym.Env") -> None:
-        self.action_spec = _gym_to_torchrl_spec_transform(
+    @implement_for("gym", None, "0.19.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        self._seed_calls_reset = False
+        self._env.seed(seed=seed)
+
+    @implement_for("gym", "0.19.0", None)
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        try:
+            self.reset(seed=seed)
+            self._seed_calls_reset = True
+        except TypeError as err:
+            warnings.warn(
+                f"reset with seed kwarg returned an exception: {err}.\n"
+                f"Calling env.seed from now on."
+            )
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        try:
+            self.reset(seed=seed)
+            self._seed_calls_reset = True
+        except TypeError as err:
+            warnings.warn(
+                f"reset with seed kwarg returned an exception: {err}.\n"
+                f"Calling env.seed from now on."
+            )
+            self._seed_calls_reset = False
+            self._env.seed(seed=seed)
+
+    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        self.observation_spec = _gym_to_torchrl_spec_transform(
+        observation_spec = _gym_to_torchrl_spec_transform(
             env.observation_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
         )
-        if not isinstance(self.observation_spec, CompositeSpec):
+        if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
-                self.observation_spec = CompositeSpec(pixels=self.observation_spec)
+                observation_spec = CompositeSpec(pixels=observation_spec)
             else:
-                self.observation_spec = CompositeSpec(observation=self.observation_spec)
-        self.reward_spec = UnboundedContinuousTensorSpec(
-            device=self.device,
-        )
+                observation_spec = CompositeSpec(observation=observation_spec)
+        if hasattr(env, "reward_space") and env.reward_space is not None:
+            reward_spec = _gym_to_torchrl_spec_transform(
+                env.reward_space,
+                device=self.device,
+                categorical_action_encoding=self._categorical_action_encoding,
+            )
+        else:
+            reward_spec = UnboundedContinuousTensorSpec(
+                shape=[1],
+                device=self.device,
+            )
+        if batch_size is not None:
+            action_spec = action_spec.expand(*batch_size, *action_spec.shape)
+            reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
+            observation_spec = observation_spec.expand(
+                *batch_size, *observation_spec.shape
+            )
+        self.action_spec = action_spec
+        self.reward_spec = reward_spec
+        self.observation_spec = observation_spec
 
     def _init_env(self):
-        self.reset()  # make sure that _is_done is populated
+        self.reset()
 
     def __repr__(self) -> str:
         return (
@@ -292,32 +606,46 @@ class GymEnv(GymWrapper):
 
     """
 
-    def __init__(self, env_name, disable_env_checker=None, **kwargs):
+    def __init__(self, env_name, **kwargs):
         kwargs["env_name"] = env_name
-        if gym_version >= version.parse("0.24.0"):
-            kwargs["disable_env_checker"] = (
-                disable_env_checker if disable_env_checker is not None else True
-            )
-        elif disable_env_checker is not None:
+        self._set_gym_args(kwargs)
+        super().__init__(**kwargs)
+
+    @implement_for("gym", None, "0.24.0")
+    def _set_gym_args(self, kwargs) -> None:  # noqa: F811
+        disable_env_checker = kwargs.pop("disable_env_checker", None)
+        if disable_env_checker is not None:
             raise RuntimeError(
                 "disable_env_checker should only be set if gym version is > 0.24"
             )
-        super().__init__(**kwargs)
+
+    @implement_for("gym", "0.24.0", None)
+    def _set_gym_args(  # noqa: F811
+        self,
+        kwargs,
+    ) -> None:
+        kwargs.setdefault("disable_env_checker", True)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def _set_gym_args(  # noqa: F811
+        self,
+        kwargs,
+    ) -> None:
+        kwargs.setdefault("disable_env_checker", True)
 
     def _build_env(
         self,
         env_name: str,
         **kwargs,
-    ) -> "gym.core.Env":
+    ) -> "gym.core.Env":  # noqa: F821
         if not _has_gym:
             raise RuntimeError(
                 f"gym not found, unable to create {env_name}. "
-                f"Consider downloading and installing dm_control from"
+                f"Consider downloading and installing gym from"
                 f" {self.git_url}"
             )
         from_pixels = kwargs.get("from_pixels", False)
-        if from_pixels and gym_version > version.parse("0.25.0"):
-            kwargs.setdefault("render_mode", "rgb_array")
+        self._set_gym_default(kwargs, from_pixels)
         if "from_pixels" in kwargs:
             del kwargs["from_pixels"]
         pixels_only = kwargs.get("pixels_only", True)
@@ -339,9 +667,10 @@ class GymEnv(GymWrapper):
                 made_env = True
             except TypeError as err:
                 if ACCEPTED_TYPE_ERRORS["frame_skip"] in str(err):
-                    warn(
-                        "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
-                    )
+                    # we can disable this, not strictly indispensable to know
+                    # warn(
+                    #     "Discarding frameskip arg. This will be taken care of by TorchRL env wrapper."
+                    # )
                     self.wrapper_frame_skip = kwargs.pop("frameskip")
                 elif ACCEPTED_TYPE_ERRORS["render_mode"] in str(err):
                     warn("Discarding render_mode from the env constructor.")
@@ -349,6 +678,21 @@ class GymEnv(GymWrapper):
                 else:
                     raise err
         return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+
+    @implement_for("gym", None, "0.25.1")
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        # Do nothing for older gym versions.
+        pass
+
+    @implement_for("gym", "0.25.1", None)
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
+        if from_pixels:
+            kwargs.setdefault("render_mode", "rgb_array")
 
     @property
     def env_name(self):
@@ -360,3 +704,50 @@ class GymEnv(GymWrapper):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, batch_size={self.batch_size}, device={self.device})"
+
+
+class MOGymWrapper(GymWrapper):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> import mo_gymnasium as mo_gym
+        >>> env = MOGymWrapper(mo_gym.make('minecart-v0'), frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+
+class MOGymEnv(GymEnv):
+    """FARAMA MO-Gymnasium environment wrapper.
+
+    Examples:
+        >>> env = MOGymEnv(env_name="minecart-v0", frame_skip=4)
+        >>> td = env.rand_step()
+        >>> print(td)
+        >>> print(env.available_envs)
+
+    """
+
+    git_url = "https://github.com/Farama-Foundation/MO-Gymnasium"
+    libname = "mo-gymnasium"
+
+    @property
+    def lib(self) -> ModuleType:
+        if _has_mo:
+            import mo_gymnasium as mo_gym
+
+            return mo_gym
+        else:
+            try:
+                import mo_gymnasium  # noqa: F401
+            except ImportError as err:
+                raise ImportError("MO-gymnasium not found, check installation") from err
+
+    _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)

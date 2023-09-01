@@ -2,16 +2,22 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
+import dataclasses
+
+import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
+from tensordict.nn import dispatch, TensorDictModuleBase
 from torch import nn
 from torch.nn import functional as F
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -49,9 +55,11 @@ class MLP(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any.
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        dropout (float, optional): dropout probability. Defaults to ``None`` (no
+            dropout);
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
-        single_bias_last_layer (bool): if True, the last dimension of the bias of the last layer will be a singleton
+        single_bias_last_layer (bool): if ``True``, the last dimension of the bias of the last layer will be a singleton
             dimension.
             default: True;
         layer_class (Type[nn.Module]): class to be used for the linear layers;
@@ -147,6 +155,7 @@ class MLP(nn.Sequential):
         activation_kwargs: Optional[dict] = None,
         norm_class: Optional[Type[nn.Module]] = None,
         norm_kwargs: Optional[dict] = None,
+        dropout: Optional[float] = None,
         bias_last_layer: bool = True,
         single_bias_last_layer: bool = False,
         layer_class: Type[nn.Module] = nn.Linear,
@@ -174,14 +183,15 @@ class MLP(nn.Sequential):
         self._out_features_num = _out_features_num
         self.activation_class = activation_class
         self.activation_kwargs = (
-            activation_kwargs if activation_kwargs is not None else dict()
+            activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_class = norm_class
-        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
+        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
+        self.dropout = dropout
         self.bias_last_layer = bias_last_layer
         self.single_bias_last_layer = single_bias_last_layer
         self.layer_class = layer_class
-        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else dict()
+        self.layer_kwargs = layer_kwargs if layer_kwargs is not None else {}
         self.activate_last_layer = activate_last_layer
         if single_bias_last_layer:
             raise NotImplementedError
@@ -235,15 +245,18 @@ class MLP(nn.Sequential):
                 )
 
             if i < self.depth or self.activate_last_layer:
+                if self.dropout is not None:
+                    layers.append(create_on_device(nn.Dropout, device, p=self.dropout))
+                if self.norm_class is not None:
+                    layers.append(
+                        create_on_device(self.norm_class, device, **self.norm_kwargs)
+                    )
                 layers.append(
                     create_on_device(
                         self.activation_class, device, **self.activation_kwargs
                     )
                 )
-                if self.norm_class is not None:
-                    layers.append(
-                        create_on_device(self.norm_class, device, **self.norm_kwargs)
-                    )
+
         return layers
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
@@ -279,13 +292,13 @@ class ConvNet(nn.Sequential):
         activation_kwargs (dict, optional): kwargs to be used with the activation class;
         norm_class (Type, optional): normalization class, if any;
         norm_kwargs (dict, optional): kwargs to be used with the normalization layers;
-        bias_last_layer (bool): if True, the last Linear layer will have a bias parameter.
+        bias_last_layer (bool): if ``True``, the last Linear layer will have a bias parameter.
             default: True;
         aggregator_class (Type[nn.Module]): aggregator to use at the end of the chain.
             default:  SquashDims;
         aggregator_kwargs (dict, optional): kwargs for the aggregator_class;
         squeeze_output (bool): whether the output should be squeezed of its singleton dimensions.
-            default: True.
+            default: False.
         device (Optional[DEVICE_TYPING]): device to create the module on.
 
     Examples:
@@ -363,10 +376,10 @@ class ConvNet(nn.Sequential):
         self.in_features = in_features
         self.activation_class = activation_class
         self.activation_kwargs = (
-            activation_kwargs if activation_kwargs is not None else dict()
+            activation_kwargs if activation_kwargs is not None else {}
         )
         self.norm_class = norm_class
-        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else dict()
+        self.norm_kwargs = norm_kwargs if norm_kwargs is not None else {}
         self.bias_last_layer = bias_last_layer
         self.aggregator_class = aggregator_class
         self.aggregator_kwargs = (
@@ -463,6 +476,15 @@ class ConvNet(nn.Sequential):
             layers.append(Squeeze2dLayer())
         return layers
 
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        *batch, C, L, W = inputs.shape
+        if len(batch) > 1:
+            inputs = inputs.flatten(0, len(batch) - 1)
+        out = super(ConvNet, self).forward(inputs)
+        if len(batch) > 1:
+            out = out.unflatten(0, batch)
+        return out
+
 
 class DuelingMlpDQNet(nn.Module):
     """Creates a Dueling MLP Q-network.
@@ -507,7 +529,7 @@ class DuelingMlpDQNet(nn.Module):
         super().__init__()
 
         mlp_kwargs_feature = (
-            mlp_kwargs_feature if mlp_kwargs_feature is not None else dict()
+            mlp_kwargs_feature if mlp_kwargs_feature is not None else {}
         )
         _mlp_kwargs_feature = {
             "num_cells": [256, 256],
@@ -524,9 +546,7 @@ class DuelingMlpDQNet(nn.Module):
             "num_cells": 512,
             "bias_last_layer": True,
         }
-        mlp_kwargs_output = (
-            mlp_kwargs_output if mlp_kwargs_output is not None else dict()
-        )
+        mlp_kwargs_output = mlp_kwargs_output if mlp_kwargs_output is not None else {}
         _mlp_kwargs_output.update(mlp_kwargs_output)
         self.out_features = out_features
         self.out_features_value = out_features_value
@@ -589,7 +609,7 @@ class DuelingCnnDQNet(nn.Module):
     ):
         super().__init__()
 
-        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else dict()
+        cnn_kwargs = cnn_kwargs if cnn_kwargs is not None else {}
         _cnn_kwargs = {
             "num_cells": [32, 64, 64],
             "strides": [4, 2, 1],
@@ -604,7 +624,7 @@ class DuelingCnnDQNet(nn.Module):
             "num_cells": 512,
             "bias_last_layer": True,
         }
-        mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else dict()
+        mlp_kwargs = mlp_kwargs if mlp_kwargs is not None else {}
         _mlp_kwargs.update(mlp_kwargs)
         self.out_features = out_features
         self.out_features_value = out_features_value
@@ -623,12 +643,17 @@ class DuelingCnnDQNet(nn.Module):
         return value + advantage - advantage.mean(dim=-1, keepdim=True)
 
 
-class DistributionalDQNnet(nn.Module):
+class DistributionalDQNnet(TensorDictModuleBase):
     """Distributional Deep Q-Network.
 
     Args:
-        DQNet (nn.Module): Q-Network with output length equal to the number of atoms:
+        DQNet (nn.Module): (deprecated) Q-Network with output length equal
+            to the number of atoms:
             output.shape = [*batch, atoms, actions].
+        in_keys (list of str or tuples of str): input keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
+        out_keys (list of str or tuples of str): output keys to the log-softmax
+            operation. Defaults to ``["action_value"]``.
 
     """
 
@@ -638,25 +663,42 @@ class DistributionalDQNnet(nn.Module):
         "instead."
     )
 
-    def __init__(self, DQNet: nn.Module):
+    def __init__(self, DQNet: nn.Module = None, in_keys=None, out_keys=None):
         super().__init__()
-        if not (
-            not isinstance(DQNet.out_features, Number) and len(DQNet.out_features) > 1
-        ):
-            raise RuntimeError(self._wrong_out_feature_dims_error)
-        self.dqn = DQNet
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        q_values = self.dqn(x)
-        if q_values.ndimension() < 2:
-            raise RuntimeError(
-                self._wrong_out_feature_dims_error.format(q_values.shape)
+        if DQNet is not None:
+            warnings.warn(
+                f"Passing a network to {type(self)} is going to be deprecated.",
+                category=DeprecationWarning,
             )
-        return F.log_softmax(q_values, dim=-2)
+            if not (
+                not isinstance(DQNet.out_features, Number)
+                and len(DQNet.out_features) > 1
+            ):
+                raise RuntimeError(self._wrong_out_feature_dims_error)
+        self.dqn = DQNet
+        if in_keys is None:
+            in_keys = ["action_value"]
+        if out_keys is None:
+            out_keys = ["action_value"]
+        self.in_keys = in_keys
+        self.out_keys = out_keys
+
+    @dispatch(auto_batch_size=False)
+    def forward(self, tensordict):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            q_values = tensordict.get(in_key)
+            if self.dqn is not None:
+                q_values = self.dqn(q_values)
+            if q_values.ndimension() < 2:
+                raise RuntimeError(
+                    self._wrong_out_feature_dims_error.format(q_values.shape)
+                )
+            tensordict.set(out_key, F.log_softmax(q_values, dim=-2))
+        return tensordict
 
 
 def ddpg_init_last_layer(
-    last_layer: nn.Module,
+    module: nn.Sequential,
     scale: float = 6e-4,
     device: Optional[DEVICE_TYPING] = None,
 ) -> None:
@@ -666,6 +708,12 @@ def ddpg_init_last_layer(
     https://arxiv.org/pdf/1509.02971.pdf
 
     """
+    for last_layer in reversed(module):
+        if isinstance(last_layer, (nn.Linear, nn.Conv2d)):
+            break
+    else:
+        raise RuntimeError("Could not find a nn.Linear / nn.Conv2d to initialize.")
+
     last_layer.weight.data.copy_(
         torch.rand_like(last_layer.weight.data, device=device) * scale - scale / 2
     )
@@ -709,8 +757,8 @@ class DdpgCnnActor(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`False`.
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
+            used to aggregate the output. Default is ``False``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -739,7 +787,7 @@ class DdpgCnnActor(nn.Module):
             else {"output_size": (1, 1)},
             "squeeze_output": use_avg_pooling,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -749,11 +797,11 @@ class DdpgCnnActor(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         hidden = self.convnet(observation)
@@ -799,10 +847,10 @@ class DdpgMlpActor(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         action = self.mlp(observation)
@@ -840,8 +888,8 @@ class DdpgCnnQNet(nn.Module):
             'activation_class': nn.ELU,
             'bias_last_layer': True,
         }
-        use_avg_pooling (bool, optional): if True, a nn.AvgPooling layer is
-            used to aggregate the output. Default is :obj:`True`.
+        use_avg_pooling (bool, optional): if ``True``, a nn.AvgPooling layer is
+            used to aggregate the output. Default is ``True``.
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -869,7 +917,7 @@ class DdpgCnnQNet(nn.Module):
             else {"output_size": (1, 1)},
             "squeeze_output": use_avg_pooling,
         }
-        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else dict()
+        conv_net_kwargs = conv_net_kwargs if conv_net_kwargs is not None else {}
         conv_net_default_kwargs.update(conv_net_kwargs)
         mlp_net_default_kwargs = {
             "in_features": None,
@@ -879,11 +927,11 @@ class DdpgCnnQNet(nn.Module):
             "activation_class": nn.ELU,
             "bias_last_layer": True,
         }
-        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else dict()
+        mlp_net_kwargs = mlp_net_kwargs if mlp_net_kwargs is not None else {}
         mlp_net_default_kwargs.update(mlp_net_kwargs)
         self.convnet = ConvNet(device=device, **conv_net_default_kwargs)
         self.mlp = MLP(device=device, **mlp_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp[-1], 6e-4, device=device)
+        ddpg_init_last_layer(self.mlp, 6e-4, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         hidden = torch.cat([self.convnet(observation), action], -1)
@@ -903,23 +951,23 @@ class DdpgMlpQNet(nn.Module):
     Args:
         mlp_net_kwargs_net1 (dict, optional): kwargs for MLP.
             Default: {
-            'in_features': None,
-            'out_features': 400,
-            'depth': 0,
-            'num_cells': [],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-            'activate_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 400,
+                'depth': 0,
+                'num_cells': [],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+                'activate_last_layer': True,
+            }
         mlp_net_kwargs_net2
             Default: {
-            'in_features': None,
-            'out_features': 1,
-            'depth': 1,
-            'num_cells': [300, ],
-            'activation_class': nn.ELU,
-            'bias_last_layer': True,
-        }
+                'in_features': None,
+                'out_features': 1,
+                'depth': 1,
+                'num_cells': [300, ],
+                'activation_class': nn.ELU,
+                'bias_last_layer': True,
+            }
         device (Optional[DEVICE_TYPING]): device to create the module on.
     """
 
@@ -940,7 +988,7 @@ class DdpgMlpQNet(nn.Module):
             "activate_last_layer": True,
         }
         mlp_net_kwargs_net1: Dict = (
-            mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else dict()
+            mlp_net_kwargs_net1 if mlp_net_kwargs_net1 is not None else {}
         )
         mlp1_net_default_kwargs.update(mlp_net_kwargs_net1)
         self.mlp1 = MLP(device=device, **mlp1_net_default_kwargs)
@@ -955,11 +1003,11 @@ class DdpgMlpQNet(nn.Module):
             "bias_last_layer": True,
         }
         mlp_net_kwargs_net2 = (
-            mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else dict()
+            mlp_net_kwargs_net2 if mlp_net_kwargs_net2 is not None else {}
         )
         mlp2_net_default_kwargs.update(mlp_net_kwargs_net2)
         self.mlp2 = MLP(device=device, **mlp2_net_default_kwargs)
-        ddpg_init_last_layer(self.mlp2[-1], 6e-3, device=device)
+        ddpg_init_last_layer(self.mlp2, 6e-3, device=device)
 
     def forward(self, observation: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         value = self.mlp2(torch.cat([self.mlp1(observation), action], -1))
@@ -984,13 +1032,17 @@ class LSTMNet(nn.Module):
         >>> batch = 7
         >>> time_steps = 6
         >>> in_features = 4
+        >>> out_features = 10
+        >>> hidden_size = 5
         >>> net = LSTMNet(
         ...     out_features,
         ...     {"input_size": hidden_size, "hidden_size": hidden_size},
         ...     {"out_features": hidden_size},
         ... )
         >>> # test single step vs multi-step
-        >>> x = torch.randn(batch, time_steps, in_features)
+        >>> x = torch.randn(batch, time_steps, in_features)  # >3 dims = multi-step
+        >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
+        >>> x = torch.randn(batch, in_features)  # 2 dims = single step
         >>> y, hidden0_in, hidden1_in, hidden0_out, hidden1_out = net(x)
 
     """
@@ -1002,6 +1054,10 @@ class LSTMNet(nn.Module):
         mlp_kwargs: Dict,
         device: Optional[DEVICE_TYPING] = None,
     ) -> None:
+        warnings.warn(
+            "LSTMNet is being deprecated in favour of torchrl.modules.LSTMModule, and will be removed soon.",
+            category=DeprecationWarning,
+        )
         super().__init__()
         lstm_kwargs.update({"batch_first": True})
         self.mlp = MLP(device=device, **mlp_kwargs)
@@ -1084,6 +1140,184 @@ class LSTMNet(nn.Module):
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class OnlineDTActor(nn.Module):
+    """Online Decision Transformer Actor class.
+
+    Actor class for the Online Decision Transformer to sample actions from gaussian distribution as presented inresented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
+    Returns mu and sigma for the gaussian distribution to sample actions from.
+
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
+
+    Examples:
+        >>> model = OnlineDTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=OnlineDTActor.default_config())
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> mu, std = model(observation, action, return_to_go)
+        >>> mu.shape
+        torch.Size([32, 10, 2])
+        >>> std.shape
+        torch.Size([32, 10, 2])
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
+        self.transformer = DecisionTransformer(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            config=transformer_config,
+        )
+        self.action_layer_mean = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+        self.action_layer_logstd = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+
+        self.log_std_min, self.log_std_max = -5.0, 2.0
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.action_layer_mean.apply(weight_init)
+        self.action_layer_logstd.apply(weight_init)
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden_state = self.transformer(observation, action, return_to_go)
+        mu = self.action_layer_mean(hidden_state)
+        log_std = self.action_layer_logstd(hidden_state)
+
+        log_std = torch.tanh(log_std)
+        # log_std is the output of tanh so it will be between [-1, 1]
+        # map it to be between [log_std_min, log_std_max]
+        log_std = self.log_std_min + 0.5 * (self.log_std_max - self.log_std_min) * (
+            log_std + 1.0
+        )
+        std = log_std.exp()
+
+        return mu, std
+
+    @classmethod
+    def default_config(cls):
+        """Default configuration for :class:`~.OnlineDTActor`."""
+        return DecisionTransformer.DTConfig(
+            n_embd=512,
+            n_layer=4,
+            n_head=4,
+            n_inner=2048,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )
+
+
+class DTActor(nn.Module):
+    """Decision Transformer Actor class.
+
+    Actor class for the Decision Transformer to output deterministic action as presented in `"Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
+    Returns the deterministic actions.
+
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`, optional):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
+
+    Examples:
+        >>> model = DTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=DTActor.default_config())
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> output = model(observation, action, return_to_go)
+        >>> output.shape
+        torch.Size([32, 10, 2])
+
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
+        self.transformer = DecisionTransformer(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            config=transformer_config,
+        )
+        self.action_layer = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.action_layer.apply(weight_init)
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_state = self.transformer(observation, action, return_to_go)
+        out = self.action_layer(hidden_state)
+        return out
+
+    @classmethod
+    def default_config(cls):
+        """Default configuration for :class:`~.DTActor`."""
+        return DecisionTransformer.DTConfig(
+            n_embd=512,
+            n_layer=4,
+            n_head=4,
+            n_inner=2048,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )

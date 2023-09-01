@@ -13,11 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import List
 
-from setuptools import setup, find_packages
-from torch.utils.cpp_extension import (
-    CppExtension,
-    BuildExtension,
-)
+from setuptools import find_packages, setup
+from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 try:
@@ -70,9 +67,11 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
+    if is_nightly:
+        return "torch>=2.1.0.dev"
     return "torch"
 
 
@@ -123,7 +122,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++14",
+            "-std=c++17",
             "-fdiagnostics-color=always",
         ]
     }
@@ -135,7 +134,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++14",
+                "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -144,10 +143,10 @@ def get_extensions():
     this_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_dir = os.path.join(this_dir, "torchrl", "csrc")
 
-    extension_sources = set(
+    extension_sources = {
         os.path.join(extensions_dir, p)
         for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
-    )
+    }
     sources = list(extension_sources)
 
     ext_modules = [
@@ -167,6 +166,10 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
+    if is_nightly:
+        tensordict_dep = "tensordict-nightly"
+    else:
+        tensordict_dep = "tensordict>=0.1.1"
 
     if is_nightly:
         version = get_nightly_version()
@@ -176,7 +179,7 @@ def _main(argv):
     else:
         version = get_version()
 
-    pytorch_package_dep = _get_pytorch_version()
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
@@ -202,7 +205,13 @@ def _main(argv):
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "packaging", "cloudpickle"],
+        install_requires=[
+            pytorch_package_dep,
+            "numpy",
+            "packaging",
+            "cloudpickle",
+            tensordict_dep,
+        ],
         extras_require={
             "atari": [
                 "gym<=0.24",
@@ -221,17 +230,22 @@ def _main(argv):
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
+                "git",
             ],
             "checkpointing": [
-                "torchinductor",
+                "torchsnapshot",
             ],
+            "marl": ["vmas"],
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3",
+            "Programming Language :: Python :: 3.7",
+            "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.9",
+            "Programming Language :: Python :: 3.10",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
-            "Development Status :: 3 - Alpha",
+            "Development Status :: 4 - Beta",
             "Intended Audience :: Developers",
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: BSD License",
@@ -241,5 +255,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
     _main(sys.argv[1:])

@@ -1,5 +1,14 @@
 # Useful resources
 
+## TorchRL paper
+To know more about TorchRL philosophy, the problem it is trying to solve and
+get some idea about its general capabilities, refer to the [TorchRL paper](https://arxiv.org/abs/2306.00577).
+
+We also have some introductory videos for you to get to know the library better, check them out:
+
+- [TorchRL intro at PyTorch day 2022](https://youtu.be/cIKMhZoykEE)
+- [PyTorch 2.0 Q&A: TorchRL](https://www.youtube.com/live/myEfUoYrbts?feature=share)
+
 ## Pytorch documentation
 See [here](https://pytorch.org/docs/stable/index.html)
 
@@ -16,6 +25,7 @@ See [here](https://pytorch.org/functorch/stable/)
 - [RL lectures from Deepmind](https://www.deepmind.com/learning-resources/reinforcement-learning-lecture-series-2021)
 - [Best benchmarks](https://neptune.ai/blog/best-benchmarks-for-reinforcement-learning)
 - [Awesome RL: Reinforcement learning resources curated](https://github.com/aikorea/awesome-rl)
+- [A Succinct Summary of Reinforcement Learning](https://arxiv.org/abs/2301.01379)
 
 ### Forums
 

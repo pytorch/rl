@@ -177,7 +177,7 @@ class ImpalaNetTensorDict(ImpalaNet):  # noqa: D101
         x = tensordict.get(self.observation_key)
         done = tensordict.get("done").squeeze(-1)
         reward = tensordict.get("reward").squeeze(-1)
-        mask = tensordict.get("mask").squeeze(-1)
+        mask = tensordict.get(("collector", "mask"))
         core_state = (
             tensordict.get("core_state") if "core_state" in tensordict.keys() else None
         )

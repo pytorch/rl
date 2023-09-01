@@ -2,229 +2,178 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+"""DDPG Example.
 
-import dataclasses
-import os
-import pathlib
-import uuid
-from datetime import datetime
+This is a simple self-contained example of a DDPG training script.
+
+It supports state environments like MuJoCo.
+
+The helper functions are coded in the utils.py associated with this script.
+"""
 
 import hydra
+
+import numpy as np
+import torch
 import torch.cuda
-from hydra.core.config_store import ConfigStore
-from torchrl.envs import ParallelEnv, EnvCreator
-from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
-from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
-from torchrl.record import VideoRecorder
-from torchrl.trainers.helpers.collectors import (
-    make_collector_offpolicy,
-    OffPolicyCollectorConfig,
-)
-from torchrl.trainers.helpers.envs import (
-    correct_for_frame_skip,
-    get_stats_random_rollout,
-    parallel_env_constructor,
-    transformed_env_constructor,
-    EnvConfig,
-)
-from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_ddpg_loss, LossConfig
-from torchrl.trainers.helpers.models import (
-    make_ddpg_actor,
-    DDPGModelConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
+import tqdm
+from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.record.loggers import generate_exp_name, get_logger
+from utils import (
+    make_collector,
+    make_ddpg_agent,
+    make_environment,
+    make_loss_module,
+    make_optimizer,
     make_replay_buffer,
-    ReplayArgsConfig,
 )
-from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
-
-config_fields = [
-    (config_field.name, config_field.type, config_field)
-    for config_cls in (
-        TrainerConfig,
-        OffPolicyCollectorConfig,
-        EnvConfig,
-        LossConfig,
-        DDPGModelConfig,
-        LoggerConfig,
-        ReplayArgsConfig,
-    )
-    for config_field in dataclasses.fields(config_cls)
-]
-Config = dataclasses.make_dataclass(cls_name="Config", fields=config_fields)
-cs = ConfigStore.instance()
-cs.store(name="config", node=Config)
-
-DEFAULT_REWARD_SCALING = {
-    "Hopper-v1": 5,
-    "Walker2d-v1": 5,
-    "HalfCheetah-v1": 5,
-    "cheetah": 5,
-    "Ant-v2": 5,
-    "Humanoid-v2": 20,
-    "humanoid": 100,
-}
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
+    device = torch.device(cfg.network.device)
 
-    cfg = correct_for_frame_skip(cfg)
-
-    if not isinstance(cfg.reward_scaling, float):
-        cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(cfg.env_name, 5.0)
-
-    device = (
-        torch.device("cpu")
-        if torch.cuda.device_count() == 0
-        else torch.device("cuda:0")
-    )
-
-    exp_name = "_".join(
-        [
-            "DDPG",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
-    )
-    if cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(log_dir="ddpg_logging", exp_name=exp_name)
-    elif cfg.logger == "mlflow":
-        from torchrl.trainers.loggers.mlflow import MLFlowLogger
-
-        logger = MLFlowLogger(
-            tracking_uri=pathlib.Path(os.path.abspath("ddpg_logging")).as_uri(),
-            exp_name=exp_name,
+    exp_name = generate_exp_name("DDPG", cfg.env.exp_name)
+    logger = None
+    if cfg.logger.backend:
+        logger = get_logger(
+            logger_type=cfg.logger.backend,
+            logger_name="ddpg_logging",
+            experiment_name=exp_name,
+            wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
         )
-    video_tag = exp_name if cfg.record_video else ""
 
-    stats = None
-    if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_env,
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
-        )
-        # make sure proof_env is closed
-        proof_env.close()
-    elif cfg.from_pixels:
-        stats = {"loc": 0.5, "scale": 0.5}
-    proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
-    )()
+    torch.manual_seed(cfg.env.seed)
+    np.random.seed(cfg.env.seed)
 
-    model = make_ddpg_actor(
-        proof_env,
-        cfg=cfg,
+    # Create Environments
+    train_env, eval_env = make_environment(cfg)
+
+    # Create Agent
+    model, exploration_policy = make_ddpg_agent(cfg, train_env, eval_env, device)
+
+    # Create Loss Module and Target Updater
+    loss_module, target_net_updater = make_loss_module(cfg, model)
+
+    # Make Off-Policy Collector
+    collector = make_collector(cfg, train_env, exploration_policy)
+
+    # Make Replay Buffer
+    replay_buffer = make_replay_buffer(
+        batch_size=cfg.optimization.batch_size,
+        prb=cfg.replay_buffer.prb,
+        buffer_size=cfg.replay_buffer.size,
         device=device,
     )
-    loss_module, target_net_updater = make_ddpg_loss(model, cfg)
 
-    actor_model_explore = model[0]
-    if cfg.ou_exploration:
-        if cfg.gSDE:
-            raise RuntimeError("gSDE and ou_exploration are incompatible")
-        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-            actor_model_explore,
-            annealing_num_steps=cfg.annealing_frames,
-            sigma=cfg.ou_sigma,
-            theta=cfg.ou_theta,
-        ).to(device)
-    if device == torch.device("cpu"):
-        # mostly for debugging
-        actor_model_explore.share_memory()
+    # Make Optimizers
+    optimizer_actor, optimizer_critic = make_optimizer(cfg, loss_module)
 
-    if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
-            # get dimensions to build the parallel env
-            proof_td = actor_model_explore(proof_env.reset().to(device))
-        action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
-        del proof_td
-    else:
-        action_dim_gsde, state_dim_gsde = None, None
+    rewards = []
+    rewards_eval = []
 
-    proof_env.close()
-    create_env_fn = parallel_env_constructor(
-        cfg=cfg,
-        stats=stats,
-        action_dim_gsde=action_dim_gsde,
-        state_dim_gsde=state_dim_gsde,
+    # Main loop
+    collected_frames = 0
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    r0 = None
+    q_loss = None
+
+    init_random_frames = cfg.collector.init_random_frames
+    num_updates = int(
+        cfg.collector.env_per_collector
+        * cfg.collector.frames_per_batch
+        * cfg.optimization.utd_ratio
     )
+    prb = cfg.replay_buffer.prb
+    env_per_collector = cfg.collector.env_per_collector
+    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
+    eval_iter = cfg.logger.eval_iter
+    eval_rollout_steps = cfg.collector.max_frames_per_traj // frame_skip
 
-    collector = make_collector_offpolicy(
-        make_env=create_env_fn,
-        actor_model_explore=actor_model_explore,
-        cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device} if device >= 0 else {}
-        #     for device in args.env_rendering_devices
-        # ],
-    )
+    for i, tensordict in enumerate(collector):
+        exploration_policy.step(tensordict.numel())
+        # update weights of the inference policy
+        collector.update_policy_weights_()
 
-    replay_buffer = make_replay_buffer(device, cfg)
+        if r0 is None:
+            r0 = tensordict["next", "reward"].sum(-1).mean().item()
+        pbar.update(tensordict.numel())
 
-    recorder = transformed_env_constructor(
-        cfg,
-        video_tag=video_tag,
-        norm_obs_only=True,
-        stats=stats,
-        logger=logger,
-        use_env_creator=False,
-    )()
+        tensordict = tensordict.reshape(-1)
+        current_frames = tensordict.numel()
+        replay_buffer.extend(tensordict.cpu())
+        collected_frames += current_frames
 
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
-    else:
-        recorder_rm = recorder
+        # optimization steps
+        if collected_frames >= init_random_frames:
+            (
+                actor_losses,
+                q_losses,
+            ) = ([], [])
+            for _ in range(num_updates):
+                # sample from replay buffer
+                sampled_tensordict = replay_buffer.sample().clone()
 
-    if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
-    elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
-    else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+                loss_td = loss_module(sampled_tensordict)
 
-    # reset reward scaling
-    for t in recorder.transform:
-        if isinstance(t, RewardScaling):
-            t.scale.fill_(1.0)
-            t.loc.fill_(0.0)
+                optimizer_critic.zero_grad()
+                optimizer_actor.zero_grad()
 
-    trainer = make_trainer(
-        collector,
-        loss_module,
-        recorder,
-        target_net_updater,
-        actor_model_explore,
-        replay_buffer,
-        logger,
-        cfg,
-    )
+                actor_loss = loss_td["loss_actor"]
+                q_loss = loss_td["loss_value"]
+                (actor_loss + q_loss).backward()
 
-    final_seed = collector.set_seed(cfg.seed)
-    print(f"init seed: {cfg.seed}, final seed: {final_seed}")
+                optimizer_critic.step()
+                q_losses.append(q_loss.item())
 
-    trainer.train()
-    return (logger.log_dir, trainer._log_dict)
+                optimizer_actor.step()
+                actor_losses.append(actor_loss.item())
+
+                # update qnet_target params
+                target_net_updater.step()
+
+                # update priority
+                if prb:
+                    replay_buffer.update_priority(sampled_tensordict)
+
+        rewards.append(
+            (i, tensordict["next", "reward"].sum().item() / env_per_collector)
+        )
+        train_log = {
+            "train_reward": rewards[-1][1],
+            "collected_frames": collected_frames,
+        }
+        if q_loss is not None:
+            train_log.update(
+                {
+                    "actor_loss": np.mean(actor_losses),
+                    "q_loss": np.mean(q_losses),
+                }
+            )
+        if logger is not None:
+            for key, value in train_log.items():
+                logger.log_scalar(key, value, step=collected_frames)
+        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
+            with set_exploration_type(ExplorationType.MODE), torch.no_grad():
+                eval_rollout = eval_env.rollout(
+                    eval_rollout_steps,
+                    exploration_policy,
+                    auto_cast_to_device=True,
+                    break_when_any_done=True,
+                )
+                eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
+                rewards_eval.append((i, eval_reward))
+                eval_str = f"eval cumulative reward: {rewards_eval[-1][1]: 4.4f} (init: {rewards_eval[0][1]: 4.4f})"
+                if logger is not None:
+                    logger.log_scalar(
+                        "evaluation_reward", rewards_eval[-1][1], step=collected_frames
+                    )
+        if len(rewards_eval):
+            pbar.set_description(
+                f"reward: {rewards[-1][1]: 4.4f} (r0 = {r0: 4.4f})," + eval_str
+            )
+
+    collector.shutdown()
 
 
 if __name__ == "__main__":

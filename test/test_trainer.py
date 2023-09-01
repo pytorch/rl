@@ -16,34 +16,37 @@ from torch import nn
 
 try:
     from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.trainers.loggers.tensorboard import TensorboardLogger
+    from torchrl.record.loggers.tensorboard import TensorboardLogger
 
     _has_tb = True
 except ImportError:
     _has_tb = False
 
+from _utils_internal import PONG_VERSIONED
 from tensordict import TensorDict
 from torchrl.data import (
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-    ListStorage,
     LazyMemmapStorage,
     LazyTensorStorage,
+    ListStorage,
+    TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.trainers import Recorder, Trainer
 from torchrl.trainers.helpers import transformed_env_constructor
 from torchrl.trainers.trainers import (
     _has_tqdm,
+    _has_ts,
     BatchSubSampler,
     CountFramesLog,
     LogReward,
     mask_batch,
+    OptimizerHook,
     ReplayBufferTrainer,
+    REWARD_KEY,
     RewardNormalizer,
     SelectKeys,
     UpdateWeights,
-    _has_ts,
 )
 
 
@@ -72,7 +75,7 @@ class MockingCollector:
         pass
 
     def state_dict(self):
-        return dict()
+        return {}
 
     def load_state_dict(self, state_dict):
         pass
@@ -82,15 +85,17 @@ class MockingLossModule(nn.Module):
     pass
 
 
-def mocking_trainer(file=None) -> Trainer:
+_mocking_optim = MockingOptim()
+
+
+def mocking_trainer(file=None, optimizer=_mocking_optim) -> Trainer:
     trainer = Trainer(
-        MockingCollector(),
-        *[
-            None,
-        ]
-        * 2,
+        collector=MockingCollector(),
+        total_frames=None,
+        frame_skip=None,
+        optim_steps_per_batch=None,
         loss_module=MockingLossModule(),
-        optimizer=MockingOptim(),
+        optimizer=optimizer,
         save_trainer_file=file,
     )
     trainer._pbar_str = OrderedDict()
@@ -196,10 +201,13 @@ class TestRB:
         torch.manual_seed(0)
         trainer = mocking_trainer()
         S = 100
+        storage = ListStorage(S)
         if prioritized:
-            replay_buffer = TensorDictPrioritizedReplayBuffer(S, 1.1, 0.9)
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=1.1, beta=0.9, storage=storage
+            )
         else:
-            replay_buffer = TensorDictReplayBuffer(S)
+            replay_buffer = TensorDictReplayBuffer(storage=storage)
 
         N = 9
         rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -230,11 +238,9 @@ class TestRB:
         if prioritized:
             for idx in range(min(S, batch)):
                 if idx in td_out.get("index"):
-                    assert replay_buffer._sum_tree[idx] != 1.0
+                    assert replay_buffer._sampler._sum_tree[idx] != 1.0
                 else:
-                    assert replay_buffer._sum_tree[idx] == 1.0
-        else:
-            assert "index" not in td_out.keys()
+                    assert replay_buffer._sampler._sum_tree[idx] == 1.0
 
     @pytest.mark.parametrize(
         "storage_type",
@@ -249,20 +255,20 @@ class TestRB:
         S = 100
         if storage_type == "list":
             storage = ListStorage(S)
-            collate_fn = lambda x: torch.stack(x, 0)
         elif storage_type == "memmap":
             storage = LazyMemmapStorage(S)
-            collate_fn = lambda x: x
         else:
             raise NotImplementedError
 
         if prioritized:
             replay_buffer = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                alpha=1.1,
+                beta=0.9,
+                storage=storage,
             )
         else:
             replay_buffer = TensorDictReplayBuffer(
-                S, storage=storage, collate_fn=collate_fn
+                storage=storage,
             )
 
         N = 9
@@ -283,24 +289,27 @@ class TestRB:
         trainer._process_batch_hook(td)
         td_out = trainer._process_optim_batch_hook(td)
         if prioritized:
-            td_out.set(replay_buffer.priority_key, torch.rand(N))
+            td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
         trainer._post_loss_hook(td_out)
 
         trainer2 = mocking_trainer()
         if prioritized:
             replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                S, 1.1, 0.9, storage=storage
+                alpha=1.1, beta=0.9, storage=storage
             )
         else:
-            replay_buffer2 = TensorDictReplayBuffer(S, storage=storage)
+            replay_buffer2 = TensorDictReplayBuffer(storage=storage)
         N = 9
         rb_trainer2 = ReplayBufferTrainer(replay_buffer=replay_buffer2, batch_size=N)
         rb_trainer2.register(trainer2)
         sd = trainer.state_dict()
         trainer2.load_state_dict(sd)
 
-        assert rb_trainer2.replay_buffer.cursor > 0
-        assert rb_trainer2.replay_buffer.cursor == rb_trainer.replay_buffer.cursor
+        assert rb_trainer2.replay_buffer._writer._cursor > 0
+        assert (
+            rb_trainer2.replay_buffer._writer._cursor
+            == rb_trainer.replay_buffer._writer._cursor
+        )
 
         if storage_type == "list":
             assert len(rb_trainer2.replay_buffer._storage._storage) > 0
@@ -371,16 +380,13 @@ class TestRB:
         def make_storage():
             if storage_type == "list":
                 storage = ListStorage(S)
-                collate_fn = lambda x: torch.stack(x, 0)
             elif storage_type == "tensor":
                 storage = LazyTensorStorage(S)
-                collate_fn = lambda x: x
             elif storage_type == "memmap":
                 storage = LazyMemmapStorage(S)
-                collate_fn = lambda x: x
             else:
                 raise NotImplementedError
-            return storage, collate_fn
+            return storage
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             if backend == "torch":
@@ -391,14 +397,16 @@ class TestRB:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            storage, collate_fn = make_storage()
+            storage = make_storage()
             if prioritized:
                 replay_buffer = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage, collate_fn=collate_fn
+                    alpha=1.1,
+                    beta=0.9,
+                    storage=storage,
                 )
             else:
                 replay_buffer = TensorDictReplayBuffer(
-                    S, storage=storage, collate_fn=collate_fn
+                    storage=storage,
                 )
 
             rb_trainer = ReplayBufferTrainer(replay_buffer=replay_buffer, batch_size=N)
@@ -413,21 +421,24 @@ class TestRB:
                 [batch],
             )
             trainer._process_batch_hook(td)
+            # sample from rb
             td_out = trainer._process_optim_batch_hook(td)
             if prioritized:
-                td_out.set(replay_buffer.priority_key, torch.rand(N))
+                td_out.unlock_().set(replay_buffer.priority_key, torch.rand(N))
             trainer._post_loss_hook(td_out)
             trainer.save_trainer(True)
 
             trainer2 = mocking_trainer()
-            storage2, _ = make_storage()
+            storage2 = make_storage()
             if prioritized:
                 replay_buffer2 = TensorDictPrioritizedReplayBuffer(
-                    S, 1.1, 0.9, storage=storage2, collate_fn=collate_fn
+                    alpha=1.1,
+                    beta=0.9,
+                    storage=storage2,
                 )
             else:
                 replay_buffer2 = TensorDictReplayBuffer(
-                    S, storage=storage2, collate_fn=collate_fn
+                    storage=storage2,
                 )
             N = 9
             rb_trainer2 = ReplayBufferTrainer(
@@ -448,8 +459,8 @@ class TestRB:
                 )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
-                    assert all([(_td1 == _td2).all() for _td1, _td2 in zip(td1, td2)])
-                    assert all([(_td1 is not _td2) for _td1, _td2 in zip(td1, td2)])
+                    assert all((_td1 == _td2).all() for _td1, _td2 in zip(td1, td2))
+                    assert all((_td1 is not _td2) for _td1, _td2 in zip(td1, td2))
                     assert storage2._storage is td2
                 else:
                     assert (td1 == td2).all()
@@ -464,6 +475,159 @@ class TestRB:
         TensorDict.load_state_dict = TensorDict_load_state_dict
 
 
+class TestOptimizer:
+    @staticmethod
+    def _setup():
+        torch.manual_seed(0)
+        x = torch.randn(5, 10)
+        model1 = nn.Linear(10, 20)
+        model2 = nn.Linear(10, 20)
+        td = TensorDict(
+            {
+                "loss_1": model1(x).sum(),
+                "loss_2": model2(x).sum(),
+            },
+            batch_size=[],
+        )
+        model1_params = list(model1.parameters())
+        model2_params = list(model2.parameters())
+        all_params = model1_params + model2_params
+        return model1_params, model2_params, all_params, td
+
+    def test_optimizer_set_as_argument(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=optimizer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_set_as_hook(self):
+        _, _, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer)
+        hook.register(trainer)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_no_optimizer(self):
+        _, _, all_params, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        params_before = [torch.clone(p) for p in all_params]
+        td_out = trainer._optimizer_hook(td)
+        params_after = all_params
+
+        assert not [key for key in td_out.keys() if key.startswith("grad_norm_")]
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(params_before, params_after)
+        )
+
+    def test_optimizer_hook_loss_components_empty(self):
+        model = nn.Linear(10, 20)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        with pytest.raises(ValueError, match="loss_components list cannot be empty"):
+            OptimizerHook(optimizer, loss_components=[])
+
+    def test_optimizer_hook_loss_components_partial(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=["loss_1"])
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_hook_loss_components_none(self):
+        model1_params, model2_params, all_params, td = self._setup()
+
+        optimizer = torch.optim.SGD(all_params, lr=1e-3)
+        trainer = mocking_trainer(optimizer=None)
+        hook = OptimizerHook(optimizer, loss_components=None)
+        hook.register(trainer)
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+    def test_optimizer_multiple_hooks(self):
+        model1_params, model2_params, _, td = self._setup()
+
+        trainer = mocking_trainer(optimizer=None)
+
+        optimizer1 = torch.optim.SGD(model1_params, lr=1e-3)
+        hook1 = OptimizerHook(optimizer1, loss_components=["loss_1"])
+        hook1.register(trainer, name="optimizer1")
+
+        optimizer2 = torch.optim.Adam(model2_params, lr=1e-4)
+        hook2 = OptimizerHook(optimizer2, loss_components=["loss_2"])
+        hook2.register(trainer, name="optimizer2")
+
+        model1_params_before = [torch.clone(p) for p in model1_params]
+        model2_params_before = [torch.clone(p) for p in model2_params]
+        td_out = trainer._optimizer_hook(td)
+        model1_params_after = model1_params
+        model2_params_after = model2_params
+
+        assert "grad_norm_0" in td_out.keys()
+        assert "grad_norm_1" in td_out.keys()
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model1_params_before, model1_params_after)
+        )
+        assert all(
+            not torch.equal(p_before, p_after)
+            for p_before, p_after in zip(model2_params_before, model2_params_after)
+        )
+
+
 class TestLogReward:
     @pytest.mark.parametrize("logname", ["a", "b"])
     @pytest.mark.parametrize("pbar", [True, False])
@@ -473,7 +637,7 @@ class TestLogReward:
 
         log_reward = LogReward(logname, log_pbar=pbar)
         trainer.register_op("pre_steps_log", log_reward)
-        td = TensorDict({"reward": torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
@@ -489,7 +653,7 @@ class TestLogReward:
 
         log_reward = LogReward(logname, log_pbar=pbar)
         log_reward.register(trainer)
-        td = TensorDict({"reward": torch.ones(3)}, [3])
+        td = TensorDict({REWARD_KEY: torch.ones(3)}, [3])
         trainer._pre_steps_log_hook(td)
         if _has_tqdm and pbar:
             assert trainer._pbar_str[logname] == 1
@@ -508,15 +672,15 @@ class TestRewardNorm:
 
         batch = 10
         reward = torch.randn(batch, 1)
-        td = TensorDict({"reward": reward.clone()}, [batch])
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
         td_out = trainer._process_batch_hook(td)
-        assert (td_out.get("reward") == reward).all()
+        assert (td_out.get(REWARD_KEY) == reward).all()
         assert not reward_normalizer._normalize_has_been_called
 
         td_norm = trainer._process_optim_batch_hook(td)
         assert reward_normalizer._normalize_has_been_called
-        torch.testing.assert_close(td_norm.get("reward").mean(), torch.zeros([]))
-        torch.testing.assert_close(td_norm.get("reward").std(), torch.ones([]))
+        torch.testing.assert_close(td_norm.get(REWARD_KEY).mean(), torch.zeros([]))
+        torch.testing.assert_close(td_norm.get(REWARD_KEY).std(), torch.ones([]))
 
     def test_reward_norm_state_dict(self):
         torch.manual_seed(0)
@@ -527,7 +691,7 @@ class TestRewardNorm:
 
         batch = 10
         reward = torch.randn(batch, 1)
-        td = TensorDict({"reward": reward.clone()}, [batch])
+        td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
         trainer._process_batch_hook(td)
         trainer._process_optim_batch_hook(td)
         state_dict = trainer.state_dict()
@@ -579,7 +743,7 @@ class TestRewardNorm:
 
             batch = 10
             reward = torch.randn(batch, 1)
-            td = TensorDict({"reward": reward.clone()}, [batch])
+            td = TensorDict({REWARD_KEY: reward.clone()}, [batch])
             trainer._process_batch_hook(td)
             trainer._process_optim_batch_hook(td)
             trainer.save_trainer(True)
@@ -601,14 +765,14 @@ def test_masking():
     batch = 10
     td = TensorDict(
         {
-            "mask": torch.zeros(batch, dtype=torch.bool).bernoulli_(),
+            ("collector", "mask"): torch.zeros(batch, dtype=torch.bool).bernoulli_(),
             "tensor": torch.randn(batch, 51),
         },
         [batch],
     )
     td_out = trainer._process_batch_hook(td)
-    assert td_out.shape[0] == td.get("mask").sum()
-    assert (td["tensor"][td["mask"].squeeze(-1)] == td_out["tensor"]).all()
+    assert td_out.shape[0] == td.get(("collector", "mask")).sum()
+    assert (td["tensor"][td[("collector", "mask")]] == td_out["tensor"]).all()
 
 
 class TestSubSampler:
@@ -673,7 +837,7 @@ class TestSubSampler:
 class TestRecorder:
     def _get_args(self):
         args = Namespace()
-        args.env_name = "ALE/Pong-v5"
+        args.env_name = PONG_VERSIONED
         args.env_task = ""
         args.grayscale = True
         args.env_library = "gym"
@@ -689,7 +853,7 @@ class TestRecorder:
         args.record_interval = 2
         args.catframes = 4
         args.image_size = 84
-        args.collector_devices = ["cpu"]
+        args.collector_device = ["cpu"]
         args.categorical_action_encoding = False
         return args
 
@@ -698,7 +862,7 @@ class TestRecorder:
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
@@ -710,7 +874,7 @@ class TestRecorder:
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             trainer = mocking_trainer()
@@ -731,7 +895,7 @@ class TestRecorder:
                     },
                 )
                 ea.Reload()
-                img = ea.Images("tmp_ALE/Pong-v5_video")
+                img = ea.Images(f"tmp_{PONG_VERSIONED}_video")
                 try:
                     assert len(img) == N // args.record_interval
                     break
@@ -772,19 +936,20 @@ class TestRecorder:
                 raise NotImplementedError
             trainer = mocking_trainer(file)
 
-            recorder = transformed_env_constructor(
+            environment = transformed_env_constructor(
                 args,
                 video_tag="tmp",
                 norm_obs_only=True,
                 stats={"loc": 0, "scale": 1},
                 logger=logger,
             )()
+            environment.rollout(2)
 
             recorder = Recorder(
                 record_frames=args.record_frames,
                 frame_skip=args.frame_skip,
                 policy_exploration=None,
-                recorder=recorder,
+                environment=environment,
                 record_interval=args.record_interval,
             )
             recorder.register(trainer)
@@ -828,10 +993,13 @@ class TestCountFrames:
         count_frames = CountFramesLog(frame_skip=frame_skip)
         count_frames.register(trainer)
         td = TensorDict(
-            {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+            {("collector", "mask"): torch.zeros(batch, dtype=torch.bool).bernoulli_()},
+            [batch],
         )
         trainer._pre_steps_log_hook(td)
-        assert count_frames.frame_count == td.get("mask").sum() * frame_skip
+        assert (
+            count_frames.frame_count == td.get(("collector", "mask")).sum() * frame_skip
+        )
 
     @pytest.mark.parametrize(
         "backend",
@@ -876,13 +1044,21 @@ class TestCountFrames:
         with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
             trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
             td = TensorDict(
-                {"mask": torch.zeros(batch, dtype=torch.bool).bernoulli_()}, [batch]
+                {
+                    ("collector", "mask"): torch.zeros(
+                        batch, dtype=torch.bool
+                    ).bernoulli_()
+                },
+                [batch],
             )
             trainer._pre_steps_log_hook(td)
             trainer.save_trainer(True)
             trainer2, count_frames2, _ = _make_countframe_and_trainer(tmpdirname2)
             trainer2.load_from_file(file)
-            assert count_frames2.frame_count == td.get("mask").sum() * frame_skip
+            assert (
+                count_frames2.frame_count
+                == td.get(("collector", "mask")).sum() * frame_skip
+            )
             assert state_dict_has_been_called[0]
             assert load_state_dict_has_been_called[0]
         CountFramesLog.state_dict = CountFramesLog_state_dict

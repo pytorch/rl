@@ -3,8 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to the TorchRL Documentation!
-=====================================
+TorchRL
+=======
+
+.. figure:: /_static/img/logo.png
+   :width: 600
 
 TorchRL is an open-source Reinforcement Learning (RL) library for PyTorch.
 
@@ -24,12 +27,58 @@ for :doc:`cost functions <reference/objectives>`, :ref:`returns <reference/objec
 
 TorchRL aims at a high modularity and good runtime performance.
 
+To read more about TorchRL philosophy and capabilities beyond this API reference,
+check the `TorchRL paper <https://arxiv.org/abs/2306.00577>`__.
+
+Tutorials
+=========
+
+Basics
+------
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/coding_ppo
+   tutorials/pendulum
+   tutorials/torchrl_demo
+
+Intermediate
+------------
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/multiagent_ppo
+   tutorials/torchrl_envs
+   tutorials/pretrained_models
+   tutorials/dqn_with_rnn
+   tutorials/rb_tutorial
+
+Advanced
+--------
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/multi_task
+   tutorials/coding_ddpg
+   tutorials/coding_dqn
+
+References
+==========
 
 .. toctree::
    :maxdepth: 3
-   :caption: Contents:
 
    reference/index
+
+Knowledge Base
+==============
+
+.. toctree::
+   :maxdepth: 2
+
    reference/knowledge_base
 
 Indices and tables

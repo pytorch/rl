@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 
 from torchrl.envs import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
@@ -36,7 +36,7 @@ class CEMPlanner(MPCPlannerBase):
             planner
         num_candidates (int): The number of candidates to sample from the
             Gaussian distributions.
-        num_top_k_candidates (int): The number of top candidates to use to
+        top_k (int): The number of top candidates to use to
             update the mean and standard deviation of the Gaussian distribution.
         reward_key (str, optional): The key in the TensorDict to use to
             retrieve the reward. Defaults to "reward".
@@ -45,38 +45,42 @@ class CEMPlanner(MPCPlannerBase):
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.data import CompositeSpec, NdUnboundedContinuousTensorSpec
+        >>> from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
         >>> from torchrl.envs.model_based import ModelBasedEnvBase
-        >>> from torchrl.modules import TensorDictModule
+        >>> from torchrl.modules import SafeModule
         >>> class MyMBEnv(ModelBasedEnvBase):
         ...     def __init__(self, world_model, device="cpu", dtype=None, batch_size=None):
         ...         super().__init__(world_model, device=device, dtype=dtype, batch_size=batch_size)
         ...         self.observation_spec = CompositeSpec(
-        ...             next_hidden_observation=NdUnboundedContinuousTensorSpec((4,))
+        ...             next_hidden_observation=UnboundedContinuousTensorSpec((4,))
         ...         )
         ...         self.input_spec = CompositeSpec(
-        ...             hidden_observation=NdUnboundedContinuousTensorSpec((4,)),
-        ...             action=NdUnboundedContinuousTensorSpec((1,)),
+        ...             hidden_observation=UnboundedContinuousTensorSpec((4,)),
+        ...             action=UnboundedContinuousTensorSpec((1,)),
         ...         )
-        ...         self.reward_spec = NdUnboundedContinuousTensorSpec((1,))
+        ...         self.reward_spec = UnboundedContinuousTensorSpec((1,))
         ...
         ...     def _reset(self, tensordict: TensorDict) -> TensorDict:
-        ...         tensordict = TensorDict({},
+        ...         tensordict = TensorDict(
+        ...             {},
         ...             batch_size=self.batch_size,
         ...             device=self.device,
         ...         )
-        ...         tensordict = tensordict.update(self.input_spec.rand(self.batch_size))
-        ...         tensordict = tensordict.update(self.observation_spec.rand(self.batch_size))
+        ...         tensordict = tensordict.update(
+        ...             self.input_spec.rand())
+        ...         tensordict = tensordict.update(
+        ...             self.observation_spec.rand())
         ...         return tensordict
+        ...
         >>> from torchrl.modules import MLP, WorldModelWrapper
         >>> import torch.nn as nn
         >>> world_model = WorldModelWrapper(
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         MLP(out_features=4, activation_class=nn.ReLU, activate_last_layer=True, depth=0),
         ...         in_keys=["hidden_observation", "action"],
         ...         out_keys=["hidden_observation"],
         ...     ),
-        ...     TensorDictModule(
+        ...     SafeModule(
         ...         nn.Linear(4, 1),
         ...         in_keys=["hidden_observation"],
         ...         out_keys=["reward"],
@@ -88,11 +92,18 @@ class CEMPlanner(MPCPlannerBase):
         >>> env.rollout(5, planner)
         TensorDict(
             fields={
-                action: Tensor(torch.Size([5, 1]), dtype=torch.float32),
-                done: Tensor(torch.Size([5, 1]), dtype=torch.bool),
-                hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                next_hidden_observation: Tensor(torch.Size([5, 4]), dtype=torch.float32),
-                reward: Tensor(torch.Size([5, 1]), dtype=torch.float32)},
+                action: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        next_hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                next_hidden_observation: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([5]),
             device=cpu,
             is_shared=False)
@@ -104,54 +115,74 @@ class CEMPlanner(MPCPlannerBase):
         planning_horizon: int,
         optim_steps: int,
         num_candidates: int,
-        num_top_k_candidates: int,
-        reward_key: str = "reward",
+        top_k: int,
+        reward_key: str = ("next", "reward"),
         action_key: str = "action",
     ):
         super().__init__(env=env, action_key=action_key)
         self.planning_horizon = planning_horizon
         self.optim_steps = optim_steps
         self.num_candidates = num_candidates
-        self.num_top_k_candidates = num_top_k_candidates
+        self.top_k = top_k
         self.reward_key = reward_key
 
     def planning(self, tensordict: TensorDictBase) -> torch.Tensor:
         batch_size = tensordict.batch_size
+        action_shape = (
+            *batch_size,
+            self.num_candidates,
+            self.planning_horizon,
+            *self.action_spec.shape,
+        )
+        action_stats_shape = (
+            *batch_size,
+            1,
+            self.planning_horizon,
+            *self.action_spec.shape,
+        )
+        action_topk_shape = (
+            *batch_size,
+            self.top_k,
+            self.planning_horizon,
+            *self.action_spec.shape,
+        )
+        TIME_DIM = len(self.action_spec.shape) - 3
+        K_DIM = len(self.action_spec.shape) - 4
         expanded_original_tensordict = (
             tensordict.unsqueeze(-1)
             .expand(*batch_size, self.num_candidates)
-            .reshape(-1)
+            .to_tensordict()
         )
-        flatten_batch_size = batch_size.numel()
-        actions_means = torch.zeros(
-            flatten_batch_size,
-            1,
-            self.planning_horizon,
-            *self.action_spec.shape,
+        _action_means = torch.zeros(
+            *action_stats_shape,
             device=tensordict.device,
             dtype=self.env.action_spec.dtype,
         )
-        actions_stds = torch.ones(
-            flatten_batch_size,
-            1,
-            self.planning_horizon,
-            *self.action_spec.shape,
-            device=tensordict.device,
-            dtype=self.env.action_spec.dtype,
+        _action_stds = torch.ones_like(_action_means)
+        container = TensorDict(
+            {
+                "tensordict": expanded_original_tensordict,
+                "stats": TensorDict(
+                    {
+                        "_action_means": _action_means,
+                        "_action_stds": _action_stds,
+                    },
+                    [*batch_size, 1, self.planning_horizon],
+                ),
+            },
+            batch_size,
         )
 
         for _ in range(self.optim_steps):
+            actions_means = container.get(("stats", "_action_means"))
+            actions_stds = container.get(("stats", "_action_stds"))
             actions = actions_means + actions_stds * torch.randn(
-                flatten_batch_size,
-                self.num_candidates,
-                self.planning_horizon,
-                *self.action_spec.shape,
-                device=tensordict.device,
-                dtype=self.env.action_spec.dtype,
+                *action_shape,
+                device=actions_means.device,
+                dtype=actions_means.dtype,
             )
-            actions = actions.flatten(0, 1)
             actions = self.env.action_spec.project(actions)
-            optim_tensordict = expanded_original_tensordict.to_tensordict()
+            optim_tensordict = container.get("tensordict").clone()
             policy = _PrecomputedActionsSequentialSetter(actions)
             optim_tensordict = self.env.rollout(
                 max_steps=self.planning_horizon,
@@ -159,23 +190,21 @@ class CEMPlanner(MPCPlannerBase):
                 auto_reset=False,
                 tensordict=optim_tensordict,
             )
-            rewards = (
-                optim_tensordict.get(self.reward_key)
-                .sum(dim=1)
-                .reshape(flatten_batch_size, self.num_candidates)
-            )
-            _, top_k = rewards.topk(self.num_top_k_candidates, dim=1)
 
-            best_actions = actions.unflatten(
-                0, (flatten_batch_size, self.num_candidates)
+            sum_rewards = optim_tensordict.get(self.reward_key).sum(
+                dim=TIME_DIM, keepdim=True
             )
-            best_actions = best_actions[
-                torch.arange(flatten_batch_size, device=tensordict.device).unsqueeze(1),
-                top_k,
-            ]
-            actions_means = best_actions.mean(dim=1, keepdim=True)
-            actions_stds = best_actions.std(dim=1, keepdim=True)
-        return actions_means[:, :, 0].reshape(*batch_size, *self.action_spec.shape)
+            _, top_k = sum_rewards.topk(self.top_k, dim=K_DIM)
+            top_k = top_k.expand(action_topk_shape)
+            best_actions = actions.gather(K_DIM, top_k)
+            container.set_(
+                ("stats", "_action_means"), best_actions.mean(dim=K_DIM, keepdim=True)
+            )
+            container.set_(
+                ("stats", "_action_stds"), best_actions.std(dim=K_DIM, keepdim=True)
+            )
+        action_means = container.get(("stats", "_action_means"))
+        return action_means[..., 0, 0, :]
 
 
 class _PrecomputedActionsSequentialSetter:
@@ -183,9 +212,10 @@ class _PrecomputedActionsSequentialSetter:
         self.actions = actions
         self.cmpt = 0
 
-    def __call__(self, td):
-        if self.cmpt >= self.actions.shape[1]:
-            raise ValueError("Precomputed actions are too short")
-        td = td.set("action", self.actions[:, self.cmpt])
+    def __call__(self, tensordict):
+        # checks that the step count is lower or equal to the horizon
+        if self.cmpt >= self.actions.shape[-2]:
+            raise ValueError("Precomputed actions sequence is too short")
+        tensordict = tensordict.set("action", self.actions[..., self.cmpt, :])
         self.cmpt += 1
-        return td
+        return tensordict

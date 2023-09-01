@@ -30,11 +30,11 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 else
-    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+    pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu118
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch-labs/tensordict
+pip install git+https://github.com/pytorch-labs/tensordict.git
 
 # smoke test
 python -c "import torch;import functorch"

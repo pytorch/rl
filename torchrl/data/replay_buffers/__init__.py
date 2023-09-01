@@ -4,9 +4,23 @@
 # LICENSE file in the root directory of this source tree.
 
 from .replay_buffers import (
-    ReplayBuffer,
     PrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
+    RemoteTensorDictReplayBuffer,
+    ReplayBuffer,
     TensorDictPrioritizedReplayBuffer,
+    TensorDictReplayBuffer,
 )
-from .storages import Storage, ListStorage, LazyMemmapStorage, LazyTensorStorage
+from .samplers import (
+    PrioritizedSampler,
+    RandomSampler,
+    Sampler,
+    SamplerWithoutReplacement,
+)
+from .storages import (
+    LazyMemmapStorage,
+    LazyTensorStorage,
+    ListStorage,
+    Storage,
+    TensorStorage,
+)
+from .writers import RoundRobinWriter, TensorDictRoundRobinWriter, Writer

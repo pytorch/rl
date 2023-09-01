@@ -1,6 +1,4 @@
 import dataclasses
-import uuid
-from datetime import datetime
 from pathlib import Path
 
 import hydra
@@ -8,18 +6,20 @@ import torch
 import torch.cuda
 import tqdm
 from dreamer_utils import (
-    parallel_env_constructor,
-    transformed_env_constructor,
     call_record,
+    EnvConfig,
     grad_norm,
     make_recorder_env,
-    EnvConfig,
+    parallel_env_constructor,
+    transformed_env_constructor,
 )
 from hydra.core.config_store import ConfigStore
 
 # float16
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.utils import clip_grad_norm_
+
+from torchrl.envs import EnvBase
 from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
@@ -29,26 +29,21 @@ from torchrl.objectives.dreamer import (
     DreamerModelLoss,
     DreamerValueLoss,
 )
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
-    get_stats_random_rollout,
+    initialize_observation_norm_transforms,
+    retrieve_observation_norms_state_dict,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.models import (
-    make_dreamer,
-    DreamerConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
-    make_replay_buffer,
-    ReplayArgsConfig,
-)
+from torchrl.trainers.helpers.models import DreamerConfig, make_dreamer
+from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import TrainerConfig
 from torchrl.trainers.trainers import Recorder, RewardNormalizer
-
 
 config_fields = [
     (config_field.name, config_field.type, config_field)
@@ -67,7 +62,14 @@ cs = ConfigStore.instance()
 cs.store(name="config", node=Config)
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+def retrieve_stats_from_state_dict(obs_norm_state_dict):
+    return {
+        "loc": obs_norm_state_dict["loc"],
+        "scale": obs_norm_state_dict["scale"],
+    }
+
+
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
@@ -82,65 +84,49 @@ def main(cfg: "DictConfig"):  # noqa: F821
     else:
         device = torch.device("cpu")
     print(f"Using device {device}")
-    exp_name = "_".join(
-        [
-            "Dreamer",
-            cfg.exp_name,
-            str(uuid.uuid4())[:8],
-            datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
-        ]
+
+    exp_name = generate_exp_name("Dreamer", cfg.exp_name)
+    logger = get_logger(
+        logger_type=cfg.logger,
+        logger_name="dreamer",
+        experiment_name=exp_name,
+        wandb_kwargs={
+            "project": "torchrl",
+            "group": f"Dreamer_{cfg.env_name}",
+            "offline": cfg.offline_logging,
+        },
     )
-
-    if cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(
-            f"dreamer/{exp_name}",
-            project="torchrl",
-            group=f"Dreamer_{cfg.env_name}",
-            offline=cfg.offline_logging,
-        )
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    elif cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
-
-        logger = TensorboardLogger(
-            f"{exp_name}",
-            log_dir="dreamer",
-        )
-    else:
-        raise NotImplementedError(cfg.logger)
-
     video_tag = f"Dreamer_{cfg.env_name}_policy_test" if cfg.record_video else ""
 
-    stats = None
-
-    # Compute the stats of the observations
+    key, init_env_steps, stats = None, None, None
     if not cfg.vecnorm and cfg.norm_stats:
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_environment=transformed_env_constructor(cfg)(),
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
-        )
-        stats = {k: v.clone() for k, v in stats.items()}
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
+        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
+        init_env_steps = cfg.init_env_steps
+        stats = {"loc": None, "scale": None}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
+    proof_env = transformed_env_constructor(
+        cfg=cfg, use_env_creator=False, stats=stats
+    )()
+    initialize_observation_norm_transforms(
+        proof_environment=proof_env, num_iter=init_env_steps, key=key
+    )
+    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
+    proof_env.close()
 
     # Create the different components of dreamer
     world_model, model_based_env, actor_model, value_model, policy = make_dreamer(
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         cfg=cfg,
         device=device,
         use_decoder_in_env=True,
         action_key="action",
         value_key="state_value",
-        proof_environment=transformed_env_constructor(cfg)(),
+        proof_environment=transformed_env_constructor(
+            cfg, stats={"loc": 0.0, "scale": 1.0}
+        )(),
     )
 
     # reward normalization
@@ -182,10 +168,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     action_dim_gsde, state_dim_gsde = None, None
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
+    if isinstance(create_env_fn, EnvBase):
+        create_env_fn.rollout(2)
+    else:
+        create_env_fn().rollout(2)
 
     # Create the replay buffer
 
@@ -193,10 +183,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         make_env=create_env_fn,
         actor_model_explore=exploration_policy,
         cfg=cfg,
-        # make_env_kwargs=[
-        #     {"device": device}
-        #     for device in cfg.collector_devices
-        # ],
     )
     print("collector:", collector)
 
@@ -206,12 +192,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         record_frames=cfg.record_frames,
         frame_skip=cfg.frame_skip,
         policy_exploration=policy,
-        recorder=make_recorder_env(
-            cfg,
-            video_tag,
-            stats,
-            logger,
-            create_env_fn,
+        environment=make_recorder_env(
+            cfg=cfg,
+            video_tag=video_tag,
+            obs_norm_state_dict=obs_norm_state_dict,
+            logger=logger,
+            create_env_fn=create_env_fn,
         ),
         record_interval=cfg.record_interval,
         log_keys=cfg.recorder_log_keys,
@@ -242,14 +228,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         current_frames = tensordict.numel()
         collected_frames += current_frames
 
-        # Compared to the original paper, the replay buffer is not temporally sampled. We fill it with trajectories of length batch_length.
-        # To be closer to the paper, we would need to fill it with trajectories of lentgh 1000 and then sample subsequences of length batch_length.
+        # Compared to the original paper, the replay buffer is not temporally
+        # sampled. We fill it with trajectories of length batch_length.
+        # To be closer to the paper, we would need to fill it with trajectories
+        # of length 1000 and then sample subsequences of length batch_length.
 
-        # tensordict = tensordict.reshape(-1, cfg.batch_length)
+        tensordict = tensordict.reshape(-1, cfg.batch_length)
         replay_buffer.extend(tensordict.cpu())
         logger.log_scalar(
             "r_training",
-            tensordict["reward"].mean().detach().item(),
+            tensordict["next", "reward"].mean().detach().item(),
             step=collected_frames,
         )
 
@@ -374,6 +362,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if j == cfg.optim_steps_per_batch - 1:
                     do_log = False
 
+            stats = retrieve_stats_from_state_dict(obs_norm_state_dict)
             call_record(
                 logger,
                 record,

@@ -22,8 +22,8 @@ def _assert_channels(img: Tensor, permitted: List[int]) -> None:
     c = _get_image_num_channels(img)
     if c not in permitted:
         raise TypeError(
-            "Input image tensor permitted channel values are {}, but found"
-            "{}".format(permitted, c)
+            f"Input image tensor permitted channel values are {permitted}, but found "
+            f"{c} (full shape: {img.shape})"
         )
 
 

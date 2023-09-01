@@ -8,7 +8,7 @@ import warnings
 
 import pytest
 import torch
-from tensordict import SavedTensorDict, TensorDict
+from tensordict import TensorDict
 from torch import multiprocessing as mp
 
 
@@ -59,7 +59,9 @@ class TestShared:
         td = tensordict.clone().share_memory_()
         if indexing_method == 0:
             subtd = TensorDict(
-                source={key: item[0] for key, item in td.items()}, batch_size=[]
+                source={key: item[0] for key, item in td.items()},
+                batch_size=[],
+                _is_shared=True,
             )
         elif indexing_method == 1:
             subtd = td.get_sub_tensordict(0)
@@ -142,6 +144,10 @@ class TestStack:
             )
 
 
+# @pytest.mark.skipif(
+#     sys.platform == "win32",
+#     reason="RuntimeError from Torch serialization.py when creating td_saved on Windows",
+# )
 @pytest.mark.parametrize(
     "idx",
     [
@@ -173,7 +179,6 @@ def test_memmap(idx, dtype, large_scale=False):
 
     td_sm = td.clone().share_memory_()
     td_memmap = td.clone().memmap_()
-    td_saved = td.to(SavedTensorDict)
 
     print("\nTesting reading from TD")
     for i in range(2):
@@ -186,11 +191,6 @@ def test_memmap(idx, dtype, large_scale=False):
         td_memmap[idx].clone()
         if i == 1:
             print(f"memmap: {time.time() - t0:4.4f} sec")
-
-        t0 = time.time()
-        td_saved[idx].clone()
-        if i == 1:
-            print(f"saved td: {time.time() - t0:4.4f} sec")
 
     td_to_copy = td[idx].contiguous()
     for k in td_to_copy.keys():
@@ -211,13 +211,6 @@ def test_memmap(idx, dtype, large_scale=False):
         if i == 1:
             print(f"memmap td: {time.time() - t0:4.4f} sec")
         torch.testing.assert_close(sub_td_sm.get("a")._tensor, td_to_copy.get("a"))
-
-        t0 = time.time()
-        sub_td_sm = td_saved.get_sub_tensordict(idx)
-        sub_td_sm.update_(td_to_copy)
-        if i == 1:
-            print(f"saved td: {time.time() - t0:4.4f} sec")
-        torch.testing.assert_close(sub_td_sm.get("a"), td_to_copy.get("a"))
 
 
 if __name__ == "__main__":

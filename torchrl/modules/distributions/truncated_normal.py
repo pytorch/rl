@@ -52,7 +52,6 @@ class TruncatedStandardNormal(Distribution):
             .tolist()
         ):
             raise ValueError("Incorrect truncation range")
-        # eps = torch.finfo(self.a.dtype).eps * 10
         eps = self.eps
         self._dtype_min_gt_0 = eps
         self._dtype_max_lt_1 = 1 - eps
@@ -98,7 +97,7 @@ class TruncatedStandardNormal(Distribution):
 
     @staticmethod
     def _little_phi(x):
-        return (-(x ** 2) * 0.5).exp() * CONST_INV_SQRT_2PI
+        return (-(x**2) * 0.5).exp() * CONST_INV_SQRT_2PI
 
     def _big_phi(self, x):
         phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
@@ -121,7 +120,7 @@ class TruncatedStandardNormal(Distribution):
     def log_prob(self, value):
         if self._validate_args:
             self._validate_sample(value)
-        return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value ** 2) * 0.5
+        return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5
 
     def rsample(self, sample_shape=None):
         if sample_shape is None:
@@ -151,7 +150,7 @@ class TruncatedNormal(TruncatedStandardNormal):
         super(TruncatedNormal, self).__init__(a, b, validate_args=validate_args)
         self._log_scale = self.scale.log()
         self._mean = self._mean * self.scale + self.loc
-        self._variance = self._variance * self.scale ** 2
+        self._variance = self._variance * self.scale**2
         self._entropy += self._log_scale
 
     def _to_std_rv(self, value):

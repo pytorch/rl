@@ -6,25 +6,29 @@ from __future__ import annotations
 
 import collections
 import os
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
-from torchrl.data import (
+from torchrl.data.tensor_specs import (
+    BoundedTensorSpec,
     CompositeSpec,
-    NdBoundedTensorSpec,
-    NdUnboundedContinuousTensorSpec,
     TensorSpec,
-    NdUnboundedDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
-from ...data.utils import numpy_to_torch_dtype_dict, DEVICE_TYPING
+
+from ..._utils import VERBOSE
+
+from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv
 
-if torch.has_cuda and torch.cuda.device_count() > 1:
+if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
-    print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
+    if VERBOSE:
+        print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
 try:
 
@@ -35,8 +39,11 @@ try:
 
     _has_dmc = True
 
-except ImportError:
+except ImportError as err:
     _has_dmc = False
+    IMPORT_ERR = err
+else:
+    IMPORT_ERR = None
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -55,24 +62,28 @@ def _dmcontrol_to_torchrl_spec_transform(
     elif isinstance(spec, dm_env.specs.BoundedArray):
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
-        return NdBoundedTensorSpec(
-            shape=spec.shape,
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
+        return BoundedTensorSpec(
+            shape=shape,
             minimum=spec.minimum,
             maximum=spec.maximum,
             dtype=dtype,
             device=device,
         )
     elif isinstance(spec, dm_env.specs.Array):
+        shape = spec.shape
+        if not len(shape):
+            shape = torch.Size([1])
         if dtype is None:
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         if dtype in (torch.float, torch.double, torch.half):
-            return NdUnboundedContinuousTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
+            return UnboundedContinuousTensorSpec(
+                shape=shape, dtype=dtype, device=device
             )
         else:
-            return NdUnboundedDiscreteTensorSpec(
-                shape=spec.shape, dtype=dtype, device=device
-            )
+            return UnboundedDiscreteTensorSpec(shape=shape, dtype=dtype, device=device)
 
     else:
         raise NotImplementedError(type(spec))
@@ -80,10 +91,10 @@ def _dmcontrol_to_torchrl_spec_transform(
 
 def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     if not _has_dmc:
-        return dict()
+        return {}
     if not to_dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
-    d = dict()
+    d = {}
     for tup in suite.BENCHMARKING:
         env_name = tup[0]
         d.setdefault(env_name, []).append(tup[1])
@@ -105,7 +116,7 @@ class DMControlWrapper(GymLikeEnv):
 
     Args:
         env (dm_control.suite env): environment instance
-        from_pixels (bool): if True, the observation
+        from_pixels (bool): if ``True``, the observation
 
     Examples:
         >>> env = dm_control.suite.load("cheetah", "run")
@@ -153,7 +164,20 @@ class DMControlWrapper(GymLikeEnv):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # specs are defined when first called
-        return
+        self.observation_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.observation_spec(), device=self.device
+        )
+        reward_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.reward_spec(), device=self.device
+        )
+        if len(reward_spec.shape) == 0:
+            reward_spec.shape = torch.Size([1])
+        self.reward_spec = reward_spec
+        # populate default done spec
+        _ = self.done_spec
+        self.action_spec = _dmcontrol_to_torchrl_spec_transform(
+            self._env.action_spec(), device=self.device
+        )
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -208,44 +232,6 @@ class DMControlWrapper(GymLikeEnv):
         observation = timestep_tuple[0].observation
         return observation, reward, done
 
-    @property
-    def input_spec(self) -> TensorSpec:
-        if self._input_spec is None:
-            self._input_spec = CompositeSpec(
-                action=_dmcontrol_to_torchrl_spec_transform(
-                    self._env.action_spec(), device=self.device
-                )
-            )
-        return self._input_spec
-
-    @input_spec.setter
-    def input_spec(self, value: TensorSpec) -> None:
-        self._input_spec = value
-
-    @property
-    def observation_spec(self) -> TensorSpec:
-        if self._observation_spec is None:
-            self._observation_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.observation_spec(), device=self.device
-            )
-        return self._observation_spec
-
-    @observation_spec.setter
-    def observation_spec(self, value: TensorSpec) -> None:
-        self._observation_spec = value
-
-    @property
-    def reward_spec(self) -> TensorSpec:
-        if self._reward_spec is None:
-            self._reward_spec = _dmcontrol_to_torchrl_spec_transform(
-                self._env.reward_spec(), device=self.device
-            )
-        return self._reward_spec
-
-    @reward_spec.setter
-    def reward_spec(self, value: TensorSpec) -> None:
-        self._reward_spec = value
-
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})"
@@ -259,7 +245,7 @@ class DMControlEnv(DMControlWrapper):
         env_name (str): name of the environment
         task_name (str): name of the task
         seed (int, optional): seed to use for the environment
-        from_pixels (bool, optional): if True, the observation will be returned
+        from_pixels (bool, optional): if ``True``, the observation will be returned
             as an image.
             Default is False.
 
@@ -275,9 +261,8 @@ class DMControlEnv(DMControlWrapper):
     def __init__(self, env_name, task_name, **kwargs):
         if not _has_dmc:
             raise ImportError(
-                "dm_control python package was not found."
-                "Please install this dependency."
-            )
+                "dm_control python package was not found. Please install this dependency."
+            ) from IMPORT_ERR
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)
@@ -340,13 +325,6 @@ class DMControlEnv(DMControlWrapper):
                 raise TypeError("dm_control requires task_name to be specified")
         else:
             raise TypeError("dm_control requires env_name to be specified")
-
-    # def _set_seed(self, _seed: int) -> int:
-    #     self._env = self._build_env(
-    #         _seed=_seed, **self._constructor_kwargs
-    #     )
-    #     self.reset()
-    #     return _seed
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(env={self.env_name}, task={self.task_name}, batch_size={self.batch_size})"

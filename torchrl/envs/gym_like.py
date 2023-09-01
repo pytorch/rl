@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import abc
+import itertools
 import warnings
-from typing import List, Optional, Sequence, Union, Tuple, Any, Dict
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -145,15 +146,14 @@ class GymLikeEnv(_EnvWrapper):
         """
         return done, done
 
-    def read_reward(self, total_reward, step_reward):
-        """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
+    def read_reward(self, reward):
+        """Reads the reward and maps it to the reward space.
 
         Args:
-            total_reward (torch.Tensor or TensorDict): total reward so far in the step
-            step_reward (reward in the format provided by the inner env): reward of this particular step
+            reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
-        return total_reward + self.reward_spec.encode(step_reward)
+        return self.reward_spec.encode(reward)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
@@ -165,18 +165,27 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if isinstance(observations, dict):
-            observations = {key: value for key, value in observations.items()}
+            if "state" in observations and "observation" not in observations:
+                # we rename "state" in "observation" as "observation" is the conventional name
+                # for single observation in torchrl.
+                # naming it 'state' will result in envs that have a different name for the state vector
+                # when queried with and without pixels
+                observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
-            key = list(self.observation_spec.keys())[0]
+            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
-        observations = self.observation_spec.encode(observations)
+        for key, val in observations.items():
+            observations[key] = self.observation_spec[key].encode(
+                val, ignore_device=True
+            )
+        # observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        action = tensordict.get("action")
+        action = tensordict.get(self.action_key)
         action_np = self.read_action(action)
 
-        reward = self.reward_spec.zero(self.batch_size)
+        reward = 0
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
                 self._env.step(action_np)
@@ -187,6 +196,7 @@ class GymLikeEnv(_EnvWrapper):
             if len(info) == 2:
                 # gym 0.26
                 truncation, info = info
+                done = done | truncation
             elif len(info) == 1:
                 info = info[0]
             elif len(info) == 0:
@@ -199,32 +209,31 @@ class GymLikeEnv(_EnvWrapper):
                 )
 
             if _reward is None:
-                _reward = self.reward_spec.zero(self.batch_size)
+                _reward = self.reward_spec.zero()
 
-            reward = self.read_reward(reward, _reward)
+            reward = reward + _reward
 
-            # TODO: check how to deal with np arrays
+            if isinstance(done, bool) or (
+                isinstance(done, np.ndarray) and not len(done)
+            ):
+                done = torch.tensor([done])
             done, do_break = self.read_done(done)
             if do_break:
                 break
 
+        reward = self.read_reward(reward)
         obs_dict = self.read_obs(obs)
 
         if reward is None:
-            reward = np.nan
-        reward = self._to_tensor(reward, dtype=self.reward_spec.dtype)
-        done = self._to_tensor(done, dtype=torch.bool)
-        self.is_done = done
+            reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+        obs_dict[self.reward_key] = reward
+        obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(
-            obs_dict, batch_size=tensordict.batch_size, device=self.device
-        )
+        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
-        tensordict_out.set("reward", reward)
-        tensordict_out.set("done", done)
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
-
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
@@ -233,14 +242,27 @@ class GymLikeEnv(_EnvWrapper):
         reset_data = self._env.reset(**kwargs)
         if not isinstance(reset_data, tuple):
             reset_data = (reset_data,)
-        obs, *_ = self._output_transform(reset_data)
+        obs, *other = self._output_transform(reset_data)
+        info = None
+        if len(other) == 1:
+            info = other[0]
+
+        source = self.read_obs(obs)
+
+        # if self.done_key not in source:
+        #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
-            source=self.read_obs(obs),
+            source=source,
             batch_size=self.batch_size,
-            device=self.device,
         )
-        self._is_done = torch.zeros(self.batch_size, dtype=torch.bool)
-        tensordict_out.set("done", self._is_done)
+        if self.info_dict_reader is not None and info is not None:
+            self.info_dict_reader(info, tensordict_out)
+        elif info is None and self.info_dict_reader is not None:
+            # populate the reset with the items we have not seen from info
+            for key, item in self.observation_spec.items():
+                if key not in tensordict_out.keys():
+                    source[key] = item.zero()
+        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
@@ -266,7 +288,8 @@ class GymLikeEnv(_EnvWrapper):
         Returns: the same environment with the dict_reader registered.
 
         Examples:
-            >>> from torchrl.envs import GymWrapper, default_info_dict_reader
+            >>> from torchrl.envs import default_info_dict_reader
+            >>> from torchrl.envs.libs.gym import GymWrapper
             >>> reader = default_info_dict_reader(["my_info_key"])
             >>> # assuming "some_env-v0" returns a dict with a key "my_info_key"
             >>> env = GymWrapper(gym.make("some_env-v0")).set_info_dict_reader(info_dict_reader=reader)
@@ -277,7 +300,7 @@ class GymLikeEnv(_EnvWrapper):
         """
         self.info_dict_reader = info_dict_reader
         for info_key, spec in info_dict_reader.info_spec.items():
-            self.observation_spec[info_key] = spec
+            self.observation_spec[info_key] = spec.to(self.device)
         return self
 
     def __repr__(self) -> str:

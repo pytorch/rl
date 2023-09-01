@@ -4,40 +4,35 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-import os
-import pathlib
 import uuid
 from datetime import datetime
 
 import hydra
 import torch.cuda
 from hydra.core.config_store import ConfigStore
-from torchrl.envs import ParallelEnv, EnvCreator
+from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.transforms import RewardScaling, TransformedEnv
-from torchrl.envs.utils import set_exploration_mode
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import OrnsteinUhlenbeckProcessWrapper
 from torchrl.record import VideoRecorder
+from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
     OffPolicyCollectorConfig,
 )
 from torchrl.trainers.helpers.envs import (
     correct_for_frame_skip,
-    get_stats_random_rollout,
-    parallel_env_constructor,
-    transformed_env_constructor,
     EnvConfig,
+    get_norm_state_dict,
+    initialize_observation_norm_transforms,
+    parallel_env_constructor,
+    retrieve_observation_norms_state_dict,
+    transformed_env_constructor,
 )
 from torchrl.trainers.helpers.logger import LoggerConfig
-from torchrl.trainers.helpers.losses import make_redq_loss, LossConfig
-from torchrl.trainers.helpers.models import (
-    make_redq_model,
-    REDQModelConfig,
-)
-from torchrl.trainers.helpers.replay_buffer import (
-    make_replay_buffer,
-    ReplayArgsConfig,
-)
+from torchrl.trainers.helpers.losses import LossConfig, make_redq_loss
+from torchrl.trainers.helpers.models import make_redq_model, REDQModelConfig
+from torchrl.trainers.helpers.replay_buffer import make_replay_buffer, ReplayArgsConfig
 from torchrl.trainers.helpers.trainers import make_trainer, TrainerConfig
 
 config_fields = [
@@ -69,7 +64,7 @@ DEFAULT_REWARD_SCALING = {
 }
 
 
-@hydra.main(version_base=None, config_path=".", config_name="config")
+@hydra.main(version_base="1.1", config_path=".", config_name="config")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     cfg = correct_for_frame_skip(cfg)
@@ -91,42 +86,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
             datetime.now().strftime("%y_%m_%d-%H_%M_%S"),
         ]
     )
-    if cfg.logger == "tensorboard":
-        from torchrl.trainers.loggers.tensorboard import TensorboardLogger
 
-        logger = TensorboardLogger(log_dir="redq_logging", exp_name=exp_name)
-    elif cfg.logger == "csv":
-        from torchrl.trainers.loggers.csv import CSVLogger
-
-        logger = CSVLogger(log_dir="redq_logging", exp_name=exp_name)
-    elif cfg.logger == "wandb":
-        from torchrl.trainers.loggers.wandb import WandbLogger
-
-        logger = WandbLogger(log_dir="redq_logging", exp_name=exp_name)
-    elif cfg.logger == "mlflow":
-        from torchrl.trainers.loggers.mlflow import MLFlowLogger
-
-        logger = MLFlowLogger(
-            tracking_uri=pathlib.Path(os.path.abspath("redq_logging")).as_uri(),
-            exp_name=exp_name,
-        )
+    exp_name = generate_exp_name("REDQ", cfg.exp_name)
+    logger = get_logger(
+        logger_type=cfg.logger, logger_name="redq_logging", experiment_name=exp_name
+    )
     video_tag = exp_name if cfg.record_video else ""
 
-    stats = None
+    key, init_env_steps, stats = None, None, None
     if not cfg.vecnorm and cfg.norm_stats:
-        proof_env = transformed_env_constructor(cfg=cfg, use_env_creator=False)()
-        stats = get_stats_random_rollout(
-            cfg,
-            proof_env,
-            key="next_pixels" if cfg.from_pixels else "next_observation_vector",
-        )
-        # make sure proof_env is closed
-        proof_env.close()
+        if not hasattr(cfg, "init_env_steps"):
+            raise AttributeError("init_env_steps missing from arguments.")
+        key = ("next", "pixels") if cfg.from_pixels else ("next", "observation_vector")
+        init_env_steps = cfg.init_env_steps
+        stats = {"loc": None, "scale": None}
     elif cfg.from_pixels:
         stats = {"loc": 0.5, "scale": 0.5}
+
     proof_env = transformed_env_constructor(
-        cfg=cfg, use_env_creator=False, stats=stats
+        cfg=cfg,
+        use_env_creator=False,
+        stats=stats,
     )()
+    initialize_observation_norm_transforms(
+        proof_environment=proof_env, num_iter=init_env_steps, key=key
+    )
+    _, obs_norm_state_dict = retrieve_observation_norms_state_dict(proof_env)[0]
+
     model = make_redq_model(
         proof_env,
         cfg=cfg,
@@ -149,7 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_model_explore.share_memory()
 
     if cfg.gSDE:
-        with torch.no_grad(), set_exploration_mode("random"):
+        with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
             # get dimensions to build the parallel env
             proof_td = actor_model_explore(proof_env.reset().to(device))
         action_dim_gsde, state_dim_gsde = proof_td.get("_eps_gSDE").shape[-2:]
@@ -160,7 +146,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     proof_env.close()
     create_env_fn = parallel_env_constructor(
         cfg=cfg,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         action_dim_gsde=action_dim_gsde,
         state_dim_gsde=state_dim_gsde,
     )
@@ -181,27 +167,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
         cfg,
         video_tag=video_tag,
         norm_obs_only=True,
-        stats=stats,
+        obs_norm_state_dict=obs_norm_state_dict,
         logger=logger,
         use_env_creator=False,
     )()
-
-    # remove video recorder from recorder to have matching state_dict keys
-    if cfg.record_video:
-        recorder_rm = TransformedEnv(recorder.base_env)
-        for transform in recorder.transform:
-            if not isinstance(transform, VideoRecorder):
-                recorder_rm.append_transform(transform)
-    else:
-        recorder_rm = recorder
-
     if isinstance(create_env_fn, ParallelEnv):
-        recorder_rm.load_state_dict(create_env_fn.state_dict()["worker0"])
-        create_env_fn.close()
+        raise NotImplementedError("This behaviour is deprecated")
     elif isinstance(create_env_fn, EnvCreator):
-        recorder_rm.load_state_dict(create_env_fn().state_dict())
+        recorder.transform[1:].load_state_dict(
+            get_norm_state_dict(create_env_fn()), strict=False
+        )
+    elif isinstance(create_env_fn, TransformedEnv):
+        recorder.transform = create_env_fn.transform.clone()
     else:
-        recorder_rm.load_state_dict(create_env_fn.state_dict())
+        raise NotImplementedError(f"Unsupported env type {type(create_env_fn)}")
+    if logger is not None and video_tag:
+        recorder.insert_transform(0, VideoRecorder(logger=logger, tag=video_tag))
 
     # reset reward scaling
     for t in recorder.transform:

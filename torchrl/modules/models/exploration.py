@@ -2,18 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 import math
+import warnings
 from typing import Optional, Sequence, Union
 
 import torch
-from torch import nn, distributions as d
+from torch import distributions as d, nn
 from torch.nn.modules.lazy import LazyModuleMixin
 from torch.nn.parameter import UninitializedBuffer, UninitializedParameter
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING, DEVICE_TYPING_ARGS
-from torchrl.envs.utils import exploration_mode
+from torchrl.envs.utils import exploration_type, ExplorationType
 from torchrl.modules.distributions.utils import _cast_transform_device
 from torchrl.modules.utils import inv_softplus
 
@@ -32,14 +32,14 @@ class NoisyLinear(nn.Linear):
     Args:
         in_features (int): input features dimension
         out_features (int): out features dimension
-        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
-            default: True
+        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
+            Defaults to ``True``
         device (DEVICE_TYPING, optional): device of the layer.
-            default: "cpu"
+            Defaults to ``"cpu"``
         dtype (torch.dtype, optional): dtype of the parameters.
-            default: None
-        std_init (scalar): initial value of the Gaussian standard deviation before optimization.
-            default: 1.0
+            Defaults to ``None`` (default pytorch dtype)
+        std_init (scalar, optional): initial value of the Gaussian standard deviation before optimization.
+            Defaults to ``0.1``
 
     """
 
@@ -154,13 +154,14 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
 
     Args:
         out_features (int): out features dimension
-        bias (bool): if True, a bias term will be added to the matrix multiplication: Ax + b.
-            default: True
+        bias (bool, optional): if ``True``, a bias term will be added to the matrix multiplication: Ax + b.
+            Defaults to ``True``.
         device (DEVICE_TYPING, optional): device of the layer.
+            Defaults to ``"cpu"``.
         dtype (torch.dtype, optional): dtype of the parameters.
-            default: None
+            Defaults to the default PyTorch dtype.
         std_init (scalar): initial value of the Gaussian standard deviation before optimization.
-            default: 1.0
+            Defaults to 0.1
 
     """
 
@@ -253,48 +254,53 @@ class gSDEModule(nn.Module):
             outputs a distribution average.
         action_dim (int): the dimension of the action.
         state_dim (int): the state dimension.
-        sigma_init (float): the initial value of the standard deviation. The
+        sigma_init (float, optional): the initial value of the standard deviation. The
             softplus non-linearity is used to map the log_sigma parameter to a
-            positive value.
-        scale_min (float, optional): min value of the scale.
-        scale_max (float, optional): max value of the scale.
+            positive value. Defaults to ``1.0``.
+        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
+            variable will be included in the module parameters, making it learnable.
+            Defaults to ``True``.
         transform (torch.distribution.Transform, optional): a transform to apply
-            to the sampled action.
-        device (DEVICE_TYPING, optional): device to create the model on.
+            to the sampled action. Defaults to ``None`` (no transform).
+        device (torch.device, optional): device to create the model on.
+            Defaults to ``"cpu"``.
 
     Examples:
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules import TensorDictModule, TensorDictSequential, ProbabilisticActor, TanhNormal
+        >>> from torchrl.modules import ProbabilisticActor, TanhNormal
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictSequential
         >>> batch, state_dim, action_dim = 3, 7, 5
         >>> model = nn.Linear(state_dim, action_dim)
         >>> deterministic_policy = TensorDictModule(model, in_keys=["obs"], out_keys=["action"])
-        >>> stochatstic_part = TensorDictModule(
+        >>> stochastic_part = TensorDictModule(
         ...     gSDEModule(action_dim, state_dim),
         ...     in_keys=["action", "obs", "_eps_gSDE"],
         ...     out_keys=["loc", "scale", "action", "_eps_gSDE"])
-        >>> stochatstic_part = ProbabilisticActor(stochatstic_part,
-        ...      dist_in_keys=["loc", "scale"],
+        >>> stochastic_part = ProbabilisticActor(stochastic_part,
+        ...      in_keys=["loc", "scale"],
         ...      distribution_class=TanhNormal)
-        >>> stochatstic_policy = TensorDictSequential(deterministic_policy, stochatstic_part)
+        >>> stochastic_policy = ProbabilisticTensorDictSequential(deterministic_policy, *stochastic_part)
         >>> tensordict = TensorDict({'obs': torch.randn(state_dim), '_epx_gSDE': torch.zeros(1)}, [])
-        >>> _ = stochatstic_policy(tensordict)
+        >>> _ = stochastic_policy(tensordict)
         >>> print(tensordict)
         TensorDict(
             fields={
-                obs: Tensor(torch.Size([7]), dtype=torch.float32),
-                _epx_gSDE: Tensor(torch.Size([1]), dtype=torch.float32),
-                action: Tensor(torch.Size([5]), dtype=torch.float32),
-                loc: Tensor(torch.Size([5]), dtype=torch.float32),
-                scale: Tensor(torch.Size([5]), dtype=torch.float32),
-                _eps_gSDE: Tensor(torch.Size([5, 7]), dtype=torch.float32)},
+                _eps_gSDE: Tensor(shape=torch.Size([5, 7]), device=cpu, dtype=torch.float32, is_shared=False),
+                _epx_gSDE: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
+                action: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                loc: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False),
+                obs: Tensor(shape=torch.Size([7]), device=cpu, dtype=torch.float32, is_shared=False),
+                scale: Tensor(shape=torch.Size([5]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([]),
-            device=cpu,
+            device=None,
             is_shared=False)
         >>> action_first_call = tensordict.get("action").clone()
-        >>> dist, *_ = stochatstic_policy.get_dist(tensordict)
+        >>> dist = stochastic_policy.get_dist(tensordict)
         >>> print(dist)
         TanhNormal(loc: torch.Size([5]), scale: torch.Size([5]))
-        >>> _ = stochatstic_policy(tensordict)
+        >>> _ = stochastic_policy(tensordict)
         >>> action_second_call = tensordict.get("action").clone()
         >>> assert (action_second_call == action_first_call).all()  # actions are the same
         >>> assert (action_first_call != dist.base_dist.base_dist.loc).all()  # actions are truly stochastic
@@ -351,7 +357,7 @@ class gSDEModule(nn.Module):
 
     def forward(self, mu, state, _eps_gSDE):
         sigma = self.sigma.clamp_max(self.scale_max)
-        _err_explo = f"gSDE behaviour for exploration mode {exploration_mode()} is not defined. Choose from 'random' or 'mode'."
+        _err_explo = f"gSDE behaviour for exploration mode {exploration_type()} is not defined. Choose from 'random' or 'mode'."
 
         if state.shape[:-1] != mu.shape[:-1]:
             _err_msg = f"mu and state are expected to have matching batch size, got shapes {mu.shape} and {state.shape}"
@@ -362,12 +368,12 @@ class gSDEModule(nn.Module):
             _err_msg = f"noise and state are expected to have matching batch size, got shapes {_eps_gSDE.shape} and {state.shape}"
             raise RuntimeError(_err_msg)
 
-        if _eps_gSDE is None and exploration_mode() == "mode":
+        if _eps_gSDE is None and exploration_type() == ExplorationType.MODE:
             # noise is irrelevant in with no exploration
             _eps_gSDE = torch.zeros(
                 *state.shape[:-1], *sigma.shape, device=sigma.device, dtype=sigma.dtype
             )
-        elif (_eps_gSDE is None and exploration_mode() == "random") or (
+        elif (_eps_gSDE is None and exploration_type() == ExplorationType.RANDOM) or (
             _eps_gSDE is not None
             and _eps_gSDE.numel() == prod(state.shape[:-1])
             and (_eps_gSDE == 0).all()
@@ -381,16 +387,16 @@ class gSDEModule(nn.Module):
         gSDE_noise = sigma * _eps_gSDE
         eps = (gSDE_noise @ state.unsqueeze(-1)).squeeze(-1)
 
-        if exploration_mode() in ("random",):
+        if exploration_type() in (ExplorationType.RANDOM,):
             action = mu + eps
-        elif exploration_mode() in ("mode",):
+        elif exploration_type() in (ExplorationType.MODE,):
             action = mu
         else:
             raise RuntimeError(_err_explo)
 
         sigma = (sigma * state.unsqueeze(-2)).pow(2).sum(-1).clamp_min(1e-5).sqrt()
         if not torch.isfinite(sigma).all():
-            print("inf sigma")
+            warnings.warn("inf sigma")
 
         if self.transform is not None:
             action = self.transform(action)
@@ -408,8 +414,22 @@ class LazygSDEModule(LazyModuleMixin, gSDEModule):
     This module behaves exactly as gSDEModule except that it does not require the
     user to specify the action and state dimension.
     If the input state is multi-dimensional (i.e. more than one state is provided), the
-    sigma value is initialized such that the resulting variance will match :obj:`sigma_init`
-    (or 1 if no :obj:`sigma_init` value is provided).
+    sigma value is initialized such that the resulting variance will match ``sigma_init``
+    (or 1 if no ``sigma_init`` value is provided).
+
+    Args:
+        sigma_init (float, optional): the initial value of the standard deviation. The
+            softplus non-linearity is used to map the log_sigma parameter to a
+            positive value. Defaults to ``None`` (learned).
+        scale_min (float, optional): min value of the scale. Defaults to ``0.01``.
+        scale_max (float, optional): max value of the scale. Defaults to ``10.0``.
+        learn_sigma (bool, optional): if ``True``, the value of the ``sigma``
+            variable will be included in the module parameters, making it learnable.
+            Defaults to ``True``.
+        transform (torch.distribution.Transform, optional): a transform to apply
+            to the sampled action. Defaults to ``None`` (no transform).
+        device (torch.device, optional): device to create the model on.
+            Defaults to ``"cpu"``.
 
     """
 

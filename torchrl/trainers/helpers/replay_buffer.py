@@ -7,11 +7,8 @@ from typing import Optional
 
 import torch
 
-from torchrl.data import (
-    ReplayBuffer,
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler, RandomSampler
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.data.utils import DEVICE_TYPING
 
@@ -22,31 +19,24 @@ def make_replay_buffer(
     """Builds a replay buffer using the config built from ReplayArgsConfig."""
     device = torch.device(device)
     if not cfg.prb:
-        buffer = TensorDictReplayBuffer(
-            cfg.buffer_size,
-            collate_fn=lambda x: x,
-            pin_memory=device != torch.device("cpu"),
-            prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
-                cfg.buffer_size,
-                scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,  # when using prefetch, this can overload the GPU memory
-            ),
-        )
+        sampler = RandomSampler()
     else:
-        buffer = TensorDictPrioritizedReplayBuffer(
-            cfg.buffer_size,
+        sampler = PrioritizedSampler(
+            max_capacity=cfg.buffer_size,
             alpha=0.7,
             beta=0.5,
-            collate_fn=lambda x: x,
-            pin_memory=device != torch.device("cpu"),
-            prefetch=cfg.buffer_prefetch,
-            storage=LazyMemmapStorage(
-                cfg.buffer_size,
-                scratch_dir=cfg.buffer_scratch_dir,
-                # device=device,  # when using prefetch, this can overload the GPU memory
-            ),
         )
+    buffer = TensorDictReplayBuffer(
+        storage=LazyMemmapStorage(
+            cfg.buffer_size,
+            scratch_dir=cfg.buffer_scratch_dir,
+            # device=device,  # when using prefetch, this can overload the GPU memory
+        ),
+        sampler=sampler,
+        pin_memory=device != torch.device("cpu"),
+        prefetch=cfg.buffer_prefetch,
+        batch_size=cfg.batch_size,
+    )
     return buffer
 
 
