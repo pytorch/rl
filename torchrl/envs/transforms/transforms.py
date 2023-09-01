@@ -16,6 +16,7 @@ from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 import torch
 
 from tensordict import unravel_key, unravel_key_list
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import expand_as_right, NestedKey
@@ -3822,15 +3823,30 @@ class RewardSum(Transform):
         state_spec = input_spec["full_state_spec"]
         if state_spec is None:
             state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
-        reward_spec = self.parent.reward_spec
+        reward_spec = self.parent.output_spec["full_reward_spec"]
+        reward_spec_keys = list(reward_spec.keys(True, True))
         # Define episode specs for all out_keys
-        for out_key in self.out_keys:
-            episode_spec = UnboundedContinuousTensorSpec(
-                shape=reward_spec.shape,
-                device=reward_spec.device,
-                dtype=reward_spec.dtype,
-            )
-            state_spec[out_key] = episode_spec
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            if (
+                in_key in reward_spec_keys
+            ):  # if this out_key has a corresponding key in reward_spec
+                out_key = _unravel_key_to_tuple(out_key)
+                temp_state_spec = state_spec
+                temp_rew_spec = reward_spec
+                for sub_key in out_key[:-1]:
+                    if sub_key not in temp_state_spec.keys():
+                        temp_state_spec[sub_key] = temp_rew_spec[sub_key].empty()
+                    temp_rew_spec = temp_rew_spec[sub_key]
+                    temp_state_spec = temp_state_spec[sub_key]
+                temp_state_spec[out_key[-1]] = temp_rew_spec[in_key[-1]].clone()
+            else:  # we just assume the out key refers to the general reward
+                reward_spec = self.parent.reward_spec
+                episode_spec = UnboundedContinuousTensorSpec(
+                    shape=reward_spec.shape,
+                    device=reward_spec.device,
+                    dtype=reward_spec.dtype,
+                )
+                state_spec[out_key] = episode_spec
         input_spec["full_state_spec"] = state_spec
         return input_spec
 
