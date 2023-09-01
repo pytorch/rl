@@ -3123,8 +3123,11 @@ class NoopResetEnv(Transform):
         env (EnvBase): env on which the random actions have to be
             performed. Can be the same env as the one provided to the
             TransformedEnv class
-        noops (int, optional): number of actions performed after reset.
-            Default is `30`.
+        noops (int, optional): upper-bound on the number of actions
+            performed after reset. Default is `30`.
+            If noops is too high such that it results in the env being
+            done or truncated before the all the noops are applied,
+            in multiple trials, the transform raises a RuntimeError.
         random (bool, optional): if False, the number of random ops will
             always be equal to the noops value. If True, the number of
             random actions will be randomly selected between 0 and noops.
@@ -3133,10 +3136,7 @@ class NoopResetEnv(Transform):
     """
 
     def __init__(self, noops: int = 30, random: bool = True):
-        """Sample initial states by taking random number of no-ops on reset.
-
-        No-op is assumed to be action 0.
-        """
+        """Sample initial states by taking random number of no-ops on reset."""
         super().__init__([])
         self.noops = noops
         self.random = random
@@ -3171,31 +3171,31 @@ class NoopResetEnv(Transform):
         noops = (
             self.noops if not self.random else torch.randint(self.noops, (1,)).item()
         )
-        trial = 0
 
-        while True:
+        trial = 0
+        while trial <= _MAX_NOOPS_TRIALS:
             i = 0
+
             while i < noops:
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get(done_key):
+                if tensordict.get(done_key) or tensordict.get(
+                    "truncated", torch.tensor(False)
+                ):
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:
                 break
 
             trial += 1
-            if trial > _MAX_NOOPS_TRIALS:
-                tensordict = parent.rand_step(tensordict)
-                if tensordict.get(("next", done_key)):
-                    raise RuntimeError(
-                        f"parent is still done after a single random step (i={i})."
-                    )
-                break
 
-        if tensordict.get(done_key):
-            raise RuntimeError("NoopResetEnv concluded with done environment")
+        else:
+            raise RuntimeError(
+                f"Parent env was repeatedly done or truncated"
+                f" before the sampled number of noops (={noops}) could be applied. "
+            )
+
         return tensordict.exclude(reward_key, inplace=True)
 
     def __repr__(self) -> str:

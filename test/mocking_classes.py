@@ -1037,6 +1037,25 @@ class CountingEnv(EnvBase):
         return tensordict
 
 
+class IncrementingEnv(CountingEnv):
+    # Same as CountingEnv but always increments the count by 1 regardless of the action.
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1  # The only difference with CountingEnv.
+        tensordict = TensorDict(
+            source={
+                "observation": self.count.clone(),
+                "done": self.count > self.max_steps,
+                "reward": torch.zeros_like(self.count, dtype=torch.float),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        return tensordict.select().set("next", tensordict)
+
+
 class NestedCountingEnv(CountingEnv):
     # an env with nested reward and done states
     def __init__(
