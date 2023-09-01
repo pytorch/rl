@@ -2096,8 +2096,8 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
-        if not val.shape and not safe:
-            return val.item()
+        # if not val.shape and not safe:
+        #     return val.item()
         return super().to_numpy(val, safe)
 
     def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
