@@ -354,7 +354,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"next": {"agents": agent_tds, "done": dones}},
+            source={"agents": agent_tds, "done": dones},
             batch_size=self.batch_size,
             device=self.device,
         )

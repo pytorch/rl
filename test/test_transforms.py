@@ -1242,7 +1242,8 @@ class TestStepCounter(TransformBase):
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            td = step_counter._step(td)
+            next_td = step_counter._step(td, td.get("next"))
+            td.set("next", next_td)
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -1295,7 +1296,7 @@ class TestStepCounter(TransformBase):
         assert not torch.all(td.get("step_count"))
         i = 0
         while max_steps is None or i < max_steps:
-            td = step_counter._step(td)
+            td.set("next", step_counter._step(td, td.get("next")))
             i += 1
             assert torch.all(td.get(("next", "step_count")) == i), (
                 td.get(("next", "step_count")),
@@ -2764,7 +2765,7 @@ class TestFrameSkipTransform(TransformBase):
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
-            t._step(tensordict)
+            t._step(tensordict, tensordict.get("next"))
 
     def test_transform_compose(self):
         t = Compose(FrameSkipTransform(2))
@@ -2772,7 +2773,7 @@ class TestFrameSkipTransform(TransformBase):
         with pytest.raises(
             RuntimeError, match="parent not found for FrameSkipTransform"
         ):
-            t._step(tensordict)
+            t._step(tensordict, tensordict.get("next"))
 
     @pytest.mark.skipif(not _has_gym, reason="gym not installed")
     @pytest.mark.parametrize("skip", [-1, 1, 2, 3])
@@ -3088,7 +3089,8 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             t.reset(TensorDict({"next": {}}, []))
-        t._step(TensorDict({"next": {}}, []))
+        td = TensorDict({"next": {}}, [])
+        t._step(td, td.get("next"))
 
     def test_transform_compose(self):
         t = Compose(NoopResetEnv())
@@ -3097,7 +3099,8 @@ class TestNoop(TransformBase):
             match="NoopResetEnv.parent not found. Make sure that the parent is set.",
         ):
             t.reset(TensorDict({"next": {}}, []))
-        t._step(TensorDict({"next": {}}, []))
+        td = TensorDict({"next": {}}, [])
+        t._step(td, td.get("next"))
 
     def test_transform_model(self):
         t = nn.Sequential(NoopResetEnv(), nn.Identity())
@@ -4258,15 +4261,13 @@ class TestRewardSum(TransformBase):
         )
 
         # apply one time, episode_reward should be equal to reward again
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert "episode_reward" in td.keys()
         assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # apply a second time, episode_reward should twice the reward
         td["episode_reward"] = td["next", "episode_reward"]
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert (td_next.get("episode_reward") == 2 * td_next.get("reward")).all()
 
         # reset environments
@@ -4274,8 +4275,7 @@ class TestRewardSum(TransformBase):
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
-        td = rs._step(td)
-        td_next = td["next"]
+        td_next = rs._step(td, td.get("next"))
         assert (td_next.get("episode_reward") == td_next.get("reward")).all()
 
         # test transform_observation_spec
@@ -5145,7 +5145,9 @@ class TestTargetReturn(TransformBase):
             batch_size=batch,
         )
         td = t.reset(td)
-        td = t._step(td)
+        next_td = td.get("next")
+        next_td = t._step(td, next_td)
+        td.set("next", next_td)
 
         if mode == "reduce":
             assert (td["next", "target_return"] + td["next", "reward"] == 10.0).all()
@@ -5219,10 +5221,11 @@ class TestTargetReturn(TransformBase):
         t = TargetReturn(
             target_return=10.0, mode=mode, in_keys=[in_key], out_keys=[out_key]
         )
-        reward = torch.randn(10)
-        td = TensorDict({("next", in_key): reward}, [])
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", in_key): reward}, [10])
         td = t.reset(td)
-        td = t._step(td)
+        td_next = t._step(td, td.get("next"))
+        td.set("next", td_next)
         if mode == "reduce":
             assert (td["next", out_key] + td["next", in_key] == 10.0).all()
         else:
@@ -5233,8 +5236,8 @@ class TestTargetReturn(TransformBase):
     ):
         t = TargetReturn(target_return=10.0)
         model = nn.Sequential(t, nn.Identity())
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, [])
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", "reward"): reward}, [10])
         with pytest.raises(
             NotImplementedError, match="cannot be executed without a parent"
         ):
@@ -5247,8 +5250,8 @@ class TestTargetReturn(TransformBase):
     ):
         t = TargetReturn(target_return=10.0)
         rb = rbclass(storage=LazyTensorStorage(10))
-        reward = torch.randn(10)
-        td = TensorDict({("next", "reward"): reward}, []).expand(10)
+        reward = torch.randn(10, 1)
+        td = TensorDict({("next", "reward"): reward}, [10])
         rb.append_transform(t)
         rb.extend(td)
         with pytest.raises(
@@ -7974,12 +7977,13 @@ class TestKLRewardTransform(TransformBase):
             {
                 "action": torch.randn(*batch, 7),
                 "observation": torch.randn(*batch, 7),
-                "next": {t.in_keys[0]: torch.zeros(*batch, 1)},
                 "sample_log_prob": torch.randn(*batch),
             },
             batch,
         )
-        t._step(tensordict)
+        next_td = TensorDict({t.in_keys[0]: torch.zeros(*batch, 1)}, batch)
+        next_td = t._step(tensordict, next_td)
+        tensordict.set("next", next_td)
         assert (tensordict.get("next").get(t.out_keys[0]) != 0).all()
 
     def test_transform_compose(self):
