@@ -3376,9 +3376,10 @@ class TensorDictPrimer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for key in self.primers.keys():
-            next_tensordict.setdefault(key, tensordict.get(key, default=None))
         return next_tensordict
+        # for key in self.primers.keys():
+        #     next_tensordict.setdefault(key, tensordict.get(key, default=None))
+        # return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Sets the default values in the input tensordict.

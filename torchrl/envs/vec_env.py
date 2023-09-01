@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, VERBOSE
@@ -394,13 +394,14 @@ class _BatchedEnv(EnvBase):
             shared_tensordict_parent = shared_tensordict_parent.select(
                 *self._selected_keys,
                 "next",
+                *[unravel_keys(("next", key)) for key in self._env_output_keys],
                 strict=False,
             )
             self.shared_tensordict_parent = shared_tensordict_parent.to(self.device)
         else:
             # Multi-task: we share tensordict that *may* have different keys
             shared_tensordict_parent = [
-                tensordict.select(*self._selected_keys, "next", strict=False).to(
+                tensordict.select(*self._selected_keys, "next", *[unravel_keys(("next", key)) for key in self._env_output_keys], strict=False).to(
                     self.device
                 )
                 for tensordict in shared_tensordict_parent
@@ -785,9 +786,12 @@ class ParallelEnv(_BatchedEnv):
             # this is faster than update_ but won't work for lazy stacks
             for key in self._env_input_keys:
                 key = _unravel_key_to_tuple(key)
+                val = tensordict._get_tuple(key, None)
+                if val is None:
+                    continue
                 self.shared_tensordict_parent._set_tuple(
                     key,
-                    tensordict._get_tuple(key, None),
+                    val,
                     inplace=True,
                     validated=True,
                 )
@@ -1058,9 +1062,8 @@ def _run_worker_pipe_shared_mem(
             if initialized:
                 raise RuntimeError("worker already initialized")
             i = 0
-            next_shared_tensordict = shared_tensordict.get("next")
+            next_shared_tensordict = shared_tensordict.get("next").clone(False)
             shared_tensordict = shared_tensordict.clone(False)
-            del shared_tensordict["next"]
 
             if not (shared_tensordict.is_shared() or shared_tensordict.is_memmap()):
                 raise RuntimeError(

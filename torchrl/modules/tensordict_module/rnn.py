@@ -227,16 +227,16 @@ class LSTMModule(ModuleBase):
             )
         return TensorDictPrimer(
             {
-                # in_key1: UnboundedContinuousTensorSpec(
-                #     shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                # ),
-                # in_key2: UnboundedContinuousTensorSpec(
-                #     shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                # ),
-                unravel_key(("next", in_key1)): UnboundedContinuousTensorSpec(
+                in_key1: UnboundedContinuousTensorSpec(
                     shape=(self.lstm.num_layers, self.lstm.hidden_size)
                 ),
-                unravel_key(("next", in_key2)): UnboundedContinuousTensorSpec(
+                in_key2: UnboundedContinuousTensorSpec(
+                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                ),
+                out_key1: UnboundedContinuousTensorSpec(
+                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
+                ),
+                out_key2: UnboundedContinuousTensorSpec(
                     shape=(self.lstm.num_layers, self.lstm.hidden_size)
                 ),
             }
