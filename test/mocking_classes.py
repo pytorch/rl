@@ -1053,7 +1053,7 @@ class IncrementingEnv(CountingEnv):
             batch_size=self.batch_size,
             device=self.device,
         )
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
 
 class NestedCountingEnv(CountingEnv):

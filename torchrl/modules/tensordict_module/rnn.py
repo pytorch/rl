@@ -233,12 +233,6 @@ class LSTMModule(ModuleBase):
                 in_key2: UnboundedContinuousTensorSpec(
                     shape=(self.lstm.num_layers, self.lstm.hidden_size)
                 ),
-                out_key1: UnboundedContinuousTensorSpec(
-                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                ),
-                out_key2: UnboundedContinuousTensorSpec(
-                    shape=(self.lstm.num_layers, self.lstm.hidden_size)
-                ),
             }
         )
 

@@ -1131,10 +1131,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         next_tensordict = self._step(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
         if next_preset is not None:
-            next_preset.update(next_tensordict)
-        else:
             # tensordict could already have a "next" key
-            tensordict.set("next", next_tensordict)
+            next_tensordict.update(next_preset)
+        tensordict.set("next", next_tensordict)
         return tensordict
 
     def _step_proc_data(self, next_tensordict_out):
