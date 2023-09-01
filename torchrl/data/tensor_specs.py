@@ -2051,7 +2051,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             if self.mask is not None
             else [None] * len(self.space)
         )
-        for _mask, space in zip(_mask, self.space):
+        for _mask, space in zip(mask, self.space):
             n = space.n
             shape = self.shape[:-1] + (n,)
             result.append(
