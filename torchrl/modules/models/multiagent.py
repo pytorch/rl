@@ -326,8 +326,6 @@ class MultiAgentConvNet(nn.Module):
         else:
             inputs = inputs[0]
 
-        inputs = inputs.float()
-
         assert len(inputs.shape) >= 4, \
 f"""Multi-agent network expects" (*batch_size, agent_index, x, y, channels)"""
         assert inputs.shape[-4] == self.n_agents, \
