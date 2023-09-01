@@ -28,6 +28,7 @@ from .models import (
     LSTMNet,
     MLP,
     MultiAgentMLP,
+    MultiAgentConvNet,
     NoisyLazyLinear,
     NoisyLinear,
     ObsDecoder,

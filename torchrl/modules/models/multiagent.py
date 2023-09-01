@@ -12,7 +12,7 @@ from torch import nn
 
 from ...data import DEVICE_TYPING
 
-from .models import MLP
+from .models import MLP, ConvNet
 
 
 class MultiAgentMLP(nn.Module):
@@ -229,6 +229,143 @@ class MultiAgentMLP(nn.Module):
 
         return output
 
+class MultiAgentConvNet(nn.Module):
+    """Multi-agent CNN
+
+    This is a CNN that can operate in Multiagent contexts.
+
+    It expects inputs with shape (*B, n_agents, x, y, channels)
+
+    Args:
+        n_agents (int): number of agents.
+        centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
+            (n_agent_inputs * n_agents will be the number of inputs for one agent).
+            Otherwise, each agent will only use its data as input.
+        share_params (bool): If `share_params` is True, the same MLP will be used to make the forward pass
+            for all agents (homogeneous policies). Otherwise, each agent will use a different MLP to process
+            its input (heterogeneous policies).
+        device (str or torch.device, optional): device to create the module on.
+        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
+            an integer is provided, every layer will have the same number of cells. If an iterable is provided,
+            the linear layers out_features will match the content of num_cells.
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network.
+            default: 5
+        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
+            depth, defined by the num_cells or depth arguments.
+            default: 2
+        activation_class (Type[nn.Module]): activation class to be used.
+            default: nn.ELU
+        **kwargs: for :class:`torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.Args:
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.modules import MultiAgentConvNet
+        >>> batch = (3,2)
+        >>> n_agents = 7
+        >>> x, y, channels = 100, 100, 3
+        >>> obs = torch.randn(*batch, n_agents, x, y, channels)
+        >>> cnn = MultiAgentConvNet(
+        >>>     n_agents,
+        >>>     centralised = True,
+        >>>     share_params = True
+        >>> )
+        >>> print(cnn)
+        MultiAgentConvNet(
+            (agent_networks): ModuleList(
+                (0): ConvNet(
+                (0): LazyConv2d(0, 32, kernel_size=(5, 5), stride=(2, 2))
+                (1): ELU(alpha=1.0)
+                (2): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (3): ELU(alpha=1.0)
+                (4): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (5): ELU(alpha=1.0)
+                (6): SquashDims()
+                )
+            )
+        )
+        >>> print(cnn(obs).shape)
+        torch.Size([3, 2, 7, 2592]) - where the final dimension is determiend by the input x,
+
+    """
+    def __init__(self,
+                 n_agents: int,
+                 centralised: bool,
+                 share_params: bool,
+                 device: Optional[DEVICE_TYPING] = None,
+                 num_cells: Optional[Sequence[int]] = None,
+                 kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
+                 strides: Union[Sequence, int] = 2,
+                 paddings: Union[Sequence, int] = 0,
+                 activation_class: Type[nn.Module] = nn.ELU,   
+                 **kwargs):
+        super().__init__()
+
+        self.n_agents = n_agents
+        self.centralised = centralised
+        self.share_params = share_params
+
+        self.agent_networks = nn.ModuleList(
+            [
+                ConvNet(
+                    num_cells=num_cells,
+                    kernel_sizes=kernel_sizes,
+                    strides=strides,
+                    paddings=paddings,
+                    activation_class=activation_class,
+                    device=device,
+                    **kwargs
+                )
+                for _ in range(self.n_agents if not self.share_params else 1)
+            ]
+        )
+
+
+    def forward(self, *inputs: Tuple[torch.Tensor]):
+        if len(inputs) > 1:
+            inputs = torch.cat([*inputs], -1)
+        else:
+            inputs = inputs[0]
+
+        inputs = inputs.float()
+
+        assert len(inputs.shape) >= 4, \
+f"""Multi-agent network expects" (*batch_size, agent_index, x, y, channels)"""
+        assert inputs.shape[-4] == self.n_agents, \
+f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
+        # If the model is centralized, agents have full observability
+        if self.centralised:
+            shape = (*inputs.shape[:-4], inputs.shape[-3], inputs.shape[-2], self.n_agents * inputs.shape[-1])
+            inputs = torch.reshape(inputs, shape)
+        # Conv2D expects (c, H, W)
+        inputs = torch.transpose(inputs, -1, -3)
+
+        # If the parameters are not shared, each agent has its own network
+        if not self.share_params:
+                if self.centralised:
+                    output = torch.stack(
+                        [net(inputs) for net in self.agent_networks],
+                        dim=-2
+                    )
+                else:
+                    output = torch.stack(
+                        [
+                            net(inputs[..., i, :, :, :])
+                            for i, net in enumerate(self.agent_networks)
+                        ],
+                        dim=-2,
+                    )
+        else:
+            output = self.agent_networks[0](inputs)
+            if self.centralised:
+                # If the parameters are shared, and it is centralised all agents will have the same output.
+                # We expand it to maintain the agent dimension, but values will be the same for all agents
+                n_agent_outputs = output.shape[-1]
+                output = (
+                    output.view(*output.shape[:-1], n_agent_outputs)
+                    .unsqueeze(-2)
+                    .expand(*output.shape[:-1], self.n_agents, n_agent_outputs)
+                )
+        return output
 
 class Mixer(nn.Module):
     """A multi-agent value mixer.
