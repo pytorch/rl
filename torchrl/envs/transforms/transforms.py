@@ -3834,19 +3834,20 @@ class RewardSum(Transform):
                 temp_state_spec = state_spec
                 temp_rew_spec = reward_spec
                 for sub_key in out_key[:-1]:
+                    if (
+                        not isinstance(temp_rew_spec, CompositeSpec)
+                        or sub_key not in temp_rew_spec.keys()
+                    ):
+                        break
                     if sub_key not in temp_state_spec.keys():
                         temp_state_spec[sub_key] = temp_rew_spec[sub_key].empty()
                     temp_rew_spec = temp_rew_spec[sub_key]
                     temp_state_spec = temp_state_spec[sub_key]
-                temp_state_spec[out_key[-1]] = temp_rew_spec[in_key[-1]].clone()
-            else:  # we just assume the out key refers to the general reward
-                reward_spec = self.parent.reward_spec
-                episode_spec = UnboundedContinuousTensorSpec(
-                    shape=reward_spec.shape,
-                    device=reward_spec.device,
-                    dtype=reward_spec.dtype,
+                state_spec[out_key] = reward_spec[in_key].clone()
+            else:
+                raise ValueError(
+                    f"The in_key: {in_key} is not present in the reward spec {reward_spec}."
                 )
-                state_spec[out_key] = episode_spec
         input_spec["full_state_spec"] = state_spec
         return input_spec
 
