@@ -545,6 +545,9 @@ class TensorSpec:
             self.assert_is_in(val)
         return val
 
+    def __ne__(self, other):
+        return not (self == other)
+
     def __setattr__(self, key, value):
         if key == "shape":
             value = torch.Size(value)
@@ -1161,6 +1164,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             device=dest_device,
             dtype=dest_dtype,
             use_register=self.use_register,
+            mask=self.mask.to(dest) if self.mask is not None else None,
         )
 
     def clone(self) -> OneHotDiscreteTensorSpec:
@@ -1170,6 +1174,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             use_register=self.use_register,
+            mask=self.mask.clone() if self.mask is not None else None,
         )
 
     def expand(self, *shape):
@@ -1321,6 +1326,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             use_register=self.use_register,
+            mask=self.mask[idx] if self.mask is not None else None,
         )
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
@@ -1349,6 +1355,11 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return gathered.any(-1).all()
 
     def __eq__(self, other):
+        mask_equal = (self.mask is None and other.mask is None) or (
+            isinstance(self.mask, torch.Tensor)
+            and isinstance(other.mask, torch.Tensor)
+            and (self.mask == other.mask).all()
+        )
         return (
             type(self) == type(other)
             and self.shape == other.shape
@@ -1357,6 +1368,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             and self.dtype == other.dtype
             and self.domain == other.domain
             and self.use_register == other.use_register
+            and mask_equal
         )
 
     def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
@@ -1384,6 +1396,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             device=self.device,
             dtype=self.dtype,
             shape=self.shape[:-1],
+            mask=self.mask,
         )
 
 
@@ -1855,6 +1868,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         device=None,
         dtype=torch.long,
         use_register=False,
+        mask: torch.Tensor | None = None,
     ):
         self.nvec = nvec
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1870,8 +1884,23 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         space = BoxList([DiscreteBox(n) for n in nvec])
         self.use_register = use_register
         super(OneHotDiscreteTensorSpec, self).__init__(
-            shape, space, device, dtype, domain="discrete"
+            shape,
+            space,
+            device,
+            dtype,
+            domain="discrete",
         )
+        self.update_mask(mask)
+
+    def update_mask(self, mask):
+        if mask is not None:
+            try:
+                mask = mask.expand(*self.shape)
+            except RuntimeError as err:
+                raise RuntimeError("Cannot expand mask to the desired shape.") from err
+            if mask.dtype != torch.bool:
+                raise ValueError("Only boolean masks are accepted.")
+        self.mask = mask
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
@@ -1887,6 +1916,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
+            mask=self.mask.to(dest) if self.mask is not None else None,
         )
 
     def clone(self) -> MultiOneHotDiscreteTensorSpec:
@@ -1895,6 +1925,24 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
+            mask=self.mask.clone() if self.mask is not None else None,
+        )
+
+    def __eq__(self, other):
+        mask_equal = (self.mask is None and other.mask is None) or (
+            isinstance(self.mask, torch.Tensor)
+            and isinstance(other.mask, torch.Tensor)
+            and (self.mask == other.mask).all()
+        )
+        return (
+            type(self) == type(other)
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.device == other.device
+            and self.dtype == other.dtype
+            and self.domain == other.domain
+            and self.use_register == other.use_register
+            and mask_equal
         )
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
@@ -1902,25 +1950,40 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             shape = self.shape[:-1]
         else:
             shape = torch.Size([*shape, *self.shape[:-1]])
+        mask = self.mask
 
-        x = torch.cat(
-            [
-                torch.nn.functional.one_hot(
-                    torch.randint(
-                        space.n,
-                        (
-                            *shape,
-                            1,
+        if mask is None:
+            x = torch.cat(
+                [
+                    torch.nn.functional.one_hot(
+                        torch.randint(
+                            space.n,
+                            (
+                                *shape,
+                                1,
+                            ),
+                            device=self.device,
                         ),
-                        device=self.device,
-                    ),
-                    space.n,
-                ).to(torch.long)
-                for space in self.space
-            ],
-            -1,
-        ).squeeze(-2)
-        return x
+                        space.n,
+                    ).to(self.dtype)
+                    for space in self.space
+                ],
+                -1,
+            ).squeeze(-2)
+            return x
+        mask = mask.expand(*shape, mask.shape[-1])
+        mask_splits = torch.split(mask, [space.n for space in self.space], -1)
+        out = []
+        for _mask in mask_splits:
+            if mask.ndim > 2:
+                mask_flat = torch.flatten(_mask, 0, -2)
+            else:
+                mask_flat = _mask
+            shape_out = _mask.shape[:-1]
+            m = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+            m = torch.nn.functional.one_hot(m, _mask.shape[-1]).to(self.dtype)
+            out.append(m)
+        return torch.cat(out, -1)
 
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device: bool = False
@@ -1970,13 +2033,38 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         vals = self._split(val)
         if vals is None:
             return False
-        return all(
-            super(MultiOneHotDiscreteTensorSpec, self).is_in(_val) for _val in vals
-        )
+        return all(spec.is_in(val) for val, spec in zip(vals, self._split_self()))
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         vals = self._split(val)
-        return torch.cat([super()._project(_val) for _val in vals], -1)
+        return torch.cat(
+            [spec._project(val) for val, spec in zip(vals, self._split_self())], -1
+        )
+
+    def _split_self(self):
+        result = []
+        device = self.device
+        dtype = self.dtype
+        use_register = self.use_register
+        mask = (
+            self.mask.split([space.n for space in self.space], -1)
+            if self.mask is not None
+            else [None] * len(self.space)
+        )
+        for _mask, space in zip(_mask, self.space):
+            n = space.n
+            shape = self.shape[:-1] + (n,)
+            result.append(
+                OneHotDiscreteTensorSpec(
+                    n=n,
+                    shape=shape,
+                    device=device,
+                    dtype=dtype,
+                    use_register=use_register,
+                    mask=_mask,
+                )
+            )
+        return result
 
     def to_categorical(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
         """Converts a given one-hot tensor in categorical format.
@@ -2004,6 +2092,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             device=self.device,
             dtype=self.dtype,
             shape=[*self.shape[:-1], len(self.space)],
+            mask=self.mask,
         )
 
     def expand(self, *shape):
@@ -2019,8 +2108,13 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
+        mask = self.mask.expand(shape) if self.mask is not None else None
         return self.__class__(
-            nvec=nvecs, shape=shape, device=self.device, dtype=self.dtype
+            nvec=nvecs,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def squeeze(self, dim=None):
@@ -2032,8 +2126,13 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         shape = _squeezed_shape(self.shape, dim)
         if shape is None:
             return self
+        mask = self.mask.reshape(shape) if self.mask is not None else None
         return self.__class__(
-            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+            nvec=self.nvec,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def unsqueeze(self, dim: int):
@@ -2042,8 +2141,9 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                 "Final dimension of MultiOneHotDiscreteTensorSpec must remain unchanged"
             )
         shape = _unsqueezed_shape(self.shape, dim)
+        mask = self.mask.reshape(shape) if self.mask is not None else None
         return self.__class__(
-            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype, mask=mask
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
@@ -2173,6 +2273,11 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def __eq__(self, other):
+        mask_equal = (self.mask is None and other.mask is None) or (
+            isinstance(self.mask, torch.Tensor)
+            and isinstance(other.mask, torch.Tensor)
+            and (self.mask == other.mask).all()
+        )
         return (
             type(self) == type(other)
             and self.shape == other.shape
@@ -2180,6 +2285,7 @@ class DiscreteTensorSpec(TensorSpec):
             and self.device == other.device
             and self.dtype == other.dtype
             and self.domain == other.domain
+            and mask_equal
         )
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
@@ -2236,16 +2342,31 @@ class DiscreteTensorSpec(TensorSpec):
 
     def squeeze(self, dim=None):
         shape = _squeezed_shape(self.shape, dim)
+        mask = self.mask
+        if mask is not None:
+            mask = mask.view(*shape, mask.shape[-1])
+
         if shape is None:
             return self
         return self.__class__(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
+        mask = self.mask
+        if mask is not None:
+            mask = mask.view(*shape, mask.shape[-1])
         return self.__class__(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
@@ -2267,6 +2388,7 @@ class DiscreteTensorSpec(TensorSpec):
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
+            mask=self.mask.clone() if self.mask is not None else None,
         )
 
 
@@ -2398,6 +2520,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        mask: torch.Tensor | None = None,
     ):
         if not isinstance(nvec, torch.Tensor):
             nvec = torch.tensor(nvec)
@@ -2421,6 +2544,17 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         super(DiscreteTensorSpec, self).__init__(
             shape, space, device, dtype, domain="discrete"
         )
+        self.update_mask(mask)
+
+    def update_mask(self, mask):
+        if mask is not None:
+            try:
+                mask = mask.expand(*self.shape[:-1], mask.shape[-1])
+            except RuntimeError as err:
+                raise RuntimeError("Cannot expand mask to the desired shape.") from err
+            if mask.dtype != torch.bool:
+                raise ValueError("Only boolean masks are accepted.")
+        self.mask = mask
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
@@ -2431,8 +2565,29 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             dest_device = torch.device(dest)
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
+        mask = self.mask.to(dest) if self.mask is not None else None
         return self.__class__(
-            n=self.nvec.to(dest), shape=None, device=dest_device, dtype=dest_dtype
+            n=self.nvec.to(dest),
+            shape=None,
+            device=dest_device,
+            dtype=dest_dtype,
+            mask=mask,
+        )
+
+    def __eq__(self, other):
+        mask_equal = (self.mask is None and other.mask is None) or (
+            isinstance(self.mask, torch.Tensor)
+            and isinstance(other.mask, torch.Tensor)
+            and (self.mask == other.mask).all()
+        )
+        return (
+            type(self) == type(other)
+            and self.shape == other.shape
+            and self.space == other.space
+            and self.device == other.device
+            and self.dtype == other.dtype
+            and self.domain == other.domain
+            and mask_equal
         )
 
     def clone(self) -> MultiDiscreteTensorSpec:
@@ -2441,6 +2596,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             shape=None,
             device=self.device,
             dtype=self.dtype,
+            mask=self.mask.clone() if self.mask is not None else None,
         )
 
     def _rand(self, space: Box, shape: torch.Size, i: int):
@@ -2461,6 +2617,9 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return torch.stack(x, -1)
 
     def rand(self, shape: Optional[torch.Size] = None) -> torch.Tensor:
+        if self.mask is not None:
+            splits = self._split_self()
+            return torch.stack([split.rand(shape) for split in splits], -1)
         if shape is None:
             shape = self.shape[:-1]
         else:
@@ -2473,7 +2632,42 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             x = x.squeeze(-1)
         return x
 
+    def _split_self(self):
+        result = []
+        device = self.device
+        dtype = self.dtype
+        nvec = self.nvec
+        if nvec.ndim > 1:
+            nvec = torch.flatten(nvec, 0, -2)[0]
+            if (self.nvec != nvec).any():
+                raise ValueError(
+                    f"Only homogeneous MultiDiscrete specs can be masked, got nvec={self.nvec}."
+                )
+        nvec = nvec.tolist()
+        mask = (
+            self.mask.split(nvec, -1)
+            if self.mask is not None
+            else [None] * len(self.space)
+        )
+        for n, _mask in zip(nvec, mask):
+            shape = self.shape[:-1]
+            result.append(
+                DiscreteTensorSpec(
+                    n=n, shape=shape, device=device, dtype=dtype, mask=_mask
+                )
+            )
+        return result
+
     def _project(self, val: torch.Tensor) -> torch.Tensor:
+        if self.mask is not None:
+            return torch.stack(
+                [
+                    spec._project(_val)
+                    for (_val, spec) in zip(val.unbind(-1), self._split_self())
+                ],
+                -1,
+            )
+
         val_is_scalar = val.ndim < 1
         if val_is_scalar:
             val = val.unsqueeze(0)
@@ -2486,6 +2680,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return val.squeeze(0) if val_is_scalar else val
 
     def is_in(self, val: torch.Tensor) -> bool:
+        if self.mask is not None:
+            return all(
+                spec.is_in(_val)
+                for (_val, spec) in zip(val.unbind(-1), self._split_self())
+            )
+
         if val.ndim < 1:
             val = val.unsqueeze(0)
         val_have_wrong_dim = (
@@ -2538,6 +2738,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             device=self.device,
             dtype=self.dtype,
             shape=[*self.shape[:-1], sum(nvec)],
+            mask=self.mask,
         )
 
     def expand(self, *shape):
@@ -2552,8 +2753,17 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
                 f"The last {self.ndim} of the expanded shape {shape} must match the"
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
+        mask = (
+            self.mask.expand(*shape, self.mask.shape[-1])
+            if self.mask is not None
+            else None
+        )
         return self.__class__(
-            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype
+            nvec=self.nvec,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def squeeze(self, dim: int | None = None):
@@ -2570,9 +2780,11 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             nvec = self.nvec.squeeze()
         else:
             nvec = self.nvec.squeeze(dim)
-
+        mask = self.mask
+        if mask is not None:
+            mask = mask.view(*shape[:-1], mask.shape[-1])
         return self.__class__(
-            nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
+            nvec=nvec, shape=shape, device=self.device, dtype=self.dtype, mask=mask
         )
 
     def unsqueeze(self, dim: int):
@@ -2582,8 +2794,15 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             )
         shape = _unsqueezed_shape(self.shape, dim)
         nvec = self.nvec.unsqueeze(dim)
+        mask = self.mask
+        if mask is not None:
+            mask = mask.view(*shape[:-1], mask.shape[-1])
         return self.__class__(
-            nvec=nvec, shape=shape, device=self.device, dtype=self.dtype
+            nvec=nvec,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask,
         )
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):

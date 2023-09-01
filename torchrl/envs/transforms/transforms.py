@@ -29,6 +29,8 @@ from torchrl.data.tensor_specs import (
     ContinuousBox,
     DEVICE_TYPING,
     DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -4855,6 +4857,14 @@ class ActionMask(Transform):
 
     """
 
+    ACCEPTED_SPECS = (
+        OneHotDiscreteTensorSpec,
+        DiscreteTensorSpec,
+        MultiOneHotDiscreteTensorSpec,
+        MultiDiscreteTensorSpec,
+    )
+    SPEC_TYPE_ERROR = "The action spec must be one of {}. Got {} instead."
+
     def __init__(self, action_key: NestedKey = "action", mask_key: NestedKey = "mask"):
         if not isinstance(action_key, (tuple, str)):
             raise ValueError(
@@ -4879,18 +4889,18 @@ class ActionMask(Transform):
             )
         mask = tensordict.get(self.in_keys[1])
         action_spec = self.container.action_spec
-        if not isinstance(action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec)):
+        if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
-                f"The action spec must be one of (OneHotDiscreteTensorSpec, DiscreteTensorSpec). Got {type(action_spec)} instead."
+                self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
         action_spec.update_mask(mask)
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         action_spec = self.container.action_spec
-        if not isinstance(action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec)):
+        if not isinstance(action_spec, self.ACCEPTED_SPECS):
             raise ValueError(
-                f"The action spec must be one of (OneHotDiscreteTensorSpec, DiscreteTensorSpec). Got {type(action_spec)} instead."
+                self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
         return tensordict

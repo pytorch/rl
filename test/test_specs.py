@@ -3170,7 +3170,9 @@ def get_all_keys(spec: TensorSpec, include_exclusive: bool):
 
 
 @pytest.mark.parametrize("shape", ((), (1,), (2, 3), (2, 3, 4)))
-@pytest.mark.parametrize("one_hot", [True, False])
+@pytest.mark.parametrize(
+    "spectype", ["one_hot", "categorical", "mult_one_hot", "mult_discrete"]
+)
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("rand_shape", ((), (2,), (2, 3)))
 class TestSpecMasking:
@@ -3193,39 +3195,96 @@ class TestSpecMasking:
         mask = self._make_mask(shape).to(device)
         return OneHotDiscreteTensorSpec(n, shape, device, mask=mask)
 
+    def _mult_one_hot_spec(self, shape, device, n):
+        shape = torch.Size([*shape, n + n + 2])
+        mask = torch.cat(
+            [
+                self._make_mask(shape[:-1] + (n,)).to(device),
+                self._make_mask(shape[:-1] + (n + 2,)).to(device),
+            ],
+            -1,
+        )
+        return MultiOneHotDiscreteTensorSpec([n, n + 2], shape, device, mask=mask)
+
     def _discrete_spec(self, shape, device, n):
         mask = self._make_mask(torch.Size([*shape, n])).to(device)
         return DiscreteTensorSpec(n, shape, device, mask=mask)
 
-    def test_is_in(self, shape, device, one_hot, rand_shape, n=5):
+    def _mult_discrete_spec(self, shape, device, n):
+        shape = torch.Size([*shape, 2])
+        mask = torch.cat(
+            [
+                self._make_mask(shape[:-1] + (n,)).to(device),
+                self._make_mask(shape[:-1] + (n + 2,)).to(device),
+            ],
+            -1,
+        )
+        return MultiDiscreteTensorSpec([n, n + 2], shape, device, mask=mask)
+
+    def test_equal(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        spec_clone = spec.clone()
+        assert spec == spec_clone
+        assert spec.unsqueeze(0).squeeze(0) == spec
+        spec.update_mask(~spec.mask)
+        assert (spec.mask != spec_clone.mask).any()
+        assert spec != spec_clone
+
+    def test_is_in(self, shape, device, spectype, rand_shape, n=5):
         shape = torch.Size(shape)
         rand_shape = torch.Size(rand_shape)
         spec = (
             self._one_hot_spec(shape, device, n=n)
-            if one_hot
+            if spectype == "one_hot"
             else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
         )
         s = spec.rand(rand_shape)
         assert spec.is_in(s)
         spec.update_mask(~spec.mask)
         assert not spec.is_in(s)
 
-    def test_project(self, shape, device, one_hot, rand_shape, n=5):
+    def test_project(self, shape, device, spectype, rand_shape, n=5):
         shape = torch.Size(shape)
         rand_shape = torch.Size(rand_shape)
         spec = (
             self._one_hot_spec(shape, device, n=n)
-            if one_hot
+            if spectype == "one_hot"
             else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
         )
         s = spec.rand(rand_shape)
         assert (spec.project(s) == s).all()
         spec.update_mask(~spec.mask)
         sp = spec.project(s)
         assert sp.shape == s.shape
-        if one_hot:
+        if spectype == "one_hot":
             assert (sp != s).any(-1).all()
             assert (sp.any(-1)).all()
+        elif spectype == "mult_one_hot":
+            assert (sp != s).any(-1).all()
+            assert (sp.sum(-1) == 2).all()
         else:
             assert (sp != s).all()
 
