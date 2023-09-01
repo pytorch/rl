@@ -8197,8 +8197,8 @@ class TestActionMask(TransformBase):
 
                 td.set("mask", mask)
                 td.set("reward", self.reward_spec.rand())
-                td.set("done", ~mask.any().view(1))
-                return td.empty().set("next", td)
+                td.set("done", ~(mask.any().view(1)))
+                return td
 
             def _set_seed(self, seed):
                 return seed
@@ -8237,29 +8237,38 @@ class TestActionMask(TransformBase):
         check_env_specs(env)
 
     def test_transform_env(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), ActionMask())
+        with pytest.raises(ValueError, match="The action spec must be one of"):
+            env.rollout(2)
         env = self._env_class()
         env = TransformedEnv(env, ActionMask())
         td = env.reset()
-        for t in range(10):
+        for _ in range(1000):
             td = env.rand_action(td)
             assert env.action_spec.is_in(td.get("action"))
             td = env.step(td)
-            if td.get(("next", "done")):
-                break
             td = step_mdp(td)
+            if td.get("done"):
+                break
+        else:
+            raise RuntimeError
         assert not td.get("mask").any()
 
     def test_transform_model(self):
         t = ActionMask()
-        with pytest.raises(RuntimeError, match="ActionMask must be executed within an environment"):
+        with pytest.raises(
+            RuntimeError, match="ActionMask must be executed within an environment"
+        ):
             t(TensorDict({}, []))
 
     def test_transform_rb(self):
         t = ActionMask()
-        rb = ReplayBuffer()
+        rb = ReplayBuffer(storage=LazyTensorStorage(100))
         rb.append_transform(t)
-        rb.extend(TensorDict({}, []))
-        with pytest.raises(RuntimeError, match="ActionMask must be executed within an environment"):
+        rb.extend(TensorDict({"a": [1]}, [1]).expand(10))
+        with pytest.raises(
+            RuntimeError, match="ActionMask must be executed within an environment"
+        ):
             rb.sample(3)
 
     def test_transform_inverse(self):

@@ -4819,7 +4819,7 @@ class ActionMask(Transform):
         ...         td.set("mask", mask)
         ...         td.set("reward", self.reward_spec.rand())
         ...         td.set("done", ~mask.any().view(1))
-        ...         return td.empty().set("next", td)
+        ...         return td
         ...
         ...     def _set_seed(self, seed):
         ...         return seed
@@ -4852,9 +4852,7 @@ class ActionMask(Transform):
         )
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise RuntimeError(
-            "ActionMask must be executed within an environment."
-        )
+        raise RuntimeError("ActionMask must be executed within an environment.")
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         parent = self.parent
@@ -4873,5 +4871,9 @@ class ActionMask(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         action_spec = self.container.action_spec
+        if not isinstance(action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec)):
+            raise ValueError(
+                f"The action spec must be one of (OneHotDiscreteTensorSpec, DiscreteTensorSpec). Got {type(action_spec)} instead."
+            )
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
         return tensordict
