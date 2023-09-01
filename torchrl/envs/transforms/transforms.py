@@ -3312,25 +3312,25 @@ class TensorDictPrimer(Transform):
             self.device = dtype_or_device
         return super().to(dtype_or_device)
 
-    # def transform_observation_spec(
-    #     self, observation_spec: CompositeSpec
-    # ) -> CompositeSpec:
-    #     if not isinstance(observation_spec, CompositeSpec):
-    #         raise ValueError(
-    #             f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
-    #         )
-    #     for key, spec in self.primers.items():
-    #         if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
-    #             raise RuntimeError(
-    #                 f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
-    #                 f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
-    #             )
-    #         try:
-    #             device = observation_spec.device
-    #         except RuntimeError:
-    #             device = self.device
-    #         observation_spec[key] = spec.to(device)
-    #     return observation_spec
+    def transform_observation_spec(
+        self, observation_spec: CompositeSpec
+    ) -> CompositeSpec:
+        if not isinstance(observation_spec, CompositeSpec):
+            raise ValueError(
+                f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
+            )
+        for key, spec in self.primers.items():
+            if spec.shape[: len(observation_spec.shape)] != observation_spec.shape:
+                raise RuntimeError(
+                    f"The leading shape of the primer specs ({self.__class__}) should match the one of the parent env. "
+                    f"Got observation_spec.shape={observation_spec.shape} but the '{key}' entry's shape is {spec.shape}."
+                )
+            try:
+                device = observation_spec.device
+            except RuntimeError:
+                device = self.device
+            observation_spec[key] = spec.to(device)
+        return observation_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
         state_spec = input_spec['full_state_spec']
@@ -3376,10 +3376,9 @@ class TensorDictPrimer(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        for key in self.primers.keys():
+            next_tensordict.setdefault(key, tensordict.get(key, default=None))
         return next_tensordict
-        # for key in self.primers.keys():
-        #     next_tensordict.setdefault(key, tensordict.get(key, default=None))
-        # return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Sets the default values in the input tensordict.

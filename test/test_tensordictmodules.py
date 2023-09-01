@@ -1814,7 +1814,7 @@ class TestLSTMModule:
         )
         for break_when_any_done in [False, True]:
             data = env.rollout(10, actor, break_when_any_done=break_when_any_done)
-            # assert (data.get("recurrent_state_c") != 0.0).any()
+            assert (data.get("recurrent_state_c") != 0.0).any()
             assert (data.get(("next", "recurrent_state_c")) != 0.0).all()
 
 
