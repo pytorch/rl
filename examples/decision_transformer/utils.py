@@ -74,14 +74,17 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     transformed_env = TransformedEnv(base_env)
     transformed_env.append_transform(
         RewardScaling(
-            loc=0, scale=env_cfg.reward_scaling, in_keys="reward", standard_normal=False
+            loc=0,
+            scale=env_cfg.reward_scaling,
+            in_keys=["reward"],
+            standard_normal=False,
         )
     )
     if train:
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.collect_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go"],
+                out_keys=["return_to_go_single"],
                 mode=env_cfg.target_return_mode,
             )
         )
@@ -89,7 +92,7 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
         transformed_env.append_transform(
             TargetReturn(
                 env_cfg.eval_target_return * env_cfg.reward_scaling,
-                out_keys=["return_to_go"],
+                out_keys=["return_to_go_single"],
                 mode=env_cfg.target_return_mode,
             )
         )
@@ -107,7 +110,11 @@ def make_transformed_env(base_env, env_cfg, obs_loc, obs_std, train=False):
     )
     transformed_env.append_transform(obsnorm)
     transformed_env.append_transform(
-        UnsqueezeTransform(-2, in_keys=["observation", "action", "return_to_go"])
+        UnsqueezeTransform(
+            -2,
+            in_keys=["observation", "action", "return_to_go_single"],
+            out_keys=["observation", "action", "return_to_go"],
+        )
     )
     transformed_env.append_transform(
         CatFrames(
@@ -158,6 +165,8 @@ def make_collector(cfg, policy):
     exclude_target_return = ExcludeTransform(
         "return_to_go",
         ("next", "return_to_go"),
+        "return_to_go_single",
+        ("next", "return_to_go_single"),
         ("next", "action"),
         ("next", "observation"),
         "scale",
@@ -183,9 +192,15 @@ def make_collector(cfg, policy):
 
 
 def make_offline_replay_buffer(rb_cfg, reward_scaling):
-    r2g = Reward2GoTransform(gamma=1.0, in_keys=["reward"], out_keys=["return_to_go"])
+    r2g = Reward2GoTransform(
+        gamma=1.0, in_keys=["reward"], out_keys=["return_to_go_single"]
+    )
     reward_scale = RewardScaling(
-        loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
+        loc=0,
+        scale=reward_scaling,
+        in_keys="return_to_go_single",
+        out_keys=["return_to_go"],
+        standard_normal=False,
     )
     crop_seq = RandomCropTensorDict(sub_seq_len=rb_cfg.stacked_frames, sample_dim=-1)
 
@@ -230,12 +245,17 @@ def make_offline_replay_buffer(rb_cfg, reward_scaling):
 
 
 def make_online_replay_buffer(offline_buffer, rb_cfg, reward_scaling=0.001):
-    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go"])
+    r2g = Reward2GoTransform(gamma=1.0, out_keys=["return_to_go_single"])
     reward_scale = RewardScaling(
-        loc=0, scale=reward_scaling, in_keys="return_to_go", standard_normal=False
+        loc=0,
+        scale=reward_scaling,
+        in_keys=["return_to_go_single"],
+        out_keys=["return_to_go"],
+        standard_normal=False,
     )
     catframes = CatFrames(
-        in_keys=["return_to_go"],
+        in_keys=["return_to_go_single"],
+        out_keys=["return_to_go"],
         N=rb_cfg.stacked_frames,
         dim=-2,
         padding="zeros",

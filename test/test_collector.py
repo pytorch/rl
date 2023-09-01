@@ -353,52 +353,52 @@ def test_collector_env_reset():
     assert _data["next", "reward"].sum(-2).min() == -21
 
 
-@pytest.mark.parametrize("num_env", [1, 2])
-@pytest.mark.parametrize("env_name", ["vec"])
-def test_collector_done_persist(num_env, env_name, seed=5):
-    if num_env == 1:
-
-        def env_fn(seed):
-            env = MockSerialEnv(device="cpu")
-            env.set_seed(seed)
-            return env
-
-    else:
-
-        def env_fn(seed):
-            def make_env(seed):
-                env = MockSerialEnv(device="cpu")
-                env.set_seed(seed)
-                return env
-
-            env = ParallelEnv(
-                num_workers=num_env,
-                create_env_fn=make_env,
-                create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
-            )
-            env.set_seed(seed)
-            return env
-
-    policy = make_policy(env_name)
-
-    collector = SyncDataCollector(
-        create_env_fn=env_fn,
-        create_env_kwargs={"seed": seed},
-        policy=policy,
-        frames_per_batch=200 * num_env,
-        max_frames_per_traj=2000,
-        total_frames=20000,
-        device="cpu",
-        reset_when_done=False,
-    )
-    for _, d in enumerate(collector):  # noqa
-        break
-
-    assert (d["done"].sum(-2) >= 1).all()
-    assert torch.unique(d["collector", "traj_ids"], dim=-1).shape[-1] == 1
-
-    del collector
+# Deprecated reset_when_done
+# @pytest.mark.parametrize("num_env", [1, 2])
+# @pytest.mark.parametrize("env_name", ["vec"])
+# def test_collector_done_persist(num_env, env_name, seed=5):
+#     if num_env == 1:
+#
+#         def env_fn(seed):
+#             env = MockSerialEnv(device="cpu")
+#             env.set_seed(seed)
+#             return env
+#
+#     else:
+#
+#         def env_fn(seed):
+#             def make_env(seed):
+#                 env = MockSerialEnv(device="cpu")
+#                 env.set_seed(seed)
+#                 return env
+#
+#             env = ParallelEnv(
+#                 num_workers=num_env,
+#                 create_env_fn=make_env,
+#                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
+#             )
+#             env.set_seed(seed)
+#             return env
+#
+#     policy = make_policy(env_name)
+#
+#     collector = SyncDataCollector(
+#         create_env_fn=env_fn,
+#         create_env_kwargs={"seed": seed},
+#         policy=policy,
+#         frames_per_batch=200 * num_env,
+#         max_frames_per_traj=2000,
+#         total_frames=20000,
+#         device="cpu",
+#         reset_when_done=False,
+#     )
+#     for _, d in enumerate(collector):  # noqa
+#         break
+#
+#     assert (d["done"].sum(-2) >= 1).all()
+#     assert torch.unique(d["collector", "traj_ids"], dim=-1).shape[-1] == 1
+#
+#     del collector
 
 
 @pytest.mark.parametrize("frames_per_batch", [200, 10])
@@ -424,7 +424,6 @@ def test_split_trajs(num_env, env_name, frames_per_batch, seed=5):
                 num_workers=num_env,
                 create_env_fn=make_env,
                 create_env_kwargs=[{"seed": i} for i in range(seed, seed + num_env)],
-                allow_step_when_done=True,
             )
             env.set_seed(seed)
             return env
@@ -1656,11 +1655,9 @@ class TestUpdateParams:
             self.state += action
             return TensorDict(
                 {
-                    "next": {
-                        "state": self.state.clone(),
-                        "reward": self.reward_spec.zero(),
-                        "done": self.done_spec.zero(),
-                    }
+                    "state": self.state.clone(),
+                    "reward": self.reward_spec.zero(),
+                    "done": self.done_spec.zero(),
                 },
                 self.batch_size,
             )

@@ -2093,7 +2093,11 @@ class DiscreteTensorSpec(TensorSpec):
             and self.domain == other.domain
         )
 
-    def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
+    def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
+        if safe is None:
+            safe = _CHECK_SPEC_ENCODE
+        # if not val.shape and not safe:
+        #     return val.item()
         return super().to_numpy(val, safe)
 
     def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:

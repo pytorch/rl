@@ -241,16 +241,13 @@ def _step(tensordict):
     new_th = th + new_thdot * dt
     reward = -costs.view(*tensordict.shape, 1)
     done = torch.zeros_like(reward, dtype=torch.bool)
-    # The output must be written in a ``"next"`` entry
     out = TensorDict(
         {
-            "next": {
-                "th": new_th,
-                "thdot": new_thdot,
-                "params": tensordict["params"],
-                "reward": reward,
-                "done": done,
-            }
+            "th": new_th,
+            "thdot": new_thdot,
+            "params": tensordict["params"],
+            "reward": reward,
+            "done": done,
         },
         tensordict.shape,
     )

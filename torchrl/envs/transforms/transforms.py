@@ -151,8 +151,10 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
-        if isinstance(in_keys, str):
+        if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
+        if isinstance(out_keys, (str, tuple)):
+            out_keys = [out_keys]
 
         self.in_keys = in_keys
         if out_keys is None:
@@ -225,7 +227,9 @@ class Transform(nn.Module):
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         """The parent method of a transform during the ``env.step`` execution.
 
         This method should be overwritten whenever the :meth:`~._step` needs to be
@@ -237,11 +241,14 @@ class Transform(nn.Module):
         :meth:`~._step` will only be called by :meth:`TransformedEnv.step` and
         not by :meth:`TransformedEnv.reset`.
 
+        Args:
+            tensordict (TensorDictBase): data at time t
+            next_tensordict (TensorDictBase): data at time t+1
+
+        Returns: the data at t+1
         """
-        next_tensordict = tensordict.get("next")
         next_tensordict = self._call(next_tensordict)
-        tensordict.set("next", next_tensordict)
-        return tensordict
+        return next_tensordict
 
     def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         if self.invertible:
@@ -584,11 +591,10 @@ but got an object of type {type(transform)}."""
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
-        tensordict_out = self.base_env._step(tensordict_in)
+        next_tensordict = self.base_env._step(tensordict_in)
         # we want the input entries to remain unchanged
-        tensordict_out = tensordict.update(tensordict_out)
-        tensordict_out = self.transform._step(tensordict_out)
-        return tensordict_out
+        next_tensordict = self.transform._step(tensordict, next_tensordict)
+        return next_tensordict
 
     def set_seed(
         self, seed: Optional[int] = None, static_seed: bool = False
@@ -797,10 +803,12 @@ class Compose(Transform):
             tensordict = t(tensordict)
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         for t in self.transforms:
-            tensordict = t._step(tensordict)
-        return tensordict
+            next_tensordict = t._step(tensordict, next_tensordict)
+        return next_tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in reversed(self.transforms):
@@ -1126,17 +1134,17 @@ class TargetReturn(Transform):
         self.mode = mode
 
     def reset(self, tensordict: TensorDict):
-        init_target_return = torch.full(
-            size=(*tensordict.batch_size, 1),
-            fill_value=self.target_return,
-            dtype=torch.float32,
-            device=tensordict.device,
-        )
 
         for out_key in self.out_keys:
             target_return = tensordict.get(out_key, default=None)
 
             if target_return is None:
+                init_target_return = torch.full(
+                    size=(*tensordict.batch_size, 1),
+                    fill_value=self.target_return,
+                    dtype=torch.float32,
+                    device=tensordict.device,
+                )
                 target_return = init_target_return
 
             tensordict.set(
@@ -1156,28 +1164,25 @@ class TargetReturn(Transform):
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # sets the current root target as next target return
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         for out_key in self.out_keys:
-            tensordict.set(("next", out_key), tensordict.get(out_key))
-        return super()._step(tensordict)
+            next_tensordict.set(out_key, tensordict.get(out_key))
+        return super()._step(tensordict, next_tensordict)
 
     def _apply_transform(
         self, reward: torch.Tensor, target_return: torch.Tensor
     ) -> torch.Tensor:
+        if target_return.shape != reward.shape:
+            raise ValueError(
+                f"The shape of the reward ({reward.shape}) and target return ({target_return.shape}) must match."
+            )
         if self.mode == "reduce":
-            if reward.ndim == 1 and target_return.ndim == 2:
-                # if target is stacked
-                target_return = target_return[-1] - reward
-            else:
-                target_return = target_return - reward
+            target_return = target_return - reward
             return target_return
         elif self.mode == "constant":
-            if reward.ndim == 1 and target_return.ndim == 2:
-                # if target is stacked
-                target_return = target_return[-1]
-            else:
-                target_return = target_return
+            target_return = target_return
             return target_return
         else:
             raise ValueError("Unknown mode: {}".format(self.mode))
@@ -2120,7 +2125,7 @@ class CatFrames(ObservationTransform):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             # Lazy init of buffers
             buffer_name = f"_cat_buffers_{in_key}"
-            data = tensordict[in_key]
+            data = tensordict.get(in_key)
             d = data.size(self.dim)
             buffer = getattr(self, buffer_name)
             if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
@@ -2290,11 +2295,15 @@ class RewardScaling(Transform):
         loc: Union[float, torch.Tensor],
         scale: Union[float, torch.Tensor],
         in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         standard_normal: bool = False,
     ):
         if in_keys is None:
             in_keys = ["reward"]
-        super().__init__(in_keys=in_keys)
+        if out_keys is None:
+            out_keys = in_keys
+
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not isinstance(standard_normal, torch.Tensor):
             standard_normal = torch.tensor(standard_normal)
         self.register_buffer("standard_normal", standard_normal)
@@ -3087,16 +3096,18 @@ class FrameSkipTransform(Transform):
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         parent = self.parent
         if parent is None:
             raise RuntimeError("parent not found for FrameSkipTransform")
         reward_key = parent.reward_key
-        reward = tensordict.get(("next", reward_key))
+        reward = next_tensordict.get(reward_key)
         for _ in range(self.frame_skip - 1):
-            tensordict = parent._step(tensordict)
-            reward = reward + tensordict.get(("next", reward_key))
-        return tensordict.set(("next", reward_key), reward)
+            next_tensordict = parent._step(tensordict)
+            reward = reward + next_tensordict.get(reward_key)
+        return next_tensordict.set(reward_key, reward)
 
     def forward(self, tensordict):
         raise RuntimeError(
@@ -3344,10 +3355,12 @@ class TensorDictPrimer(Transform):
             tensordict.set(key, value)
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         for key in self.primers.keys():
-            tensordict.setdefault(("next", key), tensordict.get(key, default=None))
-        return tensordict
+            next_tensordict.setdefault(key, tensordict.get(key, default=None))
+        return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Sets the default values in the input tensordict.
@@ -3803,10 +3816,11 @@ class RewardSum(Transform):
                         ) from err
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
-        next_tensordict = tensordict.get("next")
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in next_tensordict.keys(include_nested=True):
                 reward = next_tensordict.get(in_key)
@@ -3815,8 +3829,7 @@ class RewardSum(Transform):
                 next_tensordict.set(out_key, tensordict.get(out_key) + reward)
             elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
-        tensordict.set("next", next_tensordict)
-        return tensordict
+        return next_tensordict
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         state_spec = input_spec["full_state_spec"]
@@ -3924,7 +3937,7 @@ class StepCounter(Transform):
         self.step_count_key = step_count_key
         super().__init__([])
 
-    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _get_done(self, tensordict):
         done_key = self.parent.done_key if self.parent else "done"
         done = tensordict.get(done_key, None)
         if done is None:
@@ -3933,41 +3946,42 @@ class StepCounter(Transform):
                 dtype=self.parent.done_spec.dtype,
                 device=self.parent.done_spec.device,
             )
+        return done
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        done = None
         _reset = tensordict.get(
             "_reset",
             # TODO: decide if using done here, or using a default `True` tensor
             default=None,
         )
         if _reset is None:
+            done = self._get_done(tensordict)
             _reset = torch.ones_like(done)
-        step_count = tensordict.get(
-            self.step_count_key,
-            default=None,
-        )
+        step_count = tensordict.get(self.step_count_key, default=None)
         if step_count is None:
+            if done is None:
+                # avoid getting done if not needed
+                done = self._get_done(tensordict)
             step_count = torch.zeros_like(done, dtype=torch.int64)
-
-        step_count[_reset] = 0
-        tensordict.set(
-            self.step_count_key,
-            step_count,
-        )
+        step_count = torch.where(~_reset, step_count, 0)
+        tensordict.set(self.step_count_key, step_count)
         if self.max_steps is not None:
             truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         tensordict = tensordict.clone(False)
-        step_count = tensordict.get(
-            self.step_count_key,
-        )
+        step_count = tensordict.get(self.step_count_key)
         next_step_count = step_count + 1
-        tensordict.set(("next", self.step_count_key), next_step_count)
+        next_tensordict.set(self.step_count_key, next_step_count)
         if self.max_steps is not None:
             truncated = next_step_count >= self.max_steps
-            tensordict.set(("next", self.truncated_key), truncated)
-        return tensordict
+            next_tensordict.set(self.truncated_key, truncated)
+        return next_tensordict
 
     def transform_observation_spec(
         self, observation_spec: CompositeSpec
