@@ -38,9 +38,11 @@ from torchrl._utils import prod
 from torchrl.data import (
     BoundedTensorSpec,
     CompositeSpec,
+    LazyMemmapStorage,
     LazyTensorStorage,
     ReplayBuffer,
     TensorDictReplayBuffer,
+    TensorStorage,
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs import (
@@ -50,6 +52,7 @@ from torchrl.envs import (
     CatTensors,
     CenterCrop,
     Compose,
+    DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
     EnvBase,
@@ -4094,30 +4097,55 @@ class TestRewardScaling(TransformBase):
 
 class TestRewardSum(TransformBase):
     def test_single_trans_env_check(self):
-        env = TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_serial_trans_env_check(self):
         def make_env():
-            return TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+            )
 
         env = SerialEnv(2, make_env)
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_parallel_trans_env_check(self):
         def make_env():
-            return TransformedEnv(ContinuousActionVecMockEnv(), RewardSum())
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+            )
 
         env = ParallelEnv(2, make_env)
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_trans_serial_env_check(self):
-        env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), RewardSum())
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     def test_trans_parallel_env_check(self):
-        env = TransformedEnv(ParallelEnv(2, ContinuousActionVecMockEnv), RewardSum())
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            Compose(RewardScaling(loc=-1, scale=1), RewardSum()),
+        )
         check_env_specs(env)
+        r = env.rollout(4)
+        assert r["next", "episode_reward"].unique().numel() > 1
 
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
@@ -8233,6 +8261,105 @@ class TestActionMask(TransformBase):
     def test_transform_inverse(self):
         # no inverse transform
         return
+
+
+class TestDeviceCastTransform(TransformBase):
+    def test_single_trans_env_check(self):
+        env = ContinuousActionVecMockEnv(device="cpu:0")
+        env = TransformedEnv(env, DeviceCastTransform("cpu:1"))
+        assert env.device == torch.device("cpu:1")
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(device="cpu:0"), DeviceCastTransform("cpu:1")
+            )
+
+        env = SerialEnv(2, make_env)
+        assert env.device == torch.device("cpu:1")
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(device="cpu:0"), DeviceCastTransform("cpu:1")
+            )
+
+        env = ParallelEnv(2, make_env)
+        assert env.device == torch.device("cpu:1")
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        def make_env():
+            return ContinuousActionVecMockEnv(device="cpu:0")
+
+        env = TransformedEnv(SerialEnv(2, make_env), DeviceCastTransform("cpu:1"))
+        assert env.device == torch.device("cpu:1")
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        def make_env():
+            return ContinuousActionVecMockEnv(device="cpu:0")
+
+        env = TransformedEnv(ParallelEnv(2, make_env), DeviceCastTransform("cpu:1"))
+        assert env.device == torch.device("cpu:1")
+        check_env_specs(env)
+
+    def test_transform_no_env(self):
+        t = DeviceCastTransform("cpu:1", "cpu:0")
+        assert t._call(TensorDict({}, [], device="cpu:0")).device == torch.device(
+            "cpu:1"
+        )
+
+    def test_transform_compose(self):
+        t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
+        assert t._call(TensorDict({}, [], device="cpu:0")).device == torch.device(
+            "cpu:1"
+        )
+        assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
+            "cpu:0"
+        )
+
+    def test_transform_env(self):
+        env = ContinuousActionVecMockEnv(device="cpu:0")
+        assert env.device == torch.device("cpu:0")
+        env = TransformedEnv(env, DeviceCastTransform("cpu:1"))
+        assert env.device == torch.device("cpu:1")
+        assert env.transform.device == torch.device("cpu:1")
+        assert env.transform.orig_device == torch.device("cpu:0")
+
+    def test_transform_model(self):
+        t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
+        m = nn.Sequential(t)
+        assert t(TensorDict({}, [], device="cpu:0")).device == torch.device("cpu:1")
+
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    @pytest.mark.parametrize(
+        "storage", [TensorStorage, LazyTensorStorage, LazyMemmapStorage]
+    )
+    def test_transform_rb(self, rbclass, storage):
+        t = Compose(DeviceCastTransform("cpu:1", "cpu:0"))
+        storage_kwargs = (
+            {
+                "storage": TensorDict(
+                    {"a": torch.zeros(20, 1, device="cpu:0")}, [20], device="cpu:0"
+                )
+            }
+            if storage is TensorStorage
+            else {}
+        )
+        rb = rbclass(storage=storage(max_size=20, device="auto", **storage_kwargs))
+        rb.append_transform(t)
+        rb.add(TensorDict({"a": [1]}, [], device="cpu:1"))
+        assert rb._storage._storage.device == torch.device("cpu:0")
+        assert rb.sample(4).device == torch.device("cpu:1")
+
+    def test_transform_inverse(self):
+        t = DeviceCastTransform("cpu:1", "cpu:0")
+        assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
+            "cpu:0"
+        )
 
 
 if __name__ == "__main__":

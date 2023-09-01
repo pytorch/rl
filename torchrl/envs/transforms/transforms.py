@@ -268,6 +268,10 @@ class Transform(nn.Module):
         out = self._inv_call(tensordict.clone(False))
         return out
 
+    def transform_env_device(self, device: torch.device):
+        """Transforms the device of the parent env."""
+        return device
+
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
         """Transforms the output spec such that the resulting spec matches transform mapping.
 
@@ -424,23 +428,7 @@ class Transform(nn.Module):
                     raise ValueError(
                         "A transform parent must be either another Compose transform or an environment object."
                     )
-                compose = container
-                if compose.__dict__["_container"]:
-                    # the parent of the compose must be a TransformedEnv
-                    compose_parent = TransformedEnv(
-                        compose.__dict__["_container"].base_env
-                    )
-                    comp_parent_trans = compose_parent.transform.clone()
-                    out = TransformedEnv(
-                        compose_parent.base_env,
-                        transform=comp_parent_trans,
-                    )
-                    for orig_trans in compose.transforms:
-                        if orig_trans is self:
-                            break
-                        transform = orig_trans.clone()
-                        transform.reset_parent()
-                        out.append_transform(transform)
+                out, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
                 out = TransformedEnv(container.base_env)
             else:
@@ -574,7 +562,11 @@ but got an object of type {type(transform)}."""
 
     @property
     def device(self) -> bool:
-        return self.base_env.device
+        device = self.base_env.device
+        if self.transform is None:
+            # during init, the device is checked
+            return device
+        return self.transform.transform_env_device(device)
 
     @device.setter
     def device(self, value):
@@ -856,6 +848,11 @@ class Compose(Transform):
             tensordict = t._inv_call(tensordict)
         return tensordict
 
+    def transform_env_device(self, device: torch.device):
+        for t in self.transforms:
+            device = t.transform_env_device(device)
+        return device
+
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         for t in self.transforms[::-1]:
             input_spec = t.transform_input_spec(input_spec)
@@ -961,6 +958,39 @@ class Compose(Transform):
         for t in self.transforms:
             t.set_missing_tolerance(mode)
         super().set_missing_tolerance(mode)
+
+    def _rebuild_up_to(self, final_transform):
+        container = self.__dict__["_container"]
+
+        if isinstance(container, Compose):
+            out, parent_compose = container._rebuild_up_to(self)
+            if out is None:
+                # returns None if there is no parent env
+                return None, None
+        elif isinstance(container, TransformedEnv):
+            out = TransformedEnv(container.base_env)
+        elif container is None:
+            # returns None if there is no parent env
+            return None, None
+        else:
+            raise ValueError(f"Container of type {type(container)} isn't supported.")
+
+        if final_transform not in self.transforms:
+            raise ValueError(f"Cannot rebuild with transform {final_transform}.")
+        list_of_transforms = []
+        for orig_trans in self.transforms:
+            if orig_trans is final_transform:
+                break
+            transform = orig_trans.clone()
+            transform.reset_parent()
+            list_of_transforms.append(transform)
+        if isinstance(container, Compose):
+            parent_compose.append(Compose(*list_of_transforms))
+            return out, parent_compose[-1]
+        elif isinstance(container, TransformedEnv):
+            for t in list_of_transforms:
+                out.append_transform(t)
+            return out, out.transform
 
 
 class ToTensorImage(ObservationTransform):
@@ -2718,6 +2748,90 @@ class DoubleToFloat(DTypeCastTransform):
         super().__init__(torch.double, torch.float, in_keys, in_keys_inv)
 
 
+class DeviceCastTransform(Transform):
+    """Moves data from one device to another.
+
+    Args:
+        device (torch.device or equivalent): the destination device.
+        orig_device (torch.device or equivalent): the origin device. If not specified and
+            a parent environment exists, it it retrieved from it. In all other cases,
+            it remains unspecified.
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {'obs': torch.ones(1, dtype=torch.double),
+        ... }, [], device="cpu:0")
+        >>> transform = DeviceCastTransform(device=torch.device("cpu:2"))
+        >>> td = transform(td)
+        >>> print(td.device)
+        cpu:2
+
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        device,
+        orig_device=None,
+    ):
+        self.device = torch.device(device)
+        self.orig_device = (
+            torch.device(orig_device) if orig_device is not None else orig_device
+        )
+        super().__init__(in_keys=[])
+
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        if self.orig_device is None:
+            if isinstance(container, EnvBase):
+                device = container.device
+            else:
+                parent = container.parent
+                if parent is not None:
+                    device = parent.device
+                else:
+                    device = torch.device("cpu")
+            self.orig_device = device
+        return super().set_container(container)
+
+    @dispatch(source="in_keys", dest="out_keys")
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.to(self.device, non_blocking=True)
+
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.to(self.device, non_blocking=True)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        parent = self.parent
+        if parent is None:
+            if self.orig_device is None:
+                return tensordict
+            return tensordict.to(self.orig_device, non_blocking=True)
+        return tensordict.to(parent.device, non_blocking=True)
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        return input_spec.to(self.device)
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        return reward_spec.to(self.device)
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return observation_spec.to(self.device)
+
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        return output_spec.to(self.device)
+
+    def transform_done_spec(self, done_spec: TensorSpec) -> TensorSpec:
+        return done_spec.to(self.device)
+
+    def transform_env_device(self, device):
+        return self.device
+
+    def __repr__(self) -> str:
+        s = f"{self.__class__.__name__}(device={self.device}, orig_device={self.orig_device})"
+        return s
+
+
 class CatTensors(Transform):
     """Concatenates several keys in a single tensor.
 
@@ -3744,6 +3858,22 @@ class RewardSum(Transform):
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         tensordict.set("next", next_tensordict)
         return tensordict
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        state_spec = input_spec["full_state_spec"]
+        if state_spec is None:
+            state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
+        reward_spec = self.parent.reward_spec
+        # Define episode specs for all out_keys
+        for out_key in self.out_keys:
+            episode_spec = UnboundedContinuousTensorSpec(
+                shape=reward_spec.shape,
+                device=reward_spec.device,
+                dtype=reward_spec.dtype,
+            )
+            state_spec[out_key] = episode_spec
+        input_spec["full_state_spec"] = state_spec
+        return input_spec
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         """Transforms the observation spec, adding the new keys generated by RewardSum."""
