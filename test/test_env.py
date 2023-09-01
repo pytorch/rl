@@ -5,6 +5,7 @@
 
 import argparse
 import os.path
+import re
 from collections import defaultdict
 from functools import partial
 
@@ -247,9 +248,16 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     else:
         env = SerialEnv(3, envs)
     env.set_seed(100)
+    # out = env._single_rollout(100, break_when_any_done=False)
     out = env.rollout(100, break_when_any_done=False)
     assert out.names[-1] == "time"
     assert out.shape == torch.Size([3, 100])
+    assert (
+        out[..., -1]["step_count"].squeeze().cpu() == torch.tensor([19, 9, 19])
+    ).all()
+    assert (
+        out[..., -1]["next", "step_count"].squeeze().cpu() == torch.tensor([20, 10, 20])
+    ).all()
     assert (
         out["next", truncated_key].squeeze().sum(-1) == torch.tensor([5, 3, 2])
     ).all()
@@ -322,7 +330,9 @@ class TestModelBasedEnvBase:
         td_expanded = td.unsqueeze(-1).expand(10, 2).reshape(-1).to_tensordict()
         mb_env.step(td)
 
-        with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
+        with pytest.raises(
+            RuntimeError, match=re.escape("Expected a tensordict with shape==env.shape")
+        ):
             mb_env.step(td_expanded)
 
         mb_env = DummyModelBasedEnvBase(
@@ -1576,9 +1586,7 @@ def test_batch_unlocked_with_batch_size(device):
     td_expanded = td.expand(2, 2).reshape(-1).to_tensordict()
     td = env.step(td)
 
-    with pytest.raises(
-        RuntimeError, match="Expected a tensordict with shape==env.shape, "
-    ):
+    with pytest.raises(RuntimeError, match="Expected a tensordict with shape"):
         env.step(td_expanded)
 
 

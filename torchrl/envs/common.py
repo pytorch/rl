@@ -823,6 +823,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return keys
 
     @property
+    def reset_keys(self) -> List[NestedKey]:
+        return [_replace_last(done_key, "_reset") for done_key in self.done_keys]
+
+    @property
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
@@ -1123,23 +1127,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         # sanity check
         self._assert_tensordict_shape(tensordict)
 
-        tensordict_out = self._step(tensordict)
-        # this tensordict should contain a "next" key
-        try:
-            next_tensordict_out = tensordict_out.get("next")
-        except KeyError:
-            raise RuntimeError(
-                "The value returned by env._step must be a tensordict where the "
-                "values at t+1 have been written under a 'next' entry. This "
-                f"tensordict couldn't be found in the output, got: {tensordict_out}."
-            )
-        if tensordict_out is tensordict:
-            raise RuntimeError(
-                "EnvBase._step should return outplace changes to the input "
-                "tensordict. Consider emptying the TensorDict first (e.g. tensordict.empty() or "
-                "tensordict.select()) inside _step before writing new tensors onto this new instance."
-            )
+        next_tensordict = self._step(tensordict)
+        next_tensordict = self._step_proc_data(next_tensordict)
+        # tensordict could already have a "next" key
+        tensordict.set("next", next_tensordict)
+        return tensordict
 
+    def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         # unsqueeze rewards if needed
         # the input tensordict may have more leading dimensions than the batch_size
@@ -1178,11 +1172,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 done = done.view(expected_done_shape)
                 next_tensordict_out.set(done_key, done)
 
-        tensordict_out.set("next", next_tensordict_out)
-
         if self.run_type_checks:
-            for key in self._select_observation_keys(tensordict_out):
-                obs = tensordict_out.get(key)
+            # TODO: check these errors
+            for key in self._select_observation_keys(next_tensordict_out):
+                obs = next_tensordict_out.get(key)
                 self.observation_spec.type_check(obs, key)
 
             for reward_key in self.reward_keys:
@@ -1194,7 +1187,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 ):
                     raise TypeError(
                         f"expected reward.dtype to be {self.output_spec[unravel_key(('full_reward_spec',reward_key))]} "
-                        f"but got {tensordict_out.get(reward_key).dtype}"
+                        f"but got {next_tensordict_out.get(reward_key).dtype}"
                     )
 
             for done_key in self.done_keys:
@@ -1205,10 +1198,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     raise TypeError(
                         f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
                     )
-        # tensordict could already have a "next" key
-        tensordict.update(tensordict_out)
-
-        return tensordict
+        return next_tensordict_out
 
     def _get_in_keys_to_exclude(self, tensordict):
         if self._cache_in_keys is None:
@@ -1274,8 +1264,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             _reset_map = {}
 
         tensordict_reset = self._reset(tensordict, **kwargs)
-        if tensordict_reset.device != self.device:
-            tensordict_reset = tensordict_reset.to(self.device)
+        #        We assume that this is done properly
+        #        if tensordict_reset.device != self.device:
+        #            tensordict_reset = tensordict_reset.to(self.device, non_blocking=True)
         if tensordict_reset is tensordict:
             raise RuntimeError(
                 "EnvBase._reset should return outplace changes to the input "
@@ -1349,7 +1340,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def _assert_tensordict_shape(self, tensordict: TensorDictBase) -> None:
         if (
-            self.batch_locked or self.batch_size != torch.Size([])
+            self.batch_locked or self.batch_size != ()
         ) and tensordict.batch_size != self.batch_size:
             raise RuntimeError(
                 f"Expected a tensordict with shape==env.shape, "
@@ -1423,7 +1414,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
-    ) -> TensorDictBase:
+    ):
         """Executes a rollout in the environment.
 
         The function will stop as soon as one of the contained environments

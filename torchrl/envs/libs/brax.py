@@ -282,7 +282,6 @@ class BraxWrapper(_EnvWrapper):
             out = self._step_with_grad(tensordict)
         else:
             out = self._step_without_grad(tensordict)
-        out = out.select().set("next", out)
         return out
 
 
