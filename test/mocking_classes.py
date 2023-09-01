@@ -421,12 +421,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 shape=batch_size,
             )
         if action_spec is None:
-            action_spec_cls = (
-                DiscreteTensorSpec
-                if categorical_action_encoding
-                else OneHotDiscreteTensorSpec
-            )
-            action_spec = action_spec_cls(n=7, shape=batch_size)
+            if categorical_action_encoding:
+                action_spec_cls = DiscreteTensorSpec
+                action_spec = action_spec_cls(n=7, shape=batch_size)
+            else:
+                action_spec_cls = OneHotDiscreteTensorSpec
+                action_spec = action_spec_cls(n=7, shape=(*batch_size, 7))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(1,))
         if done_spec is None:
