@@ -6693,6 +6693,7 @@ class TestVecNorm:
         tensordict = env.reset()
         for _ in range(10):
             tensordict = env.rand_step(tensordict)
+            tensordict = step_mdp(tensordict)
         queue_out.put(True)
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "all_done"
@@ -6800,11 +6801,13 @@ class TestVecNorm:
         assert msg == "start"
         for _ in range(10):
             tensordict = parallel_env.rand_step(tensordict)
+            tensordict = step_mdp(tensordict)
         queue_out.put("first round")
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "start"
         for _ in range(10):
             tensordict = parallel_env.rand_step(tensordict)
+            tensordict = step_mdp(tensordict)
         queue_out.put("second round")
         parallel_env.close()
         queue_out.close()
@@ -6884,6 +6887,7 @@ class TestVecNorm:
         for _ in range(N):
             td = env_t.rand_step(td)
             tds.append(td.clone())
+            td = step_mdp(td)
             if td.get("done").any():
                 td = env_t.reset()
         tds = torch.stack(tds, 0)
