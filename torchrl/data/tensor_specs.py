@@ -1355,9 +1355,12 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return gathered.any(-1).all()
 
     def __eq__(self, other):
+        if not hasattr(other, 'mask'):
+            return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
             and isinstance(other.mask, torch.Tensor)
+            and (self.mask.shape == other.mask.shape)
             and (self.mask == other.mask).all()
         )
         return (
@@ -1929,9 +1932,12 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         )
 
     def __eq__(self, other):
+        if not hasattr(other, 'mask'):
+            return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
             and isinstance(other.mask, torch.Tensor)
+            and (self.mask.shape == other.mask.shape)
             and (self.mask == other.mask).all()
         )
         return (
@@ -2273,9 +2279,12 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def __eq__(self, other):
+        if not hasattr(other, 'mask'):
+            return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
             and isinstance(other.mask, torch.Tensor)
+            and (self.mask.shape == other.mask.shape)
             and (self.mask == other.mask).all()
         )
         return (
@@ -2575,9 +2584,12 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
 
     def __eq__(self, other):
+        if not hasattr(other, 'mask'):
+            return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
             and isinstance(other.mask, torch.Tensor)
+            and (self.mask.shape == other.mask.shape)
             and (self.mask == other.mask).all()
         )
         return (
