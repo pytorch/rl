@@ -1118,6 +1118,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         Args:
             tensordict (TensorDictBase): Tensordict containing the action to be taken.
+                If the input tensordict contains a ``"next"`` entry, the values contained in it
+                will prevail over the newly computed values. This gives a mechanism
+                to override the underlying computations.
 
         Returns:
             the input tensordict, modified in place with the resulting observations, done state and reward
@@ -1126,10 +1129,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         # sanity check
         self._assert_tensordict_shape(tensordict)
+        next_preset = tensordict.get("next", None)
 
         next_tensordict = self._step(tensordict)
         next_tensordict = self._step_proc_data(next_tensordict)
-        # tensordict could already have a "next" key
+        if next_preset is not None:
+            # tensordict could already have a "next" key
+            next_tensordict.update(next_preset)
         tensordict.set("next", next_tensordict)
         return tensordict
 
@@ -1669,11 +1675,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         next_output.update(fake_reward)
         next_output.update(fake_done)
         fake_in_out.update(fake_done.clone())
+        if "next" not in fake_in_out.keys():
+            fake_in_out.set("next", next_output)
+        else:
+            fake_in_out.get("next").update(next_output)
 
-        fake_td = fake_in_out.set("next", next_output)
-        fake_td.batch_size = self.batch_size
-        fake_td = fake_td.to(self.device)
-        return fake_td
+        fake_in_out.batch_size = self.batch_size
+        fake_in_out = fake_in_out.to(self.device)
+        return fake_in_out
 
 
 class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
