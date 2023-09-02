@@ -1120,7 +1120,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         n: int,
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        dtype: Optional[Union[str, torch.dtype]] = torch.bool,
         use_register: bool = False,
         mask: torch.Tensor | None = None,
     ):
@@ -1870,7 +1870,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         nvec: Sequence[int],
         shape: Optional[torch.Size] = None,
         device=None,
-        dtype=torch.long,
+        dtype=torch.bool,
         use_register=False,
         mask: torch.Tensor | None = None,
     ):
