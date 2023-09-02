@@ -292,6 +292,22 @@ class TestGym:
         env.rand_step()
         env.rollout(3)
 
+    def test_one_hot_and_categorical(self):
+        # tests that one-hot and categorical work ok when an integer is expected as action
+        cliff_walking = GymEnv(
+            'CliffWalking-v0',
+            categorical_action_encoding=True
+            )
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
+        cliff_walking = GymEnv(
+            'CliffWalking-v0',
+            categorical_action_encoding=False
+            )
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811

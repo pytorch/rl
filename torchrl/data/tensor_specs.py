@@ -1117,7 +1117,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         n: int,
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        dtype: Optional[Union[str, torch.dtype]] = torch.bool,
         use_register: bool = False,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1261,6 +1261,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             for _v in val.view(-1):
                 vals.append(inv_reg[int(_v)])
             return np.array(vals).reshape(tuple(val.shape))
+        if val.size == 1:
+            # some envs require an integer for indexing
+            val = int(val)
         return val
 
     def index(self, index: INDEX_TYPING, tensor_to_index: torch.Tensor) -> torch.Tensor:
@@ -1801,7 +1804,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         nvec: Sequence[int],
         shape: Optional[torch.Size] = None,
         device=None,
-        dtype=torch.long,
+        dtype=torch.bool,
         use_register=False,
     ):
         self.nvec = nvec
@@ -2096,8 +2099,8 @@ class DiscreteTensorSpec(TensorSpec):
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
-        # if not val.shape and not safe:
-        #     return val.item()
+        if not val.shape and not safe:
+            return val.item()
         return super().to_numpy(val, safe)
 
     def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
