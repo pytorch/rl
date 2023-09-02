@@ -1248,7 +1248,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         mask = self.mask
         if mask is None:
             n = self.space.n
-            m = torch.randint(n, (*shape, 1), device=self.device)
+            m = torch.randint(n, shape, device=self.device)
         else:
             mask = mask.expand(*shape, mask.shape[-1])
             if mask.ndim > 2:
@@ -1256,9 +1256,10 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             else:
                 mask_flat = mask
             shape_out = mask.shape[:-1]
-            m = torch.multinomial(mask_flat.float(), 1).reshape(*shape_out, 1)
-        out = torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
-        out.scatter_(-1, m, 1)
+            m = torch.multinomial(mask_flat.float(), 1).reshape(shape_out)
+        out = torch.nn.functional.one_hot(m, self.space.n).to(self.dtype)
+        # torch.zeros((*shape, self.space.n), device=self.device, dtype=self.dtype)
+        # out.scatter_(-1, m, 1)
         return out
 
     def encode(
@@ -1331,8 +1332,8 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
-            out = torch.multinomial(val.to(torch.float), 1)
-            out = (out == out.max(dim=-1, keepdim=True)[0]).to(self.dtype)
+            out = torch.multinomial(val.to(torch.float), 1).squeeze(-1)
+            out = torch.nn.functional.one_hot(val, self.space.n).to(self.dtype)
             return out
         shape = self.mask.shape
         shape = torch.broadcast_shapes(shape, val.shape)
@@ -1355,7 +1356,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return gathered.any(-1).all()
 
     def __eq__(self, other):
-        if not hasattr(other, 'mask'):
+        if not hasattr(other, "mask"):
             return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
@@ -1932,7 +1933,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         )
 
     def __eq__(self, other):
-        if not hasattr(other, 'mask'):
+        if not hasattr(other, "mask"):
             return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
@@ -2279,7 +2280,7 @@ class DiscreteTensorSpec(TensorSpec):
         )
 
     def __eq__(self, other):
-        if not hasattr(other, 'mask'):
+        if not hasattr(other, "mask"):
             return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
@@ -2584,7 +2585,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         )
 
     def __eq__(self, other):
-        if not hasattr(other, 'mask'):
+        if not hasattr(other, "mask"):
             return False
         mask_equal = (self.mask is None and other.mask is None) or (
             isinstance(self.mask, torch.Tensor)
