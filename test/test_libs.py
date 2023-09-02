@@ -294,17 +294,11 @@ class TestGym:
 
     def test_one_hot_and_categorical(self):
         # tests that one-hot and categorical work ok when an integer is expected as action
-        cliff_walking = GymEnv(
-            'CliffWalking-v0',
-            categorical_action_encoding=True
-            )
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
-        cliff_walking = GymEnv(
-            'CliffWalking-v0',
-            categorical_action_encoding=False
-            )
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
         cliff_walking.rollout(10)
         check_env_specs(cliff_walking)
 
