@@ -186,6 +186,13 @@ class GymLikeEnv(_EnvWrapper):
         action = tensordict.get("action")
         action_np = self.read_action(action)
 
+        try:
+            # Gym uses action to reference to a cell in dictionary in some of its environments (e.g. cliffwalking)
+            # Keeping action in numpy would raise TypeError: unhashable type: 'numpy.ndarray'
+            action_np = action_np.item()
+        except ValueError:
+            pass
+
         reward = 0
         for _ in range(self.wrapper_frame_skip):
             obs, _reward, done, *info = self._output_transform(
