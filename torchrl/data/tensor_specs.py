@@ -1333,7 +1333,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def _project(self, val: torch.Tensor) -> torch.Tensor:
         if self.mask is None:
             out = torch.multinomial(val.to(torch.float), 1).squeeze(-1)
-            out = torch.nn.functional.one_hot(val, self.space.n).to(self.dtype)
+            out = torch.nn.functional.one_hot(out, self.space.n).to(self.dtype)
             return out
         shape = self.mask.shape
         shape = torch.broadcast_shapes(shape, val.shape)
