@@ -1118,6 +1118,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         Args:
             tensordict (TensorDictBase): Tensordict containing the action to be taken.
+                If the input tensordict contains a ``"next"`` entry, the values contained in it
+                will prevail over the newly computed values. This gives a mechanism
+                to override the underlying computations.
 
         Returns:
             the input tensordict, modified in place with the resulting observations, done state and reward

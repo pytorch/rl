@@ -431,10 +431,8 @@ class TestCatFrames(TransformBase):
         for _ in range(10):
             td = env.rand_step(td)
             td = step_mdp(td)
-        assert (td["next", "observation"] != value_at_clone).any()
-        assert (
-            td["next", "observation"] == env.transform._cat_buffers_observation
-        ).all()
+        assert (td["observation"] != value_at_clone).any()
+        assert (td["observation"] == env.transform._cat_buffers_observation).all()
         assert (
             cloned._cat_buffers_observation == env.transform._cat_buffers_observation
         ).all()

@@ -143,7 +143,7 @@ def test_env_seed(env_name, frame_skip, seed=0):
     env.set_seed(seed)
     td0b = env.fake_tensordict()
     td0b = env.reset(tensordict=td0b)
-    td1b = env.step(td0b.clone().set("action", action))
+    td1b = env.step(td0b.exclude("next").clone().set("action", action))
 
     assert_allclose_td(td0a, td0b.select(*td0a.keys()))
     assert_allclose_td(td1a, td1b)
