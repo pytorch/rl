@@ -2328,8 +2328,6 @@ class DiscreteTensorSpec(TensorSpec):
             n=self.space.n,
             shape=shape,
             device=self.device,
-            # dtype=self.dtype,
-            mask=self.mask,
         )
 
     def expand(self, *shape):
