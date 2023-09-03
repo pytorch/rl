@@ -1696,7 +1696,8 @@ class MultiKeyCountingEnv(EnvBase):
         done = self.output_spec["full_done_spec"].zero()
         td = self.observation_spec.zero()
 
-        one_hot_action = tensordict["action"].argmax(-1).unsqueeze(-1)
+        one_hot_action = tensordict["action"]
+        one_hot_action = one_hot_action.long().argmax(-1).unsqueeze(-1)
         reward["reward"] += one_hot_action.to(torch.float)
         self.count += one_hot_action.to(torch.int)
         td["observation"] += expand_right(self.count, td["observation"].shape)

@@ -1168,7 +1168,7 @@ class TestSpec:
 
         sample = action_spec.rand((100000,))
 
-        sample_list = sample.argmax(-1)
+        sample_list = sample.long().argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
