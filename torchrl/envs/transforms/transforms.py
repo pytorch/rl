@@ -3093,7 +3093,7 @@ class DiscreteActionProjection(Transform):
             raise RuntimeError(
                 f"action.shape[-1]={action.shape[-1]} must match self.max_actions={self.max_actions}."
             )
-        action = action.argmax(-1)  # bool to int
+        action = action.long().argmax(-1)  # bool to int
         idx = action >= self.num_actions_effective
         if idx.any():
             action[idx] = torch.randint(self.num_actions_effective, (idx.sum(),))
