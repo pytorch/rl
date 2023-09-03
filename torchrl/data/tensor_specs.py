@@ -1229,9 +1229,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             if ignore_device:
-                val = torch.tensor(val, dtype=self.dtype)
+                val = torch.tensor(val)
             else:
-                val = torch.tensor(val, dtype=self.dtype, device=self.device)
+                val = torch.tensor(val, device=self.device)
 
         if space is None:
             space = self.space
@@ -1244,7 +1244,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if (val >= space.n).any():
             raise AssertionError("Value must be less than action space.")
 
-        val = torch.nn.functional.one_hot(val.long(), space.n)
+        val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
         return val
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
