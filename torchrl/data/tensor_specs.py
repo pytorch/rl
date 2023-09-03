@@ -2120,7 +2120,9 @@ class DiscreteTensorSpec(TensorSpec):
         """Converts the spec to the equivalent one-hot spec."""
         shape = [*self.shape, self.space.n]
         return OneHotDiscreteTensorSpec(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
         )
 
     def expand(self, *shape):
