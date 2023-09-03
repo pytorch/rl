@@ -1131,7 +1131,6 @@ class TestSpec:
         actions_tensors = [action_spec.rand() for _ in range(10)]
         actions_numpy = [action_spec.to_numpy(a) for a in actions_tensors]
         actions_tensors_2 = [action_spec.encode(a) for a in actions_numpy]
-        print(actions_tensors, actions_numpy, actions_tensors_2)
         assert all(
             (a1 == a2).all() for a1, a2 in zip(actions_tensors, actions_tensors_2)
         )
@@ -1169,7 +1168,7 @@ class TestSpec:
 
         sample = action_spec.rand((100000,))
 
-        sample_list = sample.argmax(-1)
+        sample_list = sample.long().argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
