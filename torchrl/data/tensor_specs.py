@@ -1117,7 +1117,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         n: int,
         shape: Optional[torch.Size] = None,
         device: Optional[DEVICE_TYPING] = None,
-        dtype: Optional[Union[str, torch.dtype]] = torch.long,
+        dtype: Optional[Union[str, torch.dtype]] = torch.bool,
         use_register: bool = False,
     ):
         dtype, device = _default_dtype_and_device(dtype, device)
@@ -1229,9 +1229,9 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     ) -> torch.Tensor:
         if not isinstance(val, torch.Tensor):
             if ignore_device:
-                val = torch.tensor(val, dtype=self.dtype)
+                val = torch.tensor(val)
             else:
-                val = torch.tensor(val, dtype=self.dtype, device=self.device)
+                val = torch.tensor(val, device=self.device)
 
         if space is None:
             space = self.space
@@ -1244,7 +1244,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         if (val >= space.n).any():
             raise AssertionError("Value must be less than action space.")
 
-        val = torch.nn.functional.one_hot(val.long(), space.n)
+        val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
         return val
 
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
@@ -1254,7 +1254,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             if not isinstance(val, torch.Tensor):
                 raise NotImplementedError
             self.assert_is_in(val)
-        val = val.argmax(-1).cpu().numpy()
+        val = val.long().argmax(-1).cpu().numpy()
         if self.use_register:
             inv_reg = self.space.register.inverse()
             vals = []
@@ -1323,14 +1323,13 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return val.argmax(-1)
+        return val.long().argmax(-1)
 
     def to_categorical_spec(self) -> DiscreteTensorSpec:
         """Converts the spec to the equivalent categorical spec."""
         return DiscreteTensorSpec(
             self.space.n,
             device=self.device,
-            dtype=self.dtype,
             shape=self.shape[:-1],
         )
 
@@ -1801,7 +1800,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         nvec: Sequence[int],
         shape: Optional[torch.Size] = None,
         device=None,
-        dtype=torch.long,
+        dtype=torch.bool,
         use_register=False,
     ):
         self.nvec = nvec
@@ -1943,14 +1942,13 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         if safe:
             self.assert_is_in(val)
         vals = self._split(val)
-        return torch.stack([val.argmax(-1) for val in vals], -1)
+        return torch.stack([val.long().argmax(-1) for val in vals], -1)
 
     def to_categorical_spec(self) -> MultiDiscreteTensorSpec:
         """Converts the spec to the equivalent categorical spec."""
         return MultiDiscreteTensorSpec(
             [_space.n for _space in self.space],
             device=self.device,
-            dtype=self.dtype,
             shape=[*self.shape[:-1], len(self.space)],
         )
 
@@ -2122,7 +2120,9 @@ class DiscreteTensorSpec(TensorSpec):
         """Converts the spec to the equivalent one-hot spec."""
         shape = [*self.shape, self.space.n]
         return OneHotDiscreteTensorSpec(
-            n=self.space.n, shape=shape, device=self.device, dtype=self.dtype
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
         )
 
     def expand(self, *shape):
@@ -2443,7 +2443,6 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return MultiOneHotDiscreteTensorSpec(
             nvec,
             device=self.device,
-            dtype=self.dtype,
             shape=[*self.shape[:-1], sum(nvec)],
         )
 

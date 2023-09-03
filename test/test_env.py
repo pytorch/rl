@@ -2013,7 +2013,7 @@ class TestMultiKeyEnvs:
             == td["next", "observation"][index_batch_size][:-1][~next_is_done]
         ).all()
         # Check observation and reward update with count action for root
-        action_is_count = td["action"].argmax(-1).to(torch.bool)
+        action_is_count = td["action"].long().argmax(-1).to(torch.bool)
         assert (
             td["next", "observation"][action_is_count]
             == td["observation"][action_is_count] + 1

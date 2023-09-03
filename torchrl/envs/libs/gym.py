@@ -419,6 +419,16 @@ class GymWrapper(GymLikeEnv):
             env = self._build_gym_env(env, pixels_only)
         return env
 
+    def read_action(self, action):
+        action = super().read_action(action)
+        if (
+            isinstance(self.action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec))
+            and action.size == 1
+        ):
+            # some envs require an integer for indexing
+            action = int(action)
+        return action
+
     @implement_for("gym", None, "0.19.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         from .utils import GymPixelObservationWrapper as PixelObservationWrapper
