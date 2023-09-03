@@ -1330,7 +1330,6 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         return DiscreteTensorSpec(
             self.space.n,
             device=self.device,
-            dtype=self.dtype,
             shape=self.shape[:-1],
         )
 
@@ -1950,7 +1949,6 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         return MultiDiscreteTensorSpec(
             [_space.n for _space in self.space],
             device=self.device,
-            dtype=self.dtype,
             shape=[*self.shape[:-1], len(self.space)],
         )
 
@@ -2443,7 +2441,6 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
         return MultiOneHotDiscreteTensorSpec(
             nvec,
             device=self.device,
-            dtype=self.dtype,
             shape=[*self.shape[:-1], sum(nvec)],
         )
 
