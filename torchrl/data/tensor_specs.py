@@ -1296,7 +1296,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             if not isinstance(val, torch.Tensor):
                 raise NotImplementedError
             self.assert_is_in(val)
-        val = val.argmax(-1).cpu().numpy()
+        val = val.long().argmax(-1).cpu().numpy()
         if self.use_register:
             inv_reg = self.space.register.inverse()
             vals = []
@@ -1391,7 +1391,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             safe = _CHECK_SPEC_ENCODE
         if safe:
             self.assert_is_in(val)
-        return val.argmax(-1)
+        return val.long().argmax(-1)
 
     def to_categorical_spec(self) -> DiscreteTensorSpec:
         """Converts the spec to the equivalent categorical spec."""
@@ -2090,7 +2090,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
         if safe:
             self.assert_is_in(val)
         vals = self._split(val)
-        return torch.stack([val.argmax(-1) for val in vals], -1)
+        return torch.stack([val.long().argmax(-1) for val in vals], -1)
 
     def to_categorical_spec(self) -> MultiDiscreteTensorSpec:
         """Converts the spec to the equivalent categorical spec."""

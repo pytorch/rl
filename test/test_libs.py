@@ -304,12 +304,13 @@ class TestGym:
         check_env_specs(cliff_walking)
 
     @implement_for("gym", None, "0.27.0")
-    def test_one_hot_and_categorical(self):
+    def test_one_hot_and_categorical(self):  # noqa: F811
         # we do not skip (bc we may want to make sure nothing is skipped)
         # but CliffWalking-v0 in earlier Gym versions uses np.bool, which
         # was deprecated after np 1.20, and we don't want to install multiple np
         # versions.
         return
+
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
