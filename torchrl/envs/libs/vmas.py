@@ -400,7 +400,7 @@ class VmasWrapper(_EnvWrapper):
         return rewards
 
     def read_action(self, action):
-        if not self.categorical_actions:
+        if not self.continuous_actions and not self.categorical_actions:
             action = self.unbatched_action_spec["agents", "action"].to_categorical(
                 action
             )
