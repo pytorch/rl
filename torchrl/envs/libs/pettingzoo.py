@@ -62,7 +62,7 @@ class PettingZooWrapper(_EnvWrapper):
 
     If there are any unavailable actions for an agent,
     the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
-    for each group to reflect the latest available actions. This should be passed to a masekd distibution during
+    for each group to reflect the latest available actions. This should be passed to a masked distribution during
     training.
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
@@ -712,7 +712,7 @@ class PettingZooEnv(PettingZooWrapper):
 
     If there are any unavailable actions for an agent,
     the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
-    for each group to reflect the latest available actions. This should be passed to a masekd distibution during
+    for each group to reflect the latest available actions. This should be passed to a masked distribution during
     training.
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
