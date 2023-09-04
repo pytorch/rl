@@ -20,4 +20,4 @@ dependencies:
     - expecttest
     - pyyaml
     - autorom[accept-rom-license]
-    - pettingzoo[all]
+    - pettingzoo[all]==1.24.1

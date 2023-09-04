@@ -18,7 +18,7 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _check_marl_grouping, _replace_last, MarlGroupMapType
+from torchrl.envs.utils import _replace_last, check_marl_grouping, MarlGroupMapType
 
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
@@ -28,115 +28,9 @@ if _has_pettingzoo:
 
 all_environments = {}
 if _has_pettingzoo:
-    # TODO change this when new petting zoo version lands
-    # from pettingzoo.utlis.all_modules import all_environments
-    from pettingzoo.atari import (
-        basketball_pong_v3,
-        boxing_v2,
-        combat_plane_v2,
-        combat_tank_v2,
-        double_dunk_v3,
-        entombed_competitive_v3,
-        entombed_cooperative_v3,
-        flag_capture_v2,
-        foozpong_v3,
-        ice_hockey_v2,
-        joust_v3,
-        mario_bros_v3,
-        maze_craze_v3,
-        othello_v3,
-        pong_v3,
-        quadrapong_v4,
-        space_invaders_v2,
-        space_war_v2,
-        surround_v2,
-        tennis_v3,
-        video_checkers_v4,
-        volleyball_pong_v3,
-        warlords_v3,
-        wizard_of_wor_v3,
-    )
-    from pettingzoo.butterfly import (
-        cooperative_pong_v5,
-        knights_archers_zombies_v10,
-        pistonball_v6,
-    )
-    from pettingzoo.classic import (
-        chess_v6,
-        connect_four_v3,
-        gin_rummy_v4,
-        go_v5,
-        hanabi_v5,
-        leduc_holdem_v4,
-        rps_v2,
-        texas_holdem_no_limit_v6,
-        texas_holdem_v4,
-        tictactoe_v3,
-    )
-    from pettingzoo.mpe import (
-        simple_adversary_v3,
-        simple_crypto_v3,
-        simple_push_v3,
-        simple_reference_v3,
-        simple_speaker_listener_v4,
-        simple_spread_v3,
-        simple_tag_v3,
-        simple_v3,
-        simple_world_comm_v3,
-    )
-    from pettingzoo.sisl import multiwalker_v9, pursuit_v4, waterworld_v4
+    from pettingzoo.utils.all_modules import all_environments as all_pz_envs
 
-    all_environments = {
-        "atari/basketball_pong_v3": basketball_pong_v3,
-        "atari/boxing_v2": boxing_v2,
-        "atari/combat_tank_v2": combat_tank_v2,
-        "atari/combat_plane_v2": combat_plane_v2,
-        "atari/double_dunk_v3": double_dunk_v3,
-        "atari/entombed_competitive_v3": entombed_competitive_v3,
-        "atari/entombed_cooperative_v3": entombed_cooperative_v3,
-        "atari/flag_capture_v2": flag_capture_v2,
-        "atari/foozpong_v3": foozpong_v3,
-        "atari/joust_v3": joust_v3,
-        "atari/ice_hockey_v2": ice_hockey_v2,
-        "atari/maze_craze_v3": maze_craze_v3,
-        "atari/mario_bros_v3": mario_bros_v3,
-        "atari/othello_v3": othello_v3,
-        "atari/pong_v3": pong_v3,
-        "atari/quadrapong_v4": quadrapong_v4,
-        "atari/space_invaders_v2": space_invaders_v2,
-        "atari/space_war_v2": space_war_v2,
-        "atari/surround_v2": surround_v2,
-        "atari/tennis_v3": tennis_v3,
-        "atari/video_checkers_v4": video_checkers_v4,
-        "atari/volleyball_pong_v3": volleyball_pong_v3,
-        "atari/wizard_of_wor_v3": wizard_of_wor_v3,
-        "atari/warlords_v3": warlords_v3,
-        "classic/chess_v6": chess_v6,
-        "classic/rps_v2": rps_v2,
-        "classic/connect_four_v3": connect_four_v3,
-        "classic/tictactoe_v3": tictactoe_v3,
-        "classic/leduc_holdem_v4": leduc_holdem_v4,
-        "classic/texas_holdem_v4": texas_holdem_v4,
-        "classic/texas_holdem_no_limit_v6": texas_holdem_no_limit_v6,
-        "classic/gin_rummy_v4": gin_rummy_v4,
-        "classic/go_v5": go_v5,
-        "classic/hanabi_v5": hanabi_v5,
-        "butterfly/knights_archers_zombies_v10": knights_archers_zombies_v10,
-        "butterfly/pistonball_v6": pistonball_v6,
-        "butterfly/cooperative_pong_v5": cooperative_pong_v5,
-        "mpe/simple_adversary_v3": simple_adversary_v3,
-        "mpe/simple_crypto_v3": simple_crypto_v3,
-        "mpe/simple_push_v3": simple_push_v3,
-        "mpe/simple_reference_v3": simple_reference_v3,
-        "mpe/simple_speaker_listener_v4": simple_speaker_listener_v4,
-        "mpe/simple_spread_v3": simple_spread_v3,
-        "mpe/simple_tag_v3": simple_tag_v3,
-        "mpe/simple_world_comm_v3": simple_world_comm_v3,
-        "mpe/simple_v3": simple_v3,
-        "sisl/multiwalker_v9": multiwalker_v9,
-        "sisl/waterworld_v4": waterworld_v4,
-        "sisl/pursuit_v4": pursuit_v4,
-    }
+    all_environments = all_pz_envs
 
 
 def _get_envs() -> List[str]:
@@ -332,7 +226,7 @@ class PettingZooWrapper(_EnvWrapper):
             )
         elif isinstance(self.group_map, MarlGroupMapType):
             self.group_map = self.group_map.get_group_map(self.possible_agents)
-        _check_marl_grouping(self.group_map, self.possible_agents)
+        check_marl_grouping(self.group_map, self.possible_agents)
 
         action_spec = CompositeSpec()
         observation_spec = CompositeSpec()
@@ -652,7 +546,7 @@ class PettingZooWrapper(_EnvWrapper):
                         " you need to set use_action_mask=True to allow this."
                     )
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _step_parallel(
         self,
