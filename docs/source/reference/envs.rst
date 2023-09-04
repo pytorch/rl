@@ -451,6 +451,7 @@ to be able to create this other composition:
     CatTensors
     CenterCrop
     Compose
+    DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
     DTypeCastTransform

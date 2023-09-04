@@ -91,7 +91,7 @@ class _MockEnv(EnvBase):
         **kwargs,
     ):
         super().__init__(
-            device="cpu",
+            device=kwargs.pop("device", "cpu"),
             dtype=torch.get_default_dtype(),
         )
         self.set_seed(seed)
@@ -203,11 +203,7 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {
-                "next": TensorDict(
-                    {"reward": n, "done": done, "observation": n.clone()}, batch_size=[]
-                )
-            },
+            {"reward": n, "done": done, "observation": n.clone()},
             batch_size=[],
         )
 
@@ -338,13 +334,7 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {
-                "next": TensorDict(
-                    {"reward": n, "done": done, "observation": n},
-                    tensordict.batch_size,
-                    device=self.device,
-                )
-            },
+            {"reward": n, "done": done, "observation": n},
             batch_size=tensordict.batch_size,
             device=self.device,
         )
@@ -431,12 +421,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 shape=batch_size,
             )
         if action_spec is None:
-            action_spec_cls = (
-                DiscreteTensorSpec
-                if categorical_action_encoding
-                else OneHotDiscreteTensorSpec
-            )
-            action_spec = action_spec_cls(n=7, shape=(*batch_size, 7))
+            if categorical_action_encoding:
+                action_spec_cls = DiscreteTensorSpec
+                action_spec = action_spec_cls(n=7, shape=batch_size)
+            else:
+                action_spec_cls = OneHotDiscreteTensorSpec
+                action_spec = action_spec_cls(n=7, shape=(*batch_size, 7))
         if reward_spec is None:
             reward_spec = UnboundedContinuousTensorSpec(shape=(1,))
         if done_spec is None:
@@ -501,7 +491,7 @@ class DiscreteActionVecMockEnv(_MockEnv):
         done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
 
 class ContinuousActionVecMockEnv(_MockEnv):
@@ -603,7 +593,7 @@ class ContinuousActionVecMockEnv(_MockEnv):
         done = reward = done.unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
     def _obs_step(self, obs, a):
         return obs + a / self.maxstep
@@ -1044,7 +1034,26 @@ class CountingEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
-        return tensordict.select().set("next", tensordict)
+        return tensordict
+
+
+class IncrementingEnv(CountingEnv):
+    # Same as CountingEnv but always increments the count by 1 regardless of the action.
+    def _step(
+        self,
+        tensordict: TensorDictBase,
+    ) -> TensorDictBase:
+        self.count += 1  # The only difference with CountingEnv.
+        tensordict = TensorDict(
+            source={
+                "observation": self.count.clone(),
+                "done": self.count > self.max_steps,
+                "reward": torch.zeros_like(self.count, dtype=torch.float),
+            },
+            batch_size=self.batch_size,
+            device=self.device,
+        )
+        return tensordict
 
 
 class NestedCountingEnv(CountingEnv):
@@ -1167,7 +1176,7 @@ class NestedCountingEnv(CountingEnv):
             td = td.clone()
             td["data"].batch_size = self.batch_size
             td[self.action_key] = td[self.action_key].max(-2)[0]
-        td_root = super()._step(td)
+        next_td = super()._step(td)
         if self.nested_obs_action:
             td[self.action_key] = (
                 td[self.action_key]
@@ -1176,7 +1185,7 @@ class NestedCountingEnv(CountingEnv):
             )
         if "data" in td.keys():
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        td = td_root["next"]
+        td = next_td
         if self.nested_done:
             td[self.done_key] = (
                 td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
@@ -1196,7 +1205,7 @@ class NestedCountingEnv(CountingEnv):
             del td["reward"]
         if "data" in td.keys():
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
-        return td_root
+        return td
 
 
 class CountingBatchedEnv(EnvBase):
@@ -1290,7 +1299,7 @@ class CountingBatchedEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
-        return tensordict.select().set("next", tensordict)
+        return tensordict
 
 
 class HeteroCountingEnvPolicy:
@@ -1479,7 +1488,7 @@ class HeteroCountingEnv(EnvBase):
             self.count > self.max_steps, self.done_spec.shape
         )
 
-        return td.select().set("next", td)
+        return td
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
@@ -1687,7 +1696,8 @@ class MultiKeyCountingEnv(EnvBase):
         done = self.output_spec["full_done_spec"].zero()
         td = self.observation_spec.zero()
 
-        one_hot_action = tensordict["action"].argmax(-1).unsqueeze(-1)
+        one_hot_action = tensordict["action"]
+        one_hot_action = one_hot_action.long().argmax(-1).unsqueeze(-1)
         reward["reward"] += one_hot_action.to(torch.float)
         self.count += one_hot_action.to(torch.int)
         td["observation"] += expand_right(self.count, td["observation"].shape)
@@ -1713,7 +1723,7 @@ class MultiKeyCountingEnv(EnvBase):
         td.update(reward)
 
         assert td.batch_size == self.batch_size
-        return td.select().set("next", td)
+        return td
 
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)

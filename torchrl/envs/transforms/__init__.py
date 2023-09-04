@@ -12,6 +12,7 @@ from .transforms import (
     CatTensors,
     CenterCrop,
     Compose,
+    DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
     DTypeCastTransform,
