@@ -1640,14 +1640,14 @@ class TestIsaacGym:
 class TestPettingZoo:
     @pytest.mark.parametrize("parallel", [True, False])
     @pytest.mark.parametrize("continuous_actions", [True, False])
-    @pytest.mark.parametrize("use_action_mask", [True])
+    @pytest.mark.parametrize("use_mask", [True])
     @pytest.mark.parametrize("return_state", [True, False])
     @pytest.mark.parametrize(
         "group_map",
         [None, MarlGroupMapType.ALL_IN_ONE_GROUP, MarlGroupMapType.ONE_GROUP_PER_AGENT],
     )
     def test_pistonball(
-        self, parallel, continuous_actions, use_action_mask, return_state, group_map
+        self, parallel, continuous_actions, use_mask, return_state, group_map
     ):
 
         kwargs = {"n_pistons": 21, "continuous": continuous_actions}
@@ -1657,7 +1657,7 @@ class TestPettingZoo:
             parallel=parallel,
             seed=0,
             return_state=return_state,
-            use_action_mask=use_action_mask,
+            use_mask=use_mask,
             group_map=group_map,
             **kwargs,
         )
@@ -1672,8 +1672,9 @@ class TestPettingZoo:
         env = PettingZooEnv(
             task="tictactoe_v3",
             parallel=False,
+            group_map={"player": ["player_1", "player_2"]},
             seed=0,
-            use_action_mask=True,
+            use_mask=True,
         )
 
         class Policy:
@@ -1683,18 +1684,24 @@ class TestPettingZoo:
 
             def __call__(self, td):
                 new_td = env.input_spec["full_action_spec"].zero()
+
+                player_acting = 0 if self.t % 2 == 0 else 1
+                other_player = 1 if self.t % 2 == 0 else 0
+                # The acting player has "mask" True and "action_mask" set to the available actions
+                assert td["player", "mask"][player_acting].all()
+                assert td["player", "action_mask"][player_acting].any()
+                # The non-acting player has "mask" False and "action_mask" set to all Trues
+                assert not td["player", "mask"][other_player].any()
+                assert td["player", "action_mask"][other_player].all()
+
                 if self.t % 2 == 0:
-                    assert td["player", "action_mask"][0].any()
-                    assert not td["player", "action_mask"][1].any()
                     if not wins_player_0 and self.t == 4:
                         new_td["player", "action"][0][self.action + 1] = 1
                     else:
                         new_td["player", "action"][0][self.action] = 1
                 else:
-                    assert td["player", "action_mask"][1].any()
-                    assert not td["player", "action_mask"][0].any()
                     new_td["player", "action"][1][self.action + 6] = 1
-                if td["player", "action_mask"][1].any():
+                if td["player", "mask"][1].all():
                     self.action += 1
                 self.t += 1
                 return td.update(new_td)
@@ -1730,7 +1737,7 @@ class TestPettingZoo:
             task=task,
             parallel=True,
             seed=0,
-            use_action_mask=False,
+            use_mask=False,
         )
         check_env_specs(env)
         env.rollout(100, break_when_any_done=False)
@@ -1758,7 +1765,7 @@ class TestPettingZoo:
             task=task,
             parallel=False,
             seed=0,
-            use_action_mask=True,
+            use_mask=True,
         )
         check_env_specs(env)
         env.rollout(100, break_when_any_done=False)
@@ -1784,7 +1791,7 @@ class TestPettingZoo:
             task=task,
             parallel=True,
             seed=0,
-            use_action_mask=False,
+            use_mask=False,
         )
         check_env_specs(env)
         env.rollout(100, break_when_any_done=False)
@@ -1811,7 +1818,7 @@ class TestPettingZoo:
             task=task,
             parallel=False,
             seed=0,
-            use_action_mask=True,
+            use_mask=True,
         )
         check_env_specs(env)
         env.rollout(100, break_when_any_done=False)
@@ -1823,7 +1830,7 @@ class TestPettingZoo:
             task=task,
             parallel=parallel,
             seed=0,
-            use_action_mask=not parallel,
+            use_mask=not parallel,
         )
         vec_env = ParallelEnv(2, create_env_fn=env_fun)
         vec_env.rollout(100, break_when_any_done=False)
@@ -1835,7 +1842,7 @@ class TestPettingZoo:
             task=task,
             parallel=parallel,
             seed=0,
-            use_action_mask=not parallel,
+            use_mask=not parallel,
         )
         coll = SyncDataCollector(
             create_env_fn=env_fun, frames_per_batch=30, total_frames=60, policy=None

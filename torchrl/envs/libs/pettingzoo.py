@@ -50,17 +50,20 @@ class PettingZooWrapper(_EnvWrapper):
     Let's see how more in details:
 
     In wrapped ``pettingzoo.ParallelEnv`` all agents will step at each environment step.
-    If the number of agents during the task varies, please set ``use_action_mask=True``.
-    ``"action_mask"`` will be provided
-    as an output and should be used to mask out dead agents.
+    If the number of agents during the task varies, please set ``use_mask=True``.
+    ``"mask"`` will be provided
+    as an output in each group and should be used to mask out dead agents.
     The environment will be reset as soon as one agent is done.
 
     In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
-    For this reason, it is compulsory to set ``use_action_mask=True`` for this type of environment.
-    ``"action_mask"`` will be provided as an output and can be used to mask out non-acting agents and unavailable actions
-    for an agent. The environment will also automatically update the mask of its ``action_spec``
-    to reflect the latest available actions.
+    For this reason, it is compulsory to set ``use_mask=True`` for this type of environment.
+    ``"mask"`` will be provided as an output for each group and can be used to mask out non-acting agents.
     The environment will be reset only when all agents are done.
+
+    If there are any unavailable actions for an agent,
+    the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
+    for each group to reflect the latest available actions. This should be passed to a masekd distibution during
+    training.
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
@@ -106,8 +109,8 @@ class PettingZooWrapper(_EnvWrapper):
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
             or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
-        use_action_mask (bool, optional): whether the environment should output an ``"action_mask"``. This is compulsory in
-            wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
+        use_mask (bool, optional): whether the environment should output a ``"mask"``. This is compulsory in
+            wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
         seed (int, optional): the seed. Defaults to ``None``.
 
@@ -119,7 +122,7 @@ class PettingZooWrapper(_EnvWrapper):
         >>> env = PettingZooWrapper(
         ...     env=pistonball_v6.parallel_env(**kwargs),
         ...     return_state=True,
-        ...     group_map=None, # Use default (all pistons grouped together)
+        ...     group_map=None, # Use default for parallel (all pistons grouped together)
         ... )
         >>> print(env.group_map)
         ... {'piston': ['piston_0', 'piston_1', ..., 'piston_20']}
@@ -130,9 +133,8 @@ class PettingZooWrapper(_EnvWrapper):
         >>> from torchrl.envs.utils import MarlGroupMapType
         >>> env = PettingZooWrapper(
         ...     env=tictactoe_v3.env(),
-        ...     use_action_mask=True, # Must use it since one player plays at a time
-        ...     group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT,
-        ...     # This time let's split the players (even though since they are both named "player_i" the default would group them together)
+        ...     use_mask=True, # Must use it since one player plays at a time
+        ...     group_map=None # # Use default for AEC (one group per player)
         ... )
         >>> print(env.group_map)
         ... {'player_1': ['player_1'], 'player_2': ['player_2']}
@@ -150,7 +152,7 @@ class PettingZooWrapper(_EnvWrapper):
         ] = None,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
-        use_action_mask: bool = False,
+        use_mask: bool = False,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -160,36 +162,40 @@ class PettingZooWrapper(_EnvWrapper):
         self.group_map = group_map
         self.return_state = return_state
         self.seed = seed
-        self.use_action_mask = use_action_mask
+        self.use_mask = use_mask
 
         super().__init__(**kwargs, allow_done_after_reset=True)
 
-    @staticmethod
-    def _get_default_group_map(agent_names: List[str]):
-        # This function performs the default grouping in pettingzoo by agent name
-        # Agents with names "str_int" will be grouped in group name "str"
-        group_map = {}
-        for agent_name in agent_names:
-            # See if the agent follows the convention "name_int"
-            follows_convention = True
-            agent_name_split = agent_name.split("_")
-            if len(agent_name_split) == 1:
-                follows_convention = False
-            try:
-                int(agent_name_split[-1])
-            except ValueError:
-                follows_convention = False
+    def _get_default_group_map(self, agent_names: List[str]):
+        # This function performs the default grouping in pettingzoo
+        if not self.parallel:
+            # In AEC envs we will have one group per agent by default
+            group_map = MarlGroupMapType.ONE_GROUP_PER_AGENT.get_group_map(agent_names)
+        else:
+            # In parallel envs, by default
+            # Agents with names "str_int" will be grouped in group name "str"
+            group_map = {}
+            for agent_name in agent_names:
+                # See if the agent follows the convention "name_int"
+                follows_convention = True
+                agent_name_split = agent_name.split("_")
+                if len(agent_name_split) == 1:
+                    follows_convention = False
+                try:
+                    int(agent_name_split[-1])
+                except ValueError:
+                    follows_convention = False
 
-            # If not, just put it in a single group
-            if not follows_convention:
-                group_map[agent_name] = [agent_name]
-            # Otherwise, group it with other agents that follow the same convention
-            else:
-                group_name = "_".join(agent_name_split[:-1])
-                if group_name in group_map:
-                    group_map[group_name].append(agent_name)
+                # If not, just put it in a single group
+                if not follows_convention:
+                    group_map[agent_name] = [agent_name]
+                # Otherwise, group it with other agents that follow the same convention
                 else:
-                    group_map[group_name] = [agent_name]
+                    group_name = "_".join(agent_name_split[:-1])
+                    if group_name in group_map:
+                        group_map[group_name].append(agent_name)
+                    else:
+                        group_map[group_name] = [agent_name]
 
         return group_map
 
@@ -202,10 +208,8 @@ class PettingZooWrapper(_EnvWrapper):
         env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
     ):
         self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
-        if not self.parallel and not self.use_action_mask:
-            raise ValueError(
-                "For AEC environments you need to set use_action_mask=True"
-            )
+        if not self.parallel and not self.use_mask:
+            raise ValueError("For AEC environments you need to set use_mask=True")
         if len(self.batch_size):
             raise RuntimeError(
                 f"PettingZoo does not support custom batch_size {self.batch_size}."
@@ -221,12 +225,11 @@ class PettingZooWrapper(_EnvWrapper):
 
         # Create and check group map
         if self.group_map is None:
-            self.group_map = PettingZooWrapper._get_default_group_map(
-                self.possible_agents
-            )
+            self.group_map = self._get_default_group_map(self.possible_agents)
         elif isinstance(self.group_map, MarlGroupMapType):
             self.group_map = self.group_map.get_group_map(self.possible_agents)
         check_marl_grouping(self.group_map, self.possible_agents)
+        self.has_action_mask = {group: False for group in self.group_map.keys()}
 
         action_spec = CompositeSpec()
         observation_spec = CompositeSpec()
@@ -238,7 +241,7 @@ class PettingZooWrapper(_EnvWrapper):
                 group_action_spec,
                 group_reward_spec,
                 group_done_spec,
-            ) = self._make_group_specs(agent_names=agents)
+            ) = self._make_group_specs(group_name=group, agent_names=agents)
             action_spec[group] = group_action_spec
             observation_spec[group] = group_observation_spec
             reward_spec[group] = group_reward_spec
@@ -249,7 +252,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.reward_spec = reward_spec
         self.done_spec = done_spec
 
-    def _make_group_specs(self, agent_names: List[str]):
+    def _make_group_specs(self, group_name: str, agent_names: List[str]):
         n_agents = len(agent_names)
         action_specs = []
         observation_specs = []
@@ -288,17 +291,19 @@ class PettingZooWrapper(_EnvWrapper):
             isinstance(group_observation_inner_spec, CompositeSpec)
             and "action_mask" in group_observation_inner_spec.keys()
         ):
-            if not self.use_action_mask:
-                raise ValueError(
-                    "PettingZoo env has action mask but use_action_mask was False at construction time."
-                    "Please set use_action_mask=True"
-                )
+            self.has_action_mask[group_name] = True
             del group_observation_inner_spec["action_mask"]
-
-        if self.use_action_mask:
             group_observation_spec["action_mask"] = DiscreteTensorSpec(
                 n=2,
                 shape=group_action_spec["action"].shape,
+                dtype=torch.bool,
+                device=self.device,
+            )
+
+        if self.use_mask:
+            group_observation_spec["mask"] = DiscreteTensorSpec(
+                n=2,
+                shape=torch.Size((n_agents,)),
                 dtype=torch.bool,
                 device=self.device,
             )
@@ -366,7 +371,6 @@ class PettingZooWrapper(_EnvWrapper):
                                         device=self.device,
                                     )
                                     for key, value in info_dict[agent].items()
-                                    if key != "action_mask"
                                 }
                             )
                         },
@@ -374,6 +378,20 @@ class PettingZooWrapper(_EnvWrapper):
                     )
                 )
             info_specs = torch.stack(info_specs, dim=0)
+            if ("info", "action_mask") in info_specs.keys(True, True):
+                if not self.has_action_mask[group]:
+                    self.has_action_mask[group] = True
+                    self.observation_spec[group]["action_mask"] = DiscreteTensorSpec(
+                        n=2,
+                        shape=self.input_spec[
+                            "full_action_spec", group, "action"
+                        ].shape,
+                        dtype=torch.bool,
+                        device=self.device,
+                    )
+                group_inner_info_spec = info_specs["info"]
+                del group_inner_info_spec["action_mask"]
+
             if len(info_specs["info"].keys()):
                 self.observation_spec[group].update(info_specs)
 
@@ -417,11 +435,11 @@ class PettingZooWrapper(_EnvWrapper):
 
         # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_reset_output_zero.clone()
-        # Update the action mask for available actions and acting agents
+        # Update the "mask" for non-acting agents
+        self._update_agent_mask(tensordict_out)
+        # Update the "action_mask" for non-available actions
         observation_dict, info_dict = self._update_action_mask(
-            tensordict_out,
-            observation_dict,
-            info_dict,
+            tensordict_out, observation_dict, info_dict
         )
 
         # Now we get the data (obs and info)
@@ -501,7 +519,9 @@ class PettingZooWrapper(_EnvWrapper):
 
         # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_step_output_zero.clone()
-        # Update the action mask for available actions and acting agents
+        # Update the "mask" for non-acting agents
+        self._update_agent_mask(tensordict_out)
+        # Update the "action_mask" for non-available actions
         observation_dict, info_dict = self._update_action_mask(
             tensordict_out, observation_dict, info_dict
         )
@@ -600,37 +620,39 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _update_action_mask(self, td, observation_dict, info_dict):
-        if self.use_action_mask:
-            # Since we remove the action_mask keys we need to copy the data
-            observation_dict = copy.deepcopy(observation_dict)
-            info_dict = copy.deepcopy(info_dict)
-            # In AEC only one agent acts
-            agents_acting = self.agents if self.parallel else [self.agent_selection]
 
-            for group, agents in self.group_map.items():
+        # Since we remove the action_mask keys we need to copy the data
+        observation_dict = copy.deepcopy(observation_dict)
+        info_dict = copy.deepcopy(info_dict)
+        # In AEC only one agent acts, in parallel env self.agents contains the agents alive
+        agents_acting = self.agents if self.parallel else [self.agent_selection]
+
+        for group, agents in self.group_map.items():
+            if self.has_action_mask[group]:
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for i, agent in enumerate(agents):
-                    if agent in agents_acting:
-                        index = (
-                            i if len(agents) > 1 else Ellipsis
-                        )  # If group has one agent we index with '...'
-                        agent_obs = observation_dict[agent]
-                        agent_info = info_dict[agent]
-                        if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
+                    index = (
+                        i if len(agents) > 1 else Ellipsis
+                    )  # If group has one agent we index with '...'
+                    agent_obs = observation_dict[agent]
+                    agent_info = info_dict[agent]
+                    if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
+                        if agent in agents_acting:
                             group_mask[index] = torch.tensor(
                                 agent_obs["action_mask"],
                                 device=self.device,
                                 dtype=torch.bool,
                             )
-                        elif (
-                            isinstance(agent_info, Dict) and "action_mask" in agent_info
-                        ):
+                        del agent_obs["action_mask"]
+                    elif isinstance(agent_info, Dict) and "action_mask" in agent_info:
+                        if agent in agents_acting:
                             group_mask[index] = torch.tensor(
                                 agent_info["action_mask"],
                                 device=self.device,
                                 dtype=torch.bool,
                             )
+                        del agent_info["action_mask"]
 
                 group_action_spec = self.input_spec["full_action_spec", group, "action"]
                 if isinstance(
@@ -639,21 +661,23 @@ class PettingZooWrapper(_EnvWrapper):
                     # We update the mask for available actions
                     group_action_spec.update_mask(group_mask.clone())
 
+        return observation_dict, info_dict
+
+    def _update_agent_mask(self, td):
+        if self.use_mask:
+            # In AEC only one agent acts, in parallel env self.agents contains the agents alive
+            agents_acting = self.agents if self.parallel else [self.agent_selection]
+            for group, agents in self.group_map.items():
+                group_mask = td.get((group, "mask"))
+                group_mask += True
+
                 # We now add dead agents to the mask
                 for i, agent in enumerate(agents):
                     index = (
                         i if len(agents) > 1 else Ellipsis
                     )  # If group has one agent we index with '...'
-                    agent_obs = observation_dict[agent]
-                    agent_info = info_dict[agent]
-                    if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
-                        del agent_obs["action_mask"]
-                    elif isinstance(agent_info, Dict) and "action_mask" in agent_info:
-                        del agent_info["action_mask"]
                     if agent not in agents_acting:
                         group_mask[index] = False
-
-        return observation_dict, info_dict
 
     def close(self) -> None:
         self._env.close()
@@ -673,20 +697,23 @@ class PettingZooEnv(PettingZooWrapper):
     and specify ``parallel=True``. This will construct the ``pettingzoo.ParallelEnv`` version of that task
     (if it is supported in pettingzoo) and wrap it for torchrl.
     In wrapped ``pettingzoo.ParallelEnv`` all agents will step at each environment step.
-    If the number of agents during the task varies, please set ``use_action_mask=True``.
-    ``"action_mask"`` will be provided
-    as an output and should be used to mask out dead agents.
+    If the number of agents during the task varies, please set ``use_mask=True``.
+    ``"mask"`` will be provided
+    as an output in each group and should be used to mask out dead agents.
     The environment will be reset as soon as one agent is done.
 
     For wrapping ``pettingzoo.AECEnv`` provide the name of your petting zoo task (in the ``task`` argument)
     and specify ``parallel=False``. This will construct the ``pettingzoo.AECEnv`` version of that task
     and wrap it for torchrl.
     In wrapped ``pettingzoo.AECEnv``, at each step only one agent will act.
-    For this reason, it is compulsory to set ``use_action_mask=True`` for this type of environment.
-    ``"action_mask"`` will be provided as an output and can be used to mask out non-acting agents and unavailable actions
-    for an agent. The environment will also automatically update the mask of its ``action_spec``
-    to reflect the latest available actions.
+    For this reason, it is compulsory to set ``use_mask=True`` for this type of environment.
+    ``"mask"`` will be provided as an output for each group and can be used to mask out non-acting agents.
     The environment will be reset only when all agents are done.
+
+    If there are any unavailable actions for an agent,
+    the environment will also automatically update the mask of its ``action_spec`` and output an ``"action_mask"``
+    for each group to reflect the latest available actions. This should be passed to a masekd distibution during
+    training.
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
@@ -733,8 +760,8 @@ class PettingZooEnv(PettingZooWrapper):
         group_map (MarlGroupMapType or Dict[str, List[str]]], optional): how to group agents in tensordicts for
             input/output. By default, agents will be grouped by their name. Otherwise, a group map can be specified
             or selected from some premade options. See :class:`torchrl.envs.utils.MarlGroupMapType` for more info.
-        use_action_mask (bool, optional): whether the environment should output an ``"action_mask"``. This is compulsory in
-            wrapped ``pettingzoo.AECEnv`` to mask out unavailable actions and non-acting agents and should be also used
+        use_mask (bool, optional): whether the environment should output an ``"mask"``. This is compulsory in
+            wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
         seed (int, optional): the seed.  Defaults to ``None``.
 
@@ -758,9 +785,8 @@ class PettingZooEnv(PettingZooWrapper):
         >>> env = PettingZooEnv(
         ...     task="tictactoe_v3",
         ...     parallel=False,
-        ...     use_action_mask=True, # Must use it since one player plays at a time
-        ...     group_map=MarlGroupMapType.ONE_GROUP_PER_AGENT,
-        ...     # This time let's split the players (even though since they are both named "player_i" the default would group them together)
+        ...     use_mask=True, # Must use it since one player plays at a time
+        ...     group_map=None # # Use default for AEC (one group per player)
         ... )
         >>> print(env.group_map)
         ... {'player_1': ['player_1'], 'player_2': ['player_2']}
@@ -773,7 +799,7 @@ class PettingZooEnv(PettingZooWrapper):
         parallel: bool,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
-        use_action_mask: bool = False,
+        use_mask: bool = False,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -786,7 +812,7 @@ class PettingZooEnv(PettingZooWrapper):
         kwargs["parallel"] = parallel
         kwargs["return_state"] = return_state
         kwargs["group_map"] = group_map
-        kwargs["use_action_mask"] = use_action_mask
+        kwargs["use_mask"] = use_mask
         kwargs["seed"] = seed
         super().__init__(**kwargs)
 
