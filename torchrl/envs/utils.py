@@ -37,6 +37,7 @@ __all__ = [
     "step_mdp",
     "make_composite_from_td",
     "MarlGroupMapType",
+    "check_marl_grouping",
 ]
 
 
@@ -674,13 +675,27 @@ class MarlGroupMapType(Enum):
             return {agent_name: [agent_name] for agent_name in agent_names}
 
 
-def _check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
+def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]):
     """Check MARL group map.
 
-    Performs checks on the group map of a marl environmeent to assess its validity.
+    Performs checks on the group map of a marl environment to assess its validity.
+    Raises an error in cas of an invalid group_map.
+
+    Args:
+        group_map (Dict[str, List[str]]): the group map mapping group names to list of agent names in the group
+        agent_names (List[str]): a list of all the agent names in the environment4
+
+    Examples:
+        >>> from torchrl.envs.utils import MarlGroupMapType, check_marl_grouping
+        >>> agent_names = ["agent_0", "agent_1", "agent_2"]
+        >>> check_marl_grouping(MarlGroupMapType.ALL_IN_ONE_GROUP.get_group_map(agent_names), agent_names)
 
     """
     n_agents = len(agent_names)
+    if n_agents == 0:
+        raise ValueError("No agents passed")
+    if len(set(agent_names)) != n_agents:
+        raise ValueError("There are agents with the same name")
     if len(group_map.keys()) > n_agents:
         raise ValueError(
             f"Number of groups {len(group_map.keys())} greater than number of agents {n_agents}"
@@ -695,7 +710,7 @@ def _check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str]
             if not found_agents[agent_name]:
                 found_agents[agent_name] = True
             else:
-                raise ValueError(f"Agent {agent_name} present in more than one group")
+                raise ValueError(f"Agent {agent_name} present more than once")
     for agent_name, found in found_agents.items():
         if not found:
             raise ValueError(f"Agent {agent_name} not found in any group")
