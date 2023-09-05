@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
-from torch.distributions import Categorical
+from torch.distributions import Categorical, OneHotCategorical
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -52,6 +52,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         max_steps=cfg.env.max_steps,
         device=cfg.env.device,
         seed=cfg.seed,
+        categorical_actions=cfg.env.categorical_action,
         # Scenario kwargs
         **cfg.env.scenario,
     )
@@ -148,7 +149,9 @@ def train(cfg: "DictConfig"):  # noqa: F821
             spec=env.unbatched_action_spec,
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
-            distribution_class=Categorical,
+            distribution_class=OneHotCategorical
+            if not cfg.env.categorical_action
+            else Categorical,
             return_log_prob=True,
         )
 
