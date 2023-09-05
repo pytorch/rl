@@ -269,7 +269,7 @@ class DDPGLoss(LossModule):
         """
         loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
         td_error = td_error.detach()
-        td_error = td_error.unsqueeze(tensordict.ndimension())
+        # td_error = td_error.unsqueeze(-1)
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)
         tensordict.set(
