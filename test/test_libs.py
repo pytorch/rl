@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib
 
-from envs import ActionMask, TransformedEnv
+from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
