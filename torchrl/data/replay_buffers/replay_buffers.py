@@ -665,10 +665,11 @@ class TensorDictReplayBuffer(ReplayBuffer):
     def _get_priority(self, tensordict: TensorDictBase) -> Optional[torch.Tensor]:
         if "_data" in tensordict.keys():
             tensordict = tensordict.get("_data")
-        if self.priority_key not in tensordict.keys():
+
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
             return self._sampler.default_priority
         try:
-            priority = tensordict.get(self.priority_key)
             if priority.numel() > 1:
                 priority = _reduce(priority, self._sampler.reduction)
             else:
