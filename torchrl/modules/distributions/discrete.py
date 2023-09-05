@@ -375,4 +375,69 @@ class MaskedOneHotCategorical(MaskedCategorical):
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         return super().log_prob(value.argmax(dim=-1))
 
-    rsample = OneHotCategorical.rsample
+    def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
+        if sample_shape is None:
+            sample_shape = torch.Size([])
+        if hasattr(self, "logits") and self.logits is not None:
+            logits = self.logits
+            probs = None
+        else:
+            logits = None
+            probs = self.probs
+        if self.grad_method == ReparamGradientStrategy.RelaxedOneHot:
+            if self._sparse_mask:
+                if probs is not None:
+                    probs_extended = torch.full(
+                        (*probs.shape[:-1], self.num_samples),
+                        0,
+                        device=probs.device,
+                        dtype=probs.dtype,
+                    )
+                    probs_extended = torch.scatter(
+                        probs_extended, -1, self._mask, probs
+                    )
+                    logits_extended = None
+                else:
+                    probs_extended = torch.full(
+                        (*logits.shape[:-1], self.num_samples),
+                        self.neg_inf,
+                        device=logits.device,
+                        dtype=logits.dtype,
+                    )
+                    logits_extended = torch.scatter(
+                        probs_extended, -1, self._mask, logits
+                    )
+                    probs_extended = None
+            else:
+                probs_extended = probs
+                logits_extended = logits
+
+            d = D.relaxed_categorical.RelaxedOneHotCategorical(
+                1.0, probs=probs_extended, logits=logits_extended
+            )
+            out = d.rsample(sample_shape)
+            out.data.copy_((out == out.max(-1)[0].unsqueeze(-1)).to(out.dtype))
+            return out
+        elif self.grad_method == ReparamGradientStrategy.PassThrough:
+            if logits is not None:
+                probs = self.probs
+            else:
+                probs = torch.softmax(self.logits, dim=-1)
+            if self._sparse_mask:
+                probs_extended = torch.full(
+                    (*probs.shape[:-1], self.num_samples),
+                    0,
+                    device=probs.device,
+                    dtype=probs.dtype,
+                )
+                probs_extended = torch.scatter(probs_extended, -1, self._mask, probs)
+            else:
+                probs_extended = probs
+
+            out = self.sample(sample_shape)
+            out = out + probs_extended - probs_extended.detach()
+            return out
+        else:
+            raise ValueError(
+                f"Unknown reparametrization strategy {self.reparam_strategy}."
+            )

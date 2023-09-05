@@ -520,22 +520,31 @@ class TestMaskedOneHotCategorical:
         "grad_method",
         [ReparamGradientStrategy.RelaxedOneHot, ReparamGradientStrategy.PassThrough],
     )
-    def test_reparam(self, grad_method):
+    @pytest.mark.parametrize("sparse", [True, False])
+    def test_reparam(self, grad_method, sparse):
         torch.manual_seed(0)
         neg_inf = -float("inf")
-        logits = torch.randn(4, requires_grad=True)
+        logits = torch.randn(100, requires_grad=True)
         probs = F.softmax(logits, dim=-1)
-        mask = torch.tensor([True, False, True, True])
-        indices = torch.tensor([0, 2, 3])
+        # mask = torch.tensor([True, False, True, True])
+        # indices = torch.tensor([0, 2, 3])
+        if sparse:
+            indices = torch.randint(100, (70,)).unique().view(-1)
+            mask = None
+        else:
+            mask = torch.zeros(100, dtype=torch.bool).bernoulli_()
+            indices = None
 
         dist = MaskedOneHotCategorical(
             logits=logits,
             indices=indices,
             neg_inf=neg_inf,
             grad_method=grad_method,
+            mask=mask,
         )
 
         s = dist.rsample()
+        assert s.shape[-1] == 100
         s[s.detach().bool()].sum().backward()
         assert logits.grad is not None and logits.grad.norm() > 0
 
