@@ -38,10 +38,10 @@ Each env will have the following attributes:
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the done-flag spec.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the input keys (:obj:`"_action_spec"` and :obj:`"_state_spec"`).
+  all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
   It is locked and should not be modified directly.
 - :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the output keys (:obj:`"_observation_spec"`, :obj:`"_reward_spec"` and :obj:`"_done_spec"`).
+  all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
@@ -340,8 +340,8 @@ single agent standards.
   spec if the accessed spec is Composite. Therefore, if in the example above
   we run `env.reward_spec` after env creation, we would get the same output as `torch.stack(reward_specs)}`.
   To get the full composite spec with the "agents" key, you can run
-  `env.output_spec["_reward_spec"]`. The same is valid for action and done specs.
-  Note that `env.reward_spec == env.output_spec["_reward_spec"][env.reward_key]`.
+  `env.output_spec["full_reward_spec"]`. The same is valid for action and done specs.
+  Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
 
 
 Transforms
@@ -445,13 +445,16 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionMask
     BinarizeReward
     CatFrames
     CatTensors
     CenterCrop
     Compose
+    DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
+    DTypeCastTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation

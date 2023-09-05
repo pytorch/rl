@@ -6,13 +6,16 @@
 from .r3m import R3MTransform
 from .rlhf import KLRewardTransform
 from .transforms import (
+    ActionMask,
     BinarizeReward,
     CatFrames,
     CatTensors,
     CenterCrop,
     Compose,
+    DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
+    DTypeCastTransform,
     ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,

@@ -17,7 +17,7 @@ jobs:
   unittests:
     uses: pytorch/test-infra/.github/workflows/windows_job.yml@main
     with:
-      runner: "windows.8xlarge.nvidia.gpu"
+      runner: "windows.g5.4xlarge.nvidia.gpu"
       repository: pytorch/rl
       timeout: 240
       script: |
