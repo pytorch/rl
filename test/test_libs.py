@@ -1673,6 +1673,7 @@ class TestPettingZoo:
             task="tictactoe_v3",
             parallel=False,
             group_map={"player": ["player_1", "player_2"]},
+            categorical_actions=False,
             seed=0,
             use_mask=True,
         )

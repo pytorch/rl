@@ -268,7 +268,7 @@ class PettingZooWrapper(_EnvWrapper):
                         "action": _gym_to_torchrl_spec_transform(
                             self.action_space(agent),
                             remap_state_to_observation=False,
-                            categorical_action_encoding=False,  # Always one hot
+                            categorical_action_encoding=self.categorical_actions,
                             device=self.device,
                         )
                     },
@@ -300,7 +300,12 @@ class PettingZooWrapper(_EnvWrapper):
             del group_observation_inner_spec["action_mask"]
             group_observation_spec["action_mask"] = DiscreteTensorSpec(
                 n=2,
-                shape=group_action_spec["action"].shape,
+                shape=group_action_spec["action"].shape
+                if not self.categorical_actions
+                else (
+                    *group_action_spec["action"].shape,
+                    group_action_spec["action"].space.n,
+                ),
                 dtype=torch.bool,
                 device=self.device,
             )
@@ -388,11 +393,14 @@ class PettingZooWrapper(_EnvWrapper):
             if ("info", "action_mask") in info_specs.keys(True, True):
                 if not self.has_action_mask[group]:
                     self.has_action_mask[group] = True
+                    group_action_spec = self.input_spec[
+                        "full_action_spec", group, "action"
+                    ]
                     self.observation_spec[group]["action_mask"] = DiscreteTensorSpec(
                         n=2,
-                        shape=self.input_spec[
-                            "full_action_spec", group, "action"
-                        ].shape,
+                        shape=group_action_spec.shape
+                        if not self.categorical_actions
+                        else (*group_action_spec.shape, group_action_spec.space.n),
                         dtype=torch.bool,
                         device=self.device,
                     )
