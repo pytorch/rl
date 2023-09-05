@@ -4,12 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from copy import copy
+import contextlib
 
-import pkg_resources
+import importlib.util
+import os
+import re
+from typing import List, Union
+
 import torch
 
-from tensordict import is_tensor_collection
+from tensordict import is_tensor_collection, unravel_key
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -20,13 +24,7 @@ from tensordict.nn.probabilistic import (  # noqa
     set_interaction_mode as set_exploration_mode,
     set_interaction_type as set_exploration_type,
 )
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    NestedKey,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.utils import unravel_keys
+from tensordict.tensordict import LazyStackedTensorDict, NestedKey, TensorDictBase
 
 __all__ = [
     "exploration_mode",
@@ -41,8 +39,11 @@ __all__ = [
 
 
 from torchrl.data import CompositeSpec
+from torchrl.data.utils import check_no_exclusive_keys
 
-AVAILABLE_LIBRARIES = {pkg.key for pkg in pkg_resources.working_set}
+DONE_AFTER_RESET_ERROR = RuntimeError(
+    "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+)
 
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
@@ -63,9 +64,9 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
-    reward_key: NestedKey = "reward",
-    done_key: NestedKey = "done",
-    action_key: NestedKey = "action",
+    reward_keys: Union[NestedKey, List[NestedKey]] = "reward",
+    done_keys: Union[NestedKey, List[NestedKey]] = "done",
+    action_keys: Union[NestedKey, List[NestedKey]] = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
@@ -93,11 +94,11 @@ def step_mdp(
             be kept in the root tensordict (since it should not be present in
             the ``"next"`` entry).
             Default is ``True``.
-        reward_key (key, optional): the key where the reward is written. Defaults
+        reward_keys (NestedKey or list of NestedKey, optional): the keys where the reward is written. Defaults
             to "reward".
-        done_key (key, optional): the key where the done is written. Defaults
+        done_keys (NestedKey or list of NestedKey, optional): the keys where the done is written. Defaults
             to "done".
-        action_key (key, optional): the key where the action is written. Defaults
+        action_keys (NestedKey or list of NestedKey, optional): the keys where the action is written. Defaults
             to "action".
 
     Returns:
@@ -180,9 +181,9 @@ def step_mdp(
                     exclude_reward=exclude_reward,
                     exclude_done=exclude_done,
                     exclude_action=exclude_action,
-                    reward_key=reward_key,
-                    done_key=done_key,
-                    action_key=action_key,
+                    reward_keys=reward_keys,
+                    done_keys=done_keys,
+                    action_keys=action_keys,
                 )
                 for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
             ],
@@ -193,19 +194,22 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_keys((action_key,))
-    done_key = unravel_keys((done_key,))
-    reward_key = unravel_keys((reward_key,))
+    if not isinstance(action_keys, list):
+        action_keys = [action_keys]
+    if not isinstance(done_keys, list):
+        done_keys = [done_keys]
+    if not isinstance(reward_keys, list):
+        reward_keys = [reward_keys]
 
     excluded = set()
     if exclude_reward:
-        excluded = {reward_key}
+        excluded = excluded.union(reward_keys)
     if exclude_done:
-        excluded = excluded.union({done_key})
+        excluded = excluded.union(done_keys)
     if exclude_action:
-        excluded = excluded.union({action_key})
+        excluded = excluded.union(action_keys)
     next_td = tensordict.get("next")
-    out = _clone_no_keys(next_td)
+    out = next_td.empty()
 
     total_key = ()
     if keep_other:
@@ -213,10 +217,10 @@ def step_mdp(
             if key != "next":
                 _set(tensordict, out, key, total_key, excluded)
     elif not exclude_action:
-        _set_single_key(tensordict, out, action_key)
+        for action_key in action_keys:
+            _set_single_key(tensordict, out, action_key)
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
-
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:
@@ -228,53 +232,70 @@ def _set_single_key(source, dest, key, clone=False):
     if isinstance(key, str):
         key = (key,)
     for k in key:
-        val = source.get(k)
-        if is_tensor_collection(val):
-            new_val = dest.get(k, None)
-            if new_val is None:
-                new_val = _clone_no_keys(val)
-                dest._set(k, new_val)
-            source = val
-            dest = new_val
-        else:
-            if clone:
-                val = val.clone()
-            dest._set(k, val)
+        try:
+            val = source._get_str(k, None)
+            if is_tensor_collection(val):
+                new_val = dest._get_str(k, None)
+                if new_val is None:
+                    new_val = val.empty()
+                    dest._set_str(k, new_val, inplace=False, validated=True)
+                source = val
+                dest = new_val
+            else:
+                if clone:
+                    val = val.clone()
+                dest._set_str(k, val, inplace=False, validated=True)
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                # this is a het key
+                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
+                    _set_single_key(s_td, d_td, k, clone)
+                break
+            else:
+                raise err
 
 
 def _set(source, dest, key, total_key, excluded):
     total_key = total_key + (key,)
     non_empty = False
-    if total_key not in excluded:
-        val = source.get(key)
-        if is_tensor_collection(val):
-            new_val = dest.get(key, None)
-            if new_val is None:
-                new_val = _clone_no_keys(val)
-            non_empty_local = False
-            for subkey in val.keys():
-                non_empty_local = (
-                    _set(val, new_val, subkey, total_key, excluded) or non_empty_local
-                )
-            if non_empty_local:
-                dest._set(key, new_val)
-            non_empty = non_empty_local
-        else:
-            non_empty = True
-            dest._set(key, val)
+    if unravel_key(total_key) not in excluded:
+        try:
+            val = source.get(key)
+            if is_tensor_collection(val):
+                new_val = dest.get(key, None)
+                if new_val is None:
+                    new_val = val.empty()
+                non_empty_local = False
+                for subkey in val.keys():
+                    non_empty_local = (
+                        _set(val, new_val, subkey, total_key, excluded)
+                        or non_empty_local
+                    )
+                if non_empty_local:
+                    # dest.set(key, new_val)
+                    dest._set_str(key, new_val, inplace=False, validated=True)
+                non_empty = non_empty_local
+            else:
+                non_empty = True
+                # dest.set(key, val)
+                dest._set_str(key, val, inplace=False, validated=True)
+        # This is a temporary solution to understand if a key is heterogeneous
+        # while not having performance impact when the exception is not raised
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                # this is a het key
+                non_empty_local = False
+                for s_td, d_td in zip(source.tensordicts, dest.tensordicts):
+                    non_empty_local = (
+                        _set(s_td, d_td, key, total_key, excluded) or non_empty_local
+                    )
+                non_empty = non_empty_local
+            else:
+                raise err
+
     return non_empty
-
-
-def _clone_no_keys(td):
-    return TensorDict(
-        source={},
-        batch_size=td.batch_size,
-        device=td.device,
-        names=copy(td._td_dim_names),
-        _run_checks=False,
-        _is_shared=td.is_shared(),
-        _is_memmap=td.is_memmap(),
-    )
 
 
 def get_available_libraries():
@@ -284,29 +305,29 @@ def get_available_libraries():
 
 def _check_gym():
     """Returns True if the gym library is installed."""
-    return "gym" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("gym") is not None
 
 
 def _check_gym_atari():
     """Returns True if the gym library is installed and atari envs can be found."""
     if not _check_gym():
         return False
-    return "atari-py" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("atari-py") is not None
 
 
 def _check_mario():
     """Returns True if the "gym-super-mario-bros" library is installed."""
-    return "gym-super-mario-bros" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("gym-super-mario-bros") is not None
 
 
 def _check_dmcontrol():
     """Returns True if the "dm-control" library is installed."""
-    return "dm-control" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("dm_control") is not None
 
 
 def _check_dmlab():
     """Returns True if the "deepmind-lab" library is installed."""
-    return "deepmind-lab" in AVAILABLE_LIBRARIES
+    return importlib.util.find_spec("deepmind_lab") is not None
 
 
 SUPPORTED_LIBRARIES = {
@@ -406,7 +427,6 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
-
     if (
         fake_tensordict.apply(lambda x: torch.zeros_like(x))
         != real_tensordict.apply(lambda x: torch.zeros_like(x))
@@ -421,17 +441,24 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # Check specs
     last_td = real_tensordict[..., -1]
-    _action_spec = env.input_spec["_action_spec"]
-    _state_spec = env.input_spec["_state_spec"]
-    _obs_spec = env.output_spec["_observation_spec"]
-    _reward_spec = env.output_spec["_reward_spec"]
-    _done_spec = env.output_spec["_done_spec"]
+    last_td = env.rand_action(last_td)
+    full_action_spec = env.input_spec["full_action_spec"]
+    full_state_spec = env.input_spec["full_state_spec"]
+    full_observation_spec = env.output_spec["full_observation_spec"]
+    full_reward_spec = env.output_spec["full_reward_spec"]
+    full_done_spec = env.output_spec["full_done_spec"]
     for name, spec in (
-        ("action", _action_spec),
-        ("state", _state_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("action", full_action_spec),
+        ("state", full_state_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
+        if not check_no_exclusive_keys(spec):
+            raise AssertionError(
+                "It appears you are using some LazyStackedCompositeSpecs with exclusive keys "
+                "(keys present in some but not all of the stacked specs). To use such heterogeneous specs, "
+                "you will need to first pass your stack through `torchrl.data.consolidate_spec`."
+            )
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
         td = last_td.select(*spec.keys(True, True), strict=True)
@@ -440,9 +467,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
     for name, spec in (
-        ("reward", _reward_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("reward", full_reward_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
@@ -487,7 +514,7 @@ class classproperty:
 
 def _sort_keys(element):
     if isinstance(element, tuple):
-        element = unravel_keys(element)
+        element = unravel_key(element)
         return "_-|-_".join(element)
     return element
 
@@ -535,3 +562,36 @@ def make_composite_from_td(data):
         shape=data.shape,
     )
     return composite
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """Clears the MPI of environment variables.
+
+    `from mpi4py import MPI` will call `MPI_Init` by default.
+    If the child process has MPI environment variables, MPI will think that the child process
+    is an MPI process just like the parent and do bad things such as hang.
+
+    This context manager is a hacky way to clear those environment variables
+    temporarily such as when we are starting multiprocessing Processes.
+
+    Yields:
+        Yields for the context manager
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ["OMPI_", "PMI_"]:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)
+
+
+def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+    if isinstance(key, str):
+        return new_ending
+    else:
+        return key[:-1] + (new_ending,)

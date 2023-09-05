@@ -171,11 +171,14 @@ class TensorStorage(Storage):
     """A storage for tensors and tensordicts.
 
     Args:
-        data (tensor or TensorDict): the data buffer to be used.
+        storage (tensor or TensorDict): the data buffer to be used.
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
+            If "auto" is passed, the device is automatically gathered from the
+            first batch of data passed. This is not enabled by default to avoid
+            data placed on GPU by mistake, causing OOM issues.
 
     Examples:
         >>> data = TensorDict({
@@ -230,7 +233,7 @@ class TensorStorage(Storage):
         cls._storage = None
         return super().__new__(cls)
 
-    def __init__(self, storage, max_size=None, device=None):
+    def __init__(self, storage, max_size=None, device="cpu"):
         if not ((storage is None) ^ (max_size is None)):
             if storage is None:
                 raise ValueError("Expected storage to be non-null.")
@@ -247,7 +250,13 @@ class TensorStorage(Storage):
             self._len = max_size
         else:
             self._len = 0
-        self.device = device if device else torch.device("cpu")
+        self.device = (
+            torch.device(device)
+            if device != "auto"
+            else storage.device
+            if storage is not None
+            else "auto"
+        )
         self._storage = storage
 
     def state_dict(self) -> Dict[str, Any]:
@@ -345,6 +354,9 @@ class LazyTensorStorage(TensorStorage):
             in the buffer.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
+            If "auto" is passed, the device is automatically gathered from the
+            first batch of data passed. This is not enabled by default to avoid
+            data placed on GPU by mistake, causing OOM issues.
 
     Examples:
         >>> data = TensorDict({
@@ -396,12 +408,14 @@ class LazyTensorStorage(TensorStorage):
 
     """
 
-    def __init__(self, max_size, device=None):
-        super().__init__(None, max_size, device=device)
+    def __init__(self, max_size, device="cpu"):
+        super().__init__(storage=None, max_size=max_size, device=device)
 
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
             print("Creating a TensorStorage...")
+        if self.device == "auto":
+            self.device = data.device
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = torch.empty(
@@ -436,6 +450,9 @@ class LazyMemmapStorage(LazyTensorStorage):
         scratch_dir (str or path): directory where memmap-tensors will be written.
         device (torch.device, optional): device where the sampled tensors will be
             stored and sent. Default is :obj:`torch.device("cpu")`.
+            If ``None`` is provided, the device is automatically gathered from the
+            first batch of data passed. This is not enabled by default to avoid
+            data placed on GPU by mistake, causing OOM issues.
 
     Examples:
         >>> data = TensorDict({
@@ -486,7 +503,7 @@ class LazyMemmapStorage(LazyTensorStorage):
 
     """
 
-    def __init__(self, max_size, scratch_dir=None, device=None):
+    def __init__(self, max_size, scratch_dir=None, device="cpu"):
         super().__init__(max_size)
         self.initialized = False
         self.scratch_dir = None
@@ -494,7 +511,7 @@ class LazyMemmapStorage(LazyTensorStorage):
             self.scratch_dir = str(scratch_dir)
             if self.scratch_dir[-1] != "/":
                 self.scratch_dir += "/"
-        self.device = device if device else torch.device("cpu")
+        self.device = torch.device(device) if device != "auto" else device
         self._len = 0
 
     def state_dict(self) -> Dict[str, Any]:
@@ -552,6 +569,8 @@ class LazyMemmapStorage(LazyTensorStorage):
     def _init(self, data: Union[TensorDictBase, torch.Tensor]) -> None:
         if VERBOSE:
             print("Creating a MemmapStorage...")
+        if self.device == "auto":
+            self.device = data.device
         if isinstance(data, torch.Tensor):
             # if Tensor, we just create a MemmapTensor of the desired shape, device and dtype
             out = MemmapTensor(
@@ -670,11 +689,21 @@ def _collate_contiguous(x):
     return x
 
 
+def _collate_as_tensor(x):
+    return x.contiguous()
+
+
 def _get_default_collate(storage, _is_tensordict=False):
     if isinstance(storage, ListStorage):
         if _is_tensordict:
             return _collate_list_tensordict
         else:
             return torch.utils.data._utils.collate.default_collate
-    elif isinstance(storage, (LazyTensorStorage, LazyMemmapStorage)):
+    elif isinstance(storage, LazyMemmapStorage):
+        return _collate_as_tensor
+    elif isinstance(storage, (TensorStorage,)):
         return _collate_contiguous
+    else:
+        raise NotImplementedError(
+            f"Could not find a default collate_fn for storage {type(storage)}."
+        )

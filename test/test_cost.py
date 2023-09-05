@@ -13,6 +13,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 
 from packaging import version as pack_version
+from tensordict._tensordict import unravel_keys
+
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -20,8 +22,11 @@ from tensordict.nn import (
     ProbabilisticTensorDictSequential,
     ProbabilisticTensorDictSequential as ProbSeq,
     TensorDictModule as Mod,
+    TensorDictSequential,
     TensorDictSequential as Seq,
 )
+
+from torchrl.modules.models import QMixer
 
 _has_functorch = True
 try:
@@ -43,9 +48,11 @@ from _utils_internal import (  # noqa
 )
 from mocking_classes import ContinuousActionConvMockEnv
 from tensordict.nn import get_functional, NormalParamExtractor, TensorDictModule
+from tensordict.nn.utils import Buffer
 
 # from torchrl.data.postprocs.utils import expand_as_right
 from tensordict.tensordict import assert_allclose_td, TensorDict
+from tensordict.utils import unravel_key
 from torch import autograd, nn
 from torchrl.data import (
     BoundedTensorSpec,
@@ -65,7 +72,11 @@ from torchrl.modules import (
     SafeSequential,
     WorldModelWrapper,
 )
-from torchrl.modules.distributions.continuous import NormalParamWrapper, TanhNormal
+from torchrl.modules.distributions.continuous import (
+    NormalParamWrapper,
+    TanhDelta,
+    TanhNormal,
+)
 from torchrl.modules.models.model_based import (
     DreamerActor,
     ObsDecoder,
@@ -80,9 +91,9 @@ from torchrl.modules.tensordict_module.actors import (
     ActorCriticOperator,
     ActorValueOperator,
     ProbabilisticActor,
+    QValueModule,
     ValueOperator,
 )
-from torchrl.modules.utils import Buffer
 from torchrl.objectives import (
     A2CLoss,
     ClipPPOLoss,
@@ -94,9 +105,12 @@ from torchrl.objectives import (
     DreamerActorLoss,
     DreamerModelLoss,
     DreamerValueLoss,
+    DTLoss,
     IQLLoss,
     KLPENPPOLoss,
+    OnlineDTLoss,
     PPOLoss,
+    QMixerLoss,
     SACLoss,
     TD3Loss,
 )
@@ -158,6 +172,12 @@ def get_devices():
 
 
 class LossModuleTestBase:
+    def _flatten_in_keys(self, in_keys):
+        return [
+            in_key if isinstance(in_key, str) else "_".join(list(unravel_keys(in_key)))
+            for in_key in in_keys
+        ]
+
     def tensordict_keys_test(self, loss_fn, default_keys, td_est=None):
         self.tensordict_keys_unknown_key_test(loss_fn)
         self.tensordict_keys_default_values_test(loss_fn, default_keys)
@@ -240,9 +260,13 @@ class TestDQN(LossModuleTestBase):
             return module.to(device)
         actor = QValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
-                chosen_action_value=None,
+                {
+                    "action": action_spec,
+                    "action_value"
+                    if action_value_key is None
+                    else action_value_key: None,
+                    "chosen_action_value": None,
+                },
                 shape=[],
             ),
             action_space=action_spec_type,
@@ -285,8 +309,10 @@ class TestDQN(LossModuleTestBase):
         #     return module
         actor = DistributionalQValueActor(
             spec=CompositeSpec(
-                action=action_spec,
-                action_value=None,
+                {
+                    "action": action_spec,
+                    action_value_key: None,
+                },
                 shape=[],
             ),
             module=module,
@@ -426,7 +452,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -483,7 +510,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -610,7 +638,8 @@ class TestDQN(LossModuleTestBase):
         # Check param update effect on targets
         target_value = loss_fn.target_value_network_params.clone()
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_value2 = loss_fn.target_value_network_params.clone()
         if loss_fn.delay_value:
             assert_allclose_td(target_value, target_value2)
@@ -711,6 +740,424 @@ class TestDQN(LossModuleTestBase):
         with _check_td_steady(td):
             _ = loss_fn(td)
         assert loss_fn.tensor_keys.priority in td.keys()
+
+
+class TestQMixer(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(
+        self,
+        action_spec_type,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        observation_key=("agents", "observation"),
+        action_key=("agents", "action"),
+        action_value_key=("agents", "action_value"),
+        chosen_action_value_key=("agents", "chosen_action_value"),
+    ):
+        # Actor
+        if action_spec_type == "one_hot":
+            action_spec = OneHotDiscreteTensorSpec(action_dim)
+        elif action_spec_type == "categorical":
+            action_spec = DiscreteTensorSpec(action_dim)
+        else:
+            raise ValueError(f"Wrong {action_spec_type}")
+
+        module = nn.Linear(obs_dim, action_dim).to(device)
+
+        module = TensorDictModule(
+            module,
+            in_keys=[observation_key],
+            out_keys=[action_value_key],
+        ).to(device)
+        value_module = QValueModule(
+            action_value_key=action_value_key,
+            out_keys=[
+                action_key,
+                action_value_key,
+                chosen_action_value_key,
+            ],
+            spec=action_spec,
+            action_space=None,
+        ).to(device)
+        actor = SafeSequential(module, value_module)
+
+        return actor
+
+    def _create_mock_mixer(
+        self,
+        state_shape=(64, 64, 3),
+        n_agents=4,
+        device="cpu",
+        chosen_action_value_key=("agents", "chosen_action_value"),
+        state_key="state",
+        global_chosen_action_value_key="chosen_action_value",
+    ):
+        qmixer = TensorDictModule(
+            module=QMixer(
+                state_shape=state_shape,
+                mixing_embed_dim=32,
+                n_agents=n_agents,
+                device=device,
+            ),
+            in_keys=[chosen_action_value_key, state_key],
+            out_keys=[global_chosen_action_value_key],
+        ).to(device)
+
+        return qmixer
+
+    def _create_mock_data_dqn(
+        self,
+        action_spec_type,
+        batch=(2,),
+        T=None,
+        n_agents=4,
+        obs_dim=3,
+        state_shape=(64, 64, 3),
+        action_dim=4,
+        device="cpu",
+        action_key=("agents", "action"),
+        action_value_key=("agents", "action_value"),
+    ):
+        if T is not None:
+            batch = batch + (T,)
+        # create a tensordict
+        obs = torch.randn(*batch, n_agents, obs_dim, device=device)
+        state = torch.randn(*batch, *state_shape, device=device)
+        next_obs = torch.randn(*batch, n_agents, obs_dim, device=device)
+        next_state = torch.randn(*batch, *state_shape, device=device)
+
+        action_value = torch.randn(*batch, n_agents, action_dim, device=device)
+        if action_spec_type == "one_hot":
+            action = (action_value == action_value.max(dim=-1, keepdim=True)[0]).to(
+                torch.long
+            )
+        elif action_spec_type == "categorical":
+            action = torch.argmax(action_value, dim=-1).to(torch.long)
+
+        reward = torch.randn(*batch, 1, device=device)
+        done = torch.zeros(*batch, 1, dtype=torch.bool, device=device)
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": obs},
+                    [*batch, n_agents],
+                    device=device,
+                ),
+                "state": state,
+                "collector": {
+                    "mask": torch.zeros(*batch, dtype=torch.bool, device=device)
+                },
+                "next": TensorDict(
+                    {
+                        "agents": TensorDict(
+                            {"observation": next_obs},
+                            [*batch, n_agents],
+                            device=device,
+                        ),
+                        "state": next_state,
+                        "reward": reward,
+                        "done": done,
+                    },
+                    batch_size=batch,
+                    device=device,
+                ),
+            },
+            batch_size=batch,
+            device=device,
+        )
+        td.set(action_key, action)
+        td.set(action_value_key, action_value)
+        if T is not None:
+            td.refine_names(None, "time")
+        return td
+
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    def test_qmixer(self, delay_value, device, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        mixer = self._create_mock_mixer(device=device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, device=device
+        )
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+        if td_est is ValueEstimators.GAE:
+            with pytest.raises(NotImplementedError):
+                loss_fn.make_value_estimator(td_est)
+            return
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(td):
+            loss = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+        sum([item for _, item in loss.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_local_value_network_params.clone()
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += 3
+        target_value2 = loss_fn.target_local_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_mixer_network_params.clone()
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += 3
+        target_value2 = loss_fn.target_mixer_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize("n", range(4))
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    def test_qmix_batcher(self, n, delay_value, device, action_spec_type, gamma=0.9):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        mixer = self._create_mock_mixer(device=device)
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type, T=4, device=device
+        )
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+
+        ms = MultiStep(gamma=gamma, n_steps=n).to(device)
+        ms_td = ms(td.clone())
+
+        with (
+            pytest.warns(UserWarning, match="No target network updater has been")
+            if delay_value
+            else contextlib.nullcontext()
+        ), _check_td_steady(ms_td):
+            loss_ms = loss_fn(ms_td)
+        assert loss_fn.tensor_keys.priority in ms_td.keys()
+
+        with torch.no_grad():
+            loss = loss_fn(td)
+        if n == 0:
+            assert_allclose_td(td, ms_td.select(*td.keys(True, True)))
+            _loss = sum([item for _, item in loss.items()])
+            _loss_ms = sum([item for _, item in loss_ms.items()])
+            assert (
+                abs(_loss - _loss_ms) < 1e-3
+            ), f"found abs(loss-loss_ms) = {abs(loss - loss_ms):4.5f} for n=0"
+        else:
+            with pytest.raises(AssertionError):
+                assert_allclose_td(loss, loss_ms)
+        sum([item for _, item in loss_ms.items()]).backward()
+        assert torch.nn.utils.clip_grad.clip_grad_norm_(actor.parameters(), 1.0) > 0.0
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_local_value_network_params.clone()
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += 3
+        target_value2 = loss_fn.target_local_value_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # Check param update effect on targets
+        target_value = loss_fn.target_mixer_network_params.clone()
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += 3
+        target_value2 = loss_fn.target_mixer_network_params.clone()
+        if loss_fn.delay_value:
+            assert_allclose_td(target_value, target_value2)
+        else:
+            assert not (target_value == target_value2).any()
+
+        # check that policy is updated after parameter update
+        parameters = [p.clone() for p in actor.parameters()]
+        for p in loss_fn.parameters():
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
+        assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_qmix_tensordict_keys(self, td_est):
+        torch.manual_seed(self.seed)
+        action_spec_type = "one_hot"
+        actor = self._create_mock_actor(action_spec_type=action_spec_type)
+        mixer = self._create_mock_mixer()
+        loss_fn = QMixerLoss(actor, mixer)
+
+        default_keys = {
+            "advantage": "advantage",
+            "value_target": "value_target",
+            "local_value": ("agents", "chosen_action_value"),
+            "global_value": "chosen_action_value",
+            "priority": "td_error",
+            "action_value": ("agents", "action_value"),
+            "action": ("agents", "action"),
+            "reward": "reward",
+            "done": "done",
+        }
+
+        self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+        loss_fn = QMixerLoss(actor, mixer)
+        key_mapping = {
+            "advantage": ("advantage", "advantage_2"),
+            "value_target": ("value_target", ("value_target", "nested")),
+            "reward": ("reward", "reward_test"),
+            "done": ("done", ("done", "test")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type,
+        )
+        mixer = self._create_mock_mixer(
+            global_chosen_action_value_key=("some", "nested")
+        )
+        loss_fn = QMixerLoss(actor, mixer)
+        key_mapping = {
+            "global_value": ("value", ("some", "nested")),
+        }
+        self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
+
+    @pytest.mark.parametrize("action_spec_type", ("categorical", "one_hot"))
+    @pytest.mark.parametrize(
+        "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
+    )
+    def test_qmix_tensordict_run(self, action_spec_type, td_est):
+        torch.manual_seed(self.seed)
+        tensor_keys = {
+            "action_value": ("other", "action_value_test"),
+            "action": ("other", "action"),
+            "local_value": ("some", "local_v"),
+            "global_value": "global_v",
+            "priority": "priority_test",
+        }
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type,
+            action_value_key=tensor_keys["action_value"],
+            action_key=tensor_keys["action"],
+            chosen_action_value_key=tensor_keys["local_value"],
+        )
+        mixer = self._create_mock_mixer(
+            chosen_action_value_key=tensor_keys["local_value"],
+            global_chosen_action_value_key=tensor_keys["global_value"],
+        )
+        td = self._create_mock_data_dqn(
+            action_spec_type=action_spec_type,
+            action_key=tensor_keys["action"],
+            action_value_key=tensor_keys["action_value"],
+        )
+
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2")
+        loss_fn.set_keys(**tensor_keys)
+
+        if td_est is not None:
+            loss_fn.make_value_estimator(td_est)
+        with _check_td_steady(td):
+            _ = loss_fn(td)
+        assert loss_fn.tensor_keys.priority in td.keys()
+
+    @pytest.mark.parametrize(
+        "mixer_local_chosen_action_value_key",
+        [("agents", "chosen_action_value"), ("other")],
+    )
+    @pytest.mark.parametrize(
+        "mixer_global_chosen_action_value_key",
+        ["chosen_action_value", ("nested", "other")],
+    )
+    def test_mixer_keys(
+        self,
+        mixer_local_chosen_action_value_key,
+        mixer_global_chosen_action_value_key,
+        n_agents=4,
+        obs_dim=3,
+    ):
+        torch.manual_seed(0)
+        actor = self._create_mock_actor(
+            action_spec_type="categorical",
+        )
+        mixer = self._create_mock_mixer(
+            chosen_action_value_key=mixer_local_chosen_action_value_key,
+            global_chosen_action_value_key=mixer_global_chosen_action_value_key,
+            n_agents=n_agents,
+        )
+
+        td = TensorDict(
+            {
+                "agents": TensorDict(
+                    {"observation": torch.zeros(32, n_agents, obs_dim)}, [32, n_agents]
+                ),
+                "state": torch.zeros(32, 64, 64, 3),
+                "next": TensorDict(
+                    {
+                        "agents": TensorDict(
+                            {"observation": torch.zeros(32, n_agents, obs_dim)},
+                            [32, n_agents],
+                        ),
+                        "state": torch.zeros(32, 64, 64, 3),
+                        "reward": torch.zeros(32, 1),
+                        "done": torch.zeros(32, 1, dtype=torch.bool),
+                    },
+                    [32],
+                ),
+            },
+            [32],
+        )
+        td = actor(td)
+
+        loss = QMixerLoss(actor, mixer)
+
+        # Wthout etting the keys
+        if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
+            with pytest.raises(RuntimeError):
+                loss(td)
+        elif unravel_key(mixer_global_chosen_action_value_key) != "chosen_action_value":
+            with pytest.raises(
+                KeyError, match='key "chosen_action_value" not found in TensorDict'
+            ):
+                loss(td)
+        else:
+            loss(td)
+
+        loss = QMixerLoss(actor, mixer)
+        # When setting the key
+        loss.set_keys(global_value=mixer_global_chosen_action_value_key)
+        if mixer_local_chosen_action_value_key != ("agents", "chosen_action_value"):
+            with pytest.raises(
+                RuntimeError
+            ):  # The mixer in key still does not match the actor out_key
+                loss(td)
+        else:
+            loss(td)
 
 
 @pytest.mark.skipif(
@@ -949,7 +1396,8 @@ class TestDDPG(LossModuleTestBase):
         target_value = [p.clone() for p in loss_fn.target_value_network_params.values()]
         _i = -1
         for _i, p in enumerate(loss_fn.parameters()):
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert _i >= 0
         target_actor2 = [
             p.clone() for p in loss_fn.target_actor_network_params.values()
@@ -973,7 +1421,8 @@ class TestDDPG(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -1518,7 +1967,14 @@ class TestTD3(LossModuleTestBase):
             assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -1653,8 +2109,16 @@ class TestTD3(LossModuleTestBase):
 
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
+
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_actor = loss_fn.target_actor_network_params.clone().values(
@@ -1664,7 +2128,8 @@ class TestTD3(LossModuleTestBase):
             include_nested=True, leaves_only=True
         )
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_actor2 = loss_fn.target_actor_network_params.clone().values(
             include_nested=True, leaves_only=True
         )
@@ -1692,7 +2157,8 @@ class TestTD3(LossModuleTestBase):
         assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -1765,7 +2231,6 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     def test_td3_notensordict(self, observation_key, reward_key, done_key):
-
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(in_keys=[observation_key])
         qvalue = self._create_mock_value(
@@ -1787,12 +2252,15 @@ class TestTD3(LossModuleTestBase):
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 
         with pytest.warns(UserWarning, match="No target network updater has been"):
+            torch.manual_seed(0)
             loss_val_td = loss(td)
+            torch.manual_seed(0)
             loss_val = loss(**kwargs)
             for i, key in enumerate(loss_val_td.keys()):
                 torch.testing.assert_close(loss_val_td.get(key), loss_val[i])
             # test select
             loss.select_out_keys("loss_actor", "loss_qvalue")
+            torch.manual_seed(0)
             if torch.__version__ >= "2.0.0":
                 loss_actor, loss_qvalue = loss(**kwargs)
             else:
@@ -2164,7 +2632,14 @@ class TestSAC(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
@@ -2333,7 +2808,14 @@ class TestSAC(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = [
@@ -2356,7 +2838,8 @@ class TestSAC(LossModuleTestBase):
                     )
                 ]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = [
                 p.clone()
                 for p in loss_fn.target_actor_network_params.values(
@@ -2405,7 +2888,8 @@ class TestSAC(LossModuleTestBase):
             # check that policy is updated after parameter update
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -2588,7 +3072,9 @@ class TestDiscreteSAC(LossModuleTestBase):
                 return self.linear(obs)
 
         module = ValueClass()
-        qvalue = ValueOperator(module=module, in_keys=[observation_key])
+        qvalue = ValueOperator(
+            module=module, in_keys=[observation_key], out_keys=["action_value"]
+        )
         return qvalue.to(device)
 
     def _create_mock_distributional_actor(
@@ -2691,7 +3177,6 @@ class TestDiscreteSAC(LossModuleTestBase):
         target_entropy,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(device=device)
 
@@ -2781,7 +3266,14 @@ class TestDiscreteSAC(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -2849,7 +3341,14 @@ class TestDiscreteSAC(LossModuleTestBase):
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_actor = [
@@ -2865,7 +3364,8 @@ class TestDiscreteSAC(LossModuleTestBase):
             )
         ]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_actor2 = [
             p.clone()
             for p in loss_fn.target_actor_network_params.values(
@@ -2896,7 +3396,8 @@ class TestDiscreteSAC(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -2988,14 +3489,6 @@ class TestDiscreteSAC(LossModuleTestBase):
             torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_val[2])
             torch.testing.assert_close(loss_val_td.get("alpha"), loss_val[3])
             torch.testing.assert_close(loss_val_td.get("entropy"), loss_val[4])
-            torch.testing.assert_close(
-                loss_val_td.get("state_action_value_actor"), loss_val[5]
-            )
-            torch.testing.assert_close(
-                loss_val_td.get("action_log_prob_actor"), loss_val[6]
-            )
-            torch.testing.assert_close(loss_val_td.get("next.state_value"), loss_val[7])
-            torch.testing.assert_close(loss_val_td.get("target_value"), loss_val[8])
             # test select
             torch.manual_seed(self.seed)
             loss.select_out_keys("loss_actor", "loss_alpha")
@@ -3239,7 +3732,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3330,11 +3822,17 @@ class TestREDQ(LossModuleTestBase):
             assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
-
         torch.manual_seed(self.seed)
 
         actor, qvalue, common, td = self._create_mock_common_layer_setup()
@@ -3423,7 +3921,6 @@ class TestREDQ(LossModuleTestBase):
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_deprecated_separate_losses(self, separate_losses):
-
         torch.manual_seed(self.seed)
 
         actor, qvalue, common, td = self._create_mock_common_layer_setup()
@@ -3512,7 +4009,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("num_qvalue", [1, 2, 4, 8])
     @pytest.mark.parametrize("device", get_default_devices())
     def test_redq_shared(self, delay_qvalue, num_qvalue, device):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3577,7 +4073,6 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_redq_batched(self, delay_qvalue, num_qvalue, device, td_est):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(device=device)
 
@@ -3640,6 +4135,7 @@ class TestREDQ(LossModuleTestBase):
     def test_redq_batcher(self, n, delay_qvalue, num_qvalue, device, gamma=0.9):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_redq(device=device)
+        assert td.names == td.get("next").names
 
         actor = self._create_mock_actor(device=device)
         qvalue = self._create_mock_qvalue(device=device)
@@ -3655,7 +4151,9 @@ class TestREDQ(LossModuleTestBase):
         ms = MultiStep(gamma=gamma, n_steps=n).to(device)
 
         td_clone = td.clone()
+        assert td_clone.names == td_clone.get("next").names
         ms_td = ms(td_clone)
+        assert ms_td.names == ms_td.get("next").names
 
         torch.manual_seed(0)
         np.random.seed(0)
@@ -3686,7 +4184,14 @@ class TestREDQ(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = loss_fn.target_actor_network_params.clone().values(
@@ -3696,7 +4201,8 @@ class TestREDQ(LossModuleTestBase):
                 include_nested=True, leaves_only=True
             )
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = loss_fn.target_actor_network_params.clone().values(
                 include_nested=True, leaves_only=True
             )
@@ -3726,7 +4232,8 @@ class TestREDQ(LossModuleTestBase):
             assert len(actorp_set.intersection(loss_fnp_set)) == len(actorp_set)
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -4081,7 +4588,14 @@ class TestCQL(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_actor", (True, False))
@@ -4100,7 +4614,6 @@ class TestCQL(LossModuleTestBase):
         with_lagrange,
         device,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_cql(device=device)
 
@@ -4152,7 +4665,14 @@ class TestCQL(LossModuleTestBase):
             sum([item for _, item in loss_ms.items()]).backward()
             named_parameters = loss_fn.named_parameters()
             for name, p in named_parameters:
-                assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+                if not name.startswith("target_"):
+                    assert (
+                        p.grad is not None and p.grad.norm() > 0.0
+                    ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+                else:
+                    assert (
+                        p.grad is None or p.grad.norm() == 0.0
+                    ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
             # Check param update effect on targets
             target_actor = [
@@ -4168,7 +4688,8 @@ class TestCQL(LossModuleTestBase):
                 )
             ]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             target_actor2 = [
                 p.clone()
                 for p in loss_fn.target_actor_network_params.values(
@@ -4201,7 +4722,8 @@ class TestCQL(LossModuleTestBase):
             # check that policy is updated after parameter update
             parameters = [p.clone() for p in actor.parameters()]
             for p in loss_fn.parameters():
-                p.data += torch.randn_like(p)
+                if p.requires_grad:
+                    p.data += torch.randn_like(p)
             assert all(
                 (p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters())
             )
@@ -4442,8 +4964,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -4456,8 +4978,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         assert counter == 2
         actor.zero_grad()
 
@@ -4512,8 +5034,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -4526,8 +5048,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
         assert counter == 4
 
@@ -4796,8 +5318,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target" in name)
+                assert ("critic" not in name) or ("target" in name)
         assert counter == 2
 
         value.zero_grad()
@@ -4810,8 +5332,8 @@ class TestPPO(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target" in name)
+                assert ("critic" in name) or ("target" in name)
         assert counter == 2
         actor.zero_grad()
 
@@ -5090,8 +5612,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         value.zero_grad()
         loss_objective.backward()
@@ -5101,8 +5623,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -5136,8 +5658,8 @@ class TestA2C(LossModuleTestBase):
                     assert "actor" not in name
                     assert "critic" in name
                 if p.grad is None:
-                    assert "actor" in name
-                    assert "critic" not in name
+                    assert ("actor" in name) or ("target_" in name)
+                    assert ("critic" not in name) or ("target_" in name)
             else:
                 if p.grad is not None and p.grad.norm() > 0.0:
                     assert ("actor" in name) or ("critic" in name)
@@ -5152,8 +5674,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -5207,8 +5729,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" not in name
                 assert "critic" in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         for param in params:
             param.grad = None
@@ -5219,8 +5741,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         for param in params:
             param.grad = None
 
@@ -5323,8 +5845,8 @@ class TestA2C(LossModuleTestBase):
             if p.grad is not None and p.grad.norm() > 0.0:
                 assert "actor" not in name
             if p.grad is None:
-                assert "actor" in name
-                assert "critic" not in name
+                assert ("actor" in name) or ("target_" in name)
+                assert ("critic" not in name) or ("target_" in name)
 
         value.zero_grad()
         loss_objective.backward()
@@ -5334,8 +5856,8 @@ class TestA2C(LossModuleTestBase):
                 assert "actor" in name
                 assert "critic" not in name
             if p.grad is None:
-                assert "actor" not in name
-                assert "critic" in name
+                assert ("actor" not in name) or ("target_" in name)
+                assert ("critic" in name) or ("target_" in name)
         actor.zero_grad()
 
         # test reset
@@ -5500,7 +6022,6 @@ class TestReinforce(LossModuleTestBase):
                     retain_graph=True,
                     allow_unused=False,
                 )
-            print(advantage, gradient_mode, delay_value, td_est)
 
     @pytest.mark.parametrize(
         "td_est",
@@ -6217,6 +6738,358 @@ class TestDreamer(LossModuleTestBase):
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
 
 
+class TestOnlineDT(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        return actor.to(device)
+
+    def _create_mock_data_odt(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, 1, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+                "reward2go": reward2go,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_odt(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, T, 1, device=device)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "reward": reward2go,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_seq_odt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_odt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = sum(
+            loss[key]
+            for key in loss.keys()
+            if key.startswith("loss") and key != "loss_alpha"
+        )
+        loss_alpha = loss["loss_alpha"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+        loss_alpha.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" not in name
+                assert "alpha" in name
+            if p.grad is None:
+                assert "actor" in name
+                assert "alpha" not in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer, loss_alpha]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    def test_onlinedt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = OnlineDTLoss(actor)
+
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_onlinedt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_odt(device=device)
+        loss_fn = OnlineDTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        torch.manual_seed(0)
+        loss_val_td = loss_fn(td)
+        torch.manual_seed(0)
+        loss_log_likelihood, loss_entropy, loss_alpha, alpha, entropy = loss_fn(
+            **kwargs
+        )
+        torch.testing.assert_close(
+            loss_val_td.get("loss_log_likelihood"), loss_log_likelihood
+        )
+        torch.testing.assert_close(loss_val_td.get("loss_entropy"), loss_entropy)
+        torch.testing.assert_close(loss_val_td.get("loss_alpha"), loss_alpha)
+        # test select
+        torch.manual_seed(0)
+        loss_fn.select_out_keys("loss_entropy")
+        if torch.__version__ >= "2.0.0":
+            loss_entropy = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_entropy = loss_fn(**kwargs)
+            return
+        assert loss_entropy == loss_val_td["loss_entropy"]
+
+
+class TestDT(LossModuleTestBase):
+    seed = 0
+
+    def _create_mock_actor(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        net = NormalParamWrapper(nn.Linear(obs_dim, 2 * action_dim))
+        module = TensorDictModule(net, in_keys=["observation"], out_keys=["param"])
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhDelta,
+            in_keys=["param"],
+            spec=action_spec,
+        )
+        return actor.to(device)
+
+    def _create_mock_data_dt(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # create a tensordict
+        obs = torch.randn(batch, obs_dim, device=device)
+        action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
+        reward2go = torch.randn(batch, 1, device=device)
+        td = TensorDict(
+            batch_size=(batch,),
+            source={
+                "observation": obs,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def _create_seq_mock_data_dt(
+        self, batch=2, T=4, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # create a tensordict
+        obs = torch.randn(batch, T, obs_dim, device=device)
+        action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
+
+        td = TensorDict(
+            batch_size=(batch, T),
+            source={
+                "observation": obs,
+                "action": action,
+            },
+            device=device,
+        )
+        return td
+
+    def test_dt_tensordict_keys(self):
+        actor = self._create_mock_actor()
+        loss_fn = DTLoss(actor)
+
+        default_keys = {
+            "action": "action",
+        }
+
+        self.tensordict_keys_test(
+            loss_fn,
+            default_keys=default_keys,
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_dt_notensordict(self, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        td = self._create_mock_data_dt(device=device)
+        loss_fn = DTLoss(actor)
+
+        in_keys = self._flatten_in_keys(loss_fn.in_keys)
+        kwargs = dict(td.flatten_keys("_").select(*in_keys))
+
+        loss_val_td = loss_fn(td)
+        loss_val = loss_fn(**kwargs)
+        torch.testing.assert_close(loss_val_td.get("loss"), loss_val)
+        # test select
+        loss_fn.select_out_keys("loss")
+        if torch.__version__ >= "2.0.0":
+            loss_actor = loss_fn(**kwargs)
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="You are likely using tensordict.nn.dispatch with keyword arguments",
+            ):
+                loss_actor = loss_fn(**kwargs)
+            return
+        assert loss_actor == loss_val_td["loss"]
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_dt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = DTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_seq_dt(self, device):
+        torch.manual_seed(self.seed)
+        td = self._create_seq_mock_data_dt(device=device)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = DTLoss(actor)
+        loss = loss_fn(td)
+        loss_transformer = loss["loss"]
+        loss_transformer.backward(retain_graph=True)
+        named_parameters = loss_fn.named_parameters()
+
+        for name, p in named_parameters:
+            if p.grad is not None and p.grad.norm() > 0.0:
+                assert "actor" in name
+                assert "alpha" not in name
+            if p.grad is None:
+                assert "actor" not in name
+                assert "alpha" in name
+        loss_fn.zero_grad()
+
+        sum([loss_transformer]).backward()
+        named_parameters = list(loss_fn.named_parameters())
+        named_buffers = list(loss_fn.named_buffers())
+
+        assert len({p for n, p in named_parameters}) == len(list(named_parameters))
+        assert len({p for n, p in named_buffers}) == len(list(named_buffers))
+
+        for name, p in named_parameters:
+            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+
 @pytest.mark.skipif(
     not _has_functorch, reason=f"functorch not installed: {FUNCTORCH_ERR}"
 )
@@ -6444,7 +7317,6 @@ class TestIQL(LossModuleTestBase):
         expectile,
         td_est,
     ):
-
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(device=device)
 
@@ -6548,7 +7420,14 @@ class TestIQL(LossModuleTestBase):
         assert len({p for n, p in named_buffers}) == len(list(named_buffers))
 
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_iql_separate_losses(self, separate_losses):
@@ -6770,7 +7649,14 @@ class TestIQL(LossModuleTestBase):
         sum([item for _, item in loss_ms.items()]).backward()
         named_parameters = loss_fn.named_parameters()
         for name, p in named_parameters:
-            assert p.grad.norm() > 0.0, f"parameter {name} has null gradient"
+            if not name.startswith("target_"):
+                assert (
+                    p.grad is not None and p.grad.norm() > 0.0
+                ), f"parameter {name} (shape: {p.shape}) has a null gradient"
+            else:
+                assert (
+                    p.grad is None or p.grad.norm() == 0.0
+                ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
         # Check param update effect on targets
         target_qvalue = [
@@ -6780,7 +7666,8 @@ class TestIQL(LossModuleTestBase):
             )
         ]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         target_qvalue2 = [
             p.clone()
             for p in loss_fn.target_qvalue_network_params.values(
@@ -6799,7 +7686,8 @@ class TestIQL(LossModuleTestBase):
         # check that policy is updated after parameter update
         parameters = [p.clone() for p in actor.parameters()]
         for p in loss_fn.parameters():
-            p.data += torch.randn_like(p)
+            if p.requires_grad:
+                p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
     @pytest.mark.parametrize(
@@ -6908,6 +7796,84 @@ class TestIQL(LossModuleTestBase):
             assert loss_value == loss_val_td["loss_value"]
 
 
+@pytest.mark.parametrize("create_target_params", [True, False])
+@pytest.mark.parametrize(
+    "cast", [None, torch.float, torch.double, *get_default_devices()]
+)
+def test_param_buffer_types(create_target_params, cast):
+    class MyLoss(LossModule):
+        def __init__(self, actor_network):
+            super().__init__()
+            self.convert_to_functional(
+                actor_network,
+                "actor_network",
+                create_target_params=create_target_params,
+            )
+
+        def _forward_value_estimator_keys(self, **kwargs) -> None:
+            pass
+
+    actor_module = TensorDictModule(
+        nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4)),
+        in_keys=["obs"],
+        out_keys=["action"],
+    )
+    loss = MyLoss(actor_module)
+    if cast is not None:
+        loss.to(cast)
+    for name in ("weight", "bias"):
+        param = loss.actor_network_params["module", "0", name]
+        assert isinstance(param, nn.Parameter)
+        target = loss.target_actor_network_params["module", "0", name]
+        if create_target_params:
+            assert target.data_ptr() != param.data_ptr()
+        else:
+            assert target.data_ptr() == param.data_ptr()
+        assert param.requires_grad
+        assert not target.requires_grad
+        if cast is not None:
+            if isinstance(cast, torch.dtype):
+                assert param.dtype == cast
+                assert target.dtype == cast
+            else:
+                assert param.device == cast
+                assert target.device == cast
+
+    if create_target_params:
+        assert (
+            loss.actor_network_params["module", "0", "weight"].data.data_ptr()
+            != loss.target_actor_network_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert (
+            loss.actor_network_params["module", "0", "bias"].data.data_ptr()
+            != loss.target_actor_network_params["module", "0", "bias"].data.data_ptr()
+        )
+    else:
+        assert (
+            loss.actor_network_params["module", "0", "weight"].data.data_ptr()
+            == loss.target_actor_network_params["module", "0", "weight"].data.data_ptr()
+        )
+        assert (
+            loss.actor_network_params["module", "0", "bias"].data.data_ptr()
+            == loss.target_actor_network_params["module", "0", "bias"].data.data_ptr()
+        )
+
+    assert loss.actor_network_params["module", "0", "bias"].requires_grad
+    assert not loss.target_actor_network_params["module", "0", "bias"].requires_grad
+    assert not isinstance(
+        loss.actor_network_params["module", "1", "running_mean"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.target_actor_network_params["module", "1", "running_mean"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.actor_network_params["module", "1", "running_var"], nn.Parameter
+    )
+    assert not isinstance(
+        loss.target_actor_network_params["module", "1", "running_var"], nn.Parameter
+    )
+
+
 def test_hold_out():
     net = torch.nn.Linear(3, 4)
     x = torch.randn(1, 3)
@@ -6966,7 +7932,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     module = custom_module_error().to(device)
     with pytest.raises(
-        RuntimeError, match="Your module seems to have a target tensor list "
+        ValueError, match="The loss_module must be a LossModule instance"
     ):
         if mode == "hard":
             upd = HardUpdate(
@@ -6997,7 +7963,10 @@ def test_updater(mode, value_network_update_interval, device, dtype):
             pass
 
     module = custom_module(delay_module=False)
-    with pytest.raises(RuntimeError, match="The target and source data are identical"):
+    with pytest.raises(
+        RuntimeError,
+        match="Did not find any target parameters or buffers in the loss module",
+    ):
         if mode == "hard":
             upd = HardUpdate(
                 module, value_network_update_interval=value_network_update_interval
@@ -7010,8 +7979,9 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         else:
             raise NotImplementedError
 
-    with pytest.warns(UserWarning, match="No target network updater has been"):
-        module = custom_module().to(device).to(dtype)
+    # this is now allowed
+    # with pytest.warns(UserWarning, match="No target network updater has been"):
+    #     module = custom_module().to(device).to(dtype)
 
     if mode == "soft":
         with pytest.raises(ValueError, match="One and only one argument"):
@@ -7021,6 +7991,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
                 tau=0.1,
             )
 
+    module = custom_module(delay_module=True)
     _ = module.module1_params
     with pytest.warns(UserWarning, match="No target network updater has been"):
         _ = module.target_module1_params
@@ -7038,7 +8009,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
 
     # total dist
     d0 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
@@ -7054,7 +8025,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         for i in range(value_network_update_interval + 1):
             # test that no update is occuring until value_network_update_interval
             d1 = 0.0
-            for (key, source_val) in upd._sources.items(True, True):
+            for key, source_val in upd._sources.items(True, True):
                 if not isinstance(key, tuple):
                     key = (key,)
                 key = ("target_" + key[0], *key[1:])
@@ -7069,7 +8040,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         assert upd.counter == 0
         # test that a new update has occured
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -7082,7 +8053,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
     elif mode == "soft":
         upd.step()
         d1 = 0.0
-        for (key, source_val) in upd._sources.items(True, True):
+        for key, source_val in upd._sources.items(True, True):
             if not isinstance(key, tuple):
                 key = (key,)
             key = ("target_" + key[0], *key[1:])
@@ -7095,7 +8066,7 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         upd.init_()
     upd.step()
     d2 = 0.0
-    for (key, source_val) in upd._sources.items(True, True):
+    for key, source_val in upd._sources.items(True, True):
         if not isinstance(key, tuple):
             key = (key,)
         key = ("target_" + key[0], *key[1:])
@@ -8246,9 +9217,10 @@ def test_shared_params(dest, expected_dtype, expected_device):
     loss = MyLoss(actor_network, value_network)
     # modify params
     for p in loss.parameters():
-        p.data += torch.randn_like(p)
+        if p.requires_grad:
+            p.data += torch.randn_like(p)
 
-    assert len(list(loss.parameters())) == 6
+    assert len([p for p in loss.parameters() if p.requires_grad]) == 6
     assert (
         len(loss.actor_network_params.keys(include_nested=True, leaves_only=True)) == 4
     )
@@ -8795,6 +9767,105 @@ class TestSingleCall:
             value_net, data, params, next_params, single_call, value_key, detach_next
         )
         assert (value != value_).all()
+
+
+class TestBuffer:
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_param_cast(self, dtype):
+    #     param = nn.Parameter(torch.zeros(3))
+    #     idb = param.data_ptr()
+    #     param = param.to(dtype)
+    #     assert param.data_ptr() == idb
+    #     assert param.dtype == dtype
+    #     assert param.data.dtype == dtype
+    # @pytest.mark.parametrize('dtype', (torch.double, torch.float, torch.half))
+    # def test_buffer_cast(self, dtype):
+    #     buffer = Buffer(torch.zeros(3))
+    #     idb = buffer.data_ptr()
+    #     buffer = buffer.to(dtype)
+    #     assert isinstance(buffer, Buffer)
+    #     assert buffer.data_ptr() == idb
+    #     assert buffer.dtype == dtype
+    #     assert buffer.data.dtype == dtype
+
+    @pytest.mark.parametrize("create_target_params", [True, False])
+    @pytest.mark.parametrize(
+        "dest", [torch.float, torch.double, torch.half, *get_default_devices()]
+    )
+    def test_module_cast(self, create_target_params, dest):
+        # test that when casting a loss module, all the tensors (params and buffers)
+        # are properly cast
+        class DummyModule(LossModule):
+            def __init__(self):
+                common = nn.Linear(3, 4)
+                actor = nn.Linear(4, 4)
+                value = nn.Linear(4, 1)
+                common = TensorDictModule(common, in_keys=["obs"], out_keys=["hidden"])
+                actor = TensorDictSequential(
+                    common,
+                    TensorDictModule(actor, in_keys=["hidden"], out_keys=["action"]),
+                )
+                value = TensorDictSequential(
+                    common,
+                    TensorDictModule(value, in_keys=["hidden"], out_keys=["value"]),
+                )
+                super().__init__()
+                self.convert_to_functional(
+                    actor,
+                    "actor",
+                    expand_dim=None,
+                    create_target_params=False,
+                    compare_against=None,
+                )
+                self.convert_to_functional(
+                    value,
+                    "value",
+                    expand_dim=2,
+                    create_target_params=create_target_params,
+                    compare_against=actor.parameters(),
+                )
+
+        mod = DummyModule()
+        v_p1 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params1 = set(mod.parameters())
+        v_buffers1 = set(mod.buffers())
+        mod.to(dest)
+        v_p2 = set(mod.value_params.values(True, True)).union(
+            set(mod.actor_params.values(True, True))
+        )
+        v_params2 = set(mod.parameters())
+        v_buffers2 = set(mod.buffers())
+        assert v_p1 == v_p2
+        assert v_params1 == v_params2
+        assert v_buffers1 == v_buffers2
+        for p in mod.parameters():
+            assert isinstance(p, nn.Parameter)
+        for p in mod.buffers():
+            assert isinstance(p, Buffer)
+        for p in mod.actor_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        for p in mod.value_params.values(True, True):
+            assert isinstance(p, (nn.Parameter, Buffer))
+        if isinstance(dest, torch.dtype):
+            for p in mod.parameters():
+                assert p.dtype == dest
+            for p in mod.buffers():
+                assert p.dtype == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.dtype == dest
+            for p in mod.value_params.values(True, True):
+                assert p.dtype == dest
+        else:
+            for p in mod.parameters():
+                assert p.device == dest
+            for p in mod.buffers():
+                assert p.device == dest
+            for p in mod.actor_params.values(True, True):
+                assert p.device == dest
+            for p in mod.value_params.values(True, True):
+                assert p.device == dest
 
 
 if __name__ == "__main__":

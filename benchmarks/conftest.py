@@ -5,6 +5,7 @@
 
 import os
 import time
+import warnings
 from collections import defaultdict
 
 import pytest
@@ -54,3 +55,37 @@ def measure_duration(request: pytest.FixtureRequest):
 
 def pytest_addoption(parser):
     parser.addoption("--rank", action="store")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_warnings() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Lazy modules are a new feature under heavy development",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Couldn't cast the policy onto the desired device on remote process",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Deprecated call to `pkg_resources.declare_namespace",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Using or importing the ABCs",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"Please use `coo_matrix` from the `scipy.sparse` namespace",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        message=r"jax.tree_util.register_keypaths is deprecated|jax.ShapedArray is deprecated",
+    )

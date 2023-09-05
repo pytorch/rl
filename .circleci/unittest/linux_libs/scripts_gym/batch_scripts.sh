@@ -16,6 +16,14 @@ $DIR/install.sh
 # Extracted from run_test.sh to run once.
 apt-get update && apt-get install -y git wget libglew-dev libx11-dev x11proto-dev g++
 
+# solves "'extras_require' must be a dictionary"
+pip install setuptools==65.3.0
+
+mkdir third_party
+cd third_party
+git clone https://github.com/vmoens/gym
+cd ..
+
 # This version is installed initially (see environment.yml)
 for GYM_VERSION in '0.13'
 do
@@ -136,6 +144,11 @@ do
       mv ale_py-0.8.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       pip install ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       rm ale_py-0.8.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+    elif [[ $PY_VERSION == *"3.11"* ]]; then
+      wget https://files.pythonhosted.org/packages/60/1b/3adde7f44f79fcc50d0a00a0643255e48024c4c3977359747d149dc43500/ale_py-0.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+      mv ale_py-0.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      pip install ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      rm ale_py-0.8.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
     fi
     pip install gymnasium[atari]
   else

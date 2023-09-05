@@ -100,7 +100,7 @@ class _VIPNet(Transform):
         device = observation_spec[keys[0]].device
         dim = observation_spec[keys[0]].shape[:-3]
 
-        observation_spec = CompositeSpec(observation_spec, shape=observation_spec.shape)
+        observation_spec = observation_spec.clone()
         if self.del_keys:
             for in_key in keys:
                 del observation_spec[in_key]
@@ -369,20 +369,22 @@ class VIPRewardTransform(VIPTransform):
         )
         return tensordict
 
-    def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
         if "goal_embedding" not in tensordict.keys():
             tensordict = self._embed_goal(tensordict)
         last_embedding_key = self.out_keys[0]
         last_embedding = tensordict.get(last_embedding_key, None)
-        tensordict = super()._step(tensordict)
-        cur_embedding = tensordict.get(("next", self.out_keys[0]))
+        next_tensordict = super()._step(tensordict, next_tensordict)
+        cur_embedding = next_tensordict.get(self.out_keys[0])
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
             reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
                 -torch.norm(last_embedding - goal_embedding, dim=-1)
             )
-            tensordict.set(("next", "reward"), reward)
-        return tensordict
+            next_tensordict.set("reward", reward)
+        return next_tensordict
 
     def forward(self, tensordict):
         tensordict = super().forward(tensordict)
