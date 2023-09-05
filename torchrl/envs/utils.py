@@ -4,7 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 import importlib.util
+import os
 import re
 from typing import List, Union
 
@@ -230,19 +233,17 @@ def _set_single_key(source, dest, key, clone=False):
         key = (key,)
     for k in key:
         try:
-            val = source.get(k)
+            val = source._get_str(k, None)
             if is_tensor_collection(val):
-                new_val = dest.get(k, None)
+                new_val = dest._get_str(k, None)
                 if new_val is None:
                     new_val = val.empty()
-                    # dest.set(k, new_val)
                     dest._set_str(k, new_val, inplace=False, validated=True)
                 source = val
                 dest = new_val
             else:
                 if clone:
                     val = val.clone()
-                # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
@@ -441,6 +442,7 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
 
     # Check specs
     last_td = real_tensordict[..., -1]
+    last_td = env.rand_action(last_td)
     full_action_spec = env.input_spec["full_action_spec"]
     full_state_spec = env.input_spec["full_state_spec"]
     full_observation_spec = env.output_spec["full_observation_spec"]
@@ -561,6 +563,32 @@ def make_composite_from_td(data):
         shape=data.shape,
     )
     return composite
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """Clears the MPI of environment variables.
+
+    `from mpi4py import MPI` will call `MPI_Init` by default.
+    If the child process has MPI environment variables, MPI will think that the child process
+    is an MPI process just like the parent and do bad things such as hang.
+
+    This context manager is a hacky way to clear those environment variables
+    temporarily such as when we are starting multiprocessing Processes.
+
+    Yields:
+        Yields for the context manager
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ["OMPI_", "PMI_"]:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)
 
 
 def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:

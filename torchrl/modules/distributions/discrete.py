@@ -192,15 +192,14 @@ class MaskedCategorical(D.Categorical):
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size()
+        else:
+            sample_shape = torch.Size(sample_shape)
 
         ret = super().sample(sample_shape)
         if not self._sparse_mask:
             return ret
 
         size = ret.size()
-        # Python 3.7 doesn't support math.prod
-        # outer_dim = prod(sample_shape)
-        # inner_dim = prod(self._mask.size()[:-1])
         outer_dim = sample_shape.numel()
         inner_dim = self._mask.shape[:-1].numel()
         idx_3d = self._mask.expand(outer_dim, inner_dim, -1)

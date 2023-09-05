@@ -293,6 +293,25 @@ class TestGym:
         env.rand_step()
         env.rollout(3)
 
+    @implement_for("gymnasium", "0.27.0", None)
+    def test_one_hot_and_categorical(self):
+        # tests that one-hot and categorical work ok when an integer is expected as action
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
+    @implement_for("gym", None, "0.27.0")
+    def test_one_hot_and_categorical(self):  # noqa: F811
+        # we do not skip (bc we may want to make sure nothing is skipped)
+        # but CliffWalking-v0 in earlier Gym versions uses np.bool, which
+        # was deprecated after np 1.20, and we don't want to install multiple np
+        # versions.
+        return
+
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
