@@ -8198,7 +8198,7 @@ class TestActionMask(TransformBase):
                 )
                 self.observation_spec = CompositeSpec(
                     obs=UnboundedContinuousTensorSpec(3),
-                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool),
+                    action_mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool),
                 )
                 self.reward_spec = UnboundedContinuousTensorSpec(1)
 
@@ -8209,11 +8209,11 @@ class TestActionMask(TransformBase):
 
             def _step(self, data):
                 td = self.observation_spec.rand()
-                mask = data.get("mask")
+                mask = data.get("action_mask")
                 action = data.get("action")
                 mask = mask.scatter(-1, action.unsqueeze(-1), 0)
 
-                td.set("mask", mask)
+                td.set("action_mask", mask)
                 td.set("reward", self.reward_spec.rand())
                 td.set("done", ~(mask.any().view(1)))
                 return td
@@ -8270,7 +8270,7 @@ class TestActionMask(TransformBase):
                 break
         else:
             raise RuntimeError
-        assert not td.get("mask").any()
+        assert not td.get("action_mask").any()
 
     def test_transform_model(self):
         t = ActionMask()

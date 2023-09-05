@@ -314,7 +314,7 @@ class MaskedOneHotCategorical(MaskedCategorical):
             must be taken into account. Exclusive with ``mask``.
         neg_inf (float, optional): The log-probability value allocated to
             invalid (out-of-mask) indices. Defaults to -inf.
-        padding_value: The padding value in the mask tensor. When
+        padding_value: The padding value in the then mask tensor when
             sparse_mask == True, the padding_value will be ignored.
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.
@@ -327,21 +327,34 @@ class MaskedOneHotCategorical(MaskedCategorical):
         >>> torch.manual_seed(0)
         >>> logits = torch.randn(4) / 100  # almost equal probabilities
         >>> mask = torch.tensor([True, False, True, True])
-        >>> dist = MaskedCategorical(logits=logits, mask=mask)
+        >>> dist = MaskedOneHotCategorical(logits=logits, mask=mask)
         >>> sample = dist.sample((10,))
         >>> print(sample)  # no `1` in the sample
-        tensor([2, 3, 0, 2, 2, 0, 2, 0, 2, 2])
+        tensor([[0, 0, 1, 0],
+                [0, 0, 0, 1],
+                [1, 0, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0],
+                [1, 0, 0, 0],
+                [0, 0, 1, 0],
+                [1, 0, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 1, 0]])
         >>> print(dist.log_prob(sample))
         tensor([-1.1203, -1.0928, -1.0831, -1.1203, -1.1203, -1.0831, -1.1203, -1.0831,
                 -1.1203, -1.1203])
-        >>> print(dist.log_prob(torch.ones_like(sample)))
+        >>> sample_non_valid = torch.zeros_like(sample)
+        >>> sample_non_valid[..., 1] = 1
+        >>> print(dist.log_prob(sample_non_valid))
         tensor([-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf])
         >>> # with probabilities
         >>> prob = torch.ones(10)
         >>> prob = prob / prob.sum()
         >>> mask = torch.tensor([False] + 9 * [True])  # first outcome is masked
-        >>> dist = MaskedCategorical(probs=prob, mask=mask)
-        >>> print(dist.log_prob(torch.arange(10)))
+        >>> dist = MaskedOneHotCategorical(probs=prob, mask=mask)
+        >>> s = torch.arange(10)
+        >>> s = torch.nn.functional.one_hot(s, 10)
+        >>> print(dist.log_prob(s))
         tensor([   -inf, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972, -2.1972,
                 -2.1972, -2.1972])
     """
