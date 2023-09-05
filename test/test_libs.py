@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 import importlib
 
+from torchrl.modules import MaskedCategorical
+
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 if _has_isaac:
@@ -35,6 +37,11 @@ from _utils_internal import (
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
@@ -1685,6 +1692,30 @@ class TestSmacv2:
         )
         check_env_specs(env, seed=None)
         env.close()
+
+    def test_collector(self):
+        env = SMACv2Env(map_name="MMM2", seed=0, categorical_actions=True)
+        in_feats = env.observation_spec["agents", "observation"].shape[-1]
+        out_feats = env.action_spec.space.n
+
+        module = TensorDictModule(
+            nn.Linear(in_feats, out_feats),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "logits")],
+        )
+        prob = ProbabilisticTensorDictModule(
+            in_keys={"logits": ("agents", "logits"), "mask": ("agents", "action_mask")},
+            out_keys=[("agents", "action")],
+            distribution_class=MaskedCategorical,
+        )
+        actor = TensorDictSequential(module, prob)
+
+        collector = SyncDataCollector(
+            env, policy=actor, frames_per_batch=20, total_frames=40
+        )
+        for _ in collector:
+            break
+        collector.shutdown()
 
 
 if __name__ == "__main__":
