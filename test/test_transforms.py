@@ -8194,7 +8194,7 @@ class TestActionMask(TransformBase):
                 super().__init__(*args, **kwargs)
                 self.action_spec = DiscreteTensorSpec(4)
                 self.state_spec = CompositeSpec(
-                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool)
+                    action_mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool)
                 )
                 self.observation_spec = CompositeSpec(
                     obs=UnboundedContinuousTensorSpec(3),
