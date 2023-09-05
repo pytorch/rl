@@ -5,6 +5,7 @@
 
 import copy
 import importlib
+import typing
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -22,20 +23,16 @@ from torchrl.envs.utils import _replace_last, check_marl_grouping, MarlGroupMapT
 
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
-if _has_pettingzoo:
+
+if typing.TYPE_CHECKING and _has_pettingzoo:
     import pettingzoo
-
-
-all_environments = {}
-if _has_pettingzoo:
-    from pettingzoo.utils.all_modules import all_environments as all_pz_envs
-
-    all_environments = all_pz_envs
 
 
 def _get_envs() -> List[str]:
     if not _has_pettingzoo:
         return []
+    from pettingzoo.utils.all_modules import all_environments
+
     return list(all_environments.keys())
 
 
@@ -201,12 +198,16 @@ class PettingZooWrapper(_EnvWrapper):
 
     @property
     def lib(self):
+        import pettingzoo
+
         return pettingzoo
 
     def _build_env(
         self,
         env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
     ):
+        import pettingzoo
+
         self.parallel = isinstance(env, pettingzoo.utils.env.ParallelEnv)
         if not self.parallel and not self.use_mask:
             raise ValueError("For AEC environments you need to set use_mask=True")
@@ -343,6 +344,8 @@ class PettingZooWrapper(_EnvWrapper):
         )
 
     def _check_kwargs(self, kwargs: Dict):
+        import pettingzoo
+
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -829,6 +832,8 @@ class PettingZooEnv(PettingZooWrapper):
         **kwargs,
     ) -> Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"]:
         self.task_name = task
+
+        from pettingzoo.utils.all_modules import all_environments
 
         if task not in all_environments:
             # Try looking at the literal translation of values
