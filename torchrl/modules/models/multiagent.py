@@ -12,7 +12,7 @@ from torch import nn
 
 from ...data import DEVICE_TYPING
 
-from .models import MLP, ConvNet
+from .models import ConvNet, MLP
 
 
 class MultiAgentMLP(nn.Module):
@@ -229,8 +229,9 @@ class MultiAgentMLP(nn.Module):
 
         return output
 
+
 class MultiAgentConvNet(nn.Module):
-    """Multi-agent CNN
+    """Multi-agent CNN.
 
     This is a CNN that can operate in multi-agent contexts.
 
@@ -294,7 +295,7 @@ class MultiAgentConvNet(nn.Module):
         >>>     n_agents,
         >>>     centralised = False,
         >>>     share_params = True
-        >>> ) 
+        >>> )
         >>> print(cnn)
         >>> print(result.shape)
         >>> print(all(result[0,0,0] == result[0,0,1]))
@@ -319,7 +320,7 @@ class MultiAgentConvNet(nn.Module):
         >>>     n_agents,
         >>>     centralised = False,
         >>>     share_params = False
-        >>> ) 
+        >>> )
         >>> print(cnn)
         >>> print(result.shape)
         >>> print(all(result[0,0,0] == result[0,0,1]))
@@ -344,7 +345,7 @@ class MultiAgentConvNet(nn.Module):
         >>>     n_agents,
         >>>     centralised = True,
         >>>     share_params = False
-        >>> ) 
+        >>> )
         >>> print(cnn)
         >>> print(result.shape)
         >>> print(all(result[0,0,0] == result[0,0,1]))
@@ -364,17 +365,20 @@ class MultiAgentConvNet(nn.Module):
         torch.Size([3, 2, 7, 2592])
         False
     """
-    def __init__(self,
-                 n_agents: int,
-                 centralised: bool,
-                 share_params: bool,
-                 device: Optional[DEVICE_TYPING] = None,
-                 num_cells: Optional[Sequence[int]] = None,
-                 kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
-                 strides: Union[Sequence, int] = 2,
-                 paddings: Union[Sequence, int] = 0,
-                 activation_class: Type[nn.Module] = nn.ELU,   
-                 **kwargs):
+
+    def __init__(
+        self,
+        n_agents: int,
+        centralised: bool,
+        share_params: bool,
+        device: Optional[DEVICE_TYPING] = None,
+        num_cells: Optional[Sequence[int]] = None,
+        kernel_sizes: Union[Sequence[Union[int, Sequence[int]]], int] = 5,
+        strides: Union[Sequence, int] = 2,
+        paddings: Union[Sequence, int] = 0,
+        activation_class: Type[nn.Module] = nn.ELU,
+        **kwargs,
+    ):
         super().__init__()
 
         self.n_agents = n_agents
@@ -390,38 +394,43 @@ class MultiAgentConvNet(nn.Module):
                     paddings=paddings,
                     activation_class=activation_class,
                     device=device,
-                    **kwargs
+                    **kwargs,
                 )
                 for _ in range(self.n_agents if not self.share_params else 1)
             ]
         )
 
-
     def forward(self, inputs: torch.Tensor):
-        assert len(inputs.shape) >= 4, \
-f"""Multi-agent network expects" (*batch_size, agent_index, x, y, channels)"""
-        assert inputs.shape[-4] == self.n_agents, \
-f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
+        assert (
+            len(inputs.shape) >= 4
+        ), """Multi-agent network expects" (*batch_size, agent_index, x, y, channels)"""
+        assert (
+            inputs.shape[-4] == self.n_agents
+        ), f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
         # If the model is centralized, agents have full observability
         if self.centralised:
-            shape = (*inputs.shape[:-4], self.n_agents * inputs.shape[-3], inputs.shape[-2], inputs.shape[-1])
+            shape = (
+                *inputs.shape[:-4],
+                self.n_agents * inputs.shape[-3],
+                inputs.shape[-2],
+                inputs.shape[-1],
+            )
             inputs = torch.reshape(inputs, shape)
 
         # If the parameters are not shared, each agent has its own network
         if not self.share_params:
-                if self.centralised:
-                    output = torch.stack(
-                        [net(inputs) for net in self.agent_networks],
-                        dim=-2
-                    )
-                else:
-                    output = torch.stack(
-                        [
-                            net(inputs[..., i, :, :, :])
-                            for i, net in enumerate(self.agent_networks)
-                        ],
-                        dim=-2,
-                    )
+            if self.centralised:
+                output = torch.stack(
+                    [net(inputs) for net in self.agent_networks], dim=-2
+                )
+            else:
+                output = torch.stack(
+                    [
+                        net(inputs[..., i, :, :, :])
+                        for i, net in enumerate(self.agent_networks)
+                    ],
+                    dim=-2,
+                )
         else:
             output = self.agent_networks[0](inputs)
             if self.centralised:
@@ -434,6 +443,7 @@ f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
                     .expand(*output.shape[:-1], self.n_agents, n_agent_outputs)
                 )
         return output
+
 
 class Mixer(nn.Module):
     """A multi-agent value mixer.

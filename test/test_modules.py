@@ -18,8 +18,8 @@ from torchrl.modules import (
     CEMPlanner,
     DTActor,
     LSTMNet,
-    MultiAgentMLP,
     MultiAgentConvNet,
+    MultiAgentMLP,
     OnlineDTActor,
     QMixer,
     SafeModule,
@@ -825,20 +825,11 @@ class TestMultiAgent:
         ],
     )
     def test_cnn(
-        self,
-        n_agents,
-        centralised,
-        share_params,
-        batch,
-        x=50,
-        y=50,
-        channels=3
+        self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
     ):
         torch.manual_seed(0)
         cnn = MultiAgentConvNet(
-            n_agents=n_agents,
-            centralised=centralised,
-            share_params=share_params
+            n_agents=n_agents, centralised=centralised, share_params=share_params
         )
         td = TensorDict(
             {
