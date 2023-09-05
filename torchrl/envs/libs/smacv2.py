@@ -46,8 +46,8 @@ class SMACv2Wrapper(_EnvWrapper):
          '27m_vs_30m', 'MMM', 'MMM2', '2s3z', '3s5z', '3s5z_vs_3s6z', '3s_vs_3z', '3s_vs_4z', '3s_vs_5z', '1c3s5z',
           '2m_vs_1z', 'corridor', '6h_vs_8z', '2s_vs_1sc', 'so_many_baneling', 'bane_vs_bane', '2c_vs_64zg']
         >>> # You can use old SMAC maps
-        >>> env = SMACv2Wrapper(smacv2.env.StarCraft2Env(map_name="MMM2"))
-        >>> print(env.rollout(5)
+        >>> env = SMACv2Wrapper(smacv2.env.StarCraft2Env(map_name="MMM2"), categorical_actions=False)
+        >>> print(env.rollout(5))
         TensorDict(
             fields={
                 agents: TensorDict(
@@ -179,7 +179,7 @@ class SMACv2Wrapper(_EnvWrapper):
     def __init__(
         self,
         env: "smacv2.env.StarCraft2Env" = None,
-        categorical_actions: bool = False,
+        categorical_actions: bool = True,
         **kwargs,
     ):
         if env is not None:
@@ -528,6 +528,7 @@ class SMACv2Env(SMACv2Wrapper):
         >>> env = SMACv2Env(
         ...     map_name="10gen_terran",
         ...     capability_config=distribution_config,
+        ...     categorical_actions=False,
         ... )
         >>> print(env.rollout(4))
         TensorDict(
@@ -585,7 +586,7 @@ class SMACv2Env(SMACv2Wrapper):
         map_name: str,
         capability_config: Optional[Dict] = None,
         seed: Optional[int] = None,
-        categorical_actions: bool = False,
+        categorical_actions: bool = True,
         **kwargs,
     ):
         if not _has_smacv2:
