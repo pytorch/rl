@@ -15,7 +15,7 @@ from tensordict.nn import (
 from tensordict.utils import is_seq_of_nested_key
 from torch import nn
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
-from torchrl.envs.transforms.transforms import Transform
+from torchrl.envs.transforms.transforms import Transform, TensorDictPrimer
 
 
 class KLRewardTransform(Transform):
@@ -219,3 +219,36 @@ class KLRewardTransform(Transform):
             # then we need to populate the output keys
             observation_spec[out_key] = reward_spec
         return output_spec
+
+class DataPrimer(TensorDictPrimer):
+    """A data primer for RLHF.
+
+    This class will populate a TensorDict with some data from a dataset for usage
+    in an RLHF fine-tuning script.
+
+    It is intended to be appended after a stateless environment with containing
+    a reward model.
+    """
+
+    def __init__(self, dataloader, in_keys):
+        super().__init__(primers, random=False)
+        self.dataloader = dataloader
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Sets the default values in the input tensordict.
+
+        If the parent is batch-locked, we assume that the specs have the appropriate leading
+        shape. We allow for execution when the parent is missing, in which case the
+        spec shape is assumed to match the tensordict's.
+
+        """
+        shape = (
+            ()
+            if (not self.parent or self.parent.batch_locked)
+            else tensordict.batch_size
+        )
+        for key, spec in self.primers.items():
+            value = next(self.dataloader)
+            tensordict.set(key, value)
+        return tensordict
+
