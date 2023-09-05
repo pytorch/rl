@@ -843,14 +843,13 @@ class TestMultiAgent:
         td = TensorDict(
             {
                 "agents": TensorDict(
-                    {"observation": torch.randn(*batch, n_agents, x, y, channels)},
+                    {"observation": torch.randn(*batch, n_agents, channels, x, y)},
                     [*batch, n_agents],
                 )
             },
             batch_size=batch,
         )
         obs = td[("agents", "observation")]
-
         out = cnn(obs)
         assert out.shape[:-1] == (*batch, n_agents)
         for i in range(n_agents):
@@ -869,8 +868,8 @@ class TestMultiAgent:
             elif i > 0:
                 assert torch.allclose(out[..., i, :], out2[..., i, :])
 
-        obs = torch.randn(*batch, 1, x, y, channels).expand(
-            *batch, n_agents, x, y, channels
+        obs = torch.randn(*batch, 1, channels, x, y).expand(
+            *batch, n_agents, channels, x, y
         )
         out = cnn(obs)
         for i in range(n_agents):

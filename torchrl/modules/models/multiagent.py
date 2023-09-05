@@ -232,17 +232,16 @@ class MultiAgentMLP(nn.Module):
 class MultiAgentConvNet(nn.Module):
     """Multi-agent CNN
 
-    This is a CNN that can operate in Multiagent contexts.
+    This is a CNN that can operate in multi-agent contexts.
 
-    It expects inputs with shape (*B, n_agents, x, y, channels)
+    It expects inputs with shape (*B, n_agents, channels, x, y)
 
     Args:
         n_agents (int): number of agents.
         centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
-            (n_agent_inputs * n_agents will be the number of inputs for one agent).
-            Otherwise, each agent will only use its data as input.
-        share_params (bool): If `share_params` is True, the same MLP will be used to make the forward pass
-            for all agents (homogeneous policies). Otherwise, each agent will use a different MLP to process
+            ,resulting in input of shape (*B, n_agents * channels, x, y). Otherwise, each agent will only use its data as input.
+        share_params (bool): If `share_params` is True, the same ConvNet will be used to make the forward pass
+            for all agents (homogeneous policies). Otherwise, each agent will use a different ConvNet to process
             its input (heterogeneous policies).
         device (str or torch.device, optional): device to create the module on.
         num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
@@ -262,8 +261,9 @@ class MultiAgentConvNet(nn.Module):
         >>> from torchrl.modules import MultiAgentConvNet
         >>> batch = (3,2)
         >>> n_agents = 7
-        >>> x, y, channels = 100, 100, 3
-        >>> obs = torch.randn(*batch, n_agents, x, y, channels)
+        >>> channels, x, y = 3, 100, 100
+        >>> obs = torch.randn(*batch, n_agents, channels, x, y)
+        First lets consider a centralised network with shared parameters.
         >>> cnn = MultiAgentConvNet(
         >>>     n_agents,
         >>>     centralised = True,
@@ -283,9 +283,86 @@ class MultiAgentConvNet(nn.Module):
                 )
             )
         )
-        >>> print(cnn(obs).shape)
-        torch.Size([3, 2, 7, 2592]) - where the final dimension is determiend by the input x,
+        >>> result = cnn(obs)
+        >>> print(result.shape)
+        torch.Size([3, 2, 7, 2592]) - where the final dimension is determined by the input x
+        >>> print(all(result[0,0,0] == result[0,0,1]))
+        True - since both shared observations and parameters leads to all agents having identical outputs (eg. for a value function)
 
+        Alternatively, a local network with parameter sharing (eg. decentralised weight sharing policy)
+        >>> cnn = MultiAgentConvNet(
+        >>>     n_agents,
+        >>>     centralised = False,
+        >>>     share_params = True
+        >>> ) 
+        >>> print(cnn)
+        >>> print(result.shape)
+        >>> print(all(result[0,0,0] == result[0,0,1]))
+        MultiAgentConvNet(
+            (agent_networks): ModuleList(
+                (0): ConvNet(
+                (0): Conv2d(4, 32, kernel_size=(5, 5), stride=(2, 2))
+                (1): ELU(alpha=1.0)
+                (2): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (3): ELU(alpha=1.0)
+                (4): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (5): ELU(alpha=1.0)
+                (6): SquashDims()
+                )
+            )
+        )
+        torch.Size([3, 2, 7, 2592])
+        False
+
+        Or multiple local networks identical in structure but with differing weights.
+        >>> cnn = MultiAgentConvNet(
+        >>>     n_agents,
+        >>>     centralised = False,
+        >>>     share_params = False
+        >>> ) 
+        >>> print(cnn)
+        >>> print(result.shape)
+        >>> print(all(result[0,0,0] == result[0,0,1]))
+        MultiAgentConvNet(
+            (agent_networks): ModuleList(
+                (0-6): 7 x ConvNet(
+                (0): Conv2d(4, 32, kernel_size=(5, 5), stride=(2, 2))
+                (1): ELU(alpha=1.0)
+                (2): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (3): ELU(alpha=1.0)
+                (4): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (5): ELU(alpha=1.0)
+                (6): SquashDims()
+                )
+            )
+        )
+        torch.Size([3, 2, 7, 2592])
+        False
+
+        Or where inputs are shared but not parameters.
+        >>> cnn = MultiAgentConvNet(
+        >>>     n_agents,
+        >>>     centralised = True,
+        >>>     share_params = False
+        >>> ) 
+        >>> print(cnn)
+        >>> print(result.shape)
+        >>> print(all(result[0,0,0] == result[0,0,1]))
+        MultiAgentConvNet(
+            (agent_networks): ModuleList(
+                (0-6): 7 x ConvNet(
+                (0): Conv2d(28, 32, kernel_size=(5, 5), stride=(2, 2))
+                (1): ELU(alpha=1.0)
+                (2): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (3): ELU(alpha=1.0)
+                (4): Conv2d(32, 32, kernel_size=(5, 5), stride=(2, 2))
+                (5): ELU(alpha=1.0)
+                (6): SquashDims()
+                )
+            )
+        )
+        torch.Size([3, 2, 7, 2592])
+        False
     """
     def __init__(self,
                  n_agents: int,
@@ -320,22 +397,15 @@ class MultiAgentConvNet(nn.Module):
         )
 
 
-    def forward(self, *inputs: Tuple[torch.Tensor]):
-        if len(inputs) > 1:
-            inputs = torch.cat([*inputs], -1)
-        else:
-            inputs = inputs[0]
-
+    def forward(self, inputs: torch.Tensor):
         assert len(inputs.shape) >= 4, \
 f"""Multi-agent network expects" (*batch_size, agent_index, x, y, channels)"""
         assert inputs.shape[-4] == self.n_agents, \
 f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}"""
         # If the model is centralized, agents have full observability
         if self.centralised:
-            shape = (*inputs.shape[:-4], inputs.shape[-3], inputs.shape[-2], self.n_agents * inputs.shape[-1])
+            shape = (*inputs.shape[:-4], self.n_agents * inputs.shape[-3], inputs.shape[-2], inputs.shape[-1])
             inputs = torch.reshape(inputs, shape)
-        # Conv2D expects (c, H, W)
-        inputs = torch.transpose(inputs, -1, -3)
 
         # If the parameters are not shared, each agent has its own network
         if not self.share_params:
