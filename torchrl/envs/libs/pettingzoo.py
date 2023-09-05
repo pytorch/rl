@@ -109,6 +109,8 @@ class PettingZooWrapper(_EnvWrapper):
         use_mask (bool, optional): whether the environment should output a ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
+        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+            them to categorical or one-hot.
         seed (int, optional): the seed. Defaults to ``None``.
 
     Examples:
@@ -150,6 +152,7 @@ class PettingZooWrapper(_EnvWrapper):
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
         use_mask: bool = False,
+        categorical_actions: bool = True,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -160,6 +163,7 @@ class PettingZooWrapper(_EnvWrapper):
         self.return_state = return_state
         self.seed = seed
         self.use_mask = use_mask
+        self.categorical_actions = categorical_actions
 
         super().__init__(**kwargs, allow_done_after_reset=True)
 
@@ -766,6 +770,8 @@ class PettingZooEnv(PettingZooWrapper):
         use_mask (bool, optional): whether the environment should output an ``"mask"``. This is compulsory in
             wrapped ``pettingzoo.AECEnv`` to mask out non-acting agents and should be also used
             for ``pettingzoo.ParallelEnv`` when the number of agents can vary. Defaults to ``False``.
+        categorical_actions (bool, optional): if the enviornments actions are discrete, whether to transform
+            them to categorical or one-hot.
         seed (int, optional): the seed.  Defaults to ``None``.
 
     Examples:
@@ -803,6 +809,7 @@ class PettingZooEnv(PettingZooWrapper):
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
         use_mask: bool = False,
+        categorical_actions: bool = True,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -816,7 +823,9 @@ class PettingZooEnv(PettingZooWrapper):
         kwargs["return_state"] = return_state
         kwargs["group_map"] = group_map
         kwargs["use_mask"] = use_mask
+        kwargs["categorical_actions"] = categorical_actions
         kwargs["seed"] = seed
+
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):
