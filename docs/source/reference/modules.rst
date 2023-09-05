@@ -401,6 +401,7 @@ Some distributions are typically used in RL scripts.
     TanhDelta
     OneHotCategorical
     MaskedCategorical
+    MaskedOneHotCategorical
 
 Utils
 -----
