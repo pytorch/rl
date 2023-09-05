@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
 from typing import Dict, Optional
 
 import torch
@@ -16,15 +17,11 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 
-IMPORT_ERR = None
-try:
+
+_has_smacv2 = importlib.util.find_spec("smacv2") is not None
+if _has_smacv2:
     import smacv2
     from smacv2.env.starcraft2.maps import smac_maps
-
-    _has_smacv2 = True
-except ImportError as err:
-    _has_smacv2 = False
-    IMPORT_ERR = err
 
 
 def _get_envs():
@@ -590,7 +587,7 @@ class SMACv2Env(SMACv2Wrapper):
             raise ImportError(
                 f"smacv2 python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
-            ) from IMPORT_ERR
+            )
         kwargs["map_name"] = map_name
         kwargs["capability_config"] = capability_config
         kwargs["seed"] = seed
