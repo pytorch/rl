@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+import typing
 from typing import Dict, Optional
 
 import torch
@@ -19,14 +20,16 @@ from torchrl.envs.common import _EnvWrapper
 
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
-if _has_smacv2:
+
+if typing.TYPE_CHECKING and _has_smacv2:
     import smacv2
-    from smacv2.env.starcraft2.maps import smac_maps
 
 
 def _get_envs():
     if not _has_smacv2:
         return []
+    from smacv2.env.starcraft2.maps import smac_maps
+
     return list(smac_maps.get_smac_map_registry().keys())
 
 
@@ -187,9 +190,13 @@ class SMACv2Wrapper(_EnvWrapper):
 
     @property
     def lib(self):
+        import smacv2
+
         return smacv2
 
     def _check_kwargs(self, kwargs: Dict):
+        import smacv2
+
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -416,27 +423,25 @@ class SMACv2Wrapper(_EnvWrapper):
 
         agent_info = self.agents[agent_index]
         if agent_info.unit_type == self.marine_id:
-            agent_type = "marine"
+            return "marine"
         elif agent_info.unit_type == self.marauder_id:
-            agent_type = "marauder"
+            return "marauder"
         elif agent_info.unit_type == self.medivac_id:
-            agent_type = "medivac"
+            return "medivac"
         elif agent_info.unit_type == self.hydralisk_id:
-            agent_type = "hydralisk"
+            return "hydralisk"
         elif agent_info.unit_type == self.zergling_id:
-            agent_type = "zergling"
+            return "zergling"
         elif agent_info.unit_type == self.baneling_id:
-            agent_type = "baneling"
+            return "baneling"
         elif agent_info.unit_type == self.stalker_id:
-            agent_type = "stalker"
+            return "stalker"
         elif agent_info.unit_type == self.colossus_id:
-            agent_type = "colossus"
+            return "colossus"
         elif agent_info.unit_type == self.zealot_id:
-            agent_type = "zealot"
+            return "zealot"
         else:
             raise AssertionError(f"Agent type {agent_info.unit_type} unidentified")
-
-        return agent_type
 
 
 class SMACv2Env(SMACv2Wrapper):
@@ -606,6 +611,7 @@ class SMACv2Env(SMACv2Wrapper):
         seed: Optional[int] = None,
         **kwargs,
     ) -> "smacv2.env.StarCraft2Env":
+        import smacv2
 
         if capability_config is not None:
             env = smacv2.env.StarCraftCapabilityEnvWrapper(
