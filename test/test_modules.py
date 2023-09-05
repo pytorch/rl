@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import time
 from numbers import Number
 
 import numpy as np
@@ -13,6 +14,17 @@ from mocking_classes import MockBatchedUnLockedEnv
 from packaging import version
 from tensordict import TensorDict
 from torch import nn
+from torchrl.data import exclude_private
+from torchrl.data.tensor_specs import (
+    DiscreteTensorSpec,
+    OneHotDiscreteTensorSpec,
+    NdBoundedTensorSpec,
+    CompositeSpec,
+    NdUnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec,
+)
+from torchrl.envs import EnvBase
+from torchrl.envs.graph_envs.deterministic import DeterministicGraphEnv
 from torchrl.data.tensor_specs import BoundedTensorSpec, CompositeSpec
 from torchrl.modules import (
     CEMPlanner,
@@ -43,6 +55,7 @@ from torchrl.modules.models.model_based import (
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
+from torchrl.modules.planners.mcts import _MCTSNode, MCTSPolicy
 
 
 @pytest.fixture
@@ -1024,6 +1037,330 @@ class TestDecisionTransformer:
         assert sig.shape == torch.Size([*batch_dims, T, 4])
         assert (dtactor.log_std_min < sig.log()).all()
         assert (dtactor.log_std_max > sig.log()).all()
+
+
+class TestMCTSNode:
+    class MockingMCTSEnv(DeterministicGraphEnv):
+        def __init__(self, n_obs=3, n_action=2):
+            self.observation_spec = CompositeSpec(
+                obs=NdUnboundedContinuousTensorSpec(n_obs)
+            )
+            self.input_spec = CompositeSpec(action=DiscreteTensorSpec(n_action))
+            self.reward_spec = UnboundedContinuousTensorSpec()
+            super().__init__()
+
+        def _step(self, tensordict):
+            action = tensordict["action"]
+            state = tensordict["obs"]
+            action_hash = self._hash_action(action)
+            tensordict = tensordict.clone(recurse=False)
+            children = tensordict.get(
+                "_children",
+                lambda: TensorDict({}, torch.Size([]), device=tensordict.device),
+            )
+            children[action_hash] = TensorDict(
+                {
+                    "obs": state + action + 1,
+                    "prev_done": torch.zeros(1, dtype=torch.bool),
+                    "prev_reward": torch.ones(1),
+                },
+                torch.Size([]),
+                device=tensordict.device,
+            )
+            # this is a no-op if the objects match -- TODO: update this once we have a set_default.
+            tensordict.update({"_children": children,})
+            return tensordict
+
+        def _reset(self, tensordict):
+            return TensorDict(
+                self.observation_spec.rand().update(
+                    {"prev_done": torch.zeros(1, dtype=torch.bool)}
+                ),
+                [],
+            )
+
+        def _hash_action(self, action: torch.Tensor) -> str:
+            return str(action)
+
+    @pytest.mark.parametrize("return_nested_env", [False, True])
+    def test_deterministic_graph_env(self, return_nested_env):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        tensordict = env.reset()
+        env.rand_step(tensordict)
+        assert "_children" in tensordict.keys()
+        rollout = env.rollout(max_steps=4, return_nested_env=return_nested_env)
+        if not return_nested_env:
+            assert rollout.shape == torch.Size([4])
+            assert {"done", "reward", "obs", "action", "prev_done"} == set(rollout.keys())
+        else:
+            for i in range(4):
+                rollout = rollout["_children"]
+                assert len(list(rollout.keys())) == 1
+                action_hash = list(rollout.keys())[0]
+                rollout = rollout[action_hash]
+
+    class _SplitModule(nn.Linear):
+        def forward(self, input):
+            y = super().forward(input)
+            return y[..., :-1], y[..., -1]
+
+    class MockingAgentNet(TensorDictModule):
+        def __init__(self, n_actions=2):
+            module = TestMCTSNode._SplitModule(3, n_actions + 1)
+            super().__init__(
+                module, in_keys=["obs"], out_keys=["action_log_prob", "state_value"]
+            )
+
+    def test_MCTSNode_init(self, n_actions=2):
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=None, parent=None, prev_action=None
+        )
+        state = TensorDict({"obs": torch.ones(2)}, [])
+        node = _MCTSNode(
+            state,
+            n_actions=n_actions,
+            env=None,
+            parent=root_node,
+            prev_action=n_actions - 1,
+        )
+        assert (node._child_visit_count == 0).all()
+        assert (node._child_total_value == 0).all()
+        assert (node._child_prior == 0).all()
+        assert (node._original_prior == 0).all()
+        assert node.visit_count == 0
+        assert node.total_value == 0
+        assert node.action_value == 0
+        assert (node.action_score == 0).all()
+
+    def test_MCTSNode_select_leaf(self, n_actions=2):
+        assert n_actions >= 2, "the test will not pass with a single action"
+        env = TestMCTSNode.MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        state = TensorDict({"obs": torch.ones(2)}, [])
+        node_last_action = _MCTSNode(
+            state,
+            n_actions=n_actions,
+            env=env,
+            parent=root_node,
+            prev_action=n_actions - 1,
+        )
+        selected_leaf = root_node.select_leaf()
+        assert selected_leaf is root_node
+        root_node.maybe_add_child(0)
+        selected_leaf = root_node.select_leaf()
+        assert selected_leaf is not root_node.children[0]
+        assert selected_leaf is not node_last_action
+        assert root_node.children[1] is node_last_action
+
+    def test_MCTSNode_incorporate_estimates(self, n_actions=2):
+        torch.manual_seed(0)
+        action_probs = torch.rand(n_actions)
+        value = torch.rand(1).item()
+        env = TestMCTSNode.MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)
+        root_node.incorporate_estimates(action_probs, value, up_to=root_node)
+        assert root_node.is_expanded
+        assert root_node.state["_is_expanded"]
+        assert (root_node.state["_original_prior"] == root_node._original_prior).all()
+        assert (root_node.state["_child_prior"] == root_node._child_prior).all()
+        assert (
+            root_node.state["_child_total_value"] == root_node._child_total_value
+        ).all()
+        assert (root_node._child_total_value == value).all()
+
+        # now with child
+        child_node = root_node.children[0]
+        child_node.incorporate_estimates(action_probs, value, up_to=child_node)
+        assert (child_node.state["_original_prior"] == child_node._original_prior).all()
+        assert (child_node.state["_child_prior"] == child_node._child_prior).all()
+        assert (
+            child_node.state["_child_total_value"] == child_node._child_total_value
+        ).all()
+        assert (child_node._child_total_value == value).all()
+        # the value of _child_total_value in parent has changed
+        assert (root_node._child_total_value != value).any()
+
+        child_node.maybe_add_child(1)
+        grand_child_node = child_node.children[1]
+        assert (root_node._child_total_value != value).any()
+        grand_child_node.incorporate_estimates(action_probs, value, up_to=root_node)
+        assert (
+            grand_child_node.state["_original_prior"]
+            == grand_child_node._original_prior
+        ).all()
+        assert (
+            grand_child_node.state["_child_prior"] == grand_child_node._child_prior
+        ).all()
+        assert (
+            grand_child_node.state["_child_total_value"]
+            == grand_child_node._child_total_value
+        ).all()
+        assert (grand_child_node._child_total_value == value).all()
+        assert root_node._child_total_value[0] == 3 * value
+        assert child_node._child_total_value[1] == 2 * value
+
+    def test_MCTSNode_recreate_tree(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)
+        child = root_node.children[0]
+        child.maybe_add_child(0)
+        grand_child = child.children[0]
+        grand_child.maybe_add_child(0)
+
+        root_node2 = _MCTSNode(
+            root_state.clone(recurse=False),
+            n_actions=n_actions,
+            env=env,
+            parent=None,
+            prev_action=None,
+        )
+        assert (root_node2.state == root_state).all()
+        assert root_node2.state["_depth"] == 0
+        assert "_children" in root_node2.state.keys()
+        assert "0" in root_node2.state["_children"].keys()
+        assert root_node2.state["_children", "0", "_depth"] == 1
+        assert "_children" in root_node2.state["_children", "0"].keys()
+        assert "0" in root_node2.state["_children", "0", "_children"].keys()
+        assert root_node2.state["_children", "0", "_children", "0", "_depth"] == 2
+        assert (
+            "_children" in root_node2.state["_children", "0", "_children", "0"].keys()
+        )
+        assert (
+            "0"
+            in root_node2.state["_children", "0", "_children", "0", "_children"].keys()
+        )
+        assert (
+            root_node2.state[
+                "_children", "0", "_children", "0", "_children", "0", "_depth"
+            ]
+            == 3
+        )
+
+        # check that depths are changed accordingly
+        pseudo_node3 = _MCTSNode(
+            root_node.children[0].state.to_tensordict(),
+            n_actions=n_actions,
+            env=env,
+            parent=None,
+            prev_action=None,
+        )
+        assert pseudo_node3.state["_depth"] == 0
+
+        assert "_children" in pseudo_node3.state.keys()
+        assert "0" in pseudo_node3.state["_children"].keys()
+        assert pseudo_node3.state["_children", "0", "_depth"] == 1
+
+        assert "_children" in pseudo_node3.state["_children", "0"].keys()
+        assert "0" in pseudo_node3.state["_children", "0", "_children"].keys()
+        assert pseudo_node3.state["_children", "0", "_children", "0", "_depth"] == 2
+
+        # since depths differ, the tensordict should not be equal anymore
+        assert (pseudo_node3.state != root_state["_children", "0"]).any()
+
+    def test_MCTSNode_return(self, n_actions=2):
+        REWARD = 1.0
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        root_state = TensorDict({"obs": torch.zeros(2)}, [])
+        root_node = _MCTSNode(
+            root_state, n_actions=n_actions, env=env, parent=None, prev_action=None
+        )
+        root_node.maybe_add_child(0)  # r=1
+        child = root_node.children[0]
+        child.maybe_add_child(0)  # r=1
+        grand_child = child.children[0]
+        grand_child.maybe_add_child(0)  # r=1
+        grand_grand_child = grand_child.children[0]
+
+        value = grand_grand_child.get_return(discount=0.95)
+        assert value == REWARD + 0.95 * (REWARD + 0.95 * REWARD)
+        grand_grand_child.backup_value(value, root_node)
+        assert root_node.total_value == REWARD + 0.95 * (REWARD + 0.95 * REWARD)
+
+    def test_MCTSNode_policy_root_and_tensordict_differ(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        assert not policy._root_and_tensordict_differ(root, root_state1)
+        root_state2 = env.reset()
+        _ = policy._get_root(root_state2)
+        assert not (root_state2 == root_state1).all()
+        assert policy._root_and_tensordict_differ(root, root_state2)
+
+    def test_MCTSNode_policy_reset_root(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        policy._root = root
+        assert policy._reset_root(root_state1) is root
+        root_state2 = env.reset()
+        assert policy._reset_root(root_state2) is not root
+        policy._root = None
+        assert policy._reset_root(root_state2) is not root
+
+    def test_MCTSNode_policy_treesearch(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(TestMCTSNode.MockingAgentNet(n_actions), env)
+        root_state1 = env.reset()
+        root = policy._get_root(root_state1)
+        policy._root = root
+        leaves = policy._tree_search()
+        assert all(leaf.is_expanded for leaf in leaves)
+        # check that leaves have no children
+        assert all([not leaf.children for leaf in leaves])
+
+    def test_MCTSNode_policy_total(self, n_actions=2):
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(
+            TestMCTSNode.MockingAgentNet(n_actions), env, simulations_per_move=40
+        )
+        root_state = env.reset()
+
+        t0 = time.time()
+        state = root_state
+        states = []
+        for _ in range(5):
+            # policy step:
+            state = policy(state)
+            # env step has already been done, we just move one step further in the tree
+            states.append(exclude_private(state).clone())
+            state = state["_children", str(state["action"].item())]
+        states = torch.stack(states, 0).contiguous()
+        assert (state["obs"] > 4).all()
+        print(time.time() - t0)
+
+        # rollout
+        # TODO: make sure that step_mdp re-uses the cached values
+        # (and check that things match)
+        torch.manual_seed(0)
+        env = TestMCTSNode.MockingMCTSEnv()
+        policy = MCTSPolicy(
+            TestMCTSNode.MockingAgentNet(n_actions), env, simulations_per_move=40
+        )
+        rollout = env.rollout(5, policy)
+        assert (rollout["obs"] == states["obs"]).all()
+        assert (rollout["action"] == states["action"]).all()
+        # assert (rollout["action_score"] == states["action_score"]).all()
 
 
 if __name__ == "__main__":

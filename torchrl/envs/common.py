@@ -23,7 +23,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import _check_only_one_entry, DEVICE_TYPING
+from torchrl.data.utils import _check_only_one_entry, DEVICE_TYPING, exclude_private
 from torchrl.envs.utils import (
     _replace_last,
     DONE_AFTER_RESET_ERROR,
@@ -1420,11 +1420,13 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         break_when_any_done: bool = True,
         return_contiguous: bool = True,
         tensordict: Optional[TensorDictBase] = None,
+        exclude_private_keys: Optional[bool] = True,
     ):
         """Executes a rollout in the environment.
 
         The function will stop as soon as one of the contained environments
-        returns done=True.
+        returns :obj:`tensordict.get("done") == True`
+        (unless :obj:`break_when_any_done` is turned off).
 
         Args:
             max_steps (int): maximum number of steps to be executed. The actual number of steps can be smaller if
@@ -1443,6 +1445,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             return_contiguous (bool): if False, a LazyStackedTensorDict will be returned. Default is True.
             tensordict (TensorDict, optional): if auto_reset is False, an initial
                 tensordict must be provided.
+            exclude_private_keys (bool, optional): if True, keys with a :obj:`"_"` prefix
+                are removed from the output. Default: :obj:`True`.
 
         Returns:
             TensorDict object containing the resulting trajectory.
@@ -1567,9 +1571,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = policy(tensordict)
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
-            tensordict = self.step(tensordict)
-
-            tensordicts.append(tensordict.clone(False))
+                tensordict = self.step(tensordict)
+                if exclude_private_keys:
+                    tensordicts.append(exclude_private(tensordict))
+                else:
+                    tensordicts.append(tensordict.clone(False))
 
             any_done = False
             _reset_map = {}
