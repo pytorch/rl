@@ -382,13 +382,11 @@ class SMACv2Wrapper(_EnvWrapper):
 
         tensordict_out = TensorDict(
             source={
-                "next": {
-                    "agents": agents_td,
-                    "state": state,
-                    "info": info,
-                    "reward": reward,
-                    "done": done,
-                }
+                "agents": agents_td,
+                "state": state,
+                "info": info,
+                "reward": reward,
+                "done": done,
             },
             batch_size=(),
             device=self.device,
@@ -614,9 +612,12 @@ class SMACv2Env(SMACv2Wrapper):
 
         if capability_config is not None:
             env = smacv2.env.StarCraftCapabilityEnvWrapper(
-                capability_config=capability_config, map_name=map_name, seed=seed
+                capability_config=capability_config,
+                map_name=map_name,
+                seed=seed,
+                **kwargs,
             )
         else:
-            env = smacv2.env.StarCraft2Env(map_name=map_name, seed=seed)
+            env = smacv2.env.StarCraft2Env(map_name=map_name, seed=seed, **kwargs)
 
         return super()._build_env(env)
