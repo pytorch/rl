@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib
 
+from envs import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
@@ -1682,12 +1683,17 @@ class TestSmacv2:
         check_env_specs(env, seed=None)
         env.close()
 
-    def test_vec_env(self):
-        env = ParallelEnv(
-            num_workers=2,
-            create_env_fn=lambda: SMACv2Env(
-                map_name="3s_vs_5z",
-                seed=0,
+    def test_parallel_env(self):
+        env = TransformedEnv(
+            ParallelEnv(
+                num_workers=2,
+                create_env_fn=lambda: SMACv2Env(
+                    map_name="3s_vs_5z",
+                    seed=0,
+                ),
+            ),
+            ActionMask(
+                action_key=("agents", "action"), mask_key=("agents", "action_mask")
             ),
         )
         check_env_specs(env, seed=None)

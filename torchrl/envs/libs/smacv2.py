@@ -3,10 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+import re
 import typing
 from typing import Dict, Optional
 
 import torch
+
+from envs.utils import ACTION_MASK_ERROR
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
@@ -231,7 +234,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _init_env(self) -> None:
         self._env.reset()
-        self.update_action_mask()
+        self._update_action_mask()
 
     def _make_action_spec(self) -> CompositeSpec:
         if self.categorical_actions:
@@ -341,7 +344,7 @@ class SMACv2Wrapper(_EnvWrapper):
         state = self._to_tensor(state)
         info = self.observation_spec["info"].zero()
 
-        mask = self.update_action_mask()
+        mask = self._update_action_mask()
 
         # build results
         agents_td = TensorDict(
@@ -361,7 +364,13 @@ class SMACv2Wrapper(_EnvWrapper):
         action_np = self.action_spec.to_numpy(action)
 
         # Actions are validated by the environment.
-        reward, done, info = self._env.step(action_np)
+        try:
+            reward, done, info = self._env.step(action_np)
+        except AssertionError as err:
+            if re.match(r"Agent . cannot perform action .", str(err)):
+                raise ACTION_MASK_ERROR
+            else:
+                raise err
 
         # collect outputs
         obs = self.get_obs()
@@ -377,7 +386,7 @@ class SMACv2Wrapper(_EnvWrapper):
         ).unsqueeze(-1)
         done = torch.tensor(done, device=self.device, dtype=torch.bool).unsqueeze(-1)
 
-        mask = self.update_action_mask()
+        mask = self._update_action_mask()
 
         # build results
         agents_td = TensorDict(
@@ -398,7 +407,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def update_action_mask(self):
+    def _update_action_mask(self):
         mask = torch.tensor(
             self.get_avail_actions(), dtype=torch.bool, device=self.device
         )
