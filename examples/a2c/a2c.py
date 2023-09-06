@@ -8,7 +8,7 @@ This is a self-contained example of a A2C training script.
 
 Both state and pixel-based environments are supported.
 
-The helper functions are coded in the utils_atari.py associated with this script.
+The helper functions are coded in the utils.py associated with this script.
 """
 import hydra
 

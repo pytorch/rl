@@ -5,7 +5,7 @@ We provide examples to train the following algorithms:
 - [DDPG](ddpg/ddpg.py)
 - [SAC](sac/sac.py)
 - [REDQ](redq/redq.py)
-- [PPO](ppo/ppo_atari.py)
+- [PPO](ppo/ppo.py)
 
 To run these examples, make sure you have installed hydra:
 ```

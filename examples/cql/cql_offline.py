@@ -6,7 +6,7 @@
 
 This is a self-contained example of an offline CQL training script.
 
-The helper functions are coded in the utils_atari.py associated with this script.
+The helper functions are coded in the utils.py associated with this script.
 
 """
 
