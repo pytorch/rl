@@ -27,10 +27,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = "cpu" if not torch.cuda.is_available() else "cuda"
 
     # Correct for frame_skip
-    total_frames = cfg.collector.total_frames // cfg.env.frame_skip
-    frames_per_batch = cfg.collector.frames_per_batch // cfg.env.frame_skip
-    mini_batch_size = cfg.loss.mini_batch_size // cfg.env.frame_skip
-    test_interval = cfg.logger.test_interval // cfg.env.frame_skip
+    frame_skip = 4
+    total_frames = cfg.collector.total_frames // frame_skip
+    frames_per_batch = cfg.collector.frames_per_batch // frame_skip
+    mini_batch_size = cfg.loss.mini_batch_size // frame_skip
+    test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
@@ -66,7 +67,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         value_network=critic,
         average_gae=False,
     )
-    loss_module, loss_module = ClipPPOLoss(
+    loss_module = ClipPPOLoss(
         actor=actor,
         critic=critic,
         clip_epsilon=cfg.loss.clip_epsilon,
@@ -87,7 +88,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create logger
     exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
     logger = get_logger(
-        cfg.logger.logger_backend, logger_name="ppo", experiment_name=exp_name
+        cfg.logger.backend, logger_name="ppo", experiment_name=exp_name
     )
 
     # Create test environment

@@ -5,7 +5,7 @@ results from Schulman et al. 2017 for the on MuJoCo Environments.
 import hydra
 
 
-@hydra.main(config_path=".", config_name="config", version_base="1.1")
+@hydra.main(config_path=".", config_name="config_mujoco", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
