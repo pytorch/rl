@@ -120,13 +120,13 @@ def vtrace_correction(
     acc = 0
     v_out = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
     gnotdone = gamma * not_done
-    import ipdb; ipdb.set_trace()  # TODO: Review!
+    # TODO: Review!
     for t in reversed(range(time_steps)):
-        import ipdb; ipdb.set_trace()  # TODO: Review!
-        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * cs[t])
+        # TODO: Review!
+        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * cs[..., t, :])
         v_out[..., t, :].copy_(acc + state_value[..., t, :])
 
-    advantage = rho * (reward + gamma * v_out - state_value) # TODO: Review!
+    advantage = rho * (reward + gamma * v_out - state_value)  # TODO: Review!
 
     return advantage, v_out
 
@@ -322,15 +322,15 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+        # TODO: raise ValueError if log_mu is not present
+        log_mu = tensordict.get("sample_log_prob")
+
         # Make sure we have the new log prob and the old log prob
         if self.actor_network is not None:
-            import ipdb; ipdb.set_trace()
-            raise NotImplementedError
+            # TODO: review
+            log_pi = self.actor_network(tensordict.select(self.actor_network.in_keys)).get("sample_log_prob")  # old / distributed log prob
         else:
-            # log_pi = tensordict.get(self.tensor_keys.log_pi)  # new / local log prob
-            log_pi = tensordict.get("sample_log_prob")
-            # log_mu = tensordict.get(self.tensor_keys.log_mu)  # old / distributed log prob
-            log_mu = tensordict.get("sample_log_prob")
+            log_pi = tensordict.get("sample_log_prob")  # new / local log prob # TODO: Review!
 
         done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:

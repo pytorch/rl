@@ -74,7 +74,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     vtrace_module = VTrace(
         gamma=cfg.loss.gamma,
         value_network=critic,
-        # actor_network=actor,
+        actor_network=actor,
         average_gae=False,
     )
     loss_module = ClipPPOLoss(
@@ -135,7 +135,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             # Compute VTrace
             with torch.no_grad():
-                import ipdb; ipdb.set_trace()
                 data = vtrace_module(data)
             data_reshape = data.reshape(-1)
 
