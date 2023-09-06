@@ -90,19 +90,23 @@ class EGreedyModule(TensorDictModuleBase):
         action_mask_key: Optional[NestedKey] = None,
         spec: Optional[TensorSpec] = None,
     ):
+        self.action_key = action_key
+        self.action_mask_key = action_mask_key
+        in_keys = [self.action_key]
+        if self.action_mask_key is not None:
+            in_keys.append(self.action_mask_key)
+        self.in_keys = in_keys
+        self.out_keys = [self.action_key]
+
+        super().__init__()
+
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
         if self.eps_end > self.eps_init:
             raise RuntimeError("eps should decrease over time or be constant")
         self.annealing_num_steps = annealing_num_steps
         self.register_buffer("eps", torch.tensor([eps_init]))
-        self.action_key = action_key
-        self.action_mask_key = action_mask_key
-        in_keys = [action_key]
-        if self.action_mask_key is not None:
-            in_keys.append(self.action_mask_key)
-        self.in_keys = in_keys
-        self.out_keys = [self.action_key]
+
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
                 spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
