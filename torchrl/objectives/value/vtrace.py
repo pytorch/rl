@@ -38,13 +38,13 @@ def _dv_val(
     vals: torch.Tensor,
     next_vals: torch.Tensor,
     gamma: Union[float, torch.Tensor],
-    rho_bar: Union[float, torch.Tensor],
+    rho_thresh: Union[float, torch.Tensor],
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    rho = _c_val(log_pi, log_mu, rho_bar)
-    deltas = rho * (rewards + gamma * next_vals - vals)
-    return deltas, rho
+    clipped_rho = _c_val(log_pi, log_mu, rho_thresh)
+    deltas = clipped_rho * (rewards + gamma * next_vals - vals)
+    return deltas, clipped_rho
 
 
 def _vtrace(
@@ -100,8 +100,8 @@ def vtrace_correction(
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
-        rho_bar (Union[float, Tensor]): clipping parameter for importance weights.
-        c_bar (Union[float, Tensor]): clipping parameter for importance weights.
+        rho_thresh (Union[float, Tensor]): clipping parameter for importance weights.
+        c_thresh (Union[float, Tensor]): clipping parameter for importance weights.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -116,24 +116,28 @@ def vtrace_correction(
     device = state_value.device
 
     delta, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
-    torch.clamp(torch.exp(log_rhos), max=clip_c_thres)
+    clipped_c = _c_val(log_pi, log_mu, c_thresh)
 
-    clipped_cs = _c_val(log_pi, log_mu, c_thresh)
+    ############################################################
+    # FIX THIS PART!
 
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
     acc = 0
     v_out = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
-    gnotdone = gamma * not_done
-    # TODO: Review!
+
+    discounts = gamma * not_done  # TODO: Review!
     for t in reversed(range(time_steps)):
         # TODO: Review!
-        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * cs[..., t, :])
+        acc = delta[..., t, :] + (discounts[..., t, :] * acc * clipped_c[..., t, :])
+        v_out.append(acc)
 
+    v_out[..., t, :].copy_(acc + state_value[..., t, :])
 
-        v_out[..., t, :].copy_(acc + state_value[..., t, :])
+    # FIX THIS PART!
+    ############################################################
 
-    advantage = rho * (reward + gamma * v_out - state_value)  # TODO: Review!
+    advantage = clipped_rho * (reward + gamma * v_out - state_value)
 
     return advantage, v_out
 
@@ -349,8 +353,6 @@ class VTrace(ValueEstimatorBase):
             c_bar=self.c_bar,
             time_dim=tensordict.ndim - 1,
         )
-
-        # TODO: where are returns computed?
 
         if self.average_adv:
             loc = adv.mean()
