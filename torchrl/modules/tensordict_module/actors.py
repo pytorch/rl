@@ -327,6 +327,8 @@ class QValueModule(TensorDictModuleBase):
             conditions the action_space.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
         out_keys (list of str or tuple of str, optional): The output keys
             representing the actions, action values and chosen action value.
             Defaults to ``["action", "action_value", "chosen_action_value"]``.
@@ -378,6 +380,7 @@ class QValueModule(TensorDictModuleBase):
         self,
         action_space: Optional[str],
         action_value_key: Optional[NestedKey] = None,
+        action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         var_nums: Optional[int] = None,
         spec: Optional[TensorSpec] = None,
@@ -408,6 +411,9 @@ class QValueModule(TensorDictModuleBase):
         if action_value_key is None:
             action_value_key = "action_value"
         self.in_keys = [action_value_key]
+        self.action_mask_key = action_mask_key
+        if self.action_mask_key is not None:
+            self.in_keys.append(self.action_mask_key)
         if out_keys is None:
             out_keys = ["action", action_value_key, "chosen_action_value"]
         elif action_value_key not in out_keys:
@@ -446,6 +452,13 @@ class QValueModule(TensorDictModuleBase):
             raise KeyError(
                 f"Action value key {self.action_value_key} not found in {tensordict}."
             )
+        if self.action_mask_key is not None:
+            action_mask = tensordict.get(self.action_mask_key, None)
+            if action_mask is None:
+                raise KeyError(
+                    f"Action mask key {self.action_mask_key} not found in {tensordict}."
+                )
+            action_values[action_mask] = torch.finfo(action_values.dtype).min
 
         action = self.action_func_mapping[self.action_space](action_values)
 
@@ -528,6 +541,8 @@ class DistributionalQValueModule(QValueModule):
         support (torch.Tensor): support of the action values.
         action_value_key (str or tuple of str, optional): The input key
             representing the action value. Defaults to ``"action_value"``.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
         out_keys (list of str or tuple of str, optional): The output keys
             representing the actions and action values.
             Defaults to ``["action", "action_value"]``.
@@ -583,6 +598,7 @@ class DistributionalQValueModule(QValueModule):
         action_space: Optional[str],
         support: torch.Tensor,
         action_value_key: Optional[NestedKey] = None,
+        action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         var_nums: Optional[int] = None,
         spec: TensorSpec = None,
@@ -595,6 +611,7 @@ class DistributionalQValueModule(QValueModule):
         super().__init__(
             action_space=action_space,
             action_value_key=action_value_key,
+            action_mask_key=action_mask_key,
             out_keys=out_keys,
             var_nums=var_nums,
             spec=spec,
@@ -609,6 +626,13 @@ class DistributionalQValueModule(QValueModule):
             raise KeyError(
                 f"Action value key {self.action_value_key} not found in {tensordict}."
             )
+        if self.action_mask_key is not None:
+            action_mask = tensordict.get(self.action_mask_key, None)
+            if action_mask is None:
+                raise KeyError(
+                    f"Action mask key {self.action_mask_key} not found in {tensordict}."
+                )
+            action_values[action_mask] = torch.finfo(action_values.dtype).min
 
         action = self.action_func_mapping[self.action_space](action_values)
 
@@ -698,6 +722,8 @@ class QValueHook:
         action_value_key (str or tuple of str, optional): to be used when hooked on
             a TensorDictModule. The input key representing the action value. Defaults
             to ``"action_value"``.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
         out_keys (list of str or tuple of str, optional): to be used when hooked on
             a TensorDictModule. The output keys representing the actions, action values
             and chosen action value. Defaults to ``["action", "action_value", "chosen_action_value"]``.
@@ -733,6 +759,7 @@ class QValueHook:
         action_space: str,
         var_nums: Optional[int] = None,
         action_value_key: Optional[NestedKey] = None,
+        action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
@@ -747,6 +774,7 @@ class QValueHook:
             action_space=action_space,
             var_nums=var_nums,
             action_value_key=action_value_key,
+            action_mask_key=action_mask_key,
             out_keys=out_keys,
         )
         action_value_key = self.qvalue_model.in_keys[0]
@@ -776,6 +804,11 @@ class DistributionalQValueHook(QValueHook):
     Args:
         action_space (str): Action space. Must be one of
             ``"one-hot"``, ``"mult-one-hot"``, ``"binary"`` or ``"categorical"``.
+        action_value_key (str or tuple of str, optional): to be used when hooked on
+            a TensorDictModule. The input key representing the action value. Defaults
+            to ``"action_value"``.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
         support (torch.Tensor): support of the action values.
         var_nums (int, optional): if ``action_space = "mult-one-hot"``, this
             value represents the cardinality of each
@@ -823,6 +856,7 @@ class DistributionalQValueHook(QValueHook):
         support: torch.Tensor,
         var_nums: Optional[int] = None,
         action_value_key: Optional[NestedKey] = None,
+        action_mask_key: Optional[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         if isinstance(action_space, TensorSpec):
@@ -837,6 +871,7 @@ class DistributionalQValueHook(QValueHook):
             var_nums=var_nums,
             support=support,
             action_value_key=action_value_key,
+            action_mask_key=action_mask_key,
             out_keys=out_keys,
         )
         action_value_key = self.qvalue_model.in_keys[0]
@@ -884,6 +919,8 @@ class QValueActor(SafeSequential):
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
             the name of the action-value entry in the output tensordict.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
 
     .. note::
         ``out_keys`` cannot be passed. If the module is a :class:`tensordict.nn.TensorDictModule`
@@ -942,6 +979,7 @@ class QValueActor(SafeSequential):
         safe=False,
         action_space: Optional[str] = None,
         action_value_key=None,
+        action_mask_key: Optional[NestedKey] = None,
     ):
         if isinstance(action_space, TensorSpec):
             warnings.warn(
@@ -987,6 +1025,7 @@ class QValueActor(SafeSequential):
             spec=spec,
             safe=safe,
             action_space=action_space,
+            action_mask_key=action_mask_key,
         )
 
         super().__init__(module, qvalue)
@@ -1035,6 +1074,12 @@ class DistributionalQValueActor(QValueActor):
         make_log_softmax (bool, optional): if ``True`` and if the module is not
             of type :class:`torchrl.modules.DistributionalDQNnet`, a log-softmax
             operation will be applied along dimension -2 of the action value tensor.
+        action_value_key (str or tuple of str, optional): if the input module
+            is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
+            match one of its output keys. Otherwise, this string represents
+            the name of the action-value entry in the output tensordict.
+        action_mask_key (str or tuple of str, optional): The input key
+            representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
 
     Examples:
         >>> import torch
@@ -1079,6 +1124,7 @@ class DistributionalQValueActor(QValueActor):
         var_nums: Optional[int] = None,
         action_space: Optional[str] = None,
         action_value_key: str = "action_value",
+        action_mask_key: Optional[NestedKey] = None,
         make_log_softmax: bool = True,
     ):
         if isinstance(action_space, TensorSpec):
@@ -1121,6 +1167,7 @@ class DistributionalQValueActor(QValueActor):
             spec=spec,
             safe=safe,
             action_space=action_space,
+            action_mask_key=action_mask_key,
             support=support,
             var_nums=var_nums,
         )
