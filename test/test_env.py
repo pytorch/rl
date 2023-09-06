@@ -38,7 +38,7 @@ from mocking_classes import (
     HeteroCountingEnvPolicy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
-    MockSerialEnv,
+    MockSerialEnv, MockingSparseEnv,
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
@@ -2157,6 +2157,33 @@ def test_mocking_envs(envclass):
     _ = env.rand_step(reset)
     check_env_specs(env, seed=100, return_contiguous=False)
 
+class TestParialEnvs:
+    class Policy:
+        def __call__(self, tensordict):
+            even = tensordict.get("even", None)
+            if even is None:
+                tensordict.set("action_even", [1])
+            else:
+                tensordict.set("action_odd", [1])
+            return tensordict
+
+    def test_regular(self):
+        env = MockingSparseEnv()
+        print(env.rollout(3))  # partial obs will be lost
+        print(env.rollout(3, return_contiguous=False))  # partial obs are kept but hard to access
+        t_env = TransformedEnv(env, FillPartial())
+        print(t_env.rollout(3))  # partial obs will be filled with 0 if not present
+
+    def test_parallel(self):
+        env = ParallelEnv(2, MockingSparseEnv)
+        r = env.rollout(10)
+        print(r)
+        print("even", r["even"].bool())
+        print("odd", r["odd"].bool())
+        assert (r["even"].bool() ^ r["odd"].bool()).all()
+        print("even", r["next", "even"].bool())
+        print("odd", r["next", "odd"].bool())
+        assert (r["next", "even"].bool() ^ r["next", "odd"].bool()).all()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
