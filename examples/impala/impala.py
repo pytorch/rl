@@ -74,7 +74,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     vtrace_module = VTrace(
         gamma=cfg.loss.gamma,
         value_network=critic,
-        actor_network=actor,
+        # actor_network=actor,
         average_gae=False,
     )
     loss_module = ClipPPOLoss(
