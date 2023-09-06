@@ -32,14 +32,13 @@ def _c_val(
 
 def _dv_val(
     rewards: torch.Tensor,
-    vals: torch.Tensor,
+    next_vals: torch.Tensor,
     gamma: Union[float, torch.Tensor],
     rho_bar: Union[float, torch.Tensor],
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     rho = _c_val(log_pi, log_mu, rho_bar)
-    next_vals = torch.cat([vals[:, 1:], torch.zeros_like(vals[:, :1])], 1)
     deltas = rho * (rewards + gamma * next_vals - vals)
     return deltas, rho
 
@@ -74,11 +73,14 @@ def _vtrace(
 @_transpose_time
 def vtrace_correction(
         gamma: float,
-        lmbda: float,
+        log_pi: torch.Tensor,
+        log_mu: torch.Tensor,
         state_value: torch.Tensor,
         next_state_value: torch.Tensor,
         reward: torch.Tensor,
         done: torch.Tensor,
+        rho_bar: Union[float, torch.Tensor] = 1.0,
+        c_bar: Union[float, torch.Tensor] = 1.0,
         time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """V-Trace off-policy correction method.
@@ -88,7 +90,6 @@ def vtrace_correction(
 
     Args:
         gamma (scalar): exponential mean discount.
-        lmbda (scalar): trajectory discount.
         log_pi (Tensor): log probability of taking actions in the environment.
         log_mu (Tensor): log probability of taking actions in the environment.
         state_value (Tensor): value function result with old_state input.
@@ -108,20 +109,23 @@ def vtrace_correction(
     dtype = next_state_value.dtype
     device = state_value.device
 
+    import ipdb; ipdb.set_trace()
+    delta, rho = _dv_val(reward, next_state_value, gamma, rho_bar, log_pi, log_mu)
+    c = _c_val(log_pi, log_mu, c_bar)
+
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
-    advantage = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
-
-    prev_advantage = 0
+    acc = 0
+    v_out = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
     gnotdone = gamma * not_done
-    delta = reward + (gnotdone * next_state_value) - state_value
-    discount = lmbda * gnotdone
     for t in reversed(range(time_steps)):
-        prev_advantage = advantage[..., t, :] = delta[..., t, :] + (prev_advantage * discount[..., t, :])
+        import ipdb; ipdb.set_trace()  # TODO: Review!
+        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * c)
+        v_out[..., t, :].copy_(acc + state_value[..., t, :])
 
-    value_target = advantage + state_value
+    advantage = rho * (reward + gamma * v_out - state_value) # TODO: Review!
 
-    return advantage, value_target
+    return advantage, v_out
 
 
 class VTrace(ValueEstimatorBase):
@@ -132,7 +136,6 @@ class VTrace(ValueEstimatorBase):
 
     Args:
         gamma (scalar): exponential mean discount.
-        lmbda (scalar): trajectory discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
         average_gae (bool): if ``True``, the resulting GAE values will be standardized.
             Default is ``False``.
@@ -186,9 +189,9 @@ class VTrace(ValueEstimatorBase):
             self,
             *,
             gamma: Union[float, torch.Tensor],
-            lmbda: float,
             rho_bar: Union[float, torch.Tensor] = 1.0,
             c_bar: Union[float, torch.Tensor] = 1.0,
+            actor_network: TensorDictModule = None,
             value_network: TensorDictModule,
             average_gae: bool = False,
             differentiable: bool = False,
@@ -213,11 +216,11 @@ class VTrace(ValueEstimatorBase):
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.register_buffer("lmbda", torch.tensor(lmbda, device=device))
         self.register_buffer("rho_bar", torch.tensor(rho_bar, device=device))
         self.register_buffer("c_bar", torch.tensor(c_bar, device=device))
         self.average_gae = average_gae
         self.vectorized = vectorized
+        self.actor_network = actor_network
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -255,7 +258,6 @@ class VTrace(ValueEstimatorBase):
             ... )
             >>> module = VTrace(
             ...     gamma=0.98,
-            ...     lmbda=0.94,
             ...     value_network=value_net,
             ...     differentiable=False,
             ... )
@@ -274,7 +276,6 @@ class VTrace(ValueEstimatorBase):
             ... )
             >>> module = VTrace(
             ...     gamma=0.98,
-            ...     lmbda=0.94,
             ...     value_network=value_net,
             ...     differentiable=False,
             ... )
@@ -291,11 +292,12 @@ class VTrace(ValueEstimatorBase):
             )
         reward = tensordict.get(("next", self.tensor_keys.reward))
         device = reward.device
-        gamma, lmbda = self.gamma.to(device), self.lmbda.to(device)
+        gamma = self.gamma.to(device)
         steps_to_next_obs = tensordict.get(self.tensor_keys.steps_to_next_obs, None)
         if steps_to_next_obs is not None:
             gamma = gamma ** steps_to_next_obs.view_as(reward)
 
+        # Make sure we have the value and next value
         if self.value_network is not None:
             if params is not None:
                 params = params.detach()
@@ -317,17 +319,29 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
+        # Make sure we have the new log prob and the old log prob
+        if self.actor_network is not None:
+            import ipdb; ipdb.set_trace()
+            raise NotImplementedError
+        else:
+            import ipdb; ipdb.set_trace()
+            log_pi = tensordict.get(self.tensor_keys.log_pi)  # new / local log prob
+            log_mu = tensordict.get(self.tensor_keys.log_mu)  # old / distributed log prob
+
         done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:
             raise NotImplementedError
         else:
             adv, value_target = vtrace_correction(
                 gamma,
-                lmbda,
+                log_pi,
+                log_mu,
                 value,
                 next_value,
                 reward,
                 done,
+                rho_bar=self.rho_bar,
+                c_bar=self.c_bar,
                 time_dim=tensordict.ndim - 1,
             )
 
