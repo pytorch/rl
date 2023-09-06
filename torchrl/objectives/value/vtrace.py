@@ -27,11 +27,12 @@ def _c_val(
     log_mu: torch.Tensor,
     c: Union[float, torch.Tensor] = 1,
 ) -> torch.Tensor:
-    return (log_pi - log_mu).clamp_max(math.log(c)).exp()
+    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)
 
 
 def _dv_val(
     rewards: torch.Tensor,
+    vals: torch.Tensor,
     next_vals: torch.Tensor,
     gamma: Union[float, torch.Tensor],
     rho_bar: Union[float, torch.Tensor],
@@ -70,7 +71,7 @@ def _vtrace(
     v_out = torch.stack(list(reversed(v_out)), 1)  # values
     return v_out, rho
 
-@_transpose_time
+# @_transpose_time
 def vtrace_correction(
         gamma: float,
         log_pi: torch.Tensor,
@@ -104,23 +105,25 @@ def vtrace_correction(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
+
     if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
         raise RuntimeError(SHAPE_ERR)
+
     dtype = next_state_value.dtype
     device = state_value.device
 
-    import ipdb; ipdb.set_trace()
-    delta, rho = _dv_val(reward, next_state_value, gamma, rho_bar, log_pi, log_mu)
-    c = _c_val(log_pi, log_mu, c_bar)
+    delta, rho = _dv_val(reward, state_value, next_state_value, gamma, rho_bar, log_pi, log_mu)
+    cs = _c_val(log_pi, log_mu, c_bar)
 
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
     acc = 0
     v_out = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
     gnotdone = gamma * not_done
+    import ipdb; ipdb.set_trace()  # TODO: Review!
     for t in reversed(range(time_steps)):
         import ipdb; ipdb.set_trace()  # TODO: Review!
-        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * c)
+        acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * cs[t])
         v_out[..., t, :].copy_(acc + state_value[..., t, :])
 
     advantage = rho * (reward + gamma * v_out - state_value) # TODO: Review!
@@ -195,7 +198,7 @@ class VTrace(ValueEstimatorBase):
             value_network: TensorDictModule,
             average_gae: bool = False,
             differentiable: bool = False,
-            vectorized: bool = True,
+            vectorized: bool = False,  # TODO: Review!
             skip_existing: Optional[bool] = None,
             advantage_key: NestedKey = None,
             value_target_key: NestedKey = None,
@@ -324,9 +327,10 @@ class VTrace(ValueEstimatorBase):
             import ipdb; ipdb.set_trace()
             raise NotImplementedError
         else:
-            import ipdb; ipdb.set_trace()
-            log_pi = tensordict.get(self.tensor_keys.log_pi)  # new / local log prob
-            log_mu = tensordict.get(self.tensor_keys.log_mu)  # old / distributed log prob
+            # log_pi = tensordict.get(self.tensor_keys.log_pi)  # new / local log prob
+            log_pi = tensordict.get("sample_log_prob")
+            # log_mu = tensordict.get(self.tensor_keys.log_mu)  # old / distributed log prob
+            log_mu = tensordict.get("sample_log_prob")
 
         done = tensordict.get(("next", self.tensor_keys.done))
         if self.vectorized:
