@@ -410,10 +410,11 @@ class QValueModule(TensorDictModuleBase):
             )
         if action_value_key is None:
             action_value_key = "action_value"
-        self.in_keys = [action_value_key]
         self.action_mask_key = action_mask_key
+        in_keys = [action_value_key]
         if self.action_mask_key is not None:
-            self.in_keys.append(self.action_mask_key)
+            in_keys.append(self.action_mask_key)
+        self.in_keys = in_keys
         if out_keys is None:
             out_keys = ["action", action_value_key, "chosen_action_value"]
         elif action_value_key not in out_keys:

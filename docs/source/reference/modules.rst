@@ -69,6 +69,7 @@ other cases, the action written in the tensordict is simply the network output.
 
     AdditiveGaussianWrapper
     EGreedyWrapper
+    EGreedyModule
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
