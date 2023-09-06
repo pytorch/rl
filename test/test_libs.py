@@ -70,6 +70,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -1641,6 +1642,30 @@ class TestIsaacGym:
     #     for c in collector:
     #         assert c.shape == torch.Size([num_envs, 20])
     #         break
+
+
+class TestRoboHive:
+    @pytest.mark.parametrize("envname", RoboHiveEnv.env_list)
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_robohive(self, envname, from_pixels):
+        if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
+            print("not testing envs with prebuilt rendering")
+            return
+        if "Adroit" in envname:
+            print("tcdm are broken")
+            return
+        try:
+            env = RoboHiveEnv(envname)
+        except AttributeError as err:
+            if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
+                print("tcdm are broken")
+                return
+            else:
+                raise err
+        if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
+            print("no camera")
+            return
+        check_env_specs(env)
 
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
