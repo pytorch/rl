@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from tensordict import TensorDict
+from tensordict.nn import TensorDictParams, make_functional
 from ...data import DEVICE_TYPING
 
 from .models import MLP
@@ -160,22 +162,38 @@ class MultiAgentMLP(nn.Module):
         self.share_params = share_params
         self.centralised = centralised
 
-        self.agent_networks = nn.ModuleList(
-            [
-                MLP(
-                    in_features=n_agent_inputs
-                    if not centralised
-                    else n_agent_inputs * n_agents,
-                    out_features=n_agent_outputs,
-                    depth=depth,
-                    num_cells=num_cells,
-                    activation_class=activation_class,
-                    device=device,
-                    **kwargs,
-                )
-                for _ in range(self.n_agents if not self.share_params else 1)
+        def make_net():
+            return MLP(
+                in_features=n_agent_inputs
+                if not centralised
+                else n_agent_inputs * n_agents,
+                out_features=n_agent_outputs,
+                depth=depth,
+                num_cells=num_cells,
+                activation_class=activation_class,
+                device=device,
+                **kwargs,
+            )
+
+        if not self.share_params:
+            agent_networks = [
+                make_net()
+                for _ in range(self.n_agents)
             ]
-        )
+            self.params = TensorDictParams(torch.stack([TensorDict.from_module(mod) for mod in agent_networks], 0).contiguous(), no_convert=True)
+            net = agent_networks[0]
+        else:
+            net = make_net()
+            self.params = TensorDictParams(TensorDict.from_module(net), no_convert=True)
+        make_functional(net)
+        self.net = net
+        if self.centralised:
+            self.net_call = torch.vmap(
+                self.net,
+                (None, 0)
+            ) if not self.share_params else self.net
+        else:
+            self.net_call = torch.vmap(self.net, (-2, 0)) if not self.share_params else self.net
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
@@ -189,39 +207,40 @@ class MultiAgentMLP(nn.Module):
                 f" but got {inputs.shape}"
             )
 
+        output = self.net_call(inputs, self.params)
         # If the model is centralized, agents have full observability
-        if self.centralised:
-            inputs = inputs.reshape(
-                *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
-            )
-
-        # If parameters are not shared, each agent has its own network
-        if not self.share_params:
-            if self.centralised:
-                output = torch.stack(
-                    [net(inputs) for i, net in enumerate(self.agent_networks)],
-                    dim=-2,
-                )
-            else:
-                output = torch.stack(
-                    [
-                        net(inputs[..., i, :])
-                        for i, net in enumerate(self.agent_networks)
-                    ],
-                    dim=-2,
-                )
-        # If parameters are shared, agents use the same network
-        else:
-            output = self.agent_networks[0](inputs)
-
-            if self.centralised:
-                # If the parameters are shared, and it is centralised, all agents will have the same output
-                # We expand it to maintain the agent dimension, but values will be the same for all agents
-                output = (
-                    output.view(*output.shape[:-1], self.n_agent_outputs)
-                    .unsqueeze(-2)
-                    .expand(*output.shape[:-1], self.n_agents, self.n_agent_outputs)
-                )
+        # if self.centralised:
+        #     inputs = inputs.reshape(
+        #         *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
+        #     )
+        #
+        # # If parameters are not shared, each agent has its own network
+        # if not self.share_params:
+        #     if self.centralised:
+        #         output = torch.stack(
+        #             [net(inputs) for i, net in enumerate(self.agent_networks)],
+        #             dim=-2,
+        #         )
+        #     else:
+        #         output = torch.stack(
+        #             [
+        #                 net(inputs[..., i, :])
+        #                 for i, net in enumerate(self.agent_networks)
+        #             ],
+        #             dim=-2,
+        #         )
+        # # If parameters are shared, agents use the same network
+        # else:
+        #     output = self.agent_networks[0](inputs)
+        #
+        #     if self.centralised:
+        #         # If the parameters are shared, and it is centralised, all agents will have the same output
+        #         # We expand it to maintain the agent dimension, but values will be the same for all agents
+        #         output = (
+        #             output.view(*output.shape[:-1], self.n_agent_outputs)
+        #             .unsqueeze(-2)
+        #             .expand(*output.shape[:-1], self.n_agents, self.n_agent_outputs)
+        #         )
 
         if output.shape[-2:] != (self.n_agents, self.n_agent_outputs):
             raise ValueError(
