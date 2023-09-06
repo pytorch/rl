@@ -75,7 +75,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         gamma=cfg.loss.gamma,
         value_network=critic,
         actor_network=actor,
-        average_gae=False,
+        average_adv=False,
     )
     loss_module = ClipPPOLoss(
         actor=actor,

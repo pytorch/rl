@@ -18,8 +18,12 @@ from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import nn, Tensor
 from torchrl.objectives.utils import hold_out_net
-from torchrl.objectives.value.advantages import ValueEstimatorBase, _self_set_skip_existing, _self_set_grad_enabled, _call_value_nets
-from torchrl.objectives.value.functional import _transpose_time, SHAPE_ERR
+from torchrl.objectives.value.advantages import (
+    ValueEstimatorBase,
+    _self_set_skip_existing,
+    _self_set_grad_enabled,
+    _call_value_nets)
+from torchrl.objectives.value.functional import _transpose_time, SHAPE_ERR, td0_return_estimate
 
 
 def _c_val(
@@ -27,8 +31,7 @@ def _c_val(
     log_mu: torch.Tensor,
     c: Union[float, torch.Tensor] = 1,
 ) -> torch.Tensor:
-    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)
-
+    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)  # TODO: Review!
 
 def _dv_val(
     rewards: torch.Tensor,
@@ -80,8 +83,8 @@ def vtrace_correction(
         next_state_value: torch.Tensor,
         reward: torch.Tensor,
         done: torch.Tensor,
-        rho_bar: Union[float, torch.Tensor] = 1.0,
-        c_bar: Union[float, torch.Tensor] = 1.0,
+        rho_thresh: Union[float, torch.Tensor] = 1.0,
+        c_thresh: Union[float, torch.Tensor] = 1.0,
         time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """V-Trace off-policy correction method.
@@ -112,8 +115,10 @@ def vtrace_correction(
     dtype = next_state_value.dtype
     device = state_value.device
 
-    delta, rho = _dv_val(reward, state_value, next_state_value, gamma, rho_bar, log_pi, log_mu)
-    cs = _c_val(log_pi, log_mu, c_bar)
+    delta, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
+    torch.clamp(torch.exp(log_rhos), max=clip_c_thres)
+
+    clipped_cs = _c_val(log_pi, log_mu, c_thresh)
 
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
@@ -124,6 +129,8 @@ def vtrace_correction(
     for t in reversed(range(time_steps)):
         # TODO: Review!
         acc = delta[..., t, :] + (gnotdone[..., t, :] * acc * cs[..., t, :])
+
+
         v_out[..., t, :].copy_(acc + state_value[..., t, :])
 
     advantage = rho * (reward + gamma * v_out - state_value)  # TODO: Review!
@@ -140,7 +147,8 @@ class VTrace(ValueEstimatorBase):
     Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        average_gae (bool): if ``True``, the resulting GAE values will be standardized.
+        actor_network (TensorDictModule, optional): actor operator used to retrieve the log prob.
+        average_adv (bool): if ``True``, the resulting advantage values will be standardized.
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
             the computation of the value function. Default is ``False``.
@@ -149,10 +157,6 @@ class VTrace(ValueEstimatorBase):
               The proper way to make the function call non-differentiable is to
               decorate it in a `torch.no_grad()` context manager/decorator or
               pass detached parameters for functional modules.
-
-        # vectorized (bool, optional): whether to use the vectorized version of the
-        #     lambda return. Default is `True`.
-
         skip_existing (bool, optional): if ``True``, the value network will skip
             modules which outputs are already present in the tensordict.
             Defaults to ``None``, ie. the value of :func:`tensordict.nn.skip_existing()`
@@ -164,27 +168,21 @@ class VTrace(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-
-        # shifted (bool, optional): if ``True``, the value and next value are
-        #     estimated with a single call to the value network. This is faster
-        #     but is only valid whenever (1) the ``"next"`` value is shifted by
-        #     only one time step (which is not the case with multi-step value
-        #     estimation, for instance) and (2) when the parameters used at time
-        #     ``t`` and ``t+1`` are identical (which is not the case when target
-        #     parameters are to be used). Defaults to ``False``.
+        shifted (bool, optional): if ``True``, the value and next value are
+            estimated with a single call to the value network. This is faster
+            but is only valid whenever (1) the ``"next"`` value is shifted by
+            only one time step (which is not the case with multi-step value
+            estimation, for instance) and (2) when the parameters used at time
+            ``t`` and ``t+1`` are identical (which is not the case when target
+            parameters are to be used). Defaults to ``False``.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
 
-    # Finally, if :obj:`gradient_mode` is ``True``,
-    # an additional and differentiable :obj:`"value_error"` entry will be returned,
-    # which simple represents the difference between the return and the value network
-    # output (i.e. an additional distance loss should be applied to that signed value).
-
-    # .. note::
-    #   As other advantage functions do, if the ``value_key`` is already present
-    #   in the input tensordict, the VTrace module will ignore the calls to the value
-    #   network (if any) and use the provided value instead.
+    .. note::
+      As other advantage functions do, if the ``value_key`` is already present
+      in the input tensordict, the VTrace module will ignore the calls to the value
+      network (if any) and use the provided value instead.
 
     """
 
@@ -196,10 +194,10 @@ class VTrace(ValueEstimatorBase):
             c_bar: Union[float, torch.Tensor] = 1.0,
             actor_network: TensorDictModule = None,
             value_network: TensorDictModule,
-            average_gae: bool = False,
+            average_adv: bool = False,
             differentiable: bool = False,
-            vectorized: bool = False,  # TODO: Review!
             skip_existing: Optional[bool] = None,
+            log_prob_key: NestedKey = "sample_log_prob",    # TODO: should be added to _AcceptedKeys?
             advantage_key: NestedKey = None,
             value_target_key: NestedKey = None,
             value_key: NestedKey = None,
@@ -221,9 +219,13 @@ class VTrace(ValueEstimatorBase):
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
         self.register_buffer("rho_bar", torch.tensor(rho_bar, device=device))
         self.register_buffer("c_bar", torch.tensor(c_bar, device=device))
-        self.average_gae = average_gae
-        self.vectorized = vectorized
+        self.average_adv = average_adv
         self.actor_network = actor_network
+        self._log_prob_key = log_prob_key
+
+    @property
+    def log_prob_key(self):
+        return self._log_prob_key
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -322,34 +324,35 @@ class VTrace(ValueEstimatorBase):
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        # TODO: raise ValueError if log_mu is not present
-        log_mu = tensordict.get("sample_log_prob")
+        # Make sure we have the log prob computed at collection time
+        if self.log_prob_key not in tensordict.keys():
+            raise ValueError(f"Expected {self.log_prob_key} to be in tensordict")
+        log_mu = tensordict.get(self.log_prob_key)
 
-        # Make sure we have the new log prob and the old log prob
-        if self.actor_network is not None:
-            # TODO: review
-            log_pi = self.actor_network(tensordict.select(self.actor_network.in_keys)).get("sample_log_prob")  # old / distributed log prob
-        else:
-            log_pi = tensordict.get("sample_log_prob")  # new / local log prob # TODO: Review!
+        # Compute the current log prob
+        with hold_out_net(self.actor_network):
+            log_pi = self.actor_network(
+                tensordict.select(self.actor_network.in_keys)
+            ).get(self.log_prob_key)
 
+        # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))
-        if self.vectorized:
-            raise NotImplementedError
-        else:
-            adv, value_target = vtrace_correction(
-                gamma,
-                log_pi,
-                log_mu,
-                value,
-                next_value,
-                reward,
-                done,
-                rho_bar=self.rho_bar,
-                c_bar=self.c_bar,
-                time_dim=tensordict.ndim - 1,
-            )
+        adv, value_target = vtrace_correction(
+            gamma,
+            log_pi,
+            log_mu,
+            value,
+            next_value,
+            reward,
+            done,
+            rho_bar=self.rho_bar,
+            c_bar=self.c_bar,
+            time_dim=tensordict.ndim - 1,
+        )
 
-        if self.average_gae:
+        # TODO: where are returns computed?
+
+        if self.average_adv:
             loc = adv.mean()
             scale = adv.std().clamp_min(1e-4)
             adv = adv - loc
