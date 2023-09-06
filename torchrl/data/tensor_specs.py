@@ -2012,7 +2012,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                     v, space, ignore_device=ignore_device
                 )
             )
-        return torch.cat(x, -1)
+        return torch.cat(x, -1).reshape(self.shape)
 
     def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
         split_sizes = [space.n for space in self.space]
