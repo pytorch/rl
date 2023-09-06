@@ -8,10 +8,11 @@ from typing import Optional, Sequence, Tuple, Type, Union
 import numpy as np
 
 import torch
-from torch import nn
 
 from tensordict import TensorDict
-from tensordict.nn import TensorDictParams, make_functional
+from tensordict.nn import make_functional, TensorDictParams
+from torch import nn
+
 from ...data import DEVICE_TYPING
 
 from .models import MLP
@@ -176,11 +177,13 @@ class MultiAgentMLP(nn.Module):
             )
 
         if not self.share_params:
-            agent_networks = [
-                make_net()
-                for _ in range(self.n_agents)
-            ]
-            self.params = TensorDictParams(torch.stack([TensorDict.from_module(mod) for mod in agent_networks], 0).contiguous(), no_convert=True)
+            agent_networks = [make_net() for _ in range(self.n_agents)]
+            self.params = TensorDictParams(
+                torch.stack(
+                    [TensorDict.from_module(mod) for mod in agent_networks], 0
+                ).contiguous(),
+                no_convert=True,
+            )
             net = agent_networks[0]
         else:
             net = make_net()
@@ -188,12 +191,17 @@ class MultiAgentMLP(nn.Module):
         make_functional(net)
         self.net = net
         if self.centralised:
-            self.net_call = torch.vmap(
-                self.net,
-                (None, 0)
-            ) if not self.share_params else self.net
+            if not self.share_params:
+                self.net_call = torch.vmap(self.net, in_dims=(None, 0), out_dims=(-2,))
+            else:
+                self.net_call = self.net
         else:
-            self.net_call = torch.vmap(self.net, (-2, 0)) if not self.share_params else self.net
+            if not self.share_params:
+                self.net_call = torch.vmap(self.net, in_dims=(-2, 0), out_dims=(-2,))
+            else:
+                self.net_call = torch.vmap(self.net, in_dims=(-2, None), out_dims=(-2,))
+
+        print("self.net_call", self.net_call)
 
     def forward(self, *inputs: Tuple[torch.Tensor]) -> torch.Tensor:
         if len(inputs) > 1:
@@ -206,41 +214,18 @@ class MultiAgentMLP(nn.Module):
                 f"Multi-agent network expected input with last 2 dimensions {[self.n_agents, self.n_agent_inputs]},"
                 f" but got {inputs.shape}"
             )
+        # If the model is centralized, agents have full observability
+        if self.centralised:
+            inputs = inputs.reshape(
+                *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
+            )
 
         output = self.net_call(inputs, self.params)
-        # If the model is centralized, agents have full observability
-        # if self.centralised:
-        #     inputs = inputs.reshape(
-        #         *inputs.shape[:-2], self.n_agents * self.n_agent_inputs
-        #     )
-        #
-        # # If parameters are not shared, each agent has its own network
-        # if not self.share_params:
-        #     if self.centralised:
-        #         output = torch.stack(
-        #             [net(inputs) for i, net in enumerate(self.agent_networks)],
-        #             dim=-2,
-        #         )
-        #     else:
-        #         output = torch.stack(
-        #             [
-        #                 net(inputs[..., i, :])
-        #                 for i, net in enumerate(self.agent_networks)
-        #             ],
-        #             dim=-2,
-        #         )
-        # # If parameters are shared, agents use the same network
-        # else:
-        #     output = self.agent_networks[0](inputs)
-        #
-        #     if self.centralised:
-        #         # If the parameters are shared, and it is centralised, all agents will have the same output
-        #         # We expand it to maintain the agent dimension, but values will be the same for all agents
-        #         output = (
-        #             output.view(*output.shape[:-1], self.n_agent_outputs)
-        #             .unsqueeze(-2)
-        #             .expand(*output.shape[:-1], self.n_agents, self.n_agent_outputs)
-        #         )
+
+        if self.share_params and self.centralised:
+            output = output.unsqueeze(-2).expand(
+                *output.shape[:-1], self.n_agents, self.n_agent_outputs
+            )
 
         if output.shape[-2:] != (self.n_agents, self.n_agent_outputs):
             raise ValueError(

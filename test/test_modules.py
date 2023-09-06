@@ -743,7 +743,7 @@ class TestMultiAgent:
         )
         return td
 
-    @pytest.mark.parametrize("n_agents", [1, 3])
+    @pytest.mark.parametrize("n_agents", [3, 1])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
     @pytest.mark.parametrize(
