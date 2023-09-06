@@ -614,9 +614,10 @@ class TestQValue:
         assert (values == in_values).all()
 
     @pytest.mark.parametrize("action_space", ["categorical", "one-hot"])
-    def test_qvalue_mask(self, action_space):
+    @pytest.mark.parametrize("action_n", [2, 3, 4, 5])
+    def test_qvalue_mask(self, action_space, action_n):
         torch.manual_seed(0)
-        shape = (3, 4, 6)
+        shape = (3, 4, 3, action_n)
         action_values = torch.randn(size=shape)
         td = TensorDict({"action_value": action_values.clone()}, [3])
         module = QValueModule(
@@ -637,6 +638,7 @@ class TestQValue:
 
         assert (new_action_values[~action_mask] != action_values[~action_mask]).all()
         assert (new_action_values[action_mask] == action_values[action_mask]).all()
+        assert (td.get("chosen_action_value") > torch.finfo(torch.float).min).all()
 
         if action_space == "one-hot":
             assert (td.get("action")[action_mask]).any()
