@@ -3179,7 +3179,8 @@ class CompositeSpec(TensorSpec):
         for key, item in self._specs.items():
             if item is None:
                 continue
-            if not item.is_in(val.get(key, None)):
+            val_item = val.get(key)
+            if not item.is_in(val_item):
                 return False
         return True
 
