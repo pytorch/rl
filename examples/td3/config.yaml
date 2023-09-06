@@ -2,14 +2,14 @@
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: "HalfCheetah-TD3"
+  exp_name: "HalfCheetah-TD3-ICLR"
   library: gym
   frame_skip: 1
   seed: 42
 
 # Collection
 collector:
-  total_frames: 1000000
+  total_frames: 3000000
   init_random_frames: 10000
   init_env_steps: 1000
   frames_per_batch: 1000
@@ -29,9 +29,9 @@ optimization:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
-  lr: 3e-4
-  weight_decay: 2e-4
-  batch_size: 256
+  lr: 1e-3
+  weight_decay: 0.0
+  batch_size: 100
   target_update_polyak: 0.995
   policy_update_delay: 2
 

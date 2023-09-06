@@ -336,13 +336,13 @@ class TD3Loss(LossModule):
     def _cached_stack_actor_params(self):
         return torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
-        )
+        ).to_tensordict()
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_save = tensordict
-        tensordict = tensordict.clone(False)
+        tensordict = tensordict.clone(False).to_tensordict()
         act = tensordict.get(self.tensor_keys.action)
         action_shape = act.shape
         action_device = act.device
@@ -365,12 +365,14 @@ class TD3Loss(LossModule):
             tensordict_actor,
             self._cached_stack_actor_params,
         )
+
         # add noise to target policy
         actor_output_td1 = actor_output_td[1]
         next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
             self.min_action, self.max_action
         )
         actor_output_td1.set(self.tensor_keys.action, next_action)
+        actor_output_td = torch.stack([actor_output_td[0], actor_output_td1], 0)
         tensordict_actor.set(
             self.tensor_keys.action,
             actor_output_td.get(self.tensor_keys.action),
