@@ -8,8 +8,6 @@ import typing
 from typing import Dict, Optional
 
 import torch
-
-from envs.utils import ACTION_MASK_ERROR
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data import (
@@ -20,6 +18,8 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
+
+from torchrl.envs.utils import ACTION_MASK_ERROR
 
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
