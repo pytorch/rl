@@ -103,7 +103,9 @@ def make_base_env(
 
 def make_parallel_env(env_name, device, is_test=False):
     num_envs = 8
-    env = ParallelEnv(num_envs, EnvCreator(lambda: make_base_env(env_name, device=device)))
+    env = ParallelEnv(
+        num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
+    )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
