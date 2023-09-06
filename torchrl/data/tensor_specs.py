@@ -2925,6 +2925,10 @@ class CompositeSpec(TensorSpec):
                     )
         self._shape = torch.Size(value)
 
+    def is_empty(self):
+        """Whether the composite spec contains specs or not."""
+        return len(self._specs) == 0
+
     @property
     def ndim(self):
         return self.ndimension()
@@ -3177,7 +3181,7 @@ class CompositeSpec(TensorSpec):
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
         for key, item in self._specs.items():
-            if item is None:
+            if item is None or (isinstance(item, CompositeSpec) and item.is_empty()):
                 continue
             val_item = val.get(key)
             if not item.is_in(val_item):
