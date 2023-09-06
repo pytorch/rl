@@ -2074,7 +2074,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be > 0 to accomodate for tensordict of "
+        "dim must be < 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "zeros"}
@@ -2092,7 +2092,7 @@ class CatFrames(ObservationTransform):
             in_keys = IMAGE_KEYS
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
-        if dim > 0:
+        if dim >= 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
         if padding not in self.ACCEPTED_PADDING:
