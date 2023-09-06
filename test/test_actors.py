@@ -613,6 +613,37 @@ class TestQValue:
         assert values.shape == in_values.shape
         assert (values == in_values).all()
 
+    @pytest.mark.parametrize("action_space", ["categorical", "one-hot"])
+    def test_qvalue_mask(self, action_space):
+        torch.manual_seed(0)
+        shape = (3, 4, 6)
+        action_values = torch.randn(size=shape)
+        td = TensorDict({"action_value": action_values.clone()}, [3])
+        module = QValueModule(
+            action_space=action_space,
+            action_value_key="action_value",
+            action_mask_key="action_mask",
+        )
+        with pytest.raises(KeyError, match="Action mask key "):
+            module(td)
+
+        action_mask = torch.randint(high=2, size=shape).to(torch.bool)
+        while not action_mask.any(dim=-1).all() or action_mask.all():
+            action_mask = torch.randint(high=2, size=shape).to(torch.bool)
+
+        td.set("action_mask", action_mask)
+        module(td)
+        new_action_values = td.get("action_value")
+
+        assert (new_action_values[~action_mask] != action_values[~action_mask]).all()
+        assert (new_action_values[action_mask] == action_values[action_mask]).all()
+
+        if action_space == "one-hot":
+            assert (td.get("action")[action_mask]).any()
+            assert not (td.get("action")[~action_mask]).any()
+        else:
+            assert action_mask.gather(-1, td.get("action").unsqueeze(-1)).all()
+
 
 @pytest.mark.parametrize("device", get_default_devices())
 def test_value_based_policy(device):
