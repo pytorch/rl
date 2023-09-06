@@ -8,10 +8,11 @@ import hydra
 @hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    import tqdm
     import time
-    import torch.optim
+
     import numpy as np
+    import torch.optim
+    import tqdm
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -20,12 +21,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.objectives import ClipPPOLoss
     from torchrl.objectives.value.advantages import GAE
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_mujoco import (make_ppo_models, make_env)
+    from utils_mujoco import make_env, make_ppo_models
 
     # Define paper hyperparameters
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
-    total_network_updates = (cfg.collector.total_frames // cfg.collector.frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
+    total_network_updates = (
+        (cfg.collector.total_frames // cfg.collector.frames_per_batch)
+        * cfg.loss.ppo_epochs
+        * num_mini_batches
+    )
 
     # Create models (check utils_mujoco.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
@@ -73,7 +78,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create logger
     exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.logger_backend, logger_name="ppo", experiment_name=exp_name)
+    logger = get_logger(
+        cfg.logger.logger_backend, logger_name="ppo", experiment_name=exp_name
+    )
 
     # Create test environment
     test_env = make_env(cfg.env.env_name, device)
@@ -94,7 +101,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
+            logger.log_scalar(
+                "reward_train", episode_rewards.mean().item(), collected_frames
+            )
 
         # Compute GAE
         with torch.no_grad():
@@ -113,14 +122,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg.optim.anneal_lr:
                     alpha = 1 - (num_network_updates / total_network_updates)
                     for g in actor_optim.param_groups:
-                        g['lr'] = cfg.optim.lr * alpha
+                        g["lr"] = cfg.optim.lr * alpha
                     for g in critic_optim.param_groups:
-                        g['lr'] = cfg.optim.lr * alpha
+                        g["lr"] = cfg.optim.lr * alpha
                 num_network_updates += 1
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
+                losses[j, i] = loss.select(
+                    "loss_critic", "loss_entropy", "loss_objective"
+                ).detach()
                 critic_loss = loss["loss_critic"]
                 actor_loss = loss["loss_objective"] + loss["loss_entropy"]
 
@@ -141,10 +152,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_in_batch) // cfg.logger.test_interval < (
-                    collected_frames // cfg.logger.test_interval):
+                collected_frames // cfg.logger.test_interval
+            ):
                 actor.eval()
                 test_rewards = []
-                for i in range(10):
+                for _ in range(cfg.logger.num_test_episodes):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_reset=True,
