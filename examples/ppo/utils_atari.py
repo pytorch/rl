@@ -90,9 +90,9 @@ def make_base_env(
     env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
     env = gym.make(env_name)
-    # if not is_test:
-    #     env = NoopResetEnv(env, noop_max=30)
-    #     env = EpisodicLifeEnv(env)
+    if not is_test:
+        env = NoopResetEnv(env, noop_max=30)
+        env = EpisodicLifeEnv(env)
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
