@@ -1,5 +1,3 @@
-import random
-
 import gym
 import torch.nn
 import torch.optim
@@ -13,6 +11,7 @@ from torchrl.envs import (
     EnvCreator,
     ExplorationType,
     GrayScale,
+    NoopResetEnv,
     ParallelEnv,
     Resize,
     RewardClipping,
@@ -36,31 +35,6 @@ from torchrl.modules import (
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
-
-
-class NoopResetEnv(gym.Wrapper):
-    def __init__(self, env, noop_max=30):
-        """Sample initial states by taking random number of no-ops on reset."""
-        gym.Wrapper.__init__(self, env)
-        self.noop_max = noop_max
-        self.override_num_noops = None
-        self.noop_action = 0  # No-op is assumed to be action 0.
-        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
-
-    def reset(self, **kwargs):
-        """Do no-op action for a number of steps in [1, noop_max]."""
-        self.env.reset(**kwargs)
-        if self.override_num_noops is not None:
-            noops = self.override_num_noops
-        else:
-            noops = random.randint(1, self.noop_max + 1)
-        assert noops > 0
-        obs = None
-        for _ in range(noops):
-            obs, _, done, *other = self.env.step(self.noop_action)
-            if done:
-                obs = self.env.reset(**kwargs)
-        return obs
 
 
 class EpisodicLifeEnv(gym.Wrapper):
@@ -91,11 +65,12 @@ def make_base_env(
 ):
     env = gym.make(env_name)
     if not is_test:
-        env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
+    env = TransformedEnv(env)
+    env.append_transform(NoopResetEnv(noops=30, random=True))
     reader = default_info_dict_reader(["end_of_life"])
     env.set_info_dict_reader(reader)
     return env
