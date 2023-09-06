@@ -13,6 +13,8 @@ from functools import wraps
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
 
+import numpy as np
+
 import torch
 
 from tensordict import unravel_key, unravel_key_list
@@ -253,11 +255,11 @@ class Transform(nn.Module):
         next_tensordict = self._call(next_tensordict)
         return next_tensordict
 
-    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
         if self.invertible:
             raise NotImplementedError
         else:
-            return obs
+            return state
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # # We create a shallow copy of the tensordict to avoid that changes are
@@ -1091,6 +1093,97 @@ class ToTensorImage(ObservationTransform):
             spec.space.maximum = self._apply_transform(spec.space.maximum)
             spec.space.minimum = self._apply_transform(spec.space.minimum)
         return spec
+
+
+class ClipTransform(Transform):
+    """A transform to clip input (state, action) or output (observation, reward) values.
+
+    This transform can take multiple input or output keys but only one value per
+    transform. If multiple clipping values are needed, several transforms should
+    be appended one after the other.
+    """
+
+    def __init__(
+        self,
+        in_keys,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
+        *,
+        low=None,
+        high=None,
+    ):
+        super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
+        if low is None and high is None:
+            raise TypeError("Either one or both of `high` and `low` must be provided.")
+
+        def check_val(val):
+            if (isinstance(val, torch.Tensor) and val.numel() > 1) or (
+                isinstance(val, np.ndarray) and val.size > 1
+            ):
+                raise TypeError(
+                    f"low and high must be scalars or None. Got low={low} and high={high}."
+                )
+            if val is None:
+                return None, None
+            if not isinstance(val, torch.Tensor):
+                val = torch.tensor(val)
+            if not val.dtype.is_floating_point:
+                val = val.float()
+            eps = torch.finfo(val.dtype).resolution
+            return val, eps
+
+        low, low_eps = check_val(low)
+        high, high_eps = check_val(high)
+        if low is not None and high is not None and low >= high:
+            raise ValueError("`low` must be stricly lower than `high`.")
+        self.low = low
+        self.low_eps = low_eps
+        self.high = high
+        self.high_eps = high_eps
+
+    def _apply_transform(self, obs: torch.Tensor) -> None:
+        if self.low is None:
+            return obs.clamp_max(self.high)
+        elif self.high is None:
+            return obs.clamp_min(self.low)
+        return obs.clamp(self.low, self.high)
+
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        if self.low is None:
+            return state.clamp_max(self.high)
+        elif self.high is None:
+            return state.clamp_min(self.low)
+        return state.clamp(self.low, self.high)
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        return BoundedTensorSpec(
+            shape=observation_spec.shape,
+            device=observation_spec.device,
+            dtype=observation_spec.dtype,
+            maximum=self.high + self.high_eps if self.high is not None else None,
+            minimum=self.low - self.low_eps if self.low is not None else None,
+        )
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        for key in self.in_keys:
+            if key in self.parent.reward_keys:
+                spec = self.parent.output_spec["full_reward_spec"][key]
+                self.parent.output_spec["full_reward_spec"][key] = BoundedTensorSpec(
+                    shape=spec.shape,
+                    device=spec.device,
+                    dtype=spec.dtype,
+                    maximum=self.high + self.high_eps
+                    if self.high is not None
+                    else None,
+                    minimum=self.low - self.low_eps if self.low is not None else None,
+                )
+        return self.parent.output_spec["full_reward_spec"]
+
+    # No need to transform the input spec since the outside world won't see the difference
+    # def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+    #     ...
 
 
 class TargetReturn(Transform):
@@ -1948,7 +2041,7 @@ class ObservationNorm(ObservationTransform):
             loc = self.loc
             return obs * scale + loc
 
-    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
         if self.loc is None or self.scale is None:
             raise RuntimeError(
                 "Loc/Scale have not been initialized. Either pass in values in the constructor "
@@ -1957,11 +2050,11 @@ class ObservationNorm(ObservationTransform):
         if not self.standard_normal:
             loc = self.loc
             scale = self.scale
-            return (obs - loc) / scale
+            return (state - loc) / scale
         else:
             scale = self.scale
             loc = self.loc
-            return obs * scale + loc
+            return state * scale + loc
 
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
@@ -2588,8 +2681,8 @@ class DTypeCastTransform(Transform):
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(self.dtype_out)
 
-    def _inv_apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
-        return obs.to(self.dtype_in)
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        return state.to(self.dtype_in)
 
     def _transform_spec(self, spec: TensorSpec) -> None:
         if isinstance(spec, CompositeSpec):
