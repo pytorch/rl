@@ -89,17 +89,7 @@ def test_unbounded(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
+@pytest.mark.parametrize("shape", [[], torch.Size([3])])
 def test_ndbounded(dtype, shape):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -282,15 +272,7 @@ def test_mult_onehot(shape, ns):
         [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
     ],
 )
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
 def test_multi_discrete(shape, ns, dtype):
     torch.manual_seed(0)
@@ -327,27 +309,9 @@ def test_multi_discrete(shape, ns, dtype):
     assert not ts.is_in(projection)
 
 
-@pytest.mark.parametrize(
-    "n",
-    [
-        1,
-        4,
-        7,
-        99,
-    ],
-)
+@pytest.mark.parametrize("n", [1, 4, 7, 99])
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        [
-            1,
-        ],
-        [1, 2],
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
 def test_discrete_conversion(n, device, shape):
     categorical = DiscreteTensorSpec(n, device=device, shape=shape)
     shape_one_hot = [n] if not shape else [*shape, n]
@@ -361,23 +325,8 @@ def test_discrete_conversion(n, device, shape):
     assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
 
 
-@pytest.mark.parametrize(
-    "ns",
-    [
-        [
-            5,
-        ],
-        [5, 2, 3],
-        [4, 5, 1, 3],
-    ],
-)
-@pytest.mark.parametrize(
-    "shape",
-    [
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
+@pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
