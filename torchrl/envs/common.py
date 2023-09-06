@@ -1570,7 +1570,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
             tensordict = self.step(tensordict)
-
             tensordicts.append(tensordict.clone(False))
 
             any_done = False
@@ -1611,7 +1610,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 callback(self, tensordict)
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-
         out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             out_td = out_td.contiguous()

@@ -427,8 +427,19 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+    # eliminate empty containers
     fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
     real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
+    # check keys
+    fake_tensordict_keys = set(fake_tensordict.keys(True, True))
+    real_tensordict_keys = set(real_tensordict.keys(True, True))
+    if fake_tensordict_keys != real_tensordict_keys:
+        raise AssertionError(
+            f"""The keys of the specs and data do not match:
+    - List of keys present in real but not in fake: {real_tensordict_keys-fake_tensordict_keys},
+    - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
+"""
+        )
     if (
         fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
         != real_tensordict_select.apply(lambda x: torch.zeros_like(x))

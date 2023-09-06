@@ -529,18 +529,19 @@ class TensorSpec:
                 val = torch.tensor(val, device=self.device, dtype=self.dtype)
             else:
                 val = torch.as_tensor(val, dtype=self.dtype)
-            if val.shape[-len(self.shape) :] != self.shape:
+            if val != self.shape:
+                # if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
-                if (
-                    val.shape[-len(self.shape) :] == self.shape[:-1]
-                    and self.shape[-1] == 1
-                ):
+                if val == self.shape and self.shape[-1] == 1:
                     val = val.unsqueeze(-1)
                 else:
-                    raise RuntimeError(
-                        f"Shape mismatch: the value has shape {val.shape} which "
-                        f"is incompatible with the spec shape {self.shape}."
-                    )
+                    try:
+                        val = val.reshape(self.shape)
+                    except Exception as err:
+                        raise RuntimeError(
+                            f"Shape mismatch: the value has shape {val.shape} which "
+                            f"is incompatible with the spec shape {self.shape}."
+                        ) from err
         if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val

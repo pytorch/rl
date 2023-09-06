@@ -252,7 +252,11 @@ class RoboHiveEnv(GymEnv):
             device=self.device,
         )  # default
 
-        rollout = self.rollout(2).get("next").exclude("done", "reward")[0]
+        rollout = self.rollout(2, return_contiguous=False).get("next")
+        rollout = rollout.exclude(
+            self.reward_key, self.done_key, *self.observation_spec.keys(True, True)
+        )
+        rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)
         self.observation_spec.update(spec)
 
@@ -302,7 +306,7 @@ class RoboHiveEnv(GymEnv):
     def read_info(self, info, tensordict_out):
         out = {}
         for key, value in info.items():
-            if key in ("obs_dict", "done", "reward", *self._env.obs_keys):
+            if key in ("obs_dict", "done", "reward", *self._env.obs_keys, "act"):
                 continue
             if isinstance(value, dict):
                 value = {key: _val for key, _val in value.items() if _val is not None}
