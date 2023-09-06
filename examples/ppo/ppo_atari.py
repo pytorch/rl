@@ -108,7 +108,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for data in collector:
 
         frames_in_batch = data.numel()
-        collected_frames += frames_in_batch * cfg.env.frame_skip
+        collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
 
         # Train loging
@@ -140,7 +140,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg.optim.anneal_lr:
                     for g in optim.param_groups:
                         g["lr"] = cfg.optim.lr * alpha
-                if cfg.optim.anneal_clip_epsilon:
+                if cfg.loss.anneal_clip_epsilon:
                     loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
                 num_network_updates += 1
 
