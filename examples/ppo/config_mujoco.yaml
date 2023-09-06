@@ -12,6 +12,7 @@ logger:
   backend: wandb
   exp_name: Mujoco_Schulman17
   test_interval: 1_000_000
+  num_test_episodes: 5
 
 # Optim
 optim:

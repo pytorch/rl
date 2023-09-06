@@ -13,6 +13,7 @@ logger:
   backend: wandb
   exp_name: Atari_Schulman17
   test_interval: 40_000_000
+  num_test_episodes: 3
 
 # Optim
 optim:

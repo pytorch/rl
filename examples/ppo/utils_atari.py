@@ -1,36 +1,36 @@
-import gym
 import random
+
+import gym
 import torch.nn
 import torch.optim
-
-from tensordict.nn import NormalParamExtractor, TensorDictModule
+from tensordict.nn import TensorDictModule
 from torchrl.data import CompositeSpec
 from torchrl.data.tensor_specs import DiscreteBox
-from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
-    default_info_dict_reader,
-    Resize,
-    VecNorm,
-    GrayScale,
-    RewardSum,
     CatFrames,
-    EnvCreator,
-    StepCounter,
-    ParallelEnv,
-    ToTensorImage,
+    default_info_dict_reader,
     DoubleToFloat,
-    RewardClipping,
-    TransformedEnv,
+    EnvCreator,
     ExplorationType,
+    GrayScale,
+    ParallelEnv,
+    Resize,
+    RewardClipping,
+    RewardSum,
+    StepCounter,
+    ToTensorImage,
+    TransformedEnv,
+    VecNorm,
 )
+from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
-    MLP,
+    ActorValueOperator,
     ConvNet,
-    TanhNormal,
-    ValueOperator,
+    MLP,
     OneHotCategorical,
     ProbabilisticActor,
-    ActorValueOperator,
+    TanhNormal,
+    ValueOperator,
 )
 
 # ====================================================================
@@ -45,10 +45,10 @@ class NoopResetEnv(gym.Wrapper):
         self.noop_max = noop_max
         self.override_num_noops = None
         self.noop_action = 0  # No-op is assumed to be action 0.
-        assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
+        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
 
     def reset(self, **kwargs):
-        """ Do no-op action for a number of steps in [1, noop_max]."""
+        """Do no-op action for a number of steps in [1, noop_max]."""
         self.env.reset(**kwargs)
         if self.override_num_noops is not None:
             noops = self.override_num_noops
@@ -86,12 +86,16 @@ class EpisodicLifeEnv(gym.Wrapper):
         return reset_data
 
 
-def make_base_env(env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False):
+def make_base_env(
+    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
+):
     env = gym.make(env_name)
     if not is_test:
         env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
-    env = GymWrapper(env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device)
+    env = GymWrapper(
+        env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
+    )
     reader = default_info_dict_reader(["end_of_life"])
     env.set_info_dict_reader(reader)
     return env
@@ -117,6 +121,7 @@ def make_parallel_env(env_name, device, is_test=False):
 # ====================================================================
 # Model utils
 # --------------------------------------------------------------------
+
 
 def make_ppo_modules_pixels(proof_environment):
 

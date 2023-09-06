@@ -4,29 +4,25 @@ results from Schulman et al. 2017 for the on Atari Environments.
 """
 import hydra
 
+
 @hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    import tqdm
     import time
-    import torch.optim
+
     import numpy as np
+    import torch.optim
+    import tqdm
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-    from torchrl.envs import (
-        ExplorationType,
-        set_exploration_type,
-    )
+    from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import ClipPPOLoss
     from torchrl.objectives.value.advantages import GAE
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_atari import (
-        make_parallel_env,
-        make_ppo_models,
-    )
+    from utils_atari import make_parallel_env, make_ppo_models
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
 
@@ -38,7 +34,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create models (check utils_atari.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
-    actor, critic, critic_head = actor.to(device), critic.to(device), critic_head.to(device)
+    actor, critic, critic_head = (
+        actor.to(device),
+        critic.to(device),
+        critic_head.to(device),
+    )
 
     # Create collector
     collector = SyncDataCollector(
@@ -86,7 +86,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create logger
     exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.logger_backend, logger_name="ppo", experiment_name=exp_name)
+    logger = get_logger(
+        cfg.logger.logger_backend, logger_name="ppo", experiment_name=exp_name
+    )
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, device, is_test=True)
@@ -98,7 +100,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
     num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
+    total_network_updates = (
+        (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
+    )
 
     for data in collector:
 
@@ -109,7 +113,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
+            logger.log_scalar(
+                "reward_train", episode_rewards.mean().item(), collected_frames
+            )
 
         # Apply episodic end of life
         data["done"].copy_(data["end_of_life"])
@@ -132,7 +138,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 alpha = 1 - (num_network_updates / total_network_updates)
                 if cfg.optim.anneal_lr:
                     for g in optim.param_groups:
-                        g['lr'] = cfg.optim.lr * alpha
+                        g["lr"] = cfg.optim.lr * alpha
                 if cfg.optim.anneal_clip_epsilon:
                     loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
                 num_network_updates += 1
@@ -142,12 +148,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                losses[j, i] = loss.select("loss_critic", "loss_entropy", "loss_objective").detach()
-                loss_sum = loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                losses[j, i] = loss.select(
+                    "loss_critic", "loss_entropy", "loss_objective"
+                ).detach()
+                loss_sum = (
+                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                )
 
                 # Backward pass
                 loss_sum.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(
+                torch.nn.utils.clip_grad_norm_(
                     list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
                 )
 
@@ -159,14 +169,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
         logger.log_scalar("lr", alpha * cfg.optim.lr, collected_frames)
-        logger.log_scalar("clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames)
+        logger.log_scalar(
+            "clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
+        )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // test_interval < (collected_frames // test_interval):
+            if (collected_frames - frames_in_batch) // test_interval < (
+                collected_frames // test_interval
+            ):
                 actor.eval()
                 test_rewards = []
-                for i in range(1):
+                for _ in range(cfg.logger.num_test_episodes):
                     td_test = test_env.rollout(
                         policy=actor,
                         auto_reset=True,

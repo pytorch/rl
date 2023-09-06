@@ -1,23 +1,13 @@
 import gym
+import numpy as np
 import torch.nn
 import torch.optim
-import numpy as np
 
-from tensordict.nn import TensorDictModule, AddStateIndependentNormalScale
+from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.data import CompositeSpec
+from torchrl.envs import DoubleToFloat, ExplorationType, RewardSum, TransformedEnv
 from torchrl.envs.libs.gym import GymWrapper
-from torchrl.envs import (
-    RewardSum,
-    DoubleToFloat,
-    TransformedEnv,
-    ExplorationType,
-)
-from torchrl.modules import (
-    MLP,
-    TanhNormal,
-    ValueOperator,
-    ProbabilisticActor,
-)
+from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 # ====================================================================
 # Environment utils
@@ -71,7 +61,7 @@ def make_ppo_models_state(proof_environment):
     # Add state-independent normal scale
     policy_mlp = torch.nn.Sequential(
         policy_mlp,
-        AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1])
+        AddStateIndependentNormalScale(proof_environment.action_spec.shape[-1]),
     )
 
     # Add probabilistic sampling of the actions
