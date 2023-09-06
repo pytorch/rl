@@ -18,9 +18,9 @@ from .models import MLP
 class MultiAgentMLP(nn.Module):
     """Mult-agent MLP.
 
-    This is an MLP that can be used in multi-agent contexts.
-    For example, as a policy or as a value function.
-    See `examples/multiagent` for examples.
+    A MultiAgentMLP is an MLP that can be used in multi-agent contexts
+    (eg, as a a policy or as a value function).
+    See ``examples/multiagent`` for examples.
 
     It expects inputs with shape (*B, n_agents, n_agent_inputs)
     It returns outputs with shape (*B, n_agents, n_agent_outputs)
@@ -36,24 +36,29 @@ class MultiAgentMLP(nn.Module):
         n_agent_inputs (int): number of inputs for each agent.
         n_agent_outputs (int): number of outputs for each agent.
         n_agents (int): number of agents.
-        centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
-            (n_agent_inputs * n_agents will be the number of inputs for one agent).
+        centralised (bool): If ``True``, each agent will use the inputs of
+            all agents to compute its output
+            (``n_agent_inputs * n_agents`` will be the number of inputs for one agent).
             Otherwise, each agent will only use its data as input.
-        share_params (bool): If `share_params` is True, the same MLP will be used to make the forward pass
-            for all agents (homogeneous policies). Otherwise, each agent will use a different MLP to process
-            its input (heterogeneous policies).
+        share_params (bool): If ``True``, the same MLP will be used to make the forward pass
+            for all agents (homogeneous policies). Otherwise, each agent will
+            use a different MLP to process its input (heterogeneous policies).
         device (str or toech.device, optional): device to create the module on.
-        depth (int, optional): depth of the network. A depth of 0 will produce a single linear layer network with the
-            desired input and output size. A length of 1 will create 2 linear layers etc. If no depth is indicated,
-            the depth information should be contained in the num_cells argument (see below). If num_cells is an
-            iterable and depth is indicated, both should match: len(num_cells) must be equal to depth.
-            default: 3.
-        num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
-            an integer is provided, every layer will have the same number of cells. If an iterable is provided,
-            the linear layers out_features will match the content of num_cells.
-            default: 32.
-        activation_class (Type[nn.Module]): activation class to be used.
-            default: nn.Tanh.
+        depth (int, optional): depth of the network. A depth of ``0`` will produce
+            a single linear layer network with the
+            desired input and output size. A length of 1 will create 2 linear
+            layers etc. If no depth is indicated,
+            the depth information must be contained in the ``num_cells`` argument.
+            If ``num_cells`` is an iterable and depth is indicated, both should
+            match: ``len(num_cells)`` must be equal to ``depth``.
+            Defaults to ``3``.
+        num_cells (int or Sequence[int], optional): number of cells of every
+            layer in between the input and output. If an integer is provided,
+            every layer will have the same number of cells. If an iterable is provided,
+            the linear layers ``out_features`` will match the content of num_cells.
+            Defaults to ``32``.
+        activation_class (Type[nn.Module], optional): activation class to be used.
+            Defaults to :class:`torch.nn.Tanh`.
         **kwargs: for :class:`torchrl.modules.models.MLP` can be passed to customize the MLPs.
 
     Examples:
@@ -63,8 +68,8 @@ class MultiAgentMLP(nn.Module):
         >>> n_agent_inputs=3
         >>> n_agent_outputs=2
         >>> batch = 64
-        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs
-        First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
+        >>> obs = torch.zeros(batch, n_agents, n_agent_inputs)
+        >>> # First let's instantiate a local network shared by all agents (e.g. a parameter-shared policy)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
@@ -86,7 +91,7 @@ class MultiAgentMLP(nn.Module):
           )
         )
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-        Now let's instantiate a centralised network shared by all agents (e.g. a centalised value function)
+        >>> # centralised network shared by all agents (e.g. a centalised value function)
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
@@ -107,12 +112,9 @@ class MultiAgentMLP(nn.Module):
             )
           )
         )
-        We can see that the input to the first layer is n_agents * n_agent_inputs,
-        this is because in the case the net acts as a centralised mlp (like a single huge agent)
+        >>> # The input to the first layer is `n_agents * n_agent_inputs`.
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
-        Outputs will be identical for all agents.
-        Now we can do both examples just shown but with an independent set of parameters for each agent
-        Let's show the centralised=False case.
+        >>> # share_params=False will create independent params for each sub-MLP
         >>> mlp = MultiAgentMLP(
         ...     n_agent_inputs=n_agent_inputs,
         ...     n_agent_outputs=n_agent_outputs,
@@ -121,6 +123,7 @@ class MultiAgentMLP(nn.Module):
         ...     share_params=False,
         ...     depth=2,
         ... )
+        >>> # we now have 6 MLPs, one per agent
         >>> print(mlp)
         MultiAgentMLP(
           (agent_networks): ModuleList(
@@ -133,7 +136,6 @@ class MultiAgentMLP(nn.Module):
             )
           )
         )
-        We can see that this is the same as in the first example, but now we have 6 MLPs, one per agent!
         >>> assert mlp(obs).shape == (batch, n_agents, n_agent_outputs)
     """
 
