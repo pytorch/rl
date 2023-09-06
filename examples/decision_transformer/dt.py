@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 """Decision Transformer Example.
 This is a self-contained example of an offline Decision Transformer training script.
-The helper functions are coded in the utils.py associated with this script.
+The helper functions are coded in the utils_atari.py associated with this script.
 """
 
 import hydra
