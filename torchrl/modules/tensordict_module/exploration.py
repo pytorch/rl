@@ -156,9 +156,14 @@ class EGreedyModule(TensorDictModuleBase):
                 if isinstance(spec, CompositeSpec):
                     spec = spec[self.action_key]
                 if spec.shape != out.shape:
-                    raise ValueError(
-                        "Action spec shape does not match the action shape"
-                    )
+                    # In batched envs if the spec is passed unbatched, the rand() will not
+                    # cover all batched dims
+                    if out.shape[-len(spec.shape) :] == spec.shape:
+                        spec = spec.expand(out.shape)
+                    else:
+                        raise ValueError(
+                            "Action spec shape does not match the action shape"
+                        )
                 if self.action_mask_key is not None:
                     action_mask = tensordict.get(self.action_mask_key, None)
                     if action_mask is None:
@@ -307,9 +312,14 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 if isinstance(spec, CompositeSpec):
                     spec = spec[self.action_key]
                 if spec.shape != out.shape:
-                    raise ValueError(
-                        "Action spec shape does not match the action shape"
-                    )
+                    # In batched envs if the spec is passed unbatched, the rand() will not
+                    # cover all batched dims
+                    if out.shape[-len(spec.shape) :] == spec.shape:
+                        spec = spec.expand(out.shape)
+                    else:
+                        raise ValueError(
+                            "Action spec shape does not match the action shape"
+                        )
                 if self.action_mask_key is not None:
                     action_mask = tensordict.get(self.action_mask_key, None)
                     if action_mask is None:

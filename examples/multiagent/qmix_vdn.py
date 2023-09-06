@@ -102,7 +102,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         eps_end=0,
         annealing_num_steps=int(cfg.collector.total_frames * (1 / 2)),
         action_key=env.action_key,
-        spec=env.input_spec["full_action_spec"],
+        spec=env.unbatched_action_spec,
     )
 
     if cfg.loss.mixer_type == "qmix":
