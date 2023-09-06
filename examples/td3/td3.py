@@ -8,7 +8,7 @@ This is a simple self-contained example of a TD3 training script.
 
 It supports state environments like MuJoCo.
 
-The helper functions are coded in the utils_atari.py associated with this script.
+The helper functions are coded in the utils.py associated with this script.
 """
 
 import hydra
