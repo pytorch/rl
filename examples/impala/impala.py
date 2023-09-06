@@ -5,7 +5,7 @@ results from Schulman et al. 2017 for the on Atari Environments.
 import hydra
 
 
-@hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
+@hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
@@ -73,8 +73,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create loss and adv modules
     vtrace_module = VTrace(
         gamma=cfg.loss.gamma,
-        lmbda=cfg.loss.gae_lambda,
         value_network=critic,
+        actor_network=actor,
         average_gae=False,
     )
     loss_module = ClipPPOLoss(

@@ -18,8 +18,8 @@ from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import nn, Tensor
 from torchrl.objectives.utils import hold_out_net
-from advantages import ValueEstimatorBase, _self_set_skip_existing, _self_set_grad_enabled, _call_value_nets
-from functional import _transpose_time, SHAPE_ERR
+from torchrl.objectives.value.advantages import ValueEstimatorBase, _self_set_skip_existing, _self_set_grad_enabled, _call_value_nets
+from torchrl.objectives.value.functional import _transpose_time, SHAPE_ERR
 
 
 def _c_val(
