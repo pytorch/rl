@@ -189,7 +189,10 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     if cfg.env.continuous_actions:
         loss_module = SACLoss(
-            actor_network=policy, qvalue_network=value_module, delay_qvalue=True
+            actor_network=policy,
+            qvalue_network=value_module,
+            delay_qvalue=True,
+            action_spec=env.unbatched_action_spec,
         )
         loss_module.set_keys(
             state_action_value=("agents", "state_action_value"),

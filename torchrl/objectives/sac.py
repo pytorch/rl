@@ -10,15 +10,14 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+
 from tensordict.nn import dispatch, make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
-
 from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
@@ -401,8 +400,21 @@ class SACLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    np.prod(
+                        action_spec[self.tensor_keys.action].shape[
+                            len(action_container_shape) :
+                        ]
+                    )
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)
