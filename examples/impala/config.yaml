@@ -9,7 +9,7 @@ collector:
 
 # logger
 logger:
-  backend: csv
+  backend: wandb
   exp_name: Atari_Espeholt18
   test_interval: 40_000_000
   num_test_episodes: 3
@@ -19,7 +19,7 @@ optim:
   lr: 0.0006
   eps: 1.0e-6
   weight_decay: 0.0
-  max_grad_norm: 10.0
+  max_grad_norm: 5.0
   anneal_lr: True
 
 # loss

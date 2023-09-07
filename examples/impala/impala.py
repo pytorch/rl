@@ -112,16 +112,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    num_mini_batches = frames_per_batch // mini_batch_size if mini_batch_size < frames_per_batch else 1
-    total_network_updates = (total_frames // max(frames_per_batch, mini_batch_size)) * num_mini_batches
-    acc_batch = []
+    num_mini_batches = frames_per_batch // mini_batch_size
+    total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
     for data in collector:
-
-        if len(acc_batch) < (cfg.loss.mini_batch_size // cfg.collector.frames_per_batch):
-            acc_batch.append(data)
-            continue
-        data = torch.cat(acc_batch, dim=0)
 
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
