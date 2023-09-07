@@ -619,7 +619,7 @@ class TestQValue:
         torch.manual_seed(0)
         shape = (3, 4, 3, action_n)
         action_values = torch.randn(size=shape)
-        td = TensorDict({"action_value": action_values.clone()}, [3])
+        td = TensorDict({"action_value": action_values}, [3])
         module = QValueModule(
             action_space=action_space,
             action_value_key="action_value",
