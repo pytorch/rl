@@ -40,31 +40,21 @@ if [ ! -d "${env_dir}" ]; then
 fi
 conda activate "${env_dir}"
 
-## 3. Install mujoco
-#printf "* Installing mujoco and related\n"
-#mkdir -p $root_dir/.mujoco
-#cd $root_dir/.mujoco/
-##wget https://github.com/deepmind/mujoco/releases/download/2.1.1/mujoco-2.1.1-linux-x86_64.tar.gz
-##tar -xf mujoco-2.1.1-linux-x86_64.tar.gz
-##wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-#wget https://www.roboti.us/download/mujoco200_linux.zip
-#unzip mujoco200_linux.zip
-## install mujoco-py locally
-git clone https://github.com/vmoens/mujoco-py.git
-cd mujoco-py
-git checkout aws_fix2
-mkdir -p mujoco_py/binaries/linux \
-    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
-    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
-    && rm mujoco.tar.gz
-wget https://www.roboti.us/file/mjkey.txt
-cp mjkey.txt mujoco_py/binaries/
-pip install -e .
-cd ..
+#git clone https://github.com/vmoens/mujoco-py.git
+#cd mujoco-py
+#git checkout aws_fix2
+#mkdir -p mujoco_py/binaries/linux \
+#    && wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz -O mujoco.tar.gz \
+#    && tar -xf mujoco.tar.gz -C mujoco_py/binaries/linux \
+#    && rm mujoco.tar.gz
+#wget https://www.roboti.us/file/mjkey.txt
+#cp mjkey.txt mujoco_py/binaries/
+#pip install -e .
+#cd ..
 
 #cd $this_dir
 
-# 4. Install Conda dependencies
+# 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
@@ -75,12 +65,8 @@ conda env config vars set \
   SDL_VIDEODRIVER=dummy \
   DISPLAY=unix:0.0 \
   PYOPENGL_PLATFORM=egl \
-  LD_PRELOAD=$glew_path \
   NVIDIA_PATH=/usr/src/nvidia-470.63.01 \
-  MUJOCO_PY_MJKEY_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/mjkey.txt \
-  MUJOCO_PY_MUJOCO_PATH=${root_dir}/mujoco-py/mujoco_py/binaries/linux/mujoco210 \
-  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/pytorch/rl/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
-#  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/circleci/project/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin
+  sim_backend=MUJOCO
 
 # make env variables apparent
 conda deactivate && conda activate "${env_dir}"
@@ -90,10 +76,7 @@ pip install pip --upgrade
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
 
-# ROM licence for Atari
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz --no-check-certificate
-tar -xzvf rarlinux-x64-5.7.1.tar.gz
-mkdir Roms
-wget http://www.atarimania.com/roms/Roms.rar
-./rar/unrar e Roms.rar ./Roms -y
-python -m atari_py.import_roms Roms
+#pip install git+https://github.com/vmoens/mj_envs@patch-2
+pip install git+https://github.com/vikashplus/robohive@dev
+
+#pip uninstall free-mujoco-py -y

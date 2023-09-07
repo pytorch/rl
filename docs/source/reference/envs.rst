@@ -450,6 +450,7 @@ to be able to create this other composition:
     CatFrames
     CatTensors
     CenterCrop
+    ClipTransform
     Compose
     DeviceCastTransform
     DiscreteActionProjection
