@@ -4,7 +4,7 @@ env:
 
 # collector
 collector:
-  frames_per_batch: 256  # 50
+  frames_per_batch: 128
   total_frames: 40_000_000
 
 # logger
@@ -19,13 +19,13 @@ optim:
   lr: 0.0006
   eps: 1.0e-6
   weight_decay: 0.0
-  max_grad_norm: 1.0
+  max_grad_norm: 10.0
   anneal_lr: True
 
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 256  # 500
+  mini_batch_size: 128
   critic_coef: 1.0
   entropy_coef: 0.025
   loss_critic_type: l2
