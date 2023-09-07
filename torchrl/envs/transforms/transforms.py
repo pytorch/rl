@@ -1101,6 +1101,26 @@ class ClipTransform(Transform):
     This transform can take multiple input or output keys but only one value per
     transform. If multiple clipping values are needed, several transforms should
     be appended one after the other.
+
+    Args:
+        in_keys (list of NestedKeys): input entries (read)
+        out_keys (list of NestedKeys): input entries (write)
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls.
+
+    Keyword Args:
+        low (scalar, optional): the lower bound of the clipped space.
+        high (scalar, optional): the higher bound of the clipped space.
+
+    .. note:: Providing just one of the arguments ``low`` or ``high`` is permitted,
+        but at least one must be provided.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env, ClipTransform(in_keys=['observation'], low=-1, high=0.1))
+        >>> r = env.rollout(100)
+        >>> assert (r["observation"] <= 0.1).all()
     """
 
     def __init__(
