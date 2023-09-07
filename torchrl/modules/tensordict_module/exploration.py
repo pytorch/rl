@@ -35,6 +35,7 @@ class EGreedyModule(TensorDictModuleBase):
     At each call, random draws (one per action) are executed given a certain probability threshold. If successful, the corresponding actions are being replaced by random samples drawn from the action spec provided. Others are left unchanged.
 
     Args:
+        spec (TensorSpec): the spec used for samppling actions.
         eps_init (scalar, optional): initial epsilon value.
             default: 1.0
         eps_end (scalar, optional): final epsilon value.
@@ -43,15 +44,10 @@ class EGreedyModule(TensorDictModuleBase):
             the ``eps_end`` value. Defaults to `1000`.
 
     Keyword Args:
-        action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type :class:`torchrl.data.CompositeSpec`. One needs to know where to
-            find the action spec.
+        action_key (NestedKey, optional): the key where the action can be found in the input tensordict.
             Default is ``"action"``.
         action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
             Default is ``None`` (corresponding to no mask).
-        spec (TensorSpec, optional): if provided, the sampled action will be
-            projected onto the valid action space once explored. If not provided,
-            the exploration wrapper will attempt to recover it from the policy.
 
     .. note::
         It is crucial to incorporate a call to :meth:`~.step` in the training loop
@@ -87,13 +83,13 @@ class EGreedyModule(TensorDictModuleBase):
 
     def __init__(
         self,
+        spec: TensorSpec,
         eps_init: float = 1.0,
         eps_end: float = 0.1,
         annealing_num_steps: int = 1000,
         *,
         action_key: Optional[NestedKey] = "action",
         action_mask_key: Optional[NestedKey] = None,
-        spec: Optional[TensorSpec] = None,
     ):
         self.action_key = action_key
         self.action_mask_key = action_mask_key
@@ -196,14 +192,12 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         eps_end (scalar, optional): final epsilon value.
             default: 0.1
         annealing_num_steps (int, optional): number of steps it will take for epsilon to reach the eps_end value
-        action_key (NestedKey, optional): if the policy module has more than one output key,
-            its output spec will be of type CompositeSpec. One needs to know where to
-            find the action spec.
-            Default is "action".
+        action_key (NestedKey, optional): the key where the action can be found in the input tensordict.
+            Default is ``"action"``.
         action_mask_key (NestedKey, optional): the key where the action mask can be found in the input tensordict.
             Default is ``None`` (corresponding to no mask).
         spec (TensorSpec, optional): if provided, the sampled action will be
-            projected onto the valid action space once explored. If not provided,
+            taken from this action space. If not provided,
             the exploration wrapper will attempt to recover it from the policy.
 
     .. note::

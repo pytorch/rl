@@ -174,7 +174,7 @@ class TestEGreedy:
         policy = QValueActor(spec=spec, module=module)
         explorative_policy = TensorDictSequential(
             policy,
-            EGreedyModule(),
+            EGreedyModule(spec=None),
         )
         td = TensorDict(
             {
