@@ -4,7 +4,14 @@ import torch.optim
 
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.data import CompositeSpec
-from torchrl.envs import DoubleToFloat, ClipTransform, ExplorationType, RewardSum, TransformedEnv, VecNorm
+from torchrl.envs import (
+    ClipTransform,
+    DoubleToFloat,
+    ExplorationType,
+    RewardSum,
+    TransformedEnv,
+    VecNorm,
+)
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
