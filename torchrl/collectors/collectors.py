@@ -1587,6 +1587,19 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
     __doc__ += _MultiDataCollector.__doc__
 
+    def __init__(self, *args, cat_dim=None, **kwargs):
+        if cat_dim is None:
+            warnings.warn(
+                "The cat_dim argument wasn't passed to the sync data collector. "
+                "The previous default value was 0 and will stay like "
+                "this until v0.3. From v0.3, the default will be -1 (the time dimension). In v0.4, "
+                "this argument will be likely be deprecated."
+                "To remove this warning, set the cat_dim to -1.",
+                category=DeprecationWarning,
+            )
+            cat_dim = 0
+        self._cat_dim = cat_dim
+        super().__init__(*args, **kwargs)
     # for RPC
     def next(self):
         return super().next()
@@ -1669,7 +1682,7 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 while self.queue_out.qsize() < int(self.num_workers):
                     continue
 
-            for _ in range(self.num_workers):
+            for idx in range(self.num_workers):
                 new_data, j = self.queue_out.get()
                 if j == 0:
                     data, idx = new_data
@@ -1680,14 +1693,16 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
                 if workers_frames[idx] >= self.total_frames:
                     dones[idx] = True
-            # we have to correct the traj_ids to make sure that they don't overlap
-            for idx in range(self.num_workers):
+
                 traj_ids = self.buffers[idx].get(("collector", "traj_ids"))
-                if max_traj_idx is not None:
-                    traj_ids[traj_ids != -1] += max_traj_idx
-                    # out_tensordicts_shared[idx].set("traj_ids", traj_ids)
-                max_traj_idx = traj_ids.max().item() + 1
-                # out = out_tensordicts_shared[idx]
+                preempt_mask = traj_ids != -1
+                if preempt_mask.all():
+                    if max_traj_idx is not None:
+                        traj_ids += max_traj_idx
+                else:
+                    if max_traj_idx is not None:
+                        traj_ids[traj_ids != -1] += max_traj_idx
+                max_traj_idx = traj_ids.max().item()
             if same_device is None:
                 prev_device = None
                 same_device = True
@@ -1699,12 +1714,12 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if same_device:
                 self.out_buffer = torch.cat(
-                    list(self.buffers.values()), 0, out=self.out_buffer
+                    list(self.buffers.values()), self._cat_dim, out=self.out_buffer
                 )
             else:
                 self.out_buffer = torch.cat(
                     [item.cpu() for item in self.buffers.values()],
-                    0,
+                    self._cat_dim,
                     out=self.out_buffer,
                 )
 
@@ -1712,7 +1727,25 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 out = split_trajectories(self.out_buffer, prefix="collector")
                 frames += out.get(("collector", "mask")).sum().item()
             else:
-                out = self.out_buffer.clone()
+                traj_ids = self.out_buffer.get(("collector", "traj_ids"))
+                cat_dim = self._cat_dim
+                if cat_dim < 0:
+                    cat_dim = self.out_buffer.ndim + cat_dim
+                truncated = None
+                if cat_dim == self.out_buffer.ndim - 1:
+                    idx = (slice(None),) * (self.out_buffer.ndim - 1)
+                    truncated = traj_ids[idx + (slice(None, -1),)] != traj_ids[idx + (slice(1),)]
+                    truncated = torch.cat([
+                        truncated,
+                        torch.ones_like(truncated[idx + (slice(-1, None),)])
+                    ], self._cat_dim)
+                valid_mask = traj_ids != -1
+                out = self.out_buffer[valid_mask]
+                if truncated is not None:
+                    out.set(("next", "truncated"), truncated[valid_mask])
+                shape = tuple(s if i != cat_dim else -1 for i, s in enumerate(self.out_buffer.shape))
+                out = out.reshape(shape)
+                out.names = self.out_buffer.names
                 frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)

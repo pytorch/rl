@@ -545,6 +545,7 @@ def test_collector_batch_size(
         frames_per_batch=frames_per_batch,
         max_frames_per_traj=1000,
         total_frames=frames_per_batch * 100,
+        cat_dim=-1,
     )
     ccollector.set_seed(seed)
     for i, b in enumerate(ccollector):
@@ -795,7 +796,7 @@ def test_collector_vecnorm_envcreator(static_seed):
     policy = RandomPolicy(env_make.action_spec)
     num_data_collectors = 2
     c = MultiSyncDataCollector(
-        [env_make] * num_data_collectors, policy=policy, total_frames=int(1e6)
+        [env_make] * num_data_collectors, policy=policy, total_frames=int(1e6), cat_dim=-1,
     )
 
     init_seed = 0
@@ -851,11 +852,13 @@ def test_update_weights(use_async):
     collector_class = (
         MultiSyncDataCollector if not use_async else MultiaSyncDataCollector
     )
+    kwargs = {"cat_dim": -1} if not use_async else {}
     collector = collector_class(
         [create_env] * 3,
         policy=policy,
         devices=[torch.device("cuda:0")] * 3,
         storing_devices=[torch.device("cuda:0")] * 3,
+        **kwargs
     )
     # collect state_dict
     state_dict = collector.state_dict()
@@ -928,6 +931,8 @@ def test_excluded_keys(collector_class, exclude):
         collector_kwargs["create_env_fn"] = [
             collector_kwargs["create_env_fn"] for _ in range(3)
         ]
+    if collector_class is MultiSyncDataCollector:
+        collector_kwargs['cat_dim'] = -1
 
     collector = collector_class(**collector_kwargs)
     collector._exclude_private_keys = exclude
@@ -1011,6 +1016,8 @@ def test_collector_output_keys(
         collector_kwargs["create_env_fn"] = [
             collector_kwargs["create_env_fn"] for _ in range(num_envs)
         ]
+    if collector_class is MultiSyncDataCollector:
+        collector_kwargs['cat_dim'] = -1
 
     collector = collector_class(**collector_kwargs)
 
@@ -1088,6 +1095,7 @@ def test_collector_device_combinations(device, storing_device):
         storing_devices=[
             storing_device,
         ],
+        cat_dim=-1,
     )
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
@@ -1146,6 +1154,8 @@ class TestAutoWrap:
             collector_kwargs["create_env_fn"] = [
                 collector_kwargs["create_env_fn"] for _ in range(self.num_envs)
             ]
+        if collector_class is MultiSyncDataCollector:
+            collector_kwargs['cat_dim'] = -1
 
         return collector_kwargs
 
@@ -1319,6 +1329,7 @@ class TestPreemptiveThreshold:
             storing_devices="cpu",
             split_trajs=False,
             preemptive_threshold=0.0,  # stop after one iteration
+            cat_dim=-1,
         )
 
         for batch in collector:
@@ -1393,6 +1404,7 @@ class TestNestedEnvsCollector:
             frames_per_batch=20,
             total_frames=100,
             device="cpu",
+            cat_dim=-1,
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1539,6 +1551,7 @@ class TestHetEnvsCollector:
             frames_per_batch=frames_per_batch,
             total_frames=100,
             device="cpu",
+            cat_dim=-1,
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1614,6 +1627,7 @@ class TestMultiKeyEnvsCollector:
             frames_per_batch=frames_per_batch,
             total_frames=100,
             device="cpu",
+            cat_dim=-1,
         )
         for i, d in enumerate(ccollector):
             if i == 0:
