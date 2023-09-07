@@ -209,7 +209,7 @@ class MLP(nn.Sequential):
         if not (len(self.num_cells) == depth or depth is None):
             raise RuntimeError(
                 "depth and num_cells length conflict, \
-            consider matching or specifying a constan num_cells argument together with a a desired depth"
+            consider matching or specifying a constant num_cells argument together with a a desired depth"
             )
         layers = self._make_net(device)
         super().__init__(*layers)
@@ -412,7 +412,7 @@ class ConvNet(nn.Sequential):
             if not (len(getattr(self, _field)) == _depth or _depth is None):
                 raise RuntimeError(
                     f"depth={depth} and {_field}={len(getattr(self, _field))} length conflict, "
-                    + f"consider matching or specifying a constan {_field} argument together with a a desired depth"
+                    + f"consider matching or specifying a constant {_field} argument together with a a desired depth"
                 )
 
         self.out_features = self.num_cells[-1]
@@ -487,7 +487,8 @@ class ConvNet(nn.Sequential):
         return out
 
 
-Conv2dNet=ConvNet
+Conv2dNet = ConvNet
+
 
 class Conv3dNet(nn.Sequential):
     """A 3D-convolutional neural network.
@@ -572,6 +573,7 @@ class Conv3dNet(nn.Sequential):
         )
 
     """
+
     def __init__(
         self,
         in_features: Optional[int] = None,
@@ -626,15 +628,10 @@ class Conv3dNet(nn.Sequential):
                 _field,
                 (_value if isinstance(_value, Sequence) else [_value] * _depth),
             )
-            if not (isinstance(_value, Sequence) or _depth is not None):
-                raise RuntimeError(
-                    f"If {_field} is provided as an integer, "
-                    "depth must be provided too."
-                )
             if not (len(getattr(self, _field)) == _depth or _depth is None):
-                raise RuntimeError(
+                raise ValueError(
                     f"depth={depth} and {_field}={len(getattr(self, _field))} length conflict, "
-                    + f"consider matching or specifying a constan {_field} argument together with a a desired depth"
+                    + f"consider matching or specifying a constant {_field} argument together with a a desired depth"
                 )
 
         self.out_features = self.num_cells[-1]
@@ -696,20 +693,23 @@ class Conv3dNet(nn.Sequential):
             )
 
         if self.squeeze_output:
-            layers.append(SqueezeLayer((-3,-2,-1)))
+            layers.append(SqueezeLayer((-3, -2, -1)))
         return layers
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         try:
             *batch, C, D, L, W = inputs.shape
         except ValueError as err:
-            raise ValueError(f"The input value of {self.__class__.__name__} must have at least 4 dimensions, got {inputs.ndim} instead.") from err
+            raise ValueError(
+                f"The input value of {self.__class__.__name__} must have at least 4 dimensions, got {inputs.ndim} instead."
+            ) from err
         if len(batch) > 1:
             inputs = inputs.flatten(0, len(batch) - 1)
         out = super().forward(inputs)
         if len(batch) > 1:
             out = out.unflatten(0, batch)
         return out
+
 
 class DuelingMlpDQNet(nn.Module):
     """Creates a Dueling MLP Q-network.

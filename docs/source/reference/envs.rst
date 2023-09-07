@@ -467,6 +467,7 @@ to be able to create this other composition:
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict

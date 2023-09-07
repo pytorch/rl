@@ -30,6 +30,7 @@ from .transforms import (
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
+    PermuteTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
@@ -53,7 +54,6 @@ from .transforms import (
     VecNorm,
     VIPRewardTransform,
     VIPTransform,
-    PermuteTransform,
 )
 from .utils import (
     check_env_specs,

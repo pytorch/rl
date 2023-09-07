@@ -150,12 +150,14 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey],
+        in_keys: Sequence[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
+        if in_keys is None:
+            in_keys = []
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
@@ -1805,18 +1807,104 @@ class SqueezeTransform(UnsqueezeTransform):
     _apply_transform = UnsqueezeTransform._inv_apply_transform
     _inv_apply_transform = UnsqueezeTransform._apply_transform
 
+
 class PermuteTransform(Transform):
+    """Permutation transform.
+
+    Permutes input tensors along the desired dimensions. The permutations
+    must be provided along the feature dimension (not batch dimension).
+
+    Args:
+        dims (list of int): the permuted order of the dimensions. Must be a reordering
+            of the dims ``[-(len(dims)), ..., -1]``.
+        in_keys (list of NestedKeys): input entries (read).
+        out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
+            not provided.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls. Defaults to ``in_keys_in`` if
+            not provided.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> base_env = GymEnv("ALE/Pong-v5")
+        >>> base_env.rollout(2)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([2, 210, 160, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                pixels: Tensor(shape=torch.Size([2, 210, 160, 3]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        >>> env = TransformedEnv(base_env, PermuteTransform((-1, -3, -2), in_keys=["pixels"]))
+        >>> env.rollout(2)  # channels are at the end
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([2, 3, 210, 160]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                pixels: Tensor(shape=torch.Size([2, 3, 210, 160]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+
+    """
+
     def __init__(
         self,
         dims,
-        in_keys,
-        out_keys = None,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
     ):
-        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
         # check dims
-        self.dims=dims
-        if sorted(list(dims))[0]!=-len(dims) or sorted(list(dims))[-1]!= -1:
-            raise ValueError(f"Only tailing dims with negative indices are supported by {self.__class__.__name__}. Got {dims} instead.")
+        self.dims = dims
+        if sorted(dims) != list(range(-len(dims), 0)):
+            raise ValueError(
+                f"Only tailing dims with negative indices are supported by {self.__class__.__name__}. Got {dims} instead."
+            )
+
+    @staticmethod
+    def _invert_permute(p):
+        def _find_inv(i):
+            for j, _p in enumerate(p):
+                if _p < 0:
+                    inv = True
+                    _p = len(p) + _p
+                else:
+                    inv = False
+                if i == _p:
+                    if inv:
+                        return j - len(p)
+                    else:
+                        return j
+            else:
+                # unreachable
+                raise RuntimeError
+
+        return [_find_inv(i) for i in range(len(p))]
 
     def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
         observation = observation.permute(
@@ -1824,22 +1912,48 @@ class PermuteTransform(Transform):
         )
         return observation
 
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        permuted_dims = self._invert_permute(self.dims)
+        state = state.permute(
+            *list(range(state.ndimension() - len(self.dims))), *permuted_dims
+        )
+        return state
+
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec = self._pixel_observation(observation_spec)
+        observation_spec = self._edit_space(observation_spec)
         observation_spec.shape = torch.Size(
             [
-                *observation_spec.shape[:-len(self.dims)],
-                *[observation_spec.shape[dim] for dim in self.dims]
+                *observation_spec.shape[: -len(self.dims)],
+                *[observation_spec.shape[dim] for dim in self.dims],
             ]
         )
         return observation_spec
 
-    def _pixel_observation(self, spec: TensorSpec) -> None:
+    @_apply_to_composite_inv
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        permuted_dims = self._invert_permute(self.dims)
+        input_spec = self._edit_space_inv(input_spec)
+        input_spec.shape = torch.Size(
+            [
+                *input_spec.shape[: -len(permuted_dims)],
+                *[input_spec.shape[dim] for dim in permuted_dims],
+            ]
+        )
+        return input_spec
+
+    def _edit_space(self, spec: TensorSpec) -> None:
         if isinstance(spec.space, ContinuousBox):
-            spec.space.maximum = self._apply_transform(spec.space.maximum)
-            spec.space.minimum = self._apply_transform(spec.space.minimum)
+            spec.space.high = self._apply_transform(spec.space.high)
+            spec.space.low = self._apply_transform(spec.space.low)
         return spec
+
+    def _edit_space_inv(self, spec: TensorSpec) -> None:
+        if isinstance(spec.space, ContinuousBox):
+            spec.space.high = self._inv_apply_transform(spec.space.high)
+            spec.space.low = self._inv_apply_transform(spec.space.low)
+        return spec
+
 
 class GrayScale(ObservationTransform):
     """Turns a pixel observation to grayscale."""

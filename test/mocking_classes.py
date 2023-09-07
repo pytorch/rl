@@ -653,7 +653,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             cls._out_key = "pixels_orig"
             state_spec = CompositeSpec(
                 {
-                    cls._out_key: observation_spec["pixels_orig"],
+                    cls._out_key: observation_spec["pixels_orig"].clone(),
                 },
                 shape=batch_size,
             )
