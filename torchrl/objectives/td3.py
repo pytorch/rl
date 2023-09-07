@@ -336,7 +336,7 @@ class TD3Loss(LossModule):
     def _cached_stack_actor_params(self):
         return torch.stack(
             [self.actor_network_params, self.target_actor_network_params], 0
-        ).to_tensordict()
+        )
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -363,14 +363,15 @@ class TD3Loss(LossModule):
         # DO NOT call contiguous bc we'll update the tds later
         actor_output_td = self._vmap_actor_network00(
             tensordict_actor,
-            self._cached_stack_actor_params,
+            self._cached_stack_actor_params.to_tensordict(),
         )
 
         # add noise to target policy
-        actor_output_td1 = actor_output_td[1]
-        next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
-            self.min_action, self.max_action
-        )
+        with torch.no_grad():
+            actor_output_td1 = actor_output_td[1]
+            next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
+                self.min_action, self.max_action
+            )
         actor_output_td1.set(self.tensor_keys.action, next_action)
         actor_output_td = torch.stack([actor_output_td[0], actor_output_td1], 0)
         tensordict_actor.set(
@@ -405,7 +406,7 @@ class TD3Loss(LossModule):
         # cat params
         qvalue_params = torch.cat(
             [
-                self._cached_detach_qvalue_network_params,
+                self.qvalue_network_params,  # self._cached_detach_qvalue_network_params,
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],
@@ -428,7 +429,7 @@ class TD3Loss(LossModule):
             dim=0,
         )
 
-        loss_actor = -(state_action_value_actor.min(0)[0]).mean()
+        loss_actor = -(state_action_value_actor[0]).mean()  # .min(0)
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
         tensordict.set(
@@ -446,7 +447,6 @@ class TD3Loss(LossModule):
             )
             .mean(-1)
             .sum()
-            * 0.5
         )
 
         tensordict_save.set(self.tensor_keys.priority, td_error.detach().max(0)[0])

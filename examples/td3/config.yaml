@@ -29,11 +29,13 @@ optimization:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
-  lr: 1e-3
+  lr: 3.0e-4
   weight_decay: 0.0
-  batch_size: 100
+  batch_size: 256
   target_update_polyak: 0.995
   policy_update_delay: 2
+  policy_noise: 0.2
+  noise_clip: 0.5
 
 # Network
 network:

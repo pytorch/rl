@@ -226,6 +226,8 @@ def make_loss_module(cfg, model):
         delay_actor=True,
         delay_qvalue=True,
         action_spec=model[0][1].spec,
+        policy_noise=cfg.optimization.policy_noise,
+        policy_noise_clip=cfg.optimization.policy_noise_clip,
     )
     loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
 
