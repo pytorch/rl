@@ -23,7 +23,7 @@ from torchrl.objectives.value.advantages import (
     _self_set_skip_existing,
     _self_set_grad_enabled,
     _call_value_nets)
-from torchrl.objectives.value.functional import _transpose_time, SHAPE_ERR, td0_return_estimate
+from torchrl.objectives.value.functional import _transpose_time, SHAPE_ERR
 
 
 def _c_val(
@@ -31,7 +31,7 @@ def _c_val(
     log_mu: torch.Tensor,
     c: Union[float, torch.Tensor] = 1,
 ) -> torch.Tensor:
-    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)  # TODO: Review!
+    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)  # TODO: is unsqueeze needed?
 
 def _dv_val(
     rewards: torch.Tensor,
@@ -89,7 +89,7 @@ def vtrace_correction(
     device = state_value.device
 
     deltas, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
-    clipped_c = _c_val(log_pi, log_mu, c_thresh)
+    clipped_c = torch.min(torch.tensor(c_thresh).to(device), clipped_rho)
 
     ############################################################
     # MAKE THIS PART WORK; THEN WE CAN TRY TO MAKE IT FASTER

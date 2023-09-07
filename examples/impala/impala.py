@@ -1,6 +1,6 @@
 """
-This script reproduces the Proximal Policy Optimization (PPO) Algorithm
-results from Schulman et al. 2017 for the on Atari Environments.
+This script reproduces the IMPALA Algorithm
+results from Espeholt et al. 2018 for the on Atari Environments.
 """
 import hydra
 
@@ -15,12 +15,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import MultiaSyncDataCollector
     from torchrl.collectors.distributed import RPCDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import A2CLoss
+    from torchrl.objectives import A2CLoss, ClipPPOLoss
     from torchrl.record.loggers import generate_exp_name, get_logger
     from torchrl.objectives.value.vtrace import VTrace
     from utils import make_parallel_env, make_ppo_models
@@ -52,8 +52,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     #     max_frames_per_traj=-1,
     #     sync=False,
     # )
-    collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, device),
+    collector = MultiaSyncDataCollector(
+        create_env_fn=[make_parallel_env(cfg.env.env_name, device)] * 4,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -86,16 +86,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizer
-    optim = torch.optim.Adam(
-        loss_module.parameters(),
+    optim_actor = torch.optim.Adam(
+        actor.parameters(),
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
+        eps=cfg.optim.eps,
+    )
+    optim_critic = torch.optim.Adam(
+        critic.parameters(),
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.eps,
     )
 
     # Create logger
-    exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.backend, logger_name="ppo", experiment_name=exp_name)
+    exp_name = generate_exp_name("IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+    logger = get_logger(cfg.logger.backend, logger_name="impala", experiment_name=exp_name)
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, device, is_test=True)
@@ -141,39 +147,40 @@ def main(cfg: "DictConfig"):  # noqa: F821
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1 - (num_network_updates / total_network_updates)
             if cfg.optim.anneal_lr:
-                for g in optim.param_groups:
+                for g in optim_actor.param_groups:
+                    g["lr"] = cfg.optim.lr * alpha
+                for g in optim_critic.param_groups:
                     g["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
 
             # Get a data batch
             batch = batch.to(device)
 
-            # Forward pass PPO loss
+            # Forward pass A2C loss
             loss = loss_module(batch)
             losses[i] = loss.select(
                 "loss_critic", "loss_entropy", "loss_objective"
             ).detach()
-            loss_sum = (
-                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-            )
+            loss_actor = loss["loss_objective"] + loss["loss_entropy"]
+            loss_critic = loss["loss_critic"]
 
             # Backward pass
-            loss_sum.backward()
+            loss_actor.backward()
+            loss_critic.backward()
             torch.nn.utils.clip_grad_norm_(
                 list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
             )
 
             # Update the networks
-            optim.step()
-            optim.zero_grad()
+            optim_actor.step()
+            optim_critic.step()
+            optim_actor.zero_grad()
+            optim_critic.zero_grad()
 
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar(key, value.item(), collected_frames)
         logger.log_scalar("lr", alpha * cfg.optim.lr, collected_frames)
-        logger.log_scalar(
-            "clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
-        )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
