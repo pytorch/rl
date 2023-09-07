@@ -50,8 +50,8 @@ from torchrl.modules.tensordict_module.exploration import (
 )
 
 
-@pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
 class TestEGreedy:
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
     @pytest.mark.parametrize("module", [True, False])
     def test_egreedy(self, eps_init, module):
         torch.manual_seed(0)
@@ -78,6 +78,7 @@ class TestEGreedy:
             assert (action == 0).any()
             assert ((action == 1) | (action == 0)).all()
 
+    @pytest.mark.parametrize("eps_init", [0.0, 0.5, 1.0])
     @pytest.mark.parametrize("module", [True, False])
     @pytest.mark.parametrize("spec_class", ["discrete", "one_hot"])
     def test_egreedy_masked(self, module, eps_init, spec_class):
@@ -86,10 +87,11 @@ class TestEGreedy:
         batch_size = (3, 4, 2)
         module = torch.nn.Linear(action_size, action_size, bias=False)
         if spec_class == "discrete":
-            spec = DiscreteTensorSpec(action_size, shape=batch_size)
+            spec = DiscreteTensorSpec(action_size)
         else:
             spec = OneHotDiscreteTensorSpec(
-                action_size, shape=batch_size + (action_size,)
+                action_size,
+                shape=(action_size,),
             )
         policy = QValueActor(spec=spec, module=module, action_mask_key="action_mask")
         if module:
@@ -109,6 +111,14 @@ class TestEGreedy:
                 eps_end=eps_init,
                 action_mask_key="action_mask",
             )
+
+        td = TensorDict(
+            {"observation": torch.zeros(*batch_size, action_size)},
+            batch_size=batch_size,
+        )
+        with pytest.raises(KeyError, match="Action mask key action_mask not found in"):
+            explorative_policy(td)
+
         torch.manual_seed(0)
         action_mask = torch.ones(*batch_size, action_size).to(torch.bool)
         td = TensorDict(
@@ -144,6 +154,58 @@ class TestEGreedy:
 
         assert not (action[~action_mask] == 0).all()
         assert (masked_action[~action_mask] == 0).all()
+
+    def test_egreedy_wrapper_deprecation(self):
+        torch.manual_seed(0)
+        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        module = torch.nn.Linear(4, 4, bias=False)
+        policy = Actor(spec=spec, module=module)
+        with pytest.deprecated_call():
+            EGreedyWrapper(policy)
+
+    def test_no_spec_error(
+        self,
+    ):
+        torch.manual_seed(0)
+        action_size = 4
+        batch_size = (3, 4, 2)
+        module = torch.nn.Linear(action_size, action_size, bias=False)
+        spec = OneHotDiscreteTensorSpec(action_size, shape=(action_size,))
+        policy = QValueActor(spec=spec, module=module)
+        explorative_policy = TensorDictSequential(
+            policy,
+            EGreedyModule(),
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(*batch_size, action_size),
+            },
+            batch_size=batch_size,
+        )
+
+        with pytest.raises(
+            RuntimeError, match="spec must be provided to the exploration wrapper."
+        ):
+            explorative_policy(td)
+
+    @pytest.mark.parametrize("module", [True, False])
+    def test_wrong_action_shape(self, module):
+        torch.manual_seed(0)
+        spec = BoundedTensorSpec(1, 1, torch.Size([4]))
+        module = torch.nn.Linear(4, 5, bias=False)
+
+        policy = Actor(spec=spec, module=module)
+        if module:
+            explorative_policy = TensorDictSequential(policy, EGreedyModule(spec=spec))
+        else:
+            explorative_policy = EGreedyWrapper(
+                policy,
+            )
+        td = TensorDict({"observation": torch.zeros(10, 4)}, batch_size=[10])
+        with pytest.raises(
+            ValueError, match="Action spec shape does not match the action shape"
+        ):
+            explorative_policy(td)
 
 
 @pytest.mark.parametrize("device", get_default_devices())

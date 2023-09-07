@@ -110,7 +110,7 @@ class EGreedyModule(TensorDictModuleBase):
         if spec is not None:
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
                 spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
-            self._spec = spec
+        self._spec = spec
 
     @property
     def spec(self):
@@ -156,7 +156,10 @@ class EGreedyModule(TensorDictModuleBase):
                 if spec.shape != out.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
                     # cover all batched dims
-                    if out.shape[-len(spec.shape) :] == spec.shape:
+                    if (
+                        not len(spec.shape)
+                        or out.shape[-len(spec.shape) :] == spec.shape
+                    ):
                         spec = spec.expand(out.shape)
                     else:
                         raise ValueError(
@@ -171,15 +174,13 @@ class EGreedyModule(TensorDictModuleBase):
                     spec.update_mask(action_mask)
                 out = cond * spec.rand().to(out.device) + (1 - cond) * out
             else:
-                raise RuntimeError(
-                    "spec must be provided by the policy or directly to the exploration wrapper."
-                )
+                raise RuntimeError("spec must be provided to the exploration wrapper.")
             action_tensordict.set(action_key, out)
         return tensordict
 
 
 class EGreedyWrapper(TensorDictModuleWrapper):
-    """Epsilon-Greedy PO wrapper.
+    """[Deprecated] ]Epsilon-Greedy PO wrapper.
 
     Args:
         policy (TensorDictModule): a deterministic policy.
@@ -243,6 +244,11 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         action_mask_key: Optional[NestedKey] = None,
         spec: Optional[TensorSpec] = None,
     ):
+        warnings.warn(
+            "EGreedyWrapper is deprecated and it will be removed in v0.3. Please use torchrl/modules.EGreedyModule instead.",
+            category=DeprecationWarning,
+        )
+
         super().__init__(policy)
         self.register_buffer("eps_init", torch.tensor([eps_init]))
         self.register_buffer("eps_end", torch.tensor([eps_end]))
@@ -264,6 +270,8 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             self._spec = self.td_module.spec.clone()
             if action_key not in self._spec.keys():
                 self._spec[action_key] = None
+        else:
+            self._spec = spec
 
     @property
     def spec(self):
@@ -310,7 +318,10 @@ class EGreedyWrapper(TensorDictModuleWrapper):
                 if spec.shape != out.shape:
                     # In batched envs if the spec is passed unbatched, the rand() will not
                     # cover all batched dims
-                    if out.shape[-len(spec.shape) :] == spec.shape:
+                    if (
+                        not len(spec.shape)
+                        or out.shape[-len(spec.shape) :] == spec.shape
+                    ):
                         spec = spec.expand(out.shape)
                     else:
                         raise ValueError(

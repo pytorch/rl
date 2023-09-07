@@ -459,7 +459,9 @@ class QValueModule(TensorDictModuleBase):
                 raise KeyError(
                     f"Action mask key {self.action_mask_key} not found in {tensordict}."
                 )
-            action_values[~action_mask] = torch.finfo(action_values.dtype).min
+            action_values = torch.where(
+                action_mask, action_values, torch.finfo(action_values.dtype).min
+            )
 
         action = self.action_func_mapping[self.action_space](action_values)
 
@@ -633,7 +635,9 @@ class DistributionalQValueModule(QValueModule):
                 raise KeyError(
                     f"Action mask key {self.action_mask_key} not found in {tensordict}."
                 )
-            action_values[action_mask] = torch.finfo(action_values.dtype).min
+            action_values = torch.where(
+                action_mask, action_values, torch.finfo(action_values.dtype).min
+            )
 
         action = self.action_func_mapping[self.action_space](action_values)
 
