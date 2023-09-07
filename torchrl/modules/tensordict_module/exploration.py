@@ -245,7 +245,8 @@ class EGreedyWrapper(TensorDictModuleWrapper):
         spec: Optional[TensorSpec] = None,
     ):
         warnings.warn(
-            "EGreedyWrapper is deprecated and it will be removed in v0.3. Please use torchrl/modules.EGreedyModule instead.",
+            "EGreedyWrapper is deprecated and it will be removed in v0.3. "
+            "Please use torchrl.modules.EGreedyModule instead.",
             category=DeprecationWarning,
         )
 
