@@ -351,32 +351,32 @@ behaviour and more control you can consider writing your own TensorDictModule.
 
 
 def DataCollector(
-        create_env_fn: Sequence[Callable[[], EnvBase]],
-        policy: Optional[
-            Union[
-                TensorDictModule,
-                Callable[[TensorDictBase], TensorDictBase],
-            ]
-        ],
-        *,
-        num_workers: int = None,
-        sync: bool = True,
-        frames_per_batch: int = 200,
-        total_frames: Optional[int] = -1,
-        device: DEVICE_TYPING = None,
-        storing_device: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
-        create_env_kwargs: Optional[Sequence[dict]] = None,
-        max_frames_per_traj: int = -1,
-        init_random_frames: int = -1,
-        reset_at_each_iter: bool = False,
-        postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
-        split_trajs: Optional[bool] = None,
-        exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
-        exploration_mode=None,
-        reset_when_done: bool = True,
-        preemptive_threshold: float = None,
-        update_at_each_batch: bool = False,
-    ):
+    create_env_fn: Sequence[Callable[[], EnvBase]],
+    policy: Optional[
+        Union[
+            TensorDictModule,
+            Callable[[TensorDictBase], TensorDictBase],
+        ]
+    ],
+    *,
+    num_workers: int = None,
+    sync: bool = True,
+    frames_per_batch: int = 200,
+    total_frames: Optional[int] = -1,
+    device: DEVICE_TYPING = None,
+    storing_device: Optional[Union[DEVICE_TYPING, Sequence[DEVICE_TYPING]]] = None,
+    create_env_kwargs: Optional[Sequence[dict]] = None,
+    max_frames_per_traj: int = -1,
+    init_random_frames: int = -1,
+    reset_at_each_iter: bool = False,
+    postproc: Optional[Callable[[TensorDictBase], TensorDictBase]] = None,
+    split_trajs: Optional[bool] = None,
+    exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
+    exploration_mode=None,
+    reset_when_done: bool = True,
+    preemptive_threshold: float = None,
+    update_at_each_batch: bool = False,
+):
     if not isinstance(create_env_fn, EnvBase) and not callable(create_env_fn):
         if num_workers is not None and num_workers != len(create_env_fn):
             raise TypeError(
@@ -459,6 +459,7 @@ def DataCollector(
             exploration_mode=exploration_mode,
             reset_when_done=reset_when_done,
         )
+
 
 @accept_remote_rref_udf_invocation
 class SyncDataCollector(DataCollectorBase):
@@ -1870,13 +1871,18 @@ class MultiSyncDataCollector(_MultiDataCollector):
                 if not valid_mask.all():
                     out = self.out_buffer[valid_mask]
                     if truncated is not None:
-                        out.set(("next", "truncated"), truncated[valid_mask].unsqueeze(-1))
+                        out.set(
+                            ("next", "truncated"), truncated[valid_mask].unsqueeze(-1)
+                        )
                     out = out.reshape(shape)
                     out.names = self.out_buffer.names
                 else:
                     out = self.out_buffer.clone()
                     if truncated is not None:
-                        out.set(("next", "truncated"), truncated[valid_mask].reshape(*shape, 1))
+                        out.set(
+                            ("next", "truncated"),
+                            truncated[valid_mask].reshape(*shape, 1),
+                        )
 
                 frames += prod(out.shape)
             if self.postprocs:
