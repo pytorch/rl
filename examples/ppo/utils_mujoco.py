@@ -1,5 +1,4 @@
 import gym
-import numpy as np
 import torch.nn
 import torch.optim
 
@@ -16,7 +15,6 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = gym.make(env_name)
-    # env = gym.wrappers.NormalizeObservation(env)
     env = GymWrapper(env, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
