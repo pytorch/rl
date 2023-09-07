@@ -529,18 +529,19 @@ class TensorSpec:
                 val = torch.tensor(val, device=self.device, dtype=self.dtype)
             else:
                 val = torch.as_tensor(val, dtype=self.dtype)
-            if val.shape[-len(self.shape) :] != self.shape:
+            if val != self.shape:
+                # if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
-                if (
-                    val.shape[-len(self.shape) :] == self.shape[:-1]
-                    and self.shape[-1] == 1
-                ):
+                if val == self.shape and self.shape[-1] == 1:
                     val = val.unsqueeze(-1)
                 else:
-                    raise RuntimeError(
-                        f"Shape mismatch: the value has shape {val.shape} which "
-                        f"is incompatible with the spec shape {self.shape}."
-                    )
+                    try:
+                        val = val.reshape(self.shape)
+                    except Exception as err:
+                        raise RuntimeError(
+                            f"Shape mismatch: the value has shape {val.shape} which "
+                            f"is incompatible with the spec shape {self.shape}."
+                        ) from err
         if _CHECK_SPEC_ENCODE:
             self.assert_is_in(val)
         return val
@@ -2011,7 +2012,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
                     v, space, ignore_device=ignore_device
                 )
             )
-        return torch.cat(x, -1)
+        return torch.cat(x, -1).reshape(self.shape)
 
     def _split(self, val: torch.Tensor) -> Optional[torch.Tensor]:
         split_sizes = [space.n for space in self.space]
@@ -2924,6 +2925,10 @@ class CompositeSpec(TensorSpec):
                     )
         self._shape = torch.Size(value)
 
+    def is_empty(self):
+        """Whether the composite spec contains specs or not."""
+        return len(self._specs) == 0
+
     @property
     def ndim(self):
         return self.ndimension()
@@ -3176,9 +3181,10 @@ class CompositeSpec(TensorSpec):
 
     def is_in(self, val: Union[dict, TensorDictBase]) -> bool:
         for key, item in self._specs.items():
-            if item is None:
+            if item is None or (isinstance(item, CompositeSpec) and item.is_empty()):
                 continue
-            if not item.is_in(val.get(key)):
+            val_item = val.get(key)
+            if not item.is_in(val_item):
                 return False
         return True
 

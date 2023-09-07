@@ -2074,7 +2074,7 @@ class CatFrames(ObservationTransform):
 
     inplace = False
     _CAT_DIM_ERR = (
-        "dim must be > 0 to accomodate for tensordict of "
+        "dim must be < 0 to accomodate for tensordict of "
         "different batch-sizes (since negative dims are batch invariant)."
     )
     ACCEPTED_PADDING = {"same", "zeros"}
@@ -2092,7 +2092,7 @@ class CatFrames(ObservationTransform):
             in_keys = IMAGE_KEYS
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
-        if dim > 0:
+        if dim >= 0:
             raise ValueError(self._CAT_DIM_ERR)
         self.dim = dim
         if padding not in self.ACCEPTED_PADDING:
@@ -4811,6 +4811,12 @@ class ActionMask(Transform):
 
       .. note:: This transform will fail when used without an environment.
 
+    Args:
+        action_key (NestedKey, optional): the key where the action tensor can be found.
+            Defaults to ``"action"``.
+        mask_key (NestedKey, optional): the key where the action mask can be found.
+            Defaults to ``"action_mask"``.
+
     Examples:
         >>> import torch
         >>> from torchrl.data.tensor_specs import DiscreteTensorSpec, BinaryDiscreteTensorSpec, UnboundedContinuousTensorSpec, CompositeSpec
@@ -4820,7 +4826,7 @@ class ActionMask(Transform):
         ...     def __init__(self, *args, **kwargs):
         ...         super().__init__(*args, **kwargs)
         ...         self.action_spec = DiscreteTensorSpec(4)
-        ...         self.state_spec = CompositeSpec(mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool))
+        ...         self.state_spec = CompositeSpec(action_mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool))
         ...         self.observation_spec = CompositeSpec(obs=UnboundedContinuousTensorSpec(3))
         ...         self.reward_spec = UnboundedContinuousTensorSpec(1)
         ...
@@ -4831,11 +4837,11 @@ class ActionMask(Transform):
         ...
         ...     def _step(self, data):
         ...         td = self.observation_spec.rand()
-        ...         mask = data.get("mask")
+        ...         mask = data.get("action_mask")
         ...         action = data.get("action")
         ...         mask = mask.scatter(-1, action.unsqueeze(-1), 0)
         ...
-        ...         td.set("mask", mask)
+        ...         td.set("action_mask", mask)
         ...         td.set("reward", self.reward_spec.rand())
         ...         td.set("done", ~mask.any().view(1))
         ...         return td
@@ -4849,7 +4855,7 @@ class ActionMask(Transform):
         >>> r = env.rollout(10)
         >>> env = TransformedEnv(base_env, ActionMask())
         >>> r = env.rollout(10)
-        >>> r["mask"]
+        >>> r["action_mask"]
         tensor([[ True,  True,  True,  True],
                 [ True,  True, False,  True],
                 [ True,  True, False, False],
@@ -4865,7 +4871,9 @@ class ActionMask(Transform):
     )
     SPEC_TYPE_ERROR = "The action spec must be one of {}. Got {} instead."
 
-    def __init__(self, action_key: NestedKey = "action", mask_key: NestedKey = "mask"):
+    def __init__(
+        self, action_key: NestedKey = "action", mask_key: NestedKey = "action_mask"
+    ):
         if not isinstance(action_key, (tuple, str)):
             raise ValueError(
                 f"The action key must be a nested key. Got {type(action_key)} instead."
