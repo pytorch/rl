@@ -4,7 +4,7 @@ env:
 
 # collector
 collector:
-  frames_per_batch: 256
+  frames_per_batch: 256  # 50
   total_frames: 40_000_000
 
 # logger
@@ -25,7 +25,7 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 256
+  mini_batch_size: 256  # 500
   critic_coef: 1.0
   entropy_coef: 0.025
   loss_critic_type: l2
