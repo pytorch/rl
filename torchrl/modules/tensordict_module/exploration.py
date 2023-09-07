@@ -32,10 +32,12 @@ class EGreedyModule(TensorDictModuleBase):
     """Epsilon-Greedy exploration module.
 
     This module randomly updates the action(s) in a tensordict given an epsilon greedy exploration strategy.
-    At each call, random draws (one per action) are executed given a certain probability threshold. If successful, the corresponding actions are being replaced by random samples drawn from the action spec provided. Others are left unchanged.
+    At each call, random draws (one per action) are executed given a certain probability threshold. If successful,
+    the corresponding actions are being replaced by random samples drawn from the action spec provided.
+    Others are left unchanged.
 
     Args:
-        spec (TensorSpec): the spec used for samppling actions.
+        spec (TensorSpec): the spec used for sampling actions.
         eps_init (scalar, optional): initial epsilon value.
             default: 1.0
         eps_end (scalar, optional): final epsilon value.
