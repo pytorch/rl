@@ -349,7 +349,7 @@ class TD3Loss(LossModule):
         # computing early for reprod
         noise = torch.normal(
             mean=torch.zeros(action_shape),
-            std=torch.full(action_shape, self.policy_noise),
+            std=torch.full(action_shape, self.max_action * self.policy_noise),
         ).to(action_device)
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
