@@ -16,11 +16,11 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = gym.make(env_name)
-    env = gym.wrappers.NormalizeObservation(env)
+    # env = gym.wrappers.NormalizeObservation(env)
     env = GymWrapper(env, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
-    # env.append_transform(VecNorm(in_keys=["observation"]))
+    env.append_transform(VecNorm(in_keys=["observation"]))
     env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env

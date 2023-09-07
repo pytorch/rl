@@ -40,7 +40,7 @@ from torchrl.modules import (
 class EpisodicLifeEnv(gym.Wrapper):
     def __init__(self, env):
         """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. since it helps value estimation.
+        Done by DeepMind for the DQN and co. It helps value estimation.
         """
         gym.Wrapper.__init__(self, env)
         self.lives = 0
