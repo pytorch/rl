@@ -1990,7 +1990,7 @@ class TestTD3(LossModuleTestBase):
         loss_fn = TD3Loss(
             actor,
             value,
-            action_spec=BoundedTensorSpec(shape=(n_act,), minimum=-1, maximum=1),
+            action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
             loss_function="l2",
             separate_losses=separate_losses,
         )

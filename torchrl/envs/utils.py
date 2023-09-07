@@ -558,7 +558,7 @@ def make_composite_from_td(data):
                 obs: UnboundedContinuousTensorSpec(
                      shape=torch.Size([3]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
                 reward: UnboundedContinuousTensorSpec(
-                     shape=torch.Size([1]), space=ContinuousBox(minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+                     shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
     from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec

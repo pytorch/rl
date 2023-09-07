@@ -51,7 +51,7 @@ from torchrl.modules.tensordict_module.actors import (
 def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
     )
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
@@ -112,7 +112,7 @@ def test_probabilistic_actor_nested_delta(log_prob_key, nested_dim=5, n_actions=
 def test_probabilistic_actor_nested_normal(log_prob_key, nested_dim=5, n_actions=3):
     env = NestedCountingEnv(nested_dim=nested_dim)
     action_spec = BoundedTensorSpec(
-        shape=torch.Size((nested_dim, n_actions)), maximum=1, minimum=-1
+        shape=torch.Size((nested_dim, n_actions)), high=1, low=-1
     )
     actor_net = nn.Sequential(
         nn.Linear(1, 2),
