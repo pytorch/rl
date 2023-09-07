@@ -122,13 +122,13 @@ fi
 git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-if [ "$TORCH_VERSION" == nightly] ; then
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/cpu
   else
       pip3 install --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
-elif [ "$TORCH_VERSION" == stable] ; then
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
       pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
   else
