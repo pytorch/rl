@@ -386,14 +386,14 @@ def _make_spec(self, td_params):
     # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
         th=BoundedTensorSpec(
-            minimum=-torch.pi,
-            maximum=torch.pi,
+            low=-torch.pi,
+            high=torch.pi,
             shape=(),
             dtype=torch.float32,
         ),
         thdot=BoundedTensorSpec(
-            minimum=-td_params["params", "max_speed"],
-            maximum=td_params["params", "max_speed"],
+            low=-td_params["params", "max_speed"],
+            high=td_params["params", "max_speed"],
             shape=(),
             dtype=torch.float32,
         ),
@@ -408,8 +408,8 @@ def _make_spec(self, td_params):
     # action-spec will be automatically wrapped in input_spec when
     # `self.action_spec = spec` will be called supported
     self.action_spec = BoundedTensorSpec(
-        minimum=-td_params["params", "max_torque"],
-        maximum=td_params["params", "max_torque"],
+        low=-td_params["params", "max_torque"],
+        high=td_params["params", "max_torque"],
         shape=(1,),
         dtype=torch.float32,
     )
@@ -658,8 +658,8 @@ class SinTransform(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec):
         return BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=observation_spec.shape,
             dtype=observation_spec.dtype,
             device=observation_spec.device,
@@ -676,8 +676,8 @@ class CosTransform(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec):
         return BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=observation_spec.shape,
             dtype=observation_spec.dtype,
             device=observation_spec.device,

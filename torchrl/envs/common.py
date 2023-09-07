@@ -152,8 +152,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 action: BoundedTensorSpec(
                     shape=torch.Size([1]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
@@ -161,8 +161,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         BoundedTensorSpec(
             shape=torch.Size([1]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)
@@ -171,8 +171,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             observation: BoundedTensorSpec(
                 shape=torch.Size([3]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous), device=cpu, shape=torch.Size([]))
@@ -204,8 +204,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])),
@@ -387,8 +387,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action: BoundedTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
@@ -440,8 +440,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     observation: BoundedTensorSpec(
                         shape=torch.Size([3]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])),
@@ -516,8 +516,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -530,8 +530,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -546,8 +546,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action: UnboundedContinuousTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
@@ -571,8 +571,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             BoundedTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -683,8 +683,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -697,8 +697,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -713,8 +713,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     reward: UnboundedContinuousTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
@@ -1021,8 +1021,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([]))
