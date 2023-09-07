@@ -111,8 +111,6 @@ class EGreedyModule(TensorDictModuleBase):
             if not isinstance(spec, CompositeSpec) and len(self.out_keys) >= 1:
                 spec = CompositeSpec({action_key: spec}, shape=spec.shape[:-1])
             self._spec = spec
-        else:
-            self._spec = CompositeSpec({action_key: None})
 
     @property
     def spec(self):
@@ -266,8 +264,6 @@ class EGreedyWrapper(TensorDictModuleWrapper):
             self._spec = self.td_module.spec.clone()
             if action_key not in self._spec.keys():
                 self._spec[action_key] = None
-        else:
-            self._spec = CompositeSpec({key: None for key in policy.out_keys})
 
     @property
     def spec(self):
