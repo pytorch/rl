@@ -348,7 +348,7 @@ class Box:
 
 @dataclass(repr=False)
 class ContinuousBox(Box):
-    """A continuous box of values, in between a minimum and a maximum."""
+    """A continuous box of values, in between a minimum (self.low) and a maximum (self.high)."""
 
     _low: torch.Tensor
     _high: torch.Tensor
@@ -1531,7 +1531,7 @@ class BoundedTensorSpec(TensorSpec):
                 shape = torch.Size([shape])
             elif not isinstance(shape, torch.Size):
                 shape = torch.Size(shape)
-            shape_err_msg = f"minimum and shape mismatch, got {low.shape} and {shape}"
+            shape_err_msg = f"low and shape mismatch, got {low.shape} and {shape}"
             if len(low.shape) != len(shape):
                 raise RuntimeError(shape_err_msg)
             if not all(_s == _sa for _s, _sa in zip(shape, low.shape)):
@@ -1553,8 +1553,8 @@ class BoundedTensorSpec(TensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            minimum=self.space.minimum.expand(shape).clone(),
-            maximum=self.space.maximum.expand(shape).clone(),
+            low=self.space.low.expand(shape).clone(),
+            high=self.space.high.expand(shape).clone(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -1566,15 +1566,15 @@ class BoundedTensorSpec(TensorSpec):
             return self
 
         if dim is None:
-            minimum = self.space.minimum.squeeze().clone()
-            maximum = self.space.maximum.squeeze().clone()
+            low = self.space.low.squeeze().clone()
+            high = self.space.high.squeeze().clone()
         else:
-            minimum = self.space.minimum.squeeze(dim).clone()
-            maximum = self.space.maximum.squeeze(dim).clone()
+            low = self.space.low.squeeze(dim).clone()
+            high = self.space.high.squeeze(dim).clone()
 
         return self.__class__(
-            minimum=minimum,
-            maximum=maximum,
+            low=low,
+            high=high,
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -1583,8 +1583,8 @@ class BoundedTensorSpec(TensorSpec):
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            minimum=self.space.minimum.unsqueeze(dim).clone(),
-            maximum=self.space.maximum.unsqueeze(dim).clone(),
+            low=self.space.low.unsqueeze(dim).clone(),
+            high=self.space.high.unsqueeze(dim).clone(),
             shape=shape,
             device=self.device,
             dtype=self.dtype,
@@ -1607,42 +1607,42 @@ class BoundedTensorSpec(TensorSpec):
                 out[out < a] = a.expand_as(out)[out < a]
             return out
         else:
-            if self.space.maximum.dtype == torch.bool:
-                maxi = self.space.maximum.int()
+            if self.space.high.dtype == torch.bool:
+                maxi = self.space.high.int()
             else:
-                maxi = self.space.maximum
-            if self.space.minimum.dtype == torch.bool:
-                mini = self.space.minimum.int()
+                maxi = self.space.high
+            if self.space.low.dtype == torch.bool:
+                mini = self.space.low.int()
             else:
-                mini = self.space.minimum
+                mini = self.space.low
             interval = maxi - mini
             r = torch.rand(torch.Size([*shape, *self.shape]), device=interval.device)
             r = interval * r
-            r = self.space.minimum + r
+            r = self.space.low + r
             r = r.to(self.dtype).to(self.device)
             return r
 
     def _project(self, val: torch.Tensor) -> torch.Tensor:
-        minimum = self.space.minimum.to(val.device)
-        maximum = self.space.maximum.to(val.device)
+        low = self.space.low.to(val.device)
+        high = self.space.high.to(val.device)
         try:
-            val = val.clamp_(minimum.item(), maximum.item())
+            val = val.clamp_(low.item(), high.item())
         except ValueError:
-            minimum = minimum.expand_as(val)
-            maximum = maximum.expand_as(val)
-            val[val < minimum] = minimum[val < minimum]
-            val[val > maximum] = maximum[val > maximum]
+            low = low.expand_as(val)
+            high = high.expand_as(val)
+            val[val < low] = low[val < low]
+            val[val > high] = high[val > high]
         except RuntimeError:
-            minimum = minimum.expand_as(val)
-            maximum = maximum.expand_as(val)
-            val[val < minimum] = minimum[val < minimum]
-            val[val > maximum] = maximum[val > maximum]
+            low = low.expand_as(val)
+            high = high.expand_as(val)
+            val[val < low] = low[val < low]
+            val[val > high] = high[val > high]
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
         try:
-            return (val >= self.space.minimum.to(val.device)).all() and (
-                val <= self.space.maximum.to(val.device)
+            return (val >= self.space.low.to(val.device)).all() and (
+                val <= self.space.high.to(val.device)
             ).all()
         except RuntimeError as err:
             if "The size of tensor a" in str(err):
@@ -1660,8 +1660,8 @@ class BoundedTensorSpec(TensorSpec):
         if dest_device == self.device and dest_dtype == self.dtype:
             return self
         return self.__class__(
-            minimum=self.space.minimum.to(dest),
-            maximum=self.space.maximum.to(dest),
+            low=self.space.low.to(dest),
+            high=self.space.high.to(dest),
             shape=self.shape,
             device=dest_device,
             dtype=dest_dtype,
@@ -1669,8 +1669,8 @@ class BoundedTensorSpec(TensorSpec):
 
     def clone(self) -> BoundedTensorSpec:
         return self.__class__(
-            minimum=self.space.minimum.clone(),
-            maximum=self.space.maximum.clone(),
+            low=self.space.low.clone(),
+            high=self.space.high.clone(),
             shape=self.shape,
             device=self.device,
             dtype=self.dtype,
@@ -1686,8 +1686,8 @@ class BoundedTensorSpec(TensorSpec):
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         # Expand is required as pytorch.tensor indexing
         return self.__class__(
-            minimum=self.space.minimum[idx].clone().expand(indexed_shape),
-            maximum=self.space.maximum[idx].clone().expand(indexed_shape),
+            low=self.space.low[idx].clone().expand(indexed_shape),
+            high=self.space.high[idx].clone().expand(indexed_shape),
             shape=indexed_shape,
             device=self.device,
             dtype=self.dtype,
@@ -1848,10 +1848,10 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
-        interval = self.space.maximum - self.space.minimum
+        interval = self.space.high - self.space.low
         r = torch.rand(torch.Size([*shape, *interval.shape]), device=interval.device)
         r = r * interval
-        r = self.space.minimum + r
+        r = self.space.low + r
         r = r.to(self.dtype)
         return r.to(self.device)
 

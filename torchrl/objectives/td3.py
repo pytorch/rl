@@ -275,8 +275,8 @@ class TD3Loss(LossModule):
                 raise ValueError(
                     f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
                 )
-            low = action_spec.space.minimum
-            high = action_spec.space.maximum
+            low = action_spec.space.low
+            high = action_spec.space.high
         else:
             low, high = bounds
         if not isinstance(low, torch.Tensor):

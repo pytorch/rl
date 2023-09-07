@@ -4198,7 +4198,7 @@ class StepCounter(Transform):
             dtype=torch.int64,
             device=input_spec.device,
         )
-        step_spec.space.minimum *= 0
+        step_spec.space.low *= 0
         input_spec["full_state_spec", self.step_count_key] = step_spec
 
         return input_spec

@@ -188,7 +188,7 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         >>> from torchrl.modules import ProbabilisticActor, NormalParamWrapper, TanhNormal
         >>> td = TensorDict({"observation": torch.randn(3, 4)}, [3,])
         >>> action_spec = BoundedTensorSpec(shape=torch.Size([4]),
-        ...    minimum=-1, maximum=1)
+        ...    low=-1, high=1)
         >>> module = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> tensordict_module = TensorDictModule(module, in_keys=["observation"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticActor(
