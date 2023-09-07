@@ -28,7 +28,7 @@ Key learnings:
 - Transforming your environment inputs and outputs, and writing your own
   transforms;
 - How to use :class:`tensordict.TensorDict` to carry arbitrary data structures
-  from sep to step.
+  from step to step.
 
 In the process, we will touch three crucial components of TorchRL:
 
@@ -437,7 +437,7 @@ def make_composite_from_td(td):
 # Reproducible experiments: seeding
 # ---------------------------------
 #
-# Seeding an environment is a commong operation when initializing an experiment.
+# Seeding an environment is a common operation when initializing an experiment.
 # :func:`EnvBase._set_seed` only goal is to set the seed of the contained
 # simulator. If possible, this operation should not call `reset()` or interact
 # with the environment execution. The parent :func:`EnvBase.set_seed` method
