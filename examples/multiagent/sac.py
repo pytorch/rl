@@ -19,7 +19,6 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import RewardSum, TransformedEnv
 from torchrl.envs.libs.vmas import VmasEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DiscreteSACLoss, SACLoss, SoftUpdate, ValueEstimators
@@ -52,7 +51,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         max_steps=cfg.env.max_steps,
         device=cfg.env.device,
         seed=cfg.seed,
-        categorical_actions=cfg.env.categorical_action,
+        categorical_actions=cfg.env.categorical_actions,
         # Scenario kwargs
         **cfg.env.scenario,
     )
@@ -101,8 +100,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
-                "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
+                "min": env.unbatched_action_spec[("agents", "action")].space.low,
+                "max": env.unbatched_action_spec[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
@@ -150,7 +149,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
             in_keys=[("agents", "logits")],
             out_keys=[env.action_key],
             distribution_class=OneHotCategorical
-            if not cfg.env.categorical_action
+            if not cfg.env.categorical_actions
             else Categorical,
             return_log_prob=True,
         )

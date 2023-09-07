@@ -375,8 +375,8 @@ def make_redq_model(
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
+        "min": action_spec.space.low,
+        "max": action_spec.space.high,
         "tanh_loc": tanh_loc,
     }
 
@@ -400,8 +400,8 @@ def make_redq_model(
         )
 
         if action_spec.domain == "continuous":
-            min = action_spec.space.minimum
-            max = action_spec.space.maximum
+            min = action_spec.space.low
+            max = action_spec.space.high
             transform = SafeTanhTransform()
             if (min != -1).any() or (max != 1).any():
                 transform = d.ComposeTransform(

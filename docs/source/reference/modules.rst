@@ -68,7 +68,7 @@ other cases, the action written in the tensordict is simply the network output.
     :template: rl_template_noinherit.rst
 
     AdditiveGaussianWrapper
-    EGreedyWrapper
+    EGreedyModule
     OrnsteinUhlenbeckProcessWrapper
 
 Probabilistic actors
@@ -401,6 +401,7 @@ Some distributions are typically used in RL scripts.
     TanhDelta
     OneHotCategorical
     MaskedCategorical
+    MaskedOneHotCategorical
 
 Utils
 -----

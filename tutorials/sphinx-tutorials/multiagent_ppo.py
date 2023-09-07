@@ -461,8 +461,8 @@ policy = ProbabilisticActor(
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "min": env.unbatched_action_spec[env.action_key].space.minimum,
-        "max": env.unbatched_action_spec[env.action_key].space.maximum,
+        "min": env.unbatched_action_spec[env.action_key].space.low,
+        "max": env.unbatched_action_spec[env.action_key].space.high,
     },
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),
