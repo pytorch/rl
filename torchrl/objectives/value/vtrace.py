@@ -47,34 +47,7 @@ def _dv_val(
     return deltas, clipped_rho
 
 
-def _vtrace(
-    rewards: torch.Tensor,
-    vals: torch.Tensor,
-    log_pi: torch.Tensor,
-    log_mu: torch.Tensor,
-    gamma: Union[torch.Tensor, float],
-    rho_bar: Union[float, torch.Tensor] = 1.0,
-    c_bar: Union[float, torch.Tensor] = 1.0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-
-    T = vals.shape[1]
-    if not isinstance(gamma, torch.Tensor):
-        gamma = torch.full_like(vals, gamma)
-
-    dv, rho = _dv_val(rewards, vals, gamma, rho_bar, log_pi, log_mu)
-    c = _c_val(log_pi, log_mu, c_bar)
-
-    v_out = []
-    v_out.append(vals[:, -1] + dv[:, -1])
-    for t in range(T - 2, -1, -1):
-        _v_out = (
-            vals[:, t] + dv[:, t] + gamma[:, t] * c[:, t] * (v_out[-1] - vals[:, t + 1])
-        )
-        v_out.append(_v_out)
-    v_out = torch.stack(list(reversed(v_out)), 1)  # values
-    return v_out, rho
-
-# @_transpose_time
+# @_transpose_time # TODO: is this needed?
 def vtrace_correction(
         gamma: float,
         log_pi: torch.Tensor,
@@ -87,7 +60,7 @@ def vtrace_correction(
         c_thresh: Union[float, torch.Tensor] = 1.0,
         time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """V-Trace off-policy correction method.
+    """Computes V-Trace off-policy actor critic targets.
 
     Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
     https://arxiv.org/abs/1802.01561 for more context.
@@ -115,31 +88,28 @@ def vtrace_correction(
     dtype = next_state_value.dtype
     device = state_value.device
 
-    delta, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
+    deltas, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
     clipped_c = _c_val(log_pi, log_mu, c_thresh)
 
     ############################################################
-    # FIX THIS PART!
+    # MAKE THIS PART WORK; THEN WE CAN TRY TO MAKE IT FASTER
 
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
-    acc = 0
-    v_out = torch.empty(*batch_size, time_steps, lastdim, device=device, dtype=dtype)
+    discounts = gamma * not_done
+    vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
+    for i in reversed(range(time_steps)):
+        discount_t, c_t, delta_t = discounts[..., i, :], clipped_c[..., i, :], deltas[..., i, :]
+        vs_minus_v_xs.append(delta_t + discount_t * c_t * vs_minus_v_xs[-1])
+    vs_minus_v_xs = torch.stack(vs_minus_v_xs[1:], dim=time_dim)
+    vs_minus_v_xs = torch.flip(vs_minus_v_xs, dims=[time_dim])
+    vs = vs_minus_v_xs + state_value
+    vs_t_plus_1 = torch.cat([vs[..., 1:, :], next_state_value[..., -1:, :]], dim=time_dim)
+    advantages = clipped_rho * (reward + gamma * vs_t_plus_1 - state_value)
 
-    discounts = gamma * not_done  # TODO: Review!
-    for t in reversed(range(time_steps)):
-        # TODO: Review!
-        acc = delta[..., t, :] + (discounts[..., t, :] * acc * clipped_c[..., t, :])
-        v_out.append(acc)
-
-    v_out[..., t, :].copy_(acc + state_value[..., t, :])
-
-    # FIX THIS PART!
     ############################################################
 
-    advantage = clipped_rho * (reward + gamma * v_out - state_value)
-
-    return advantage, v_out
+    return advantages, vs
 
 
 class VTrace(ValueEstimatorBase):
@@ -194,8 +164,8 @@ class VTrace(ValueEstimatorBase):
             self,
             *,
             gamma: Union[float, torch.Tensor],
-            rho_bar: Union[float, torch.Tensor] = 1.0,
-            c_bar: Union[float, torch.Tensor] = 1.0,
+            rho_thresh: Union[float, torch.Tensor] = 1.0,
+            c_thresh: Union[float, torch.Tensor] = 1.0,
             actor_network: TensorDictModule = None,
             value_network: TensorDictModule,
             average_adv: bool = False,
@@ -221,8 +191,8 @@ class VTrace(ValueEstimatorBase):
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
         self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.register_buffer("rho_bar", torch.tensor(rho_bar, device=device))
-        self.register_buffer("c_bar", torch.tensor(c_bar, device=device))
+        self.register_buffer("rho_thresh", torch.tensor(rho_thresh, device=device))
+        self.register_buffer("c_thresh", torch.tensor(c_thresh, device=device))
         self.average_adv = average_adv
         self.actor_network = actor_network
         self._log_prob_key = log_prob_key
@@ -333,7 +303,7 @@ class VTrace(ValueEstimatorBase):
             raise ValueError(f"Expected {self.log_prob_key} to be in tensordict")
         log_mu = tensordict.get(self.log_prob_key)
 
-        # Compute the current log prob
+        # Compute log prob with current policy
         with hold_out_net(self.actor_network):
             log_pi = self.actor_network(
                 tensordict.select(self.actor_network.in_keys)
@@ -349,8 +319,8 @@ class VTrace(ValueEstimatorBase):
             next_value,
             reward,
             done,
-            rho_bar=self.rho_bar,
-            c_bar=self.c_bar,
+            rho_thresh=self.rho_thresh,
+            c_thresh=self.c_thresh,
             time_dim=tensordict.ndim - 1,
         )
 

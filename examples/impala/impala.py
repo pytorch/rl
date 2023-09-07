@@ -20,7 +20,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import ClipPPOLoss
+    from torchrl.objectives import A2CLoss
     from torchrl.record.loggers import generate_exp_name, get_logger
     from torchrl.objectives.value.vtrace import VTrace
     from utils import make_parallel_env, make_ppo_models
@@ -75,16 +75,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         gamma=cfg.loss.gamma,
         value_network=critic,
         actor_network=actor,
-        average_adv=False,
+        average_adv=True,
     )
-    loss_module = ClipPPOLoss(
+    loss_module = A2CLoss(
         actor=actor,
         critic=critic,
-        clip_epsilon=cfg.loss.clip_epsilon,
         loss_critic_type=cfg.loss.loss_critic_type,
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
-        normalize_advantage=True,
     )
 
     # Create optimizer
@@ -109,9 +107,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
     num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (
-            (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
-    )
+    total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
     for data in collector:
 
@@ -130,49 +126,46 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data["done"].copy_(data["end_of_life"])
         data["next", "done"].copy_(data["next", "end_of_life"])
 
-        losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
-        for j in range(cfg.loss.ppo_epochs):
+        losses = TensorDict({}, batch_size=[num_mini_batches])
 
-            # Compute VTrace
-            with torch.no_grad():
-                data = vtrace_module(data)
-            data_reshape = data.reshape(-1)
+        # Compute VTrace
+        with torch.no_grad():
+            data = vtrace_module(data)
+        data_reshape = data.reshape(-1)
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
+        # Update the data buffer
+        data_buffer.extend(data_reshape)
 
-            for i, batch in enumerate(data_buffer):
+        for i, batch in enumerate(data_buffer):
 
-                # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
-                if cfg.optim.anneal_lr:
-                    for g in optim.param_groups:
-                        g["lr"] = cfg.optim.lr * alpha
-                if cfg.loss.anneal_clip_epsilon:
-                    loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
-                num_network_updates += 1
+            # Linearly decrease the learning rate and clip epsilon
+            alpha = 1 - (num_network_updates / total_network_updates)
+            if cfg.optim.anneal_lr:
+                for g in optim.param_groups:
+                    g["lr"] = cfg.optim.lr * alpha
+            num_network_updates += 1
 
-                # Get a data batch
-                batch = batch.to(device)
+            # Get a data batch
+            batch = batch.to(device)
 
-                # Forward pass PPO loss
-                loss = loss_module(batch)
-                losses[j, i] = loss.select(
-                    "loss_critic", "loss_entropy", "loss_objective"
-                ).detach()
-                loss_sum = (
-                        loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
-                )
+            # Forward pass PPO loss
+            loss = loss_module(batch)
+            losses[i] = loss.select(
+                "loss_critic", "loss_entropy", "loss_objective"
+            ).detach()
+            loss_sum = (
+                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+            )
 
-                # Backward pass
-                loss_sum.backward()
-                torch.nn.utils.clip_grad_norm_(
-                    list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
-                )
+            # Backward pass
+            loss_sum.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
+            )
 
-                # Update the networks
-                optim.step()
-                optim.zero_grad()
+            # Update the networks
+            optim.step()
+            optim.zero_grad()
 
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():

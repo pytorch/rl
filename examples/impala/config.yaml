@@ -26,9 +26,6 @@ optim:
 loss:
   gamma: 0.99
   mini_batch_size: 1024
-  ppo_epochs: 3
-  clip_epsilon: 0.1
-  anneal_clip_epsilon: True
   critic_coef: 1.0
   entropy_coef: 0.01
   loss_critic_type: l2
