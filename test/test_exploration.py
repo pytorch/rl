@@ -78,7 +78,7 @@ class TestEGreedy:
             assert (action == 0).any()
             assert ((action == 1) | (action == 0)).all()
 
-    @pytest.mark.parametrize("module", [True])
+    @pytest.mark.parametrize("module", [True, False])
     @pytest.mark.parametrize("spec_class", ["discrete", "one_hot"])
     def test_egreedy_masked(self, module, eps_init, spec_class):
         torch.manual_seed(0)
