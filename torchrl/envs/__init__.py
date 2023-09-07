@@ -20,6 +20,7 @@ from .transforms import (
     DoubleToFloat,
     DTypeCastTransform,
     ExcludeTransform,
+    FillSparseTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
     FrameSkipTransform,

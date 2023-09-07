@@ -392,7 +392,9 @@ def _per_level_env_check(data0, data1, check_dtype):
                     )
 
 
-def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
+def check_env_specs(
+    env, return_contiguous=True, check_dtype=True, seed=0, policy=None, n_steps=3
+):
     """Tests an environment specs against the results of short rollout.
 
     This test function should be used as a sanity check for an env wrapped with
@@ -410,6 +412,11 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         check_dtype (bool, optional): if False, dtype checks will be skipped.
             Defaults to True.
         seed (int, optional): for reproducibility, a seed is set.
+        policy (callable, optional): a policy to execute the rollouts. This
+            can be used with sparse environments, ie. environments that
+            expect sparse actions or output sparse observations.
+        n_steps (int, optional): number of steps to execute for the dummy rollout.
+            Defaults to 3.
 
     Caution: this function resets the env seed. It should be used "offline" to
     check that an env is adequately constructed, but it may affect the seeding
@@ -420,7 +427,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict()
-    real_tensordict = env.rollout(3, return_contiguous=return_contiguous)
+    real_tensordict = env.rollout(
+        n_steps, return_contiguous=return_contiguous, policy=policy
+    )
 
     if return_contiguous:
         fake_tensordict = fake_tensordict.unsqueeze(real_tensordict.batch_dims - 1)

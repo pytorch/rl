@@ -38,7 +38,8 @@ from mocking_classes import (
     HeteroCountingEnvPolicy,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
-    MockSerialEnv, MockingSparseEnv,
+    MockingSparseEnv,
+    MockSerialEnv,
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
@@ -56,7 +57,14 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs import CatTensors, DoubleToFloat, EnvCreator, ParallelEnv, SerialEnv
+from torchrl.envs import (
+    CatTensors,
+    DoubleToFloat,
+    EnvCreator,
+    FillSparseTransform,
+    ParallelEnv,
+    SerialEnv,
+)
 from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
@@ -2157,22 +2165,31 @@ def test_mocking_envs(envclass):
     _ = env.rand_step(reset)
     check_env_specs(env, seed=100, return_contiguous=False)
 
-class TestParialEnvs:
+
+class TestSparseEnvs:
     class Policy:
         def __call__(self, tensordict):
             even = tensordict.get("even", None)
+            odd = tensordict.get("odd", None)
             if even is None:
                 tensordict.set("action_even", [1])
-            else:
+            elif odd is None:
                 tensordict.set("action_odd", [1])
+            else:
+                raise RuntimeError(tensordict)
             return tensordict
 
     def test_regular(self):
         env = MockingSparseEnv()
-        print(env.rollout(3))  # partial obs will be lost
-        print(env.rollout(3, return_contiguous=False))  # partial obs are kept but hard to access
-        t_env = TransformedEnv(env, FillPartial())
-        print(t_env.rollout(3))  # partial obs will be filled with 0 if not present
+        print(env.rollout(3, TestSparseEnvs.Policy()))  # partial obs will be lost
+        print(
+            env.rollout(3, TestSparseEnvs.Policy(), return_contiguous=False)
+        )  # partial obs are kept but hard to access
+        t_env = TransformedEnv(env, FillSparseTransform())
+        print(
+            t_env.rollout(10, TestSparseEnvs.Policy())
+        )  # partial obs will be filled with 0 if not present
+        check_env_specs(t_env, policy=TestSparseEnvs.Policy(), n_steps=10)
 
     def test_parallel(self):
         env = ParallelEnv(2, MockingSparseEnv)
@@ -2184,6 +2201,7 @@ class TestParialEnvs:
         print("even", r["next", "even"].bool())
         print("odd", r["next", "odd"].bool())
         assert (r["next", "even"].bool() ^ r["next", "odd"].bool()).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

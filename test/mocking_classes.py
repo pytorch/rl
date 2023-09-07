@@ -1726,38 +1726,62 @@ class MultiKeyCountingEnv(EnvBase):
     def _set_seed(self, seed: Optional[int]):
         torch.manual_seed(seed)
 
+
 class MockingSparseEnv(EnvBase):
+    sparse = True
+
     def __init__(self, device="cpu"):
         super().__init__(device=device)
         self.observation_spec = CompositeSpec(
-            {"even": UnboundedContinuousTensorSpec(1, device=device),
-            "odd": UnboundedContinuousTensorSpec(1, device=device),
-             "count": UnboundedContinuousTensorSpec((), dtype=torch.int, device=device)}, device=device
+            {
+                "even": UnboundedContinuousTensorSpec(1, device=device),
+                "odd": UnboundedContinuousTensorSpec(1, device=device),
+                "count": UnboundedContinuousTensorSpec(
+                    (), dtype=torch.int, device=device
+                ),
+            },
+            device=device,
         )
         self.action_spec = CompositeSpec(
             action_even=DiscreteTensorSpec(1, dtype=torch.int, device=device),
             action_odd=DiscreteTensorSpec(1, dtype=torch.int, device=self.device),
-            device=self.device
+            device=self.device,
         )
         self.reward_spec = UnboundedContinuousTensorSpec(1, device=device)
 
     def _reset(self, tensordict=None):
         self.count = 0
-        return TensorDict({"even": self.observation_spec["even"].zero(), "count": self.count}, [], device=self.device)
+        return TensorDict(
+            {"even": self.observation_spec["even"].zero(), "count": self.count},
+            [],
+            device=self.device,
+        )
 
     def _step(self, tensordict):
         act_even = tensordict.get("action_even", None)
         act_odd = tensordict.get("action_odd", None)
-        assert (act_even is None) ^ (act_odd is None)
+        assert (act_even is None) ^ (act_odd is None), (act_odd, act_even)
         if act_even is not None:
             result = TensorDict(
-                {"even": self.observation_spec["even"].zero()+act_even, "count": self.count,
-                 "done": torch.zeros(1, dtype=torch.bool), "reward": torch.Tensor([0.0])}, [], device=self.device
+                {
+                    "even": self.observation_spec["even"].zero() + act_even,
+                    "count": self.count,
+                    "done": torch.zeros(1, dtype=torch.bool),
+                    "reward": torch.Tensor([0.0]),
+                },
+                [],
+                device=self.device,
             )
         else:
             result = TensorDict(
-                {"odd": self.observation_spec["odd"].zero()+act_odd, "count": self.count,
-                 "done": torch.zeros(1, dtype=torch.bool), "reward": torch.Tensor([0.0])}, [], device=self.device
+                {
+                    "odd": self.observation_spec["odd"].zero() + act_odd,
+                    "count": self.count,
+                    "done": torch.zeros(1, dtype=torch.bool),
+                    "reward": torch.Tensor([0.0]),
+                },
+                [],
+                device=self.device,
             )
         self.count += 1
         return result
