@@ -1904,22 +1904,22 @@ class TanhModule(TensorDictModuleBase):
         if low is None and leaf_spec is None:
             low = -torch.ones(())
         elif low is None:
-            low = leaf_spec.space.minimum
+            low = leaf_spec.space.low
         elif leaf_spec is not None:
-            if (low != leaf_spec.space.minimum).any():
+            if (low != leaf_spec.space.low).any():
                 raise ValueError(
-                    f"The minimum value ({low}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.minimum})."
+                    f"The minimum value ({low}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.low})."
                 )
         if not isinstance(low, torch.Tensor):
             low = torch.tensor(low)
         if high is None and leaf_spec is None:
             high = torch.ones(())
         elif high is None:
-            high = leaf_spec.space.maximum
+            high = leaf_spec.space.high
         elif leaf_spec is not None:
-            if (high != leaf_spec.space.maximum).any():
+            if (high != leaf_spec.space.high).any():
                 raise ValueError(
-                    f"The maximum value ({high}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.maximum})."
+                    f"The maximum value ({high}) provided to {type(self)} does not match the action spec one ({leaf_spec.space.high})."
                 )
         if not isinstance(high, torch.Tensor):
             high = torch.tensor(high)

@@ -1090,8 +1090,8 @@ class ToTensorImage(ObservationTransform):
 
     def _pixel_observation(self, spec: TensorSpec) -> None:
         if isinstance(spec.space, ContinuousBox):
-            spec.space.maximum = self._apply_transform(spec.space.maximum)
-            spec.space.minimum = self._apply_transform(spec.space.minimum)
+            spec.space.high = self._apply_transform(spec.space.high)
+            spec.space.low = self._apply_transform(spec.space.low)
         return spec
 
 
@@ -1105,7 +1105,7 @@ class ClipTransform(Transform):
 
     def __init__(
         self,
-        in_keys,
+        in_keys=None,
         out_keys=None,
         in_keys_inv=None,
         out_keys_inv=None,
@@ -1113,6 +1113,8 @@ class ClipTransform(Transform):
         low=None,
         high=None,
     ):
+        if in_keys is None:
+            in_keys = []
         super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
         if low is None and high is None:
             raise TypeError("Either one or both of `high` and `low` must be provided.")
@@ -1125,22 +1127,25 @@ class ClipTransform(Transform):
                     f"low and high must be scalars or None. Got low={low} and high={high}."
                 )
             if val is None:
-                return None, None
+                return None, None, torch.finfo(torch.get_default_dtype()).max
             if not isinstance(val, torch.Tensor):
                 val = torch.tensor(val)
             if not val.dtype.is_floating_point:
                 val = val.float()
             eps = torch.finfo(val.dtype).resolution
-            return val, eps
+            ext = torch.finfo(val.dtype).max
+            return val, eps, ext
 
-        low, low_eps = check_val(low)
-        high, high_eps = check_val(high)
+        low, low_eps, low_min = check_val(low)
+        high, high_eps, high_max = check_val(high)
         if low is not None and high is not None and low >= high:
             raise ValueError("`low` must be stricly lower than `high`.")
         self.low = low
         self.low_eps = low_eps
+        self.low_min = -low_min
         self.high = high
         self.high_eps = high_eps
+        self.high_max = high_max
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
         if self.low is None:
@@ -1162,8 +1167,8 @@ class ClipTransform(Transform):
             shape=observation_spec.shape,
             device=observation_spec.device,
             dtype=observation_spec.dtype,
-            maximum=self.high + self.high_eps if self.high is not None else None,
-            minimum=self.low - self.low_eps if self.low is not None else None,
+            high=self.high + self.high_eps if self.high is not None else self.high_max,
+            low=self.low - self.low_eps if self.low is not None else self.low_min,
         )
 
     def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
@@ -1174,10 +1179,12 @@ class ClipTransform(Transform):
                     shape=spec.shape,
                     device=spec.device,
                     dtype=spec.dtype,
-                    maximum=self.high + self.high_eps
+                    high=self.high + self.high_eps
                     if self.high is not None
-                    else None,
-                    minimum=self.low - self.low_eps if self.low is not None else None,
+                    else self.high_max,
+                    low=self.low - self.low_eps
+                    if self.low is not None
+                    else self.low_min,
                 )
         return self.parent.output_spec["full_reward_spec"]
 
@@ -1338,8 +1345,8 @@ class TargetReturn(Transform):
             )
         for key in self.out_keys:
             target_return_spec = BoundedTensorSpec(
-                minimum=-float("inf"),
-                maximum=self.target_return,
+                low=-float("inf"),
+                high=self.target_return,
                 shape=self.parent.reward_spec.shape,
                 dtype=self.parent.reward_spec.dtype,
                 device=self.parent.reward_spec.device,
@@ -1490,9 +1497,9 @@ class Resize(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            observation_spec.shape = space.minimum.shape
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
         else:
             observation_spec.shape = self._apply_transform(
                 torch.zeros(observation_spec.shape)
@@ -1542,9 +1549,9 @@ class CenterCrop(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            observation_spec.shape = space.minimum.shape
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
         else:
             observation_spec.shape = self._apply_transform(
                 torch.zeros(observation_spec.shape)
@@ -1621,9 +1628,9 @@ class FlattenObservation(ObservationTransform):
         space = observation_spec.space
 
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            observation_spec.shape = space.minimum.shape
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
         else:
             observation_spec.shape = self._apply_transform(
                 torch.zeros(observation_spec.shape)
@@ -1702,9 +1709,9 @@ class UnsqueezeTransform(Transform):
     def _transform_spec(self, spec: TensorSpec):
         space = spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            spec.shape = space.minimum.shape
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            spec.shape = space.low.shape
         else:
             spec.shape = self._apply_transform(torch.zeros(spec.shape)).shape
         return spec
@@ -1712,9 +1719,9 @@ class UnsqueezeTransform(Transform):
     def _inv_transform_spec(self, spec: TensorSpec) -> None:
         space = spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._inv_apply_transform(space.minimum)
-            space.maximum = self._inv_apply_transform(space.maximum)
-            spec.shape = space.minimum.shape
+            space.low = self._inv_apply_transform(space.low)
+            space.high = self._inv_apply_transform(space.high)
+            spec.shape = space.low.shape
         else:
             spec.shape = self._inv_apply_transform(torch.zeros(spec.shape)).shape
         return spec
@@ -1799,9 +1806,9 @@ class GrayScale(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
-            observation_spec.shape = space.minimum.shape
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
+            observation_spec.shape = space.low.shape
         else:
             observation_spec.shape = self._apply_transform(
                 torch.zeros(observation_spec.shape)
@@ -2060,16 +2067,16 @@ class ObservationNorm(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
         return observation_spec
 
     @_apply_to_composite_inv
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         space = input_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = self._apply_transform(space.minimum)
-            space.maximum = self._apply_transform(space.maximum)
+            space.low = self._apply_transform(space.low)
+            space.high = self._apply_transform(space.high)
         return input_spec
 
     def __repr__(self) -> str:
@@ -2299,9 +2306,9 @@ class CatFrames(ObservationTransform):
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
         space = observation_spec.space
         if isinstance(space, ContinuousBox):
-            space.minimum = torch.cat([space.minimum] * self.N, self.dim)
-            space.maximum = torch.cat([space.maximum] * self.N, self.dim)
-            observation_spec.shape = space.minimum.shape
+            space.low = torch.cat([space.low] * self.N, self.dim)
+            space.high = torch.cat([space.high] * self.N, self.dim)
+            observation_spec.shape = space.low.shape
         else:
             shape = list(observation_spec.shape)
             shape[self.dim] = self.N * shape[self.dim]
@@ -2692,8 +2699,8 @@ class DTypeCastTransform(Transform):
             spec.dtype = self.dtype_out
             space = spec.space
             if isinstance(space, ContinuousBox):
-                space.minimum = space.minimum.to(self.dtype_out)
-                space.maximum = space.maximum.to(self.dtype_out)
+                space.low = space.low.to(self.dtype_out)
+                space.high = space.high.to(self.dtype_out)
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
         if self._keys_inv_unset:
@@ -4150,8 +4157,8 @@ class StepCounter(Transform):
             dtype=torch.int64,
             device=observation_spec.device,
         )
-        observation_spec[self.step_count_key].space.minimum = (
-            observation_spec[self.step_count_key].space.minimum * 0
+        observation_spec[self.step_count_key].space.low = (
+            observation_spec[self.step_count_key].space.low * 0
         )
         if self.max_steps is not None and self.truncated_key != self.parent.done_key:
             observation_spec[self.truncated_key] = self.parent.done_spec.clone()

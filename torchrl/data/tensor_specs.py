@@ -350,50 +350,76 @@ class Box:
 class ContinuousBox(Box):
     """A continuous box of values, in between a minimum and a maximum."""
 
-    _minimum: torch.Tensor
-    _maximum: torch.Tensor
+    _low: torch.Tensor
+    _high: torch.Tensor
     device: torch.device = None
 
     # We store the tensors on CPU to avoid overloading CUDA with tensors that are rarely used.
     @property
+    def low(self):
+        return self._low.to(self.device)
+
+    @property
+    def high(self):
+        return self._high.to(self.device)
+
+    @low.setter
+    def low(self, value):
+        self.device = value.device
+        self._low = value.cpu()
+
+    @high.setter
+    def high(self, value):
+        self.device = value.device
+        self._high = value.cpu()
+
+    @property
     def minimum(self):
-        return self._minimum.to(self.device)
+        warnings.warn(
+            f"{type(self)}.minimum is going to be deprecated in favour of {type(self)}.low",
+            category=DeprecationWarning,
+        )
+        return self._low.to(self.device)
 
     @property
     def maximum(self):
-        return self._maximum.to(self.device)
+        warnings.warn(
+            f"{type(self)}.maximum is going to be deprecated in favour of {type(self)}.low",
+            category=DeprecationWarning,
+        )
+        return self._high.to(self.device)
 
-    @minimum.setter
-    def minimum(self, value):
+    @low.setter
+    def low(self, value):
         self.device = value.device
-        self._minimum = value.cpu()
+        self._low = value.cpu()
 
-    @maximum.setter
-    def maximum(self, value):
+    @high.setter
+    def high(self, value):
         self.device = value.device
-        self._maximum = value.cpu()
+        self._high = value.cpu()
 
     def __post_init__(self):
-        self.minimum = self.minimum.clone()
-        self.maximum = self.maximum.clone()
+        self.low = self.low.clone()
+        self.high = self.high.clone()
 
     def __iter__(self):
-        yield self.minimum
-        yield self.maximum
+        yield self.low
+        yield self.high
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> ContinuousBox:
-        return self.__class__(self.minimum.to(dest), self.maximum.to(dest))
+        return self.__class__(self.low.to(dest), self.high.to(dest))
 
     def clone(self) -> ContinuousBox:
-        return self.__class__(self.minimum.clone(), self.maximum.clone())
+        return self.__class__(self.low.clone(), self.high.clone())
 
     def __repr__(self):
         min_str = indent(
-            f"\nminimum=Tensor(shape={self.minimum.shape}, device={self.minimum.device}, dtype={self.minimum.dtype}, contiguous={self.maximum.is_contiguous()})",
+            f"\nlow=Tensor(shape={self.low.shape}, device={self.low.device}, dtype={self.low.dtype}, contiguous={self.high.is_contiguous()})",
             " " * 4,
         )
         max_str = indent(
-            f"\nmaximum=Tensor(shape={self.maximum.shape}, device={self.maximum.device}, dtype={self.maximum.dtype}, contiguous={self.maximum.is_contiguous()})",
+            f"\nhigh=Tensor(shape={self.high.shape}, device={self.high.device}, dtype={self.high.dtype}, contiguous={self.high.is_contiguous()})",
             " " * 4,
         )
         return f"{self.__class__.__name__}({min_str},{max_str})"
@@ -401,10 +427,10 @@ class ContinuousBox(Box):
     def __eq__(self, other):
         return (
             type(self) == type(other)
-            and self.minimum.dtype == other.minimum.dtype
-            and self.maximum.dtype == other.maximum.dtype
-            and torch.equal(self.minimum, other.minimum)
-            and torch.equal(self.maximum, other.maximum)
+            and self.low.dtype == other.low.dtype
+            and self.high.dtype == other.high.dtype
+            and torch.equal(self.low, other.low)
+            and torch.equal(self.high, other.high)
         )
 
 
@@ -1409,41 +1435,62 @@ class BoundedTensorSpec(TensorSpec):
     """A bounded continuous tensor spec.
 
     Args:
-        minimum (np.ndarray, torch.Tensor or number): lower bound of the box.
-        maximum (np.ndarray, torch.Tensor or number): upper bound of the box.
+        low (np.ndarray, torch.Tensor or number): lower bound of the box.
+        high (np.ndarray, torch.Tensor or number): upper bound of the box.
         device (str, int or torch.device, optional): device of the tensors.
         dtype (str or torch.dtype, optional): dtype of the tensors.
 
     """
 
     # SPEC_HANDLED_FUNCTIONS = {}
+    DEPRECATED_KWARGS = (
+        "The `minimum` and `maximum` keyword arguments are now "
+        "deprecated in favour of `low` and `high`."
+    )
+    CONFLICTING_KWARGS = (
+        "The keyword arguments {} and {} conflict. Only one of these can be passed."
+    )
 
     def __init__(
         self,
-        minimum: Union[float, torch.Tensor, np.ndarray],
-        maximum: Union[float, torch.Tensor, np.ndarray],
+        low: Union[float, torch.Tensor, np.ndarray] = None,
+        high: Union[float, torch.Tensor, np.ndarray] = None,
         shape: Optional[Union[torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         dtype: Optional[Union[torch.dtype, str]] = None,
+        **kwargs,
     ):
+        if "maximum" in kwargs:
+            if high is not None:
+                raise TypeError(self.CONFLICTING_KWARGS.format("high", "maximum"))
+            high = kwargs.pop("maximum")
+            warnings.warn(self.DEPRECATED_KWARGS, category=DeprecationWarning)
+        if "minimum" in kwargs:
+            if low is not None:
+                raise TypeError(self.CONFLICTING_KWARGS.format("low", "minimum"))
+            low = kwargs.pop("minimum")
+            warnings.warn(self.DEPRECATED_KWARGS, category=DeprecationWarning)
+        if len(kwargs):
+            raise TypeError(f"Got unrecognised kwargs {tuple(kwargs.keys())}.")
+
         dtype, device = _default_dtype_and_device(dtype, device)
         if dtype is None:
             dtype = torch.get_default_dtype()
         if device is None:
             device = torch._get_default_device()
 
-        if not isinstance(minimum, torch.Tensor):
-            minimum = torch.tensor(minimum, dtype=dtype, device=device)
-        if not isinstance(maximum, torch.Tensor):
-            maximum = torch.tensor(maximum, dtype=dtype, device=device)
-        if maximum.device != device:
-            maximum = maximum.to(device)
-        if minimum.device != device:
-            minimum = minimum.to(device)
-        if dtype is not None and minimum.dtype is not dtype:
-            minimum = minimum.to(dtype)
-        if dtype is not None and maximum.dtype is not dtype:
-            maximum = maximum.to(dtype)
+        if not isinstance(low, torch.Tensor):
+            low = torch.tensor(low, dtype=dtype, device=device)
+        if not isinstance(high, torch.Tensor):
+            high = torch.tensor(high, dtype=dtype, device=device)
+        if high.device != device:
+            high = high.to(device)
+        if low.device != device:
+            low = low.to(device)
+        if dtype is not None and low.dtype is not dtype:
+            low = low.to(dtype)
+        if dtype is not None and high.dtype is not dtype:
+            high = high.to(dtype)
         err_msg = (
             "BoundedTensorSpec requires the shape to be explicitely (via "
             "the shape argument) or implicitely defined (via either the "
@@ -1457,45 +1504,41 @@ class BoundedTensorSpec(TensorSpec):
             else:
                 shape = torch.Size(list(shape))
 
-        if maximum.ndimension():
-            if shape is not None and shape != maximum.shape:
+        if high.ndimension():
+            if shape is not None and shape != high.shape:
                 raise RuntimeError(err_msg)
-            shape = maximum.shape
-            minimum = minimum.expand(shape).clone()
-        elif minimum.ndimension():
-            if shape is not None and shape != minimum.shape:
+            shape = high.shape
+            low = low.expand(shape).clone()
+        elif low.ndimension():
+            if shape is not None and shape != low.shape:
                 raise RuntimeError(err_msg)
-            shape = minimum.shape
-            maximum = maximum.expand(shape).clone()
+            shape = low.shape
+            high = high.expand(shape).clone()
         elif shape is None:
             raise RuntimeError(err_msg)
         else:
-            minimum = minimum.expand(shape).clone()
-            maximum = maximum.expand(shape).clone()
+            low = low.expand(shape).clone()
+            high = high.expand(shape).clone()
 
-        if minimum.numel() > maximum.numel():
-            maximum = maximum.expand_as(minimum).clone()
-        elif maximum.numel() > minimum.numel():
-            minimum = minimum.expand_as(maximum).clone()
+        if low.numel() > high.numel():
+            high = high.expand_as(low).clone()
+        elif high.numel() > low.numel():
+            low = low.expand_as(high).clone()
         if shape is None:
-            shape = minimum.shape
+            shape = low.shape
         else:
             if isinstance(shape, float):
                 shape = torch.Size([shape])
             elif not isinstance(shape, torch.Size):
                 shape = torch.Size(shape)
-            shape_err_msg = (
-                f"minimum and shape mismatch, got {minimum.shape} and {shape}"
-            )
-            if len(minimum.shape) != len(shape):
+            shape_err_msg = f"minimum and shape mismatch, got {low.shape} and {shape}"
+            if len(low.shape) != len(shape):
                 raise RuntimeError(shape_err_msg)
-            if not all(_s == _sa for _s, _sa in zip(shape, minimum.shape)):
+            if not all(_s == _sa for _s, _sa in zip(shape, low.shape)):
                 raise RuntimeError(shape_err_msg)
         self.shape = shape
 
-        super().__init__(
-            shape, ContinuousBox(minimum, maximum), device, dtype, "continuous"
-        )
+        super().__init__(shape, ContinuousBox(low, high), device, dtype, "continuous")
 
     def expand(self, *shape):
         if len(shape) == 1 and isinstance(shape[0], (tuple, list, torch.Size)):

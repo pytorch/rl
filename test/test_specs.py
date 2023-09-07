@@ -820,32 +820,30 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
-        )
+        ts = BoundedTensorSpec(low=minimum, high=maximum, device=device, dtype=dtype)
 
         ts_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
+            low=minimum, high=maximum, device=device, dtype=dtype
         )
         assert ts == ts_same
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum + 1, maximum=maximum, device=device, dtype=dtype
+            low=minimum + 1, high=maximum, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device="cpu:0", dtype=dtype
+            low=minimum, high=maximum, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=torch.float64
+            low=minimum, high=maximum, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
@@ -1035,14 +1033,12 @@ class TestEquality:
         bounded_other = BoundedTensorSpec(0, 2, torch.Size((1,)), device, dtype)
 
         nd = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         nd_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
-        _ = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
-        )
+        _ = BoundedTensorSpec(low=minimum, high=maximum + 3, device=device, dtype=dtype)
 
         # Equality tests
         ts = CompositeSpec(ts1=bounded)
@@ -2177,7 +2173,7 @@ class TestLazyStackedCompositeSpecs:
         batch_size=(),
         stack_dim: int = 0,
     ):
-        shared = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
+        shared = BoundedTensorSpec(low=0, high=1, shape=(*batch_size, 32, 32, 3))
         hetero_3d = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
@@ -2191,8 +2187,8 @@ class TestLazyStackedCompositeSpecs:
             )
         )
         lidar = BoundedTensorSpec(
-            minimum=0,
-            maximum=5,
+            low=0,
+            high=5,
             shape=(
                 *batch_size,
                 20,
@@ -2214,7 +2210,7 @@ class TestLazyStackedCompositeSpecs:
         individual_1_obs = CompositeSpec(
             {
                 "individual_1_obs_0": BoundedTensorSpec(
-                    minimum=0, maximum=3, shape=(*batch_size, 3, 1, 2)
+                    low=0, high=3, shape=(*batch_size, 3, 1, 2)
                 )
             },
             shape=(*batch_size, 3),
@@ -2564,7 +2560,7 @@ class TestLazyStackedCompositeSpecs:
         assert not c == c2 and c != c2
 
         c2 = self._get_het_specs(batch_size=batch_size)
-        c2[0]["lidar"].space.minimum += 1
+        c2[0]["lidar"].space.low += 1
         assert not c == c2 and c != c2
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
@@ -2842,13 +2838,11 @@ class TestLazyStackedCompositeSpecs:
         spec.update(spec2)
         assert spec["hetero"].shape == (3, *batch_size, -1, 1)
 
-        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum += 1
-        assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
-        )
+        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.low += 1
+        assert spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         spec.update(spec2)
         assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
+            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         )  # Only non exclusive keys will be updated
 
         new = torch.stack(

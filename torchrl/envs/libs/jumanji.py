@@ -69,8 +69,8 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return BoundedTensorSpec(
             shape=shape,
-            minimum=np.asarray(spec.minimum),
-            maximum=np.asarray(spec.maximum),
+            low=np.asarray(spec.low),
+            high=np.asarray(spec.high),
             dtype=dtype,
             device=device,
         )
