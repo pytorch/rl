@@ -1160,10 +1160,10 @@ class ClipTransform(Transform):
         high, high_eps, high_max = check_val(high)
         if low is not None and high is not None and low >= high:
             raise ValueError("`low` must be stricly lower than `high`.")
-        self.low = low
+        self.register_buffer("low", low)
         self.low_eps = low_eps
         self.low_min = -low_min
-        self.high = high
+        self.register_buffer("high", high)
         self.high_eps = high_eps
         self.high_max = high_max
 
