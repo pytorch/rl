@@ -5,14 +5,15 @@
 from copy import deepcopy
 
 import torch
-
 from tensordict import TensorDictBase, unravel_key
 from tensordict.nn import (
     make_functional,
     ProbabilisticTensorDictModule,
     repopulate_module,
+    TensorDictParams,
 )
 from tensordict.utils import is_seq_of_nested_key
+from torch import nn
 from torchrl.data.tensor_specs import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs.transforms.transforms import Transform
 
@@ -33,6 +34,14 @@ class KLRewardTransform(Transform):
             reward should be fetched. Defaults to ``"reward"``.
         out_keys (str or list of str/tuples of str): the output key where the
             reward should be written. Defaults to ``"reward"``.
+        requires_grad (bool, optional): if ``True``, the frozen parameters will
+            consist of differentiable clones of the original params.
+            Defaults to ``False``.
+
+    .. note:: If the parameters are not differentiable (default), they will *not*
+        follow the module when dtype or device casting operations will be called
+        (such as :meth:`~.cuda`, :meth:`~.to` etc.). When ``requires_grad=True``,
+        casting operations will work as expected.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -65,8 +74,7 @@ class KLRewardTransform(Transform):
         >>> # check that rewards have been modified
         >>> assert (td.get(("next", "reward")) != td.get(("next", "reward_kl"))).all()
 
-    .. note::
-      Because the KL formulat is not always available and the parameters of the
+    .. note:: Because the KL formulat is not always available and the parameters of the
       original distribution may not have been recorded, we use a stochastic estimate
       of the KL divergence.
 
@@ -80,6 +88,7 @@ class KLRewardTransform(Transform):
         coef=1.0,
         in_keys=None,
         out_keys=None,
+        requires_grad=False,
     ):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
@@ -115,7 +124,23 @@ class KLRewardTransform(Transform):
         repopulate_module(actor, params)
         # we need to register these params as buffer to have `to` and similar
         # methods work properly
-        self.frozen_params = params.clone().detach()
+
+        def _make_detached_param(x):
+
+            if isinstance(x, nn.Parameter):
+                # we need an nn.Parameter since some modules (RNN) require nn.Parameters
+                return nn.Parameter(x.data.clone(), requires_grad=requires_grad)
+            elif x.requires_grad:
+                raise ValueError(
+                    "Encountered a value that requires gradients but is not an nn.Parameter instance."
+                )
+            return x.clone()
+
+        self.frozen_params = params.apply(_make_detached_param)
+        if requires_grad:
+            # includes the frozen params/buffers in the module parameters/buffers
+            self.frozen_params = TensorDictParams(self.frozen_params, no_convert=True)
+
         # self._buffers["actor_params"] = params.clone().detach()
 
         # find the sample log-prob key
@@ -152,7 +177,12 @@ class KLRewardTransform(Transform):
         tensordict.set(("next", *self.out_keys[0]), reward + self.coef * kl)
         return tensordict
 
-    _step = _call
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        with tensordict.unlock_():
+            return self._call(tensordict.set("next", next_tensordict)).pop("next")
+
     forward = _call
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
@@ -166,23 +196,23 @@ class KLRewardTransform(Transform):
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
-                shape=output_spec["_reward_spec"][parent.reward_key].shape,
+                shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
-            output_spec["_reward_spec"] = CompositeSpec(
+            output_spec["full_reward_spec"] = CompositeSpec(
                 {parent.reward_key: reward_spec},
-                shape=output_spec["_reward_spec"].shape,
+                shape=output_spec["full_reward_spec"].shape,
             )
         elif in_key == "reward":
             parent = self.parent
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device,
-                shape=output_spec["_reward_spec"][parent.reward_key].shape,
+                shape=output_spec["full_reward_spec"][parent.reward_key].shape,
             )
             # then we need to populate the output keys
-            observation_spec = output_spec["_observation_spec"]
+            observation_spec = output_spec["full_observation_spec"]
             observation_spec[out_key] = reward_spec
         else:
-            observation_spec = output_spec["_observation_spec"]
+            observation_spec = output_spec["full_observation_spec"]
             reward_spec = UnboundedContinuousTensorSpec(
                 device=output_spec.device, shape=observation_spec[in_key].shape
             )

@@ -2,6 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import dataclasses
+
 import warnings
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -13,6 +17,7 @@ from torch.nn import functional as F
 
 from torchrl._utils import prod
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.modules.models.decision_transformer import DecisionTransformer
 from torchrl.modules.models.utils import (
     _find_depth,
     create_on_device,
@@ -1360,6 +1365,184 @@ class LSTMNet(nn.Module):
         hidden0_in: Optional[torch.Tensor] = None,
         hidden1_in: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
         input = self.mlp(input)
         return self._lstm(input, hidden0_in, hidden1_in)
+
+
+class OnlineDTActor(nn.Module):
+    """Online Decision Transformer Actor class.
+
+    Actor class for the Online Decision Transformer to sample actions from gaussian distribution as presented inresented in `"Online Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
+    Returns mu and sigma for the gaussian distribution to sample actions from.
+
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
+
+    Examples:
+        >>> model = OnlineDTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=OnlineDTActor.default_config())
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> mu, std = model(observation, action, return_to_go)
+        >>> mu.shape
+        torch.Size([32, 10, 2])
+        >>> std.shape
+        torch.Size([32, 10, 2])
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
+        self.transformer = DecisionTransformer(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            config=transformer_config,
+        )
+        self.action_layer_mean = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+        self.action_layer_logstd = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+
+        self.log_std_min, self.log_std_max = -5.0, 2.0
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.action_layer_mean.apply(weight_init)
+        self.action_layer_logstd.apply(weight_init)
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        hidden_state = self.transformer(observation, action, return_to_go)
+        mu = self.action_layer_mean(hidden_state)
+        log_std = self.action_layer_logstd(hidden_state)
+
+        log_std = torch.tanh(log_std)
+        # log_std is the output of tanh so it will be between [-1, 1]
+        # map it to be between [log_std_min, log_std_max]
+        log_std = self.log_std_min + 0.5 * (self.log_std_max - self.log_std_min) * (
+            log_std + 1.0
+        )
+        std = log_std.exp()
+
+        return mu, std
+
+    @classmethod
+    def default_config(cls):
+        """Default configuration for :class:`~.OnlineDTActor`."""
+        return DecisionTransformer.DTConfig(
+            n_embd=512,
+            n_layer=4,
+            n_head=4,
+            n_inner=2048,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )
+
+
+class DTActor(nn.Module):
+    """Decision Transformer Actor class.
+
+    Actor class for the Decision Transformer to output deterministic action as presented in `"Decision Transformer" <https://arxiv.org/abs/2202.05607.pdf>`.
+    Returns the deterministic actions.
+
+    Args:
+        state_dim (int): state dimension.
+        action_dim (int): action dimension.
+        transformer_config (Dict or :class:`DecisionTransformer.DTConfig`, optional):
+            config for the GPT2 transformer.
+            Defaults to :meth:`~.default_config`.
+        device (Optional[DEVICE_TYPING], optional): device to use. Defaults to None.
+
+    Examples:
+        >>> model = DTActor(state_dim=4, action_dim=2,
+        ...     transformer_config=DTActor.default_config())
+        >>> observation = torch.randn(32, 10, 4)
+        >>> action = torch.randn(32, 10, 2)
+        >>> return_to_go = torch.randn(32, 10, 1)
+        >>> output = model(observation, action, return_to_go)
+        >>> output.shape
+        torch.Size([32, 10, 2])
+
+    """
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        transformer_config: Dict | DecisionTransformer.DTConfig = None,
+        device: Optional[DEVICE_TYPING] = None,
+    ):
+        super().__init__()
+        if transformer_config is None:
+            transformer_config = self.default_config()
+        if isinstance(transformer_config, DecisionTransformer.DTConfig):
+            transformer_config = dataclasses.asdict(transformer_config)
+        self.transformer = DecisionTransformer(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            config=transformer_config,
+        )
+        self.action_layer = nn.Linear(
+            transformer_config["n_embd"], action_dim, device=device
+        )
+
+        def weight_init(m):
+            """Custom weight init for Conv2D and Linear layers."""
+            if isinstance(m, torch.nn.Linear):
+                nn.init.orthogonal_(m.weight.data)
+                if hasattr(m.bias, "data"):
+                    m.bias.data.fill_(0.0)
+
+        self.action_layer.apply(weight_init)
+
+    def forward(
+        self,
+        observation: torch.Tensor,
+        action: torch.Tensor,
+        return_to_go: torch.Tensor,
+    ) -> torch.Tensor:
+        hidden_state = self.transformer(observation, action, return_to_go)
+        out = self.action_layer(hidden_state)
+        return out
+
+    @classmethod
+    def default_config(cls):
+        """Default configuration for :class:`~.DTActor`."""
+        return DecisionTransformer.DTConfig(
+            n_embd=512,
+            n_layer=4,
+            n_head=4,
+            n_inner=2048,
+            activation="relu",
+            n_positions=1024,
+            resid_pdrop=0.1,
+            attn_pdrop=0.1,
+        )

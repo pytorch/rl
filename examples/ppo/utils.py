@@ -1,6 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import torch.nn
 import torch.optim
-from tensordict.nn import TensorDictModule
+from tensordict.nn import NormalParamExtractor, TensorDictModule
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
@@ -29,7 +34,6 @@ from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
     MLP,
-    NormalParamWrapper,
     OneHotCategorical,
     ProbabilisticActor,
     TanhNormal,
@@ -89,14 +93,10 @@ def make_transformed_env_pixels(base_env, env_cfg):
     if not isinstance(env_cfg.reward_scaling, float):
         env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
 
-    env_library = LIBS[env_cfg.env_library]
     env = TransformedEnv(base_env)
 
     reward_scaling = env_cfg.reward_scaling
     env.append_transform(RewardScaling(0.0, reward_scaling))
-
-    double_to_float_list = []
-    double_to_float_inv_list = []
 
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
@@ -108,17 +108,7 @@ def make_transformed_env_pixels(base_env, env_cfg):
     obs_norm = ObservationNorm(in_keys=["pixels"], standard_normal=True)
     env.append_transform(obs_norm)
 
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-
-    env.append_transform(
-        DoubleToFloat(
-            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-        )
-    )
+    env.append_transform(DoubleToFloat())
     return env
 
 
@@ -126,15 +116,11 @@ def make_transformed_env_states(base_env, env_cfg):
     if not isinstance(env_cfg.reward_scaling, float):
         env_cfg.reward_scaling = DEFAULT_REWARD_SCALING.get(env_cfg.env_name, 5.0)
 
-    env_library = LIBS[env_cfg.env_library]
     env = TransformedEnv(base_env)
 
     reward_scaling = env_cfg.reward_scaling
 
     env.append_transform(RewardScaling(0.0, reward_scaling))
-
-    double_to_float_list = []
-    double_to_float_inv_list = []
 
     # we concatenate all the state vectors
     # even if there is a single tensor, it'll be renamed in "observation_vector"
@@ -148,19 +134,7 @@ def make_transformed_env_states(base_env, env_cfg):
     # obs_norm = ObservationNorm(in_keys=[out_key])
     # env.append_transform(obs_norm)
 
-    if env_library is DMControlEnv:
-        double_to_float_list += [
-            "reward",
-        ]
-        double_to_float_inv_list += ["action"]  # DMControl requires double-precision
-        double_to_float_list += ["observation_vector"]
-    else:
-        double_to_float_list += ["observation_vector"]
-    env.append_transform(
-        DoubleToFloat(
-            in_keys=double_to_float_list, in_keys_inv=double_to_float_inv_list
-        )
-    )
+    env.append_transform(DoubleToFloat())
     return env
 
 
@@ -304,8 +278,8 @@ def make_ppo_modules_state(proof_environment):
         num_outputs = proof_environment.action_spec.shape[-1] * 2
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
             "tanh_loc": False,
         }
 
@@ -332,7 +306,9 @@ def make_ppo_modules_state(proof_environment):
         in_features=shared_features_size, out_features=num_outputs, num_cells=[]
     )
     if continuous_actions:
-        policy_net = NormalParamWrapper(policy_net)
+        policy_net = torch.nn.Sequential(
+            policy_net, NormalParamExtractor(scale_lb=1e-2)
+        )
 
     policy_module = TensorDictModule(
         module=policy_net,
@@ -376,8 +352,8 @@ def make_ppo_modules_pixels(proof_environment):
         num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
         }
 
     # Define input keys
