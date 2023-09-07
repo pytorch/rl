@@ -190,16 +190,13 @@ class MultiAgentMLP(nn.Module):
             self.params = TensorDictParams(TensorDict.from_module(net), no_convert=True)
         make_functional(net)
         self.net = net
-        if self.centralised:
-            if not self.share_params:
-                self.net_call = torch.vmap(self.net, in_dims=(None, 0), out_dims=(-2,))
-            else:
-                self.net_call = self.net
+        if self.share_params:
+            self.net_call = self.net
         else:
-            if not self.share_params:
+            if self.centralised:
+                self.net_call = torch.vmap(self.net, in_dims=(None, 0), out_dims=(-2,))
+           else:
                 self.net_call = torch.vmap(self.net, in_dims=(-2, 0), out_dims=(-2,))
-            else:
-                self.net_call = torch.vmap(self.net, in_dims=(-2, None), out_dims=(-2,))
 
         print("self.net_call", self.net_call)
 
