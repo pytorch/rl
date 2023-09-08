@@ -22,7 +22,7 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
-    env = RoboHiveEnv(env_name, device=device)
+    env = RoboHiveEnv(env_name, include_info=False, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(CatTensors(["qpos", "qvel", "tip_pos", "reach_err"], out_key="observation"))

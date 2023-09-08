@@ -82,6 +82,12 @@ class RoboHiveEnv(GymEnv):
     else:
         CURR_DIR = None
 
+    def __init__(self, env_name, include_info: bool=True, **kwargs):
+        self.include_info = include_info
+        kwargs["env_name"] = env_name
+        self._set_gym_args(kwargs)
+        super().__init__(**kwargs)
+
     @classmethod
     def register_envs(cls):
 
@@ -304,19 +310,20 @@ class RoboHiveEnv(GymEnv):
         return super().read_obs(out)
 
     def read_info(self, info, tensordict_out):
-        out = {}
-        for key, value in info.items():
-            if key in ("obs_dict", "done", "reward", *self._env.obs_keys, "act"):
-                continue
-            if isinstance(value, dict):
-                value = {key: _val for key, _val in value.items() if _val is not None}
-                value = make_tensordict(value, batch_size=[])
-            if value is not None:
-                out[key] = value
-        tensordict_out.update(out)
-        tensordict_out.update(
-            tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
-        )
+        if self.include_info:
+            out = {}
+            for key, value in info.items():
+                if key in ("obs_dict", "done", "reward", *self._env.obs_keys, "act"):
+                    continue
+                if isinstance(value, dict):
+                    value = {key: _val for key, _val in value.items() if _val is not None}
+                    value = make_tensordict(value, batch_size=[])
+                if value is not None:
+                    out[key] = value
+            tensordict_out.update(out)
+            tensordict_out.update(
+                tensordict_out.apply(lambda x: x.reshape((1,)) if not x.shape else x)
+            )
         return tensordict_out
 
     def to(self, *args, **kwargs):

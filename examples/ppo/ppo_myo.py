@@ -103,6 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
+    losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
     for data in collector:
 
         frames_in_batch = data.numel()
@@ -116,8 +117,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "reward_train", episode_rewards.mean().item(), collected_frames
             )
 
-
-        losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
         for j in range(cfg.loss.ppo_epochs):
             # Compute GAE
             with torch.no_grad():
