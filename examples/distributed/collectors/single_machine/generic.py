@@ -32,6 +32,7 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.distributed import DistributedDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -80,6 +81,16 @@ parser.add_argument(
     default="ALE/Pong-v5",
     help="Gym environment to be run.",
 )
+LIBS = {
+    "gym": GymEnv,
+    "robohive": RoboHiveEnv,
+}
+parser.add_argument(
+    "--lib",
+    default="gym",
+    help="Lib backend",
+    choices=list(LIBS.keys()),
+)
 if __name__ == "__main__":
     args = parser.parse_args()
     num_workers = args.num_workers
@@ -89,7 +100,8 @@ if __name__ == "__main__":
 
     device_count = torch.cuda.device_count()
 
-    make_env = EnvCreator(lambda: GymEnv(args.env))
+    lib = LIBS[args.lib]
+    make_env = EnvCreator(lambda: lib(args.env))
     if args.worker_parallelism == "collector" or num_workers == 1:
         action_spec = make_env().action_spec
     else:

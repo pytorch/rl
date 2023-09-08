@@ -32,6 +32,7 @@ from torchrl.collectors.collectors import (
 from torchrl.collectors.distributed import DistributedSyncDataCollector
 from torchrl.envs import EnvCreator, ParallelEnv
 from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -74,6 +75,16 @@ parser.add_argument(
     "--env",
     default="ALE/Pong-v5",
     help="Gym environment to be run.",
+)
+LIBS = {
+    "gym": GymEnv,
+    "robohive": RoboHiveEnv,
+}
+parser.add_argument(
+    "--lib",
+    default="gym",
+    help="Lib backend",
+    choices=list(LIBS.keys()),
 )
 if __name__ == "__main__":
     args = parser.parse_args()
