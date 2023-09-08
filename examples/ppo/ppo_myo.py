@@ -116,16 +116,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "reward_train", episode_rewards.mean().item(), collected_frames
             )
 
-        # Compute GAE
-        with torch.no_grad():
-            data = adv_module(data)
-        data_reshape = data.reshape(-1)
-
-        # Update the data buffer
-        data_buffer.extend(data_reshape)
 
         losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
         for j in range(cfg.loss.ppo_epochs):
+            # Compute GAE
+            with torch.no_grad():
+                data = adv_module(data)
+            data_reshape = data.reshape(-1)
+            # Update the data buffer
+            data_buffer.empty()
+            data_buffer.extend(data_reshape)
 
             for i, batch in enumerate(data_buffer):
 
