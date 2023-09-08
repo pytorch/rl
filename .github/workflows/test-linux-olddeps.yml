@@ -28,6 +28,6 @@ jobs:
         export TF_CPP_MIN_LOG_LEVEL=0
 
 
-        bash .circleci/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
-        bash .circleci/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
-        bash .circleci/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh
+        bash .github/unittest/linux_olddeps/scripts_gym_0_13/setup_env.sh
+        bash .github/unittest/linux_olddeps/scripts_gym_0_13/batch_scripts.sh
+        bash .github/unittest/linux_olddeps/scripts_gym_0_13/post_process.sh

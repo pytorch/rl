@@ -39,4 +39,4 @@ jobs:
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
-        bash .circleci/unittest/linux_libs/scripts_habitat/run_all.sh
+        bash .github/unittest/linux_libs/scripts_habitat/run_all.sh
