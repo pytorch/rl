@@ -383,10 +383,11 @@ class TestClipTransform(TransformBase):
         assert data["reward"] == 2
         assert data["reward_clip"] == 0.1
 
-    def test_transform_env(self):
-        env = ContinuousActionVecMockEnv()
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_env(self, device):
+        base_env = ContinuousActionVecMockEnv(device=device)
         env = TransformedEnv(
-            env,
+            base_env,
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],
@@ -395,6 +396,7 @@ class TestClipTransform(TransformBase):
             ),
         )
         r = env.rollout(3)
+        assert r.device == device
         assert (r["observation"] <= 0.1).all()
         assert (r["next", "observation"] <= 0.1).all()
         assert (r["next", "reward"] <= 0.1).all()
@@ -426,7 +428,7 @@ class TestClipTransform(TransformBase):
                 high=-1.0,
             )
         env = TransformedEnv(
-            env,
+            base_env,
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],
@@ -436,7 +438,7 @@ class TestClipTransform(TransformBase):
         )
         check_env_specs(env)
         env = TransformedEnv(
-            env,
+            base_env,
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],
@@ -446,11 +448,21 @@ class TestClipTransform(TransformBase):
         )
         check_env_specs(env)
         env = TransformedEnv(
-            env,
+            base_env,
             ClipTransform(
                 in_keys=["observation", "reward"],
                 in_keys_inv=["observation_orig"],
                 low=-1,
+                high=1,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-torch.ones(()),
                 high=1,
             ),
         )
