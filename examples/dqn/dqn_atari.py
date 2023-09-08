@@ -216,8 +216,8 @@ if __name__ == "__main__":
     frame_skip = 4
     total_frames = 10_000_000
     record_interval = 10_000_000
-    frames_per_batch = 4
-    num_updates = 1
+    frames_per_batch = 512
+    num_updates = 128
     buffer_size = 1_000_000
     init_random_frames = 80_000
     annealing_frames = 1_000_000
