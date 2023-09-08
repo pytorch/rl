@@ -744,10 +744,9 @@ but got an object of type {type(transform)}."""
             elif "base_env" in self.__dir__():
                 base_env = self.__getattr__("base_env")
                 return getattr(base_env, attr)
-
-        raise AttributeError(
-            f"env not set in {self.__class__.__name__}, cannot access {attr}"
-        ) from err
+            raise AttributeError(
+                f"env not set in {self.__class__.__name__}, cannot access {attr}"
+            ) from err
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.base_env}", 4 * " ")
