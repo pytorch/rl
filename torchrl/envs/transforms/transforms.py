@@ -730,23 +730,23 @@ but got an object of type {type(transform)}."""
         self._erase_metadata()
 
     def __getattr__(self, attr: str) -> Any:
-        if attr in self.__dir__():
+        try:
             return super().__getattr__(
                 attr
             )  # make sure that appropriate exceptions are raised
-        elif attr.startswith("__"):
+        except Exception as err:
+            if attr.startswith("__"):
+                raise AttributeError(
+                    "passing built-in private methods is "
+                    f"not permitted with type {type(self)}. "
+                    f"Got attribute {attr}."
+                )
+            elif "base_env" in self.__dir__():
+                base_env = self.__getattr__("base_env")
+                return getattr(base_env, attr)
             raise AttributeError(
-                "passing built-in private methods is "
-                f"not permitted with type {type(self)}. "
-                f"Got attribute {attr}."
-            )
-        elif "base_env" in self.__dir__():
-            base_env = self.__getattr__("base_env")
-            return getattr(base_env, attr)
-
-        raise AttributeError(
-            f"env not set in {self.__class__.__name__}, cannot access {attr}"
-        )
+                f"env not set in {self.__class__.__name__}, cannot access {attr}"
+            ) from err
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.base_env}", 4 * " ")
@@ -3988,9 +3988,8 @@ class RewardSum(Transform):
         for in_key, out_key in zip(self.in_keys, self.out_keys):
             if in_key in next_tensordict.keys(include_nested=True):
                 reward = next_tensordict.get(in_key)
-                if out_key not in tensordict.keys(True):
-                    tensordict.set(out_key, torch.zeros_like(reward))
-                next_tensordict.set(out_key, tensordict.get(out_key) + reward)
+                prev_reward = tensordict.get(out_key, 0.0)
+                next_tensordict.set(out_key, prev_reward + reward)
             elif not self.missing_tolerance:
                 raise KeyError(f"'{in_key}' not found in tensordict {tensordict}")
         return next_tensordict
@@ -4154,7 +4153,6 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        tensordict = tensordict.clone(False)
         step_count = tensordict.get(self.step_count_key)
         next_step_count = step_count + 1
         next_tensordict.set(self.step_count_key, next_step_count)
