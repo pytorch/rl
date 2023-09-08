@@ -2,23 +2,25 @@
 DQN Benchmarks: CartPole-v1
 """
 
-import tqdm
 import time
+
 import torch.nn
 import torch.optim
+import tqdm
 from tensordict import TensorDict
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs import DoubleToFloat, RewardSum, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs import RewardSum, DoubleToFloat, TransformedEnv, StepCounter
+from torchrl.modules import EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DQNLoss, HardUpdate
-from torchrl.modules import MLP, QValueActor, EGreedyWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
+
 
 def make_env(env_name="CartPole-v1", device="cpu"):
     env = GymEnv(env_name, device=device)
@@ -27,6 +29,7 @@ def make_env(env_name="CartPole-v1", device="cpu"):
     env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat())
     return env
+
 
 # ====================================================================
 # Model utils
@@ -68,7 +71,7 @@ if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     env_name = "CartPole-v1"
-    total_frames = 500_000
+    total_frames = 5_000  # 500_000
     record_interval = 500_000
     frames_per_batch = 10
     num_updates = 1
@@ -87,10 +90,11 @@ if __name__ == "__main__":
 
     # Make the components
     model = make_dqn_model(env_name)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames, eps_end=eps_end).to(device)
+    model_explore = EGreedyWrapper(
+        model, annealing_num_steps=annealing_frames, eps_end=eps_end
+    ).to(device)
 
     # Create the collector
-    collector_class = SyncDataCollector
     collector = SyncDataCollector(
         make_env(env_name, device),
         policy=model_explore,
@@ -121,7 +125,9 @@ if __name__ == "__main__":
         delay_value=True,
     )
     loss_module.make_value_estimator(gamma=gamma)
-    target_net_updater = HardUpdate(loss_module, value_network_update_interval=hard_update_freq)
+    target_net_updater = HardUpdate(
+        loss_module, value_network_update_interval=hard_update_freq
+    )
 
     # Create the optimizer
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=lr)
@@ -138,12 +144,22 @@ if __name__ == "__main__":
     for i, data in enumerate(collector):
 
         # Train loging
-        logger.log_scalar("q_values", (data["action_value"]*data["action"]).sum().item() / frames_per_batch, collected_frames)
+        logger.log_scalar(
+            "q_values",
+            (data["action_value"] * data["action"]).sum().item() / frames_per_batch,
+            collected_frames,
+        )
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
-            logger.log_scalar("episode_length_train", episode_length.sum().item() / len(episode_length), collected_frames)
+            logger.log_scalar(
+                "reward_train", episode_rewards.mean().item(), collected_frames
+            )
+            logger.log_scalar(
+                "episode_length_train",
+                episode_length.sum().item() / len(episode_length),
+                collected_frames,
+            )
 
         pbar.update(data.numel())
         data = data.reshape(-1)

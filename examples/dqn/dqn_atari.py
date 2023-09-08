@@ -3,40 +3,36 @@ DQN Benchmarks: Reproducing Experiments from Mnih et al. 2015
 Deep Q-Learning Algorithm on Atari Environments.
 """
 
-import gym
-import tqdm
-import time
 import random
+import time
+
+import gym
+import numpy as np
 import torch.nn
 import torch.optim
-import numpy as np
+import tqdm
 from tensordict import TensorDict
 
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyMemmapStorage, TensorDictReplayBuffer
-from torchrl.envs.libs.gym import GymWrapper
 from torchrl.envs import (
-    default_info_dict_reader,
-    Resize,
-    VecNorm,
-    GrayScale,
-    RewardSum,
     CatFrames,
+    default_info_dict_reader,
+    DoubleToFloat,
+    ExplorationType,
+    GrayScale,
+    NoopResetEnv,
+    Resize,
+    RewardClipping,
+    RewardSum,
+    set_exploration_type,
     StepCounter,
     ToTensorImage,
-    DoubleToFloat,
-    RewardClipping,
     TransformedEnv,
-    NoopResetEnv,
-    ExplorationType,
-    set_exploration_type,
+    VecNorm,
 )
-from torchrl.modules import (
-    MLP,
-    ConvNet,
-    QValueActor,
-    EGreedyWrapper,
-)
+from torchrl.envs.libs.gym import GymWrapper
+from torchrl.modules import ConvNet, EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 
@@ -91,6 +87,7 @@ def make_env(env_name, device, is_test=False):
     # env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
+
 # ====================================================================
 # Model utils
 # --------------------------------------------------------------------
@@ -137,6 +134,7 @@ def make_dqn_model(env_name):
 # Collector utils
 # --------------------------------------------------------------------
 
+
 def make_collector(env_name, policy, device):
     collector_class = SyncDataCollector
     collector = collector_class(
@@ -151,15 +149,16 @@ def make_collector(env_name, policy, device):
     collector.set_seed(seed)
     return collector
 
+
 # ====================================================================
 # Collector and replay buffer utils
 # --------------------------------------------------------------------
 
 
 def make_replay_buffer(
-        batch_size,
-        buffer_scratch_dir="/tmp/",
-        prefetch=3,
+    batch_size,
+    buffer_scratch_dir="/tmp/",
+    prefetch=3,
 ):
     replay_buffer = TensorDictReplayBuffer(
         pin_memory=False,
@@ -172,6 +171,7 @@ def make_replay_buffer(
         batch_size=batch_size,
     )
     return replay_buffer
+
 
 # ====================================================================
 # Discrete DQN Loss
@@ -187,8 +187,11 @@ def make_loss_module(value_network):
         delay_value=True,
     )
     dqn_loss.make_value_estimator(gamma=gamma)
-    targ_net_updater = HardUpdate(dqn_loss, value_network_update_interval=hard_update_freq)
+    targ_net_updater = HardUpdate(
+        dqn_loss, value_network_update_interval=hard_update_freq
+    )
     return dqn_loss, targ_net_updater
+
 
 # ====================================================================
 # Other component utils
@@ -234,7 +237,9 @@ if __name__ == "__main__":
 
     # Make the components
     model = make_dqn_model(env_name)
-    model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames, eps_end=end_e).to(device)
+    model_explore = EGreedyWrapper(
+        model, annealing_num_steps=annealing_frames, eps_end=end_e
+    ).to(device)
     collector = make_collector(env_name, model_explore, device)
     replay_buffer = make_replay_buffer(batch_size)
     loss_module, target_net_updater = make_loss_module(model)
@@ -254,8 +259,14 @@ if __name__ == "__main__":
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
-            logger.log_scalar("episode_length_train", episode_length.sum().item() / len(episode_length), collected_frames)
+            logger.log_scalar(
+                "reward_train", episode_rewards.mean().item(), collected_frames
+            )
+            logger.log_scalar(
+                "episode_length_train",
+                episode_length.sum().item() / len(episode_length),
+                collected_frames,
+            )
 
         pbar.update(data.numel())
         data = data.reshape(-1)
