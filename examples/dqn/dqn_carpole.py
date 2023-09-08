@@ -10,7 +10,7 @@ from tensordict import TensorDict
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs import RewardSum, DoubleToFloat, TransformedEnv
+from torchrl.envs import RewardSum, DoubleToFloat, TransformedEnv, StepCounter
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.modules import MLP, QValueActor, EGreedyWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
@@ -24,6 +24,7 @@ def make_env(env_name="CartPole-v1", device="cpu"):
     env = GymEnv(env_name, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat())
     return env
 
@@ -63,77 +64,6 @@ def make_dqn_model(env_name):
     return qvalue_module
 
 
-# ====================================================================
-# Collector utils
-# --------------------------------------------------------------------
-
-def make_collector(env_name, policy, device):
-    collector_class = SyncDataCollector
-    collector = collector_class(
-        make_env(env_name, device),
-        policy,
-        frames_per_batch=frames_per_batch,
-        total_frames=total_frames,
-        device=device,
-        storing_device=device,
-        max_frames_per_traj=-1,
-    )
-    collector.set_seed(seed)
-    return collector
-
-# ====================================================================
-# Collector and replay buffer utils
-# --------------------------------------------------------------------
-
-
-def make_replay_buffer(
-        batch_size,
-        prefetch=3,
-):
-    replay_buffer = TensorDictReplayBuffer(
-        pin_memory=False,
-        prefetch=prefetch,
-        storage=LazyTensorStorage(
-            max_size=buffer_size,
-            device=device,
-        ),
-        batch_size=batch_size,
-    )
-    return replay_buffer
-
-# ====================================================================
-# Discrete DQN Loss
-# --------------------------------------------------------------------
-
-
-def make_loss_module(value_network):
-    """Make loss module and target network updater."""
-    dqn_loss = DQNLoss(
-        value_network=value_network,
-        gamma=gamma,
-        loss_function="l2",
-        delay_value=True,
-    )
-    dqn_loss.make_value_estimator(gamma=gamma)
-    targ_net_updater = HardUpdate(dqn_loss, value_network_update_interval=hard_update_freq)
-    return dqn_loss, targ_net_updater
-
-# ====================================================================
-# Other component utils
-# --------------------------------------------------------------------
-
-
-def make_optimizer(dqn_loss):
-    optimizer = torch.optim.Adam(dqn_loss.parameters(), lr=lr)
-    return optimizer
-
-
-def make_logger(backend="csv"):
-    exp_name = generate_exp_name("DQN", f"CartPole_{env_name}")
-    logger = get_logger(backend, logger_name="dqn", experiment_name=exp_name)
-    return logger
-
-
 if __name__ == "__main__":
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
@@ -148,9 +78,9 @@ if __name__ == "__main__":
     gamma = 0.99
     lr = 2.5e-4
     batch_size = 128
-    hard_update_freq = 125
+    hard_update_freq = 50
     eps_end = 0.05
-    logger_backend = "wandb"
+    logger_backend = "csv"
 
     seed = 42
     torch.manual_seed(seed)
@@ -158,11 +88,47 @@ if __name__ == "__main__":
     # Make the components
     model = make_dqn_model(env_name)
     model_explore = EGreedyWrapper(model, annealing_num_steps=annealing_frames, eps_end=eps_end).to(device)
-    collector = make_collector(env_name, model_explore, device)
-    replay_buffer = make_replay_buffer(batch_size)
-    loss_module, target_net_updater = make_loss_module(model)
-    optimizer_actor = make_optimizer(loss_module)
-    logger = make_logger(logger_backend)
+
+    # Create the collector
+    collector_class = SyncDataCollector
+    collector = SyncDataCollector(
+        make_env(env_name, device),
+        policy=model_explore,
+        frames_per_batch=frames_per_batch,
+        total_frames=total_frames,
+        device=device,
+        storing_device=device,
+        max_frames_per_traj=-1,
+    )
+    collector.set_seed(seed)
+
+    # Create the replay buffer
+    replay_buffer = TensorDictReplayBuffer(
+        pin_memory=False,
+        prefetch=3,
+        storage=LazyTensorStorage(
+            max_size=buffer_size,
+            device=device,
+        ),
+        batch_size=batch_size,
+    )
+
+    # Create the loss module
+    loss_module = DQNLoss(
+        value_network=model,
+        gamma=gamma,
+        loss_function="l2",
+        delay_value=True,
+    )
+    loss_module.make_value_estimator(gamma=gamma)
+    target_net_updater = HardUpdate(loss_module, value_network_update_interval=hard_update_freq)
+
+    # Create the optimizer
+    optimizer = torch.optim.Adam(loss_module.parameters(), lr=lr)
+
+    # Create the logger
+    exp_name = generate_exp_name("DQN", f"CartPole_{env_name}")
+    logger = get_logger(logger_backend, logger_name="dqn", experiment_name=exp_name)
 
     # Main loop
     collected_frames = 0
@@ -172,9 +138,12 @@ if __name__ == "__main__":
     for i, data in enumerate(collector):
 
         # Train loging
+        logger.log_scalar("q_values", (data["action_value"]*data["action"]).sum().item() / frames_per_batch, collected_frames)
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
+            episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
+            logger.log_scalar("episode_length_train", episode_length.sum().item() / len(episode_length), collected_frames)
 
         pbar.update(data.numel())
         data = data.reshape(-1)
@@ -187,12 +156,12 @@ if __name__ == "__main__":
         if collected_frames >= init_random_frames:
             q_losses = TensorDict({}, batch_size=[num_updates])
             for j in range(num_updates):
-                sampled_tensordict = replay_buffer.sample(batch_size).to(device)
+                sampled_tensordict = replay_buffer.sample(batch_size)
                 loss_td = loss_module(sampled_tensordict)
                 q_loss = loss_td["loss"]
-                optimizer_actor.zero_grad()
+                optimizer.zero_grad()
                 q_loss.backward()
-                optimizer_actor.step()
+                optimizer.step()
                 target_net_updater.step()
                 q_losses[j] = loss_td.select("loss").detach()
 
