@@ -140,6 +140,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         rollout (Callable, ... -> TensorDictBase): executes a rollout in the environment with the given policy (or random
             steps if no policy is provided)
 
+    Attributes:
+        sparse (bool): Whether the environment is sparse or not.
+            Sparse environments only read sparse actions, or return
+            sparse observations.
+
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
         >>> env = GymEnv("Pendulum-v1")
@@ -218,6 +223,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     domain=discrete), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
     """
+
+    sparse = False
 
     def __init__(
         self,
@@ -1592,7 +1599,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 break
             tensordict = step_mdp(
                 tensordict,
-                keep_other=True,
+                keep_other=False,
                 exclude_action=False,
                 exclude_reward=True,
                 reward_keys=self.reward_keys,

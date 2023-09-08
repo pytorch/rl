@@ -150,12 +150,14 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey],
+        in_keys: Sequence[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
+        if in_keys is None:
+            in_keys = []
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
@@ -5029,4 +5031,18 @@ class ActionMask(Transform):
                 self.SPEC_TYPE_ERROR.format(self.ACCEPTED_SPECS, type(action_spec))
             )
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
+        return tensordict
+
+
+class FillSparseTransform(Transform):
+    def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for key, spec in self.parent.observation_spec.items(True, True):
+            if key not in tensordict.keys(True):
+                tensordict.set(key, spec.zero())
+        for key, spec in self.parent.output_spec["full_reward_spec"].items(True, True):
+            if key not in tensordict.keys(True):
+                tensordict.set(key, spec.zero())
+        for key, spec in self.parent.output_spec["full_done_spec"].items(True, True):
+            if key not in tensordict.keys(True):
+                tensordict.set(key, spec.zero())
         return tensordict

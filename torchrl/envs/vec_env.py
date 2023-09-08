@@ -819,9 +819,12 @@ class ParallelEnv(_BatchedEnv):
             )
             for key in self._selected_step_keys:
                 _set_single_key(next_td, out, key, clone=True)
+            self.shared_tensordict_parent.zero_()
         else:
             # strict=False ensures that non-homogeneous keys are still there
             out = next_td.select(*self._selected_step_keys, strict=False).clone()
+            for td in self.shared_tensordicts:
+                td.zero_()
         return out
 
     @_check_start
