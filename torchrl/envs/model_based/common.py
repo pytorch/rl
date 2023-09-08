@@ -167,10 +167,7 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
                 dtype=torch.bool,
                 device=tensordict_out.device,
             )
-        return tensordict_out.select().set(
-            "next",
-            tensordict_out.select(*self.observation_spec.keys(), "reward", "done"),
-        )
+        return tensordict_out.select(*self.observation_spec.keys(), "reward", "done")
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:

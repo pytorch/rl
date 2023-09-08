@@ -13,14 +13,14 @@ from tensordict.utils import NestedKey
 from torch import nn
 from torchrl.data.tensor_specs import TensorSpec
 
+from torchrl.data.utils import _find_action_space
+
 from torchrl.envs.utils import step_mdp
 from torchrl.modules.tensordict_module.actors import (
     DistributionalQValueActor,
     QValueActor,
 )
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
-
-from torchrl.modules.utils.utils import _find_action_space
 
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (

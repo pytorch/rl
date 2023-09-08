@@ -123,8 +123,8 @@ class BraxWrapper(_EnvWrapper):
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self.action_spec = BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=(
                 *self.batch_size,
                 env.action_size,
@@ -282,7 +282,6 @@ class BraxWrapper(_EnvWrapper):
             out = self._step_with_grad(tensordict)
         else:
             out = self._step_without_grad(tensordict)
-        out = out.select().set("next", out)
         return out
 
 

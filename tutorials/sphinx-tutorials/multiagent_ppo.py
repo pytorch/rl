@@ -273,9 +273,9 @@ print("observation_spec:", env.observation_spec)
 # To access the full structure of the specs we can use
 #
 
-print("full_action_spec:", env.input_spec["_action_spec"])
-print("full_reward_spec:", env.output_spec["_reward_spec"])
-print("full_done_spec:", env.output_spec["_done_spec"])
+print("full_action_spec:", env.input_spec["full_action_spec"])
+print("full_reward_spec:", env.output_spec["full_reward_spec"])
+print("full_done_spec:", env.output_spec["full_done_spec"])
 
 ######################################################################
 # As you can see the reward and action spec present the "agent" key,
@@ -296,9 +296,9 @@ print("done_key:", env.done_key)
 # To tie it all together, we can see that passing these keys to the full specs gives us the leaf domains
 #
 
-assert env.action_spec == env.input_spec["_action_spec"][env.action_key]
-assert env.reward_spec == env.output_spec["_reward_spec"][env.reward_key]
-assert env.done_spec == env.output_spec["_done_spec"][env.done_key]
+assert env.action_spec == env.input_spec["full_action_spec"][env.action_key]
+assert env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]
+assert env.done_spec == env.output_spec["full_done_spec"][env.done_key]
 
 ######################################################################
 # Transforms
@@ -461,8 +461,8 @@ policy = ProbabilisticActor(
     out_keys=[env.action_key],
     distribution_class=TanhNormal,
     distribution_kwargs={
-        "min": env.unbatched_action_spec[env.action_key].space.minimum,
-        "max": env.unbatched_action_spec[env.action_key].space.maximum,
+        "min": env.unbatched_action_spec[env.action_key].space.low,
+        "max": env.unbatched_action_spec[env.action_key].space.high,
     },
     return_log_prob=True,
     log_prob_key=("agents", "sample_log_prob"),

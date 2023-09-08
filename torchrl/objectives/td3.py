@@ -270,13 +270,24 @@ class TD3Loss(LossModule):
             )
         elif action_spec is not None:
             if isinstance(action_spec, CompositeSpec):
-                action_spec = action_spec[self.tensor_keys.action]
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
+                action_spec = action_spec[self.tensor_keys.action][
+                    (0,) * len(action_container_shape)
+                ]
             if not isinstance(action_spec, BoundedTensorSpec):
                 raise ValueError(
                     f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
                 )
-            low = action_spec.space.minimum
-            high = action_spec.space.maximum
+            low = action_spec.space.low
+            high = action_spec.space.high
         else:
             low, high = bounds
         if not isinstance(low, torch.Tensor):

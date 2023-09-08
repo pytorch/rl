@@ -4,8 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
+
 import importlib.util
+import os
 import re
+from typing import List, Union
 
 import torch
 
@@ -37,6 +41,10 @@ __all__ = [
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
 
+DONE_AFTER_RESET_ERROR = RuntimeError(
+    "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+)
+
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
     if exploration_mode is not None:
@@ -56,9 +64,9 @@ def step_mdp(
     exclude_reward: bool = True,
     exclude_done: bool = False,
     exclude_action: bool = True,
-    reward_key: NestedKey = "reward",
-    done_key: NestedKey = "done",
-    action_key: NestedKey = "action",
+    reward_keys: Union[NestedKey, List[NestedKey]] = "reward",
+    done_keys: Union[NestedKey, List[NestedKey]] = "done",
+    action_keys: Union[NestedKey, List[NestedKey]] = "action",
 ) -> TensorDictBase:
     """Creates a new tensordict that reflects a step in time of the input tensordict.
 
@@ -86,11 +94,11 @@ def step_mdp(
             be kept in the root tensordict (since it should not be present in
             the ``"next"`` entry).
             Default is ``True``.
-        reward_key (key, optional): the key where the reward is written. Defaults
+        reward_keys (NestedKey or list of NestedKey, optional): the keys where the reward is written. Defaults
             to "reward".
-        done_key (key, optional): the key where the done is written. Defaults
+        done_keys (NestedKey or list of NestedKey, optional): the keys where the done is written. Defaults
             to "done".
-        action_key (key, optional): the key where the action is written. Defaults
+        action_keys (NestedKey or list of NestedKey, optional): the keys where the action is written. Defaults
             to "action".
 
     Returns:
@@ -173,9 +181,9 @@ def step_mdp(
                     exclude_reward=exclude_reward,
                     exclude_done=exclude_done,
                     exclude_action=exclude_action,
-                    reward_key=reward_key,
-                    done_key=done_key,
-                    action_key=action_key,
+                    reward_keys=reward_keys,
+                    done_keys=done_keys,
+                    action_keys=action_keys,
                 )
                 for td, ntd in zip(tensordict.tensordicts, next_tensordicts)
             ],
@@ -186,17 +194,20 @@ def step_mdp(
             return next_tensordict
         return out
 
-    action_key = unravel_key(action_key)
-    done_key = unravel_key(done_key)
-    reward_key = unravel_key(reward_key)
+    if not isinstance(action_keys, list):
+        action_keys = [action_keys]
+    if not isinstance(done_keys, list):
+        done_keys = [done_keys]
+    if not isinstance(reward_keys, list):
+        reward_keys = [reward_keys]
 
     excluded = set()
     if exclude_reward:
-        excluded = {reward_key}
+        excluded = excluded.union(reward_keys)
     if exclude_done:
-        excluded = excluded.union({done_key})
+        excluded = excluded.union(done_keys)
     if exclude_action:
-        excluded = excluded.union({action_key})
+        excluded = excluded.union(action_keys)
     next_td = tensordict.get("next")
     out = next_td.empty()
 
@@ -206,7 +217,8 @@ def step_mdp(
             if key != "next":
                 _set(tensordict, out, key, total_key, excluded)
     elif not exclude_action:
-        _set_single_key(tensordict, out, action_key)
+        for action_key in action_keys:
+            _set_single_key(tensordict, out, action_key)
     for key in next_td.keys():
         _set(next_td, out, key, total_key, excluded)
     if next_tensordict is not None:
@@ -221,19 +233,17 @@ def _set_single_key(source, dest, key, clone=False):
         key = (key,)
     for k in key:
         try:
-            val = source.get(k)
+            val = source._get_str(k, None)
             if is_tensor_collection(val):
-                new_val = dest.get(k, None)
+                new_val = dest._get_str(k, None)
                 if new_val is None:
                     new_val = val.empty()
-                    # dest.set(k, new_val)
                     dest._set_str(k, new_val, inplace=False, validated=True)
                 source = val
                 dest = new_val
             else:
                 if clone:
                     val = val.clone()
-                # dest.set(k, val)
                 dest._set_str(k, val, inplace=False, validated=True)
         # This is a temporary solution to understand if a key is heterogeneous
         # while not having performance impact when the exception is not raised
@@ -417,9 +427,22 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         fake_tensordict = fake_tensordict.expand(*real_tensordict.shape)
     else:
         fake_tensordict = torch.stack([fake_tensordict.clone() for _ in range(3)], -1)
+    # eliminate empty containers
+    fake_tensordict_select = fake_tensordict.select(*fake_tensordict.keys(True, True))
+    real_tensordict_select = real_tensordict.select(*real_tensordict.keys(True, True))
+    # check keys
+    fake_tensordict_keys = set(fake_tensordict.keys(True, True))
+    real_tensordict_keys = set(real_tensordict.keys(True, True))
+    if fake_tensordict_keys != real_tensordict_keys:
+        raise AssertionError(
+            f"""The keys of the specs and data do not match:
+    - List of keys present in real but not in fake: {real_tensordict_keys-fake_tensordict_keys},
+    - List of keys present in fake but not in real: {fake_tensordict_keys-real_tensordict_keys}.
+"""
+        )
     if (
-        fake_tensordict.apply(lambda x: torch.zeros_like(x))
-        != real_tensordict.apply(lambda x: torch.zeros_like(x))
+        fake_tensordict_select.apply(lambda x: torch.zeros_like(x))
+        != real_tensordict_select.apply(lambda x: torch.zeros_like(x))
     ).any():
         raise AssertionError(
             "zeroing the two tensordicts did not make them identical. "
@@ -427,20 +450,23 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
         )
 
     # Checks shapes and eventually dtypes of keys at all nesting levels
-    _per_level_env_check(fake_tensordict, real_tensordict, check_dtype=check_dtype)
+    _per_level_env_check(
+        fake_tensordict_select, real_tensordict_select, check_dtype=check_dtype
+    )
 
     # Check specs
     last_td = real_tensordict[..., -1]
-    _action_spec = env.input_spec["_action_spec"]
-    _state_spec = env.input_spec["_state_spec"]
-    _obs_spec = env.output_spec["_observation_spec"]
-    _reward_spec = env.output_spec["_reward_spec"]
-    _done_spec = env.output_spec["_done_spec"]
+    last_td = env.rand_action(last_td)
+    full_action_spec = env.input_spec["full_action_spec"]
+    full_state_spec = env.input_spec["full_state_spec"]
+    full_observation_spec = env.output_spec["full_observation_spec"]
+    full_reward_spec = env.output_spec["full_reward_spec"]
+    full_done_spec = env.output_spec["full_done_spec"]
     for name, spec in (
-        ("action", _action_spec),
-        ("state", _state_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("action", full_action_spec),
+        ("state", full_state_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if not check_no_exclusive_keys(spec):
             raise AssertionError(
@@ -456,9 +482,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
                 f"spec check failed at root for spec {name}={spec} and data {td}."
             )
     for name, spec in (
-        ("reward", _reward_spec),
-        ("done", _done_spec),
-        ("obs", _obs_spec),
+        ("reward", full_reward_spec),
+        ("done", full_done_spec),
+        ("obs", full_observation_spec),
     ):
         if spec is None:
             spec = CompositeSpec(shape=env.batch_size, device=env.device)
@@ -532,7 +558,7 @@ def make_composite_from_td(data):
                 obs: UnboundedContinuousTensorSpec(
                      shape=torch.Size([3]), space=None, device=cpu, dtype=torch.float32, domain=continuous),
                 reward: UnboundedContinuousTensorSpec(
-                     shape=torch.Size([1]), space=ContinuousBox(minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+                     shape=torch.Size([1]), space=ContinuousBox(low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True), high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)), device=cpu, dtype=torch.float32, domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
         >>> assert (spec.zero() == data.zero_()).all()
     """
     from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
@@ -544,10 +570,45 @@ def make_composite_from_td(data):
             key: make_composite_from_td(tensor)
             if isinstance(tensor, TensorDictBase)
             else UnboundedContinuousTensorSpec(
-                dtype=tensor.dtype, device=tensor.device, shape=tensor.shape
+                dtype=tensor.dtype,
+                device=tensor.device,
+                shape=tensor.shape if tensor.shape else [1],
             )
             for key, tensor in data.items()
         },
         shape=data.shape,
     )
     return composite
+
+
+@contextlib.contextmanager
+def clear_mpi_env_vars():
+    """Clears the MPI of environment variables.
+
+    `from mpi4py import MPI` will call `MPI_Init` by default.
+    If the child process has MPI environment variables, MPI will think that the child process
+    is an MPI process just like the parent and do bad things such as hang.
+
+    This context manager is a hacky way to clear those environment variables
+    temporarily such as when we are starting multiprocessing Processes.
+
+    Yields:
+        Yields for the context manager
+    """
+    removed_environment = {}
+    for k, v in list(os.environ.items()):
+        for prefix in ["OMPI_", "PMI_"]:
+            if k.startswith(prefix):
+                removed_environment[k] = v
+                del os.environ[k]
+    try:
+        yield
+    finally:
+        os.environ.update(removed_environment)
+
+
+def _replace_last(key: NestedKey, new_ending: str) -> NestedKey:
+    if isinstance(key, str):
+        return new_ending
+    else:
+        return key[:-1] + (new_ending,)

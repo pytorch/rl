@@ -105,13 +105,17 @@ class VmasWrapper(_EnvWrapper):
     available_envs = _get_envs()
 
     def __init__(
-        self, env: "vmas.simulator.environment.environment.Environment" = None, **kwargs
+        self,
+        env: "vmas.simulator.environment.environment.Environment" = None,
+        categorical_actions: bool = True,
+        **kwargs,
     ):
         if env is not None:
             kwargs["env"] = env
             if "device" in kwargs.keys() and kwargs["device"] != str(env.device):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
+        self.categorical_actions = categorical_actions
         super().__init__(**kwargs)
 
     @property
@@ -165,7 +169,7 @@ class VmasWrapper(_EnvWrapper):
                     {
                         "action": _gym_to_torchrl_spec_transform(
                             self.action_space[agent_index],
-                            categorical_action_encoding=True,
+                            categorical_action_encoding=self.categorical_actions,
                             device=self.device,
                             remap_state_to_observation=False,
                         )  # shape = (n_actions_per_agent,)
@@ -354,7 +358,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"next": {"agents": agent_tds, "done": dones}},
+            source={"agents": agent_tds, "done": dones},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -396,6 +400,10 @@ class VmasWrapper(_EnvWrapper):
         return rewards
 
     def read_action(self, action):
+        if not self.continuous_actions and not self.categorical_actions:
+            action = self.unbatched_action_spec["agents", "action"].to_categorical(
+                action
+            )
         agent_actions = []
         for i in range(self.n_agents):
             agent_actions.append(action[:, i, ...])
@@ -468,6 +476,7 @@ class VmasEnv(VmasWrapper):
         num_envs: int,
         continuous_actions: bool = True,
         max_steps: Optional[int] = None,
+        categorical_actions: bool = True,
         seed: Optional[int] = None,
         **kwargs,
     ):
@@ -481,6 +490,7 @@ class VmasEnv(VmasWrapper):
         kwargs["continuous_actions"] = continuous_actions
         kwargs["max_steps"] = max_steps
         kwargs["seed"] = seed
+        kwargs["categorical_actions"] = categorical_actions
         super().__init__(**kwargs)
 
     def _check_kwargs(self, kwargs: Dict):

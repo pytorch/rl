@@ -29,7 +29,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+            DoubleToFloat(),
         ),
     )
     return transformed_env
@@ -142,8 +142,8 @@ def make_sac_agent(cfg, train_env, eval_env, device):
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
+        "min": action_spec.space.low,
+        "max": action_spec.space.high,
         "tanh_loc": False,
     }
 
