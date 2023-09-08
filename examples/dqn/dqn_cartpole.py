@@ -2,24 +2,34 @@
 DQN Benchmarks: CartPole-v1
 """
 
-import hydra
-import tqdm
 import time
+
+import hydra
+import numpy as np
 import torch.nn
 import torch.optim
+import tqdm
 from tensordict import TensorDict
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import CompositeSpec, LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs import (
+    DoubleToFloat,
+    ExplorationType,
+    RewardSum,
+    set_exploration_type,
+    StepCounter,
+    TransformedEnv,
+)
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs import RewardSum, DoubleToFloat, TransformedEnv, StepCounter
+from torchrl.modules import EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DQNLoss, HardUpdate
-from torchrl.modules import MLP, QValueActor, EGreedyWrapper
 from torchrl.record.loggers import generate_exp_name, get_logger
 
 
 # ====================================================================
 # Environment utils
 # --------------------------------------------------------------------
+
 
 def make_env(env_name="CartPole-v1", device="cpu"):
     env = GymEnv(env_name, device=device)
@@ -28,6 +38,7 @@ def make_env(env_name="CartPole-v1", device="cpu"):
     env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat())
     return env
+
 
 # ====================================================================
 # Model utils
@@ -109,7 +120,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         delay_value=True,
     )
     loss_module.make_value_estimator(gamma=cfg.loss.gamma)
-    target_net_updater = HardUpdate(loss_module, value_network_update_interval=cfg.loss.hard_update_freq)
+    target_net_updater = HardUpdate(
+        loss_module, value_network_update_interval=cfg.loss.hard_update_freq
+    )
 
     # Create the optimizer
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
@@ -118,20 +131,34 @@ def main(cfg: "DictConfig"):  # noqa: F821
     exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
     logger = get_logger(cfg.logger.backend, logger_name="dqn", experiment_name=exp_name)
 
+    # Create the test environment
+    test_env = make_env(cfg.env.env_name, device)
+
     # Main loop
     collected_frames = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    for i, data in enumerate(collector):
+    for data in collector:
 
         # Train loging
-        logger.log_scalar("q_values", (data["action_value"]*data["action"]).sum().item() / cfg.collector.frames_per_batch, collected_frames)
+        logger.log_scalar(
+            "q_values",
+            (data["action_value"] * data["action"]).sum().item()
+            / cfg.collector.frames_per_batch,
+            collected_frames,
+        )
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            logger.log_scalar("reward_train", episode_rewards.mean().item(), collected_frames)
-            logger.log_scalar("episode_length_train", episode_length.sum().item() / len(episode_length), collected_frames)
+            logger.log_scalar(
+                "reward_train", episode_rewards.mean().item(), collected_frames
+            )
+            logger.log_scalar(
+                "episode_length_train",
+                episode_length.sum().item() / len(episode_length),
+                collected_frames,
+            )
 
         pbar.update(data.numel())
         data = data.reshape(-1)
@@ -157,6 +184,33 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for key, value in q_losses.items():
                 logger.log_scalar(key, value.item(), collected_frames)
             logger.log_scalar("epsilon", model_explore.eps, collected_frames)
+
+            # Test logging
+            with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+                if (
+                    collected_frames - cfg.collector.frames_per_batch
+                ) // cfg.logger.test_interval < (
+                    collected_frames // cfg.logger.test_interval
+                ):
+                    model.eval()
+                    test_rewards = []
+                    for _ in range(cfg.logger.num_test_episodes):
+                        td_test = test_env.rollout(
+                            policy=model,
+                            auto_reset=True,
+                            auto_cast_to_device=True,
+                            break_when_any_done=True,
+                            max_steps=10_000_000,
+                        )
+                        reward = td_test["next", "episode_reward"][
+                            td_test["next", "done"]
+                        ]
+                        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+                        del td_test
+                    logger.log_scalar(
+                        "reward_test", test_rewards.mean(), collected_frames
+                    )
+                    model.train()
 
         # update weights of the inference policy
         collector.update_policy_weights_()

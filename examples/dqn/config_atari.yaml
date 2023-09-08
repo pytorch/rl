@@ -1,0 +1,34 @@
+# Environment
+env:
+  env_name: PongNoFrameskip-v4
+  frame_skip: 4
+
+# collector
+collector:
+  total_frames: 40_000_000
+  frames_per_batch: 16  # 512 * 4
+  eps_start: 1.0
+  eps_end: 0.01
+  annealing_frames: 4_000_000
+  init_random_frames: 320_000
+
+# buffer
+buffer:
+  buffer_size: 1_000_000
+  batch_size: 32
+
+# logger
+logger:
+  backend: csv
+  exp_name: DQN
+  record_interval: 40_000_000
+
+# Optim
+optim:
+  lr: 1e-4
+
+# loss
+loss:
+  gamma: 0.99
+  hard_update_freq: 250
+  num_updates: 1  # 128 * 4

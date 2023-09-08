@@ -20,6 +20,8 @@ buffer:
 logger:
   backend: csv
   exp_name: DQN
+  test_interval: 500_000
+  num_test_episodes: 5
 
 # Optim
 optim:
