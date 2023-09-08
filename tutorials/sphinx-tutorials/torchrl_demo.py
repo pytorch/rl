@@ -70,7 +70,7 @@ This demo was presented at ICML 2022 on the industry demo day.
 #      ├── "objectives"
 #      │   ├── "common.py"
 #      │   ├── "ddpg.py"
-#      │   ├── "dqn.py"
+#      │   ├── "dqn_atari.py"
 #      │   ├── "functional.py"
 #      │   ├── "ppo.py"
 #      │   ├── "redq.py"
