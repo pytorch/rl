@@ -153,7 +153,7 @@ class GymLikeEnv(_EnvWrapper):
             reward (torch.Tensor or TensorDict): reward to be mapped.
 
         """
-        return self.reward_spec.encode(reward)
+        return self.reward_spec.encode(reward, ignore_device=True)
 
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
