@@ -1,7 +1,7 @@
 # Examples
 
 We provide examples to train the following algorithms:
-- [DQN](dqn/dqn_atari.py)
+- [DQN](dqn/dqn.py)
 - [DDPG](ddpg/ddpg.py)
 - [SAC](sac/sac.py)
 - [REDQ](redq/redq.py)
