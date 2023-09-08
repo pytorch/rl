@@ -142,8 +142,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # optimization steps
         if collected_frames >= cfg.collector.init_random_frames:
-            q_losses = TensorDict({}, batch_size=[cfg.collector.num_updates])
-            for j in range(cfg.collector.num_updates):
+            q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
+            for j in range(cfg.loss.num_updates):
                 sampled_tensordict = replay_buffer.sample(cfg.buffer.batch_size)
                 loss_td = loss_module(sampled_tensordict)
                 q_loss = loss_td["loss"]
