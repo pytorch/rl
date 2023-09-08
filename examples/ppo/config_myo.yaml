@@ -1,0 +1,33 @@
+# task and env
+env:
+  env_name: myoHandReachRandom-v0
+
+# collector
+collector:
+  frames_per_batch: 2048
+  total_frames: 1_000_000
+  num_envs: 1
+
+# logger
+logger:
+  backend: wandb
+  exp_name: myo_hand_reach
+  test_interval: 1_000_000
+  num_test_episodes: 5
+
+# Optim
+optim:
+  lr: 3e-4
+  weight_decay: 0.0
+  anneal_lr: False
+
+# loss
+loss:
+  gamma: 0.99
+  mini_batch_size: 64
+  ppo_epochs: 10
+  gae_lambda: 0.95
+  clip_epsilon: 0.2
+  critic_coef: 0.25
+  entropy_coef: 0.0
+  loss_critic_type: l2
