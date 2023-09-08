@@ -35,4 +35,4 @@ jobs:
 
         nvidia-smi
 
-        bash .circleci/unittest/linux_libs/scripts_brax/run_all.sh
+        bash .github/unittest/linux_libs/scripts_brax/run_all.sh

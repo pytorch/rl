@@ -33,9 +33,10 @@ jobs:
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
         export SYSTEM_VERSION_COMPAT=0
+        export TORCH_VERSION=nightly
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        ./.circleci/unittest/linux/scripts/run_all.sh
+        ./.github/unittest/linux/scripts/run_all.sh
