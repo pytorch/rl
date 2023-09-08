@@ -718,13 +718,14 @@ plt.show()
 #
 # .. code-block:: python
 #
-#    env.rollout(
-#        max_steps=max_steps,
-#        policy=policy,
-#        callback=lambda env, _: env.render(),
-#        auto_cast_to_device=True,
-#        break_when_any_done=False,
-#    )
+#    with torch.no_grad():
+#       env.rollout(
+#           max_steps=max_steps,
+#           policy=policy,
+#           callback=lambda env, _: env.render(),
+#           auto_cast_to_device=True,
+#           break_when_any_done=False,
+#       )
 #
 # If you are running this in Google Colab, you can render the trained policy by running:
 #
@@ -745,13 +746,14 @@ plt.show()
 #    def rendering_callback(env, td):
 #        env.frames.append(Image.fromarray(env.render(mode="rgb_array")))
 #    env.frames = []
-#    env.rollout(
-#         max_steps=max_steps,
-#         policy=policy,
-#         callback=rendering_callback,
-#         auto_cast_to_device=True,
-#         break_when_any_done=False,
-#    )
+#    with torch.no_grad():
+#       env.rollout(
+#           max_steps=max_steps,
+#           policy=policy,
+#           callback=rendering_callback,
+#           auto_cast_to_device=True,
+#           break_when_any_done=False,
+#       )
 #    env.frames[0].save(
 #        f"{scenario_name}.gif",
 #        save_all=True,

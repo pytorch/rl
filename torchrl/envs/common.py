@@ -231,6 +231,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         self.__dict__["_done_keys"] = None
         self.__dict__["_reward_keys"] = None
         self.__dict__["_action_keys"] = None
+        self.__dict__["_batch_size"] = None
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -320,7 +321,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_size(self) -> torch.Size:
-        _batch_size = getattr(self, "_batch_size", None)
+        _batch_size = self.__dict__["_batch_size"]
         if _batch_size is None:
             _batch_size = self._batch_size = torch.Size([])
         return _batch_size
