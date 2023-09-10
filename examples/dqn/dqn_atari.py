@@ -163,14 +163,14 @@ def make_dqn_modules_pixels(proof_environment):
     return qvalue_module
 
 
-def make_dqn_model(env_name):
-    proof_environment = make_env(env_name, device="cpu")
+def make_dqn_model(env_name, frame_skip):
+    proof_environment = make_env(env_name, frame_skip, device="cpu")
     qvalue_module = make_dqn_modules_pixels(proof_environment)
     del proof_environment
     return qvalue_module
 
 
-@hydra.main(config_path=".", config_name="config_cartpole", version_base="1.1")
+@hydra.main(config_path=".", config_name="config_atari", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
@@ -189,7 +189,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     init_random_frames = cfg.collector.init_random_frames // frame_skip
 
     # Make the components
-    model = make_dqn_model(cfg.environment.env_name)
+    model = make_dqn_model(cfg.env.env_name, frame_skip)
     model_explore = EGreedyWrapper(
         model,
         annealing_num_steps=cfg.collector.annealing_frames,
@@ -198,6 +198,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
+        create_env_fn=make_env(cfg.env.env_name, frame_skip, device),
         policy=model_explore,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -232,14 +233,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create the optimizer
-    optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.loss.lr)
+    optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
 
     # Create the logger
     exp_name = generate_exp_name("DQN", f"Atari_mnih15_{cfg.env.env_name}")
     logger = get_logger(cfg.logger.backend, logger_name="dqn", experiment_name=exp_name)
 
     # Create the test environment
-    test_env = make_env(cfg.environment.env_name, device, is_test=True)
+    test_env = make_env(cfg.env.env_name, frame_skip, device, is_test=True)
     test_env.eval()
 
     # Main loop

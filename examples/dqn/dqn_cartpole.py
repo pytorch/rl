@@ -92,7 +92,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create the collector
     collector = SyncDataCollector(
-        make_env(cfg.env.env_name, device),
+        create_env_fn=make_env(cfg.env.env_name, device),
         policy=model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
