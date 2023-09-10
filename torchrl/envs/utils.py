@@ -14,6 +14,7 @@ from typing import List, Union
 import torch
 
 from tensordict import is_tensor_collection, unravel_key
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -208,6 +209,7 @@ def step_mdp(
         excluded = excluded.union(done_keys)
     if exclude_action:
         excluded = excluded.union(action_keys)
+    excluded = tuple(_unravel_key_to_tuple(exc) for exc in excluded)
     next_td = tensordict.get("next")
     out = next_td.empty()
 
@@ -258,12 +260,17 @@ def _set_single_key(source, dest, key, clone=False):
 
 
 def _set(source, dest, key, total_key, excluded):
-    total_key = total_key + (key,)
+    total_key = total_key + (key,)  # unravel_key(total_key + (key,))
     non_empty = False
-    if unravel_key(total_key) not in excluded:
+    if total_key not in excluded:
         try:
-            val = source.get(key)
-            if is_tensor_collection(val):
+            val = source._get_str(key, default=None)
+            if isinstance(val, torch.Tensor):
+                # most usual use case
+                non_empty = True
+                # dest.set(key, val)
+                dest._set_str(key, val, inplace=False, validated=True)
+            elif is_tensor_collection(val):
                 new_val = dest.get(key, None)
                 if new_val is None:
                     new_val = val.empty()
@@ -278,6 +285,7 @@ def _set(source, dest, key, total_key, excluded):
                     dest._set_str(key, new_val, inplace=False, validated=True)
                 non_empty = non_empty_local
             else:
+                # support for potential non-tensor stored in the data structure
                 non_empty = True
                 # dest.set(key, val)
                 dest._set_str(key, val, inplace=False, validated=True)

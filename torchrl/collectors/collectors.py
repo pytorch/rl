@@ -811,7 +811,8 @@ class SyncDataCollector(DataCollectorBase):
             reward_keys=self.env.reward_keys,
             done_keys=self.env.done_keys,
             action_keys=self.env.action_keys,
-        )
+            keep_other=False,
+        ).set("collector", self._tensordict.get("collector"))
 
         if not self.reset_when_done:
             return
