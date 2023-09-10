@@ -208,6 +208,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor.train()
 
         collector.update_policy_weights_()
+        sampling_start = time.time()
 
     end_time = time.time()
     execution_time = end_time - start_time

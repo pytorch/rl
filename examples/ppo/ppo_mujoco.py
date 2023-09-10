@@ -172,7 +172,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
                 i * frames_in_batch
             ) // cfg.logger.test_interval:
-
                 actor.eval()
                 test_rewards = []
                 for _ in range(cfg.logger.num_test_episodes):
@@ -190,6 +189,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor.train()
 
         collector.update_policy_weights_()
+        sampling_start = time.time()
 
     end_time = time.time()
     execution_time = end_time - start_time
