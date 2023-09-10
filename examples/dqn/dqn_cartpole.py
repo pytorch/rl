@@ -26,6 +26,7 @@ from torchrl.modules import EGreedyWrapper, MLP, QValueActor
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
 
+torch.set_num_threads(1)
 
 # ====================================================================
 # Environment utils
@@ -97,8 +98,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         policy=model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device="cpu",
-        storing_device="cpu",
+        device=cfg.collector.device,
+        storing_device=cfg.collector.storing_device,
         max_frames_per_traj=-1,
     )
 
