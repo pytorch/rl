@@ -13,6 +13,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import numpy as np
     import torch.optim
     import tqdm
+
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
@@ -90,8 +91,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
 
-    for data in collector:
+    sampling_start = time.time()
+    for i, data in enumerate(collector):
 
+        sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch
         pbar.update(data.numel())
@@ -99,22 +102,29 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
+            episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
+                "train/reward", episode_rewards.mean().item(), collected_frames
+            )
+            logger.log_scalar(
+                "train/episode_length",
+                episode_length.sum().item() / len(episode_length),
+                collected_frames,
             )
 
-        # Compute GAE
-        with torch.no_grad():
-            data = adv_module(data)
-        data_reshape = data.reshape(-1)
-
-        # Update the data buffer
-        data_buffer.extend(data_reshape)
-
         losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
+        training_start = time.time()
         for j in range(cfg.loss.ppo_epochs):
 
-            for i, batch in enumerate(data_buffer):
+            # Compute GAE
+            with torch.no_grad():
+                data = adv_module(data)
+            data_reshape = data.reshape(-1)
+
+            # Update the data buffer
+            data_buffer.extend(data_reshape)
+
+            for k, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
                 if cfg.optim.anneal_lr:
@@ -123,11 +133,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         g["lr"] = cfg.optim.lr * alpha
                     for g in critic_optim.param_groups:
                         g["lr"] = cfg.optim.lr * alpha
+                if cfg.loss.anneal_clip_epsilon:
+                    loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
                 num_network_updates += 1
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                losses[j, i] = loss.select(
+                losses[j, k] = loss.select(
                     "loss_critic", "loss_entropy", "loss_objective"
                 ).detach()
                 critic_loss = loss["loss_critic"]
@@ -143,15 +155,24 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_optim.zero_grad()
                 critic_optim.zero_grad()
 
+        training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
-            logger.log_scalar(key, value.item(), collected_frames)
+            logger.log_scalar("train/" + key, value.item(), collected_frames)
+        logger.log_scalar("train/lr", alpha * cfg.optim.lr, collected_frames)
+        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
+        logger.log_scalar("train/training_time", training_time, collected_frames)
+        logger.log_scalar(
+            "train/clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
+        )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // cfg.logger.test_interval < (
-                collected_frames // cfg.logger.test_interval
+            if (
+                (i - 1) * frames_in_batch % cfg.logger.test_interval
+                < i * frames_in_batch % cfg.logger.test_interval
             ):
+
                 actor.eval()
                 test_rewards = []
                 for _ in range(cfg.logger.num_test_episodes):
@@ -165,7 +186,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
-                logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
                 actor.train()
 
         collector.update_policy_weights_()

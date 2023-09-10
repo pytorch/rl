@@ -2,6 +2,7 @@
 This script reproduces the Proximal Policy Optimization (PPO) Algorithm
 results from Schulman et al. 2017 for the on Atari Environments.
 """
+
 import hydra
 
 
@@ -103,8 +104,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
         (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
     )
 
-    for data in collector:
+    sampling_start = time.time()
+    for i, data in enumerate(collector):
 
+        sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
@@ -112,8 +115,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Train loging
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
+            episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
+                "train/reward", episode_rewards.mean().item(), collected_frames
+            )
+            logger.log_scalar(
+                "train/episode_length",
+                episode_length.sum().item() / len(episode_length),
+                collected_frames,
             )
 
         # Apply episodic end of life
@@ -121,6 +130,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data["next", "done"].copy_(data["next", "end_of_life"])
 
         losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
+        training_start = time.time()
         for j in range(cfg.loss.ppo_epochs):
 
             # Compute GAE
@@ -131,7 +141,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             # Update the data buffer
             data_buffer.extend(data_reshape)
 
-            for i, batch in enumerate(data_buffer):
+            for k, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
                 alpha = 1 - (num_network_updates / total_network_updates)
@@ -147,7 +157,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Forward pass PPO loss
                 loss = loss_module(batch)
-                losses[j, i] = loss.select(
+                losses[j, k] = loss.select(
                     "loss_critic", "loss_entropy", "loss_objective"
                 ).detach()
                 loss_sum = (
@@ -164,19 +174,24 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optim.step()
                 optim.zero_grad()
 
+        training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
-            logger.log_scalar(key, value.item(), collected_frames)
-        logger.log_scalar("lr", alpha * cfg.optim.lr, collected_frames)
+            logger.log_scalar("train/" + key, value.item(), collected_frames)
+        logger.log_scalar("train/lr", alpha * cfg.optim.lr, collected_frames)
+        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
+        logger.log_scalar("train/training_time", training_time, collected_frames)
         logger.log_scalar(
-            "clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
+            "train/clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
         )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_in_batch) // test_interval < (
-                collected_frames // test_interval
+            if (
+                (i - 1) * frames_in_batch * frame_skip % test_interval
+                < i * frames_in_batch * frame_skip % test_interval
             ):
+
                 actor.eval()
                 test_rewards = []
                 for _ in range(cfg.logger.num_test_episodes):
@@ -190,7 +205,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
-                logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
                 actor.train()
 
         collector.update_policy_weights_()
