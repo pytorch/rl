@@ -10,7 +10,8 @@ import torch.nn
 import torch.optim
 import tqdm
 from tensordict import TensorDict
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import SyncDataCollector, MultiSyncDataCollector, \
+    MultiaSyncDataCollector
 from torchrl.data import CompositeSpec, LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs import (
     DoubleToFloat,
@@ -18,7 +19,7 @@ from torchrl.envs import (
     RewardSum,
     set_exploration_type,
     StepCounter,
-    TransformedEnv,
+    TransformedEnv, EnvCreator,
 )
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import EGreedyWrapper, MLP, QValueActor
@@ -91,13 +92,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ).to(device)
 
     # Create the collector
-    collector = SyncDataCollector(
-        make_env(cfg.env.env_name, device),
+    collector = MultiaSyncDataCollector(
+        [EnvCreator(lambda: make_env(cfg.env.env_name, device))],
         policy=model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
-        device=device,
-        storing_device=device,
+        device="cpu",
+        storing_device="cpu",
         max_frames_per_traj=-1,
     )
 
