@@ -9,6 +9,7 @@ from types import ModuleType
 from typing import Dict, List
 from warnings import warn
 
+import numpy as np
 import torch
 from torchrl.envs.vec_env import CloudpickleWrapper
 
@@ -25,7 +26,8 @@ from torchrl.data.tensor_specs import (
     DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec,
+    UnboundedContinuousTensorSpec, MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 
@@ -226,11 +228,18 @@ def _gym_to_torchrl_spec_transform(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        # dtype = (
-        #     numpy_to_torch_dtype_dict[spec.dtype]
-        #     if categorical_action_encoding
-        #     else torch.long
-        # )
+        if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
+            dtype = (
+                numpy_to_torch_dtype_dict[spec.dtype]
+                if categorical_action_encoding
+                else torch.long
+            )
+            return (
+                MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+                if categorical_action_encoding
+                else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+            )
+
         return torch.stack(
             [
                 _gym_to_torchrl_spec_transform(
@@ -243,11 +252,6 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-        # return (
-        #     MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
-        #     if categorical_action_encoding
-        #     else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
-        # )
     elif isinstance(spec, gym.spaces.Box):
         shape = spec.shape
         if not len(shape):
