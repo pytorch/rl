@@ -446,7 +446,7 @@ class TestDreamerComponents:
     @pytest.mark.parametrize("action_size", [3, 6])
     def test_rssm_prior(self, device, batch_size, stoch_size, deter_size, action_size):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,
@@ -501,7 +501,7 @@ class TestDreamerComponents:
         self, device, batch_size, temporal_size, stoch_size, deter_size, action_size
     ):
         action_spec = BoundedTensorSpec(
-            shape=(action_size,), dtype=torch.float32, minimum=-1, maximum=1
+            shape=(action_size,), dtype=torch.float32, low=-1, high=1
         )
         rssm_prior = RSSMPrior(
             action_spec,

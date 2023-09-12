@@ -366,8 +366,19 @@ class CQLLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    action_spec[self.tensor_keys.action]
+                    .shape[len(action_container_shape) :]
+                    .numel()
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)

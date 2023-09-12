@@ -11,6 +11,7 @@ from .transforms import (
     CatFrames,
     CatTensors,
     CenterCrop,
+    ClipTransform,
     Compose,
     DeviceCastTransform,
     DiscreteActionProjection,
