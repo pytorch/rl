@@ -28,9 +28,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     device = "cpu" if not torch.cuda.is_available() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
-        (cfg.collector.total_frames // cfg.collector.frames_per_batch)
-        * num_mini_batches
-    )
+        cfg.collector.total_frames // cfg.collector.frames_per_batch
+    ) * num_mini_batches
 
     # Create models (check utils_mujoco.py)
     actor, critic = make_ppo_models(cfg.env.env_name)

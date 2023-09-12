@@ -98,9 +98,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
     num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (
-        (total_frames // frames_per_batch) * num_mini_batches
-    )
+    total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
     sampling_start = time.time()
     for i, data in enumerate(collector):
