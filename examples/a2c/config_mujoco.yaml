@@ -24,7 +24,6 @@ optim:
 loss:
   gamma: 0.99
   mini_batch_size: 64
-  ppo_epochs: 10
   gae_lambda: 0.95
   critic_coef: 0.25
   entropy_coef: 0.0

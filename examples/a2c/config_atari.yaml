@@ -16,7 +16,7 @@ logger:
 
 # Optim
 optim:
-  lr: 2.5e-4
+  lr: 0.001 # 2.5e-4
   eps: 1.0e-6
   weight_decay: 0.0
   max_grad_norm: 0.5
@@ -26,7 +26,6 @@ optim:
 loss:
   gamma: 0.99
   mini_batch_size: 1024
-  ppo_epochs: 3
   gae_lambda: 0.95
   critic_coef: 1.0
   entropy_coef: 0.01
