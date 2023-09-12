@@ -746,17 +746,7 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [3, 1])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     def test_mlp(
         self,
         n_agents,
@@ -810,17 +800,7 @@ class TestMultiAgent:
                     assert not torch.allclose(out[..., i, :], out[..., j, :])
 
     @pytest.mark.parametrize("n_agents", [1, 3])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     def test_vdn(self, n_agents, batch):
         torch.manual_seed(0)
         mixer = VDNMixer(n_agents=n_agents, device="cpu")

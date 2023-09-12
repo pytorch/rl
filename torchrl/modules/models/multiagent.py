@@ -195,7 +195,7 @@ class MultiAgentMLP(nn.Module):
         else:
             if self.centralised:
                 self.net_call = torch.vmap(self.net, in_dims=(None, 0), out_dims=(-2,))
-           else:
+            else:
                 self.net_call = torch.vmap(self.net, in_dims=(-2, 0), out_dims=(-2,))
 
         print("self.net_call", self.net_call)
