@@ -10,6 +10,7 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
+    RewardSum,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
@@ -44,6 +45,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
             InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat("observation"),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -79,6 +81,7 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
@@ -222,19 +225,17 @@ def make_loss_module(cfg, model):
         actor_network=model[0],
         qvalue_network=model[1],
         num_qvalue_nets=2,
-        loss_function=cfg.optimization.loss_function,
+        loss_function=cfg.optim.loss_function,
         delay_actor=True,
         delay_qvalue=True,
         action_spec=model[0][1].spec,
-        policy_noise=cfg.optimization.policy_noise,
-        policy_noise_clip=cfg.optimization.policy_noise_clip,
+        policy_noise=cfg.optim.policy_noise,
+        noise_clip=cfg.optim.noise_clip,
     )
-    loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optim.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(
-        loss_module, eps=cfg.optimization.target_update_polyak
-    )
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
     return loss_module, target_net_updater
 
 
@@ -243,11 +244,11 @@ def make_optimizer(cfg, loss_module):
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
-        actor_params, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+        actor_params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
     )
     optimizer_critic = optim.Adam(
         critic_params,
-        lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     return optimizer_actor, optimizer_critic

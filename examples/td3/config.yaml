@@ -1,16 +1,16 @@
-# Environment
+# task and env
 env:
-  name: HalfCheetah-v3
+  name: HalfCheetah-v2
   task: ""
-  exp_name: "HalfCheetah-TD3-ICLR"
+  exp_name: "HalfCheetah-TD2-ICLR"
   library: gym
   frame_skip: 1
   seed: 42
 
-# Collection
+# collector
 collector:
   total_frames: 3000000
-  init_random_frames: 10000
+  init_random_frames: 25_000
   init_env_steps: 1000
   frames_per_batch: 1000
   max_frames_per_traj: 1000
@@ -19,13 +19,13 @@ collector:
   env_per_collector: 1
   num_workers: 1
 
-# Replay Buffer
+# replay buffer
 replay_buffer:
   prb: 0 # use prioritized experience replay
   size: 1000000
 
-# Optimization
-optimization:
+# optim
+optim:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
@@ -37,13 +37,13 @@ optimization:
   policy_noise: 0.2
   noise_clip: 0.5
 
-# Network
+# network
 network:
   hidden_sizes: [256, 256]
   activation: relu
   device: "cuda:0"
 
-# Logging
+# logging
 logger:
   backend: wandb
   mode: online

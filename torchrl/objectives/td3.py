@@ -347,11 +347,11 @@ class TD3Loss(LossModule):
         action_shape = act.shape
         action_device = act.device
         # computing early for reprod
-        noise = torch.normal(
-            mean=torch.zeros(action_shape),
-            std=torch.full(action_shape, self.max_action * self.policy_noise),
-        ).to(action_device)
-        noise = noise.clamp(-self.noise_clip, self.noise_clip)
+        noise = (
+            (torch.randn(action_shape) * self.policy_noise)
+            .clamp(-self.noise_clip, self.noise_clip)
+            .to(action_device)
+        )
 
         tensordict_actor_grad = tensordict.select(
             *obs_keys
@@ -406,7 +406,7 @@ class TD3Loss(LossModule):
         # cat params
         qvalue_params = torch.cat(
             [
-                self.qvalue_network_params,  # self._cached_detach_qvalue_network_params,
+                self._cached_detach_qvalue_network_params,  # self.qvalue_network_params,  #
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],
