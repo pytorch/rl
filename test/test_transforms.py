@@ -52,6 +52,7 @@ from torchrl.envs import (
     CatFrames,
     CatTensors,
     CenterCrop,
+    ClipTransform,
     Compose,
     DeviceCastTransform,
     DiscreteActionProjection,
@@ -321,6 +322,253 @@ class TestBinarizeReward(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for BinerizedReward")
+
+
+class TestClipTransform(TransformBase):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        rb = rbclass(storage=LazyTensorStorage(20))
+
+        t = Compose(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                in_keys_inv=["input"],
+                out_keys_inv=["input_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        rb.append_transform(t)
+        data = TensorDict({"observation": 1, "reward": 2, "input": 3}, [])
+        rb.add(data)
+        sample = rb.sample(20)
+
+        assert (sample["observation"] == 1).all()
+        assert (sample["obs_clip"] == 0.1).all()
+        assert (sample["reward"] == 2).all()
+        assert (sample["reward_clip"] == 0.1).all()
+        assert (sample["input"] == 3).all()
+        assert (sample["input_clip"] == 0.1).all()
+
+    def test_single_trans_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_transform_compose(self):
+        t = Compose(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_env(self, device):
+        base_env = ContinuousActionVecMockEnv(device=device)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        r = env.rollout(3)
+        assert r.device == device
+        assert (r["observation"] <= 0.1).all()
+        assert (r["next", "observation"] <= 0.1).all()
+        assert (r["next", "reward"] <= 0.1).all()
+        assert (r["observation"] >= -0.1).all()
+        assert (r["next", "observation"] >= -0.1).all()
+        assert (r["next", "reward"] >= -0.1).all()
+        check_env_specs(env)
+        with pytest.raises(
+            TypeError, match="Either one or both of `high` and `low` must be provided"
+        ):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=None,
+                high=None,
+            )
+        with pytest.raises(TypeError, match="low and high must be scalars or None"):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=torch.randn(2),
+                high=None,
+            )
+        with pytest.raises(ValueError, match="`low` must be stricly lower than `high`"):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=1.0,
+                high=-1.0,
+            )
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=1.0,
+                high=None,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=None,
+                high=1.0,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-1,
+                high=1,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-torch.ones(()),
+                high=1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        t = ClipTransform(
+            in_keys_inv=["observation", "reward"],
+            out_keys_inv=["obs_clip", "reward_clip"],
+            low=-0.1,
+            high=0.1,
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t.inv(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_transform_model(self):
+        t = nn.Sequential(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_transform_no_env(self):
+        t = ClipTransform(
+            in_keys=["observation", "reward"],
+            out_keys=["obs_clip", "reward_clip"],
+            low=-0.1,
+            high=0.1,
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                ClipTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                    low=-0.1,
+                    high=0.1,
+                ),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                ClipTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                    low=-0.1,
+                    high=0.1,
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
 
 
 class TestCatFrames(TransformBase):
@@ -596,10 +844,10 @@ class TestCatFrames(TransformBase):
         for key in keys:
             for i in range(N):
                 assert torch.equal(
-                    result[key].space.maximum[i], observation_spec[key].space.maximum[0]
+                    result[key].space.high[i], observation_spec[key].space.high[0]
                 )
                 assert torch.equal(
-                    result[key].space.minimum[i], observation_spec[key].space.minimum[0]
+                    result[key].space.low[i], observation_spec[key].space.low[0]
                 )
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -3535,13 +3783,11 @@ class TestObservationNorm(TransformBase):
             observation_spec = on.transform_observation_spec(observation_spec)
             for key in keys:
                 if standard_normal:
-                    assert (observation_spec[key].space.minimum == -loc / scale).all()
-                    assert (
-                        observation_spec[key].space.maximum == (1 - loc) / scale
-                    ).all()
+                    assert (observation_spec[key].space.low == -loc / scale).all()
+                    assert (observation_spec[key].space.high == (1 - loc) / scale).all()
                 else:
-                    assert (observation_spec[key].space.minimum == loc).all()
-                    assert (observation_spec[key].space.maximum == scale + loc).all()
+                    assert (observation_spec[key].space.low == loc).all()
+                    assert (observation_spec[key].space.high == scale + loc).all()
 
     @pytest.mark.parametrize("keys", [["observation"], ["observation", "next_pixel"]])
     @pytest.mark.parametrize("size", [1, 3])
@@ -3555,15 +3801,13 @@ class TestObservationNorm(TransformBase):
             base_env = ContinuousActionVecMockEnv(
                 observation_spec=CompositeSpec(
                     observation=BoundedTensorSpec(
-                        minimum=1, maximum=1, shape=torch.Size([size])
+                        low=1, high=1, shape=torch.Size([size])
                     ),
                     observation_orig=BoundedTensorSpec(
-                        minimum=1, maximum=1, shape=torch.Size([size])
+                        low=1, high=1, shape=torch.Size([size])
                     ),
                 ),
-                action_spec=BoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size((size,))
-                ),
+                action_spec=BoundedTensorSpec(low=1, high=1, shape=torch.Size((size,))),
                 seed=0,
             )
             base_env.out_key = "observation"
@@ -5321,8 +5565,8 @@ class TestToTensorImage(TransformBase):
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
-                assert (observation_spec[key].space.minimum == 0).all()
-                assert (observation_spec[key].space.maximum == 1).all()
+                assert (observation_spec[key].space.low == 0).all()
+                assert (observation_spec[key].space.high == 1).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -5370,8 +5614,8 @@ class TestToTensorImage(TransformBase):
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
-                assert (observation_spec[key].space.minimum == 0).all()
-                assert (observation_spec[key].space.maximum == 1).all()
+                assert (observation_spec[key].space.low == 0).all()
+                assert (observation_spec[key].space.high == 1).all()
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_single_trans_env_check(self, out_keys):
@@ -6928,7 +7172,7 @@ def test_added_transforms_are_in_eval_mode():
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
         obs_spec = CompositeSpec(
-            observation=BoundedTensorSpec(minimum=0, maximum=10, shape=torch.Size((1,)))
+            observation=BoundedTensorSpec(low=0, high=10, shape=torch.Size((1,)))
         )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
@@ -6937,14 +7181,14 @@ class TestTransformedEnv:
         t1_obs_spec = t1.observation_spec
         t2_obs_spec = t2.observation_spec
 
-        assert t1_obs_spec["observation"].space.minimum == 3
-        assert t1_obs_spec["observation"].space.maximum == 23
+        assert t1_obs_spec["observation"].space.low == 3
+        assert t1_obs_spec["observation"].space.high == 23
 
-        assert t2_obs_spec["observation"].space.minimum == 1
-        assert t2_obs_spec["observation"].space.maximum == 61
+        assert t2_obs_spec["observation"].space.low == 1
+        assert t2_obs_spec["observation"].space.high == 61
 
-        assert base_env.observation_spec["observation"].space.minimum == 0
-        assert base_env.observation_spec["observation"].space.maximum == 10
+        assert base_env.observation_spec["observation"].space.low == 0
+        assert base_env.observation_spec["observation"].space.high == 10
 
     def test_independent_reward_specs_from_shared_env(self):
         reward_spec = UnboundedContinuousTensorSpec()

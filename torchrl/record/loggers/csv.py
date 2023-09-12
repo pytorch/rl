@@ -26,14 +26,18 @@ class CSVExperiment:
         os.makedirs(os.path.join(self.log_dir, "videos"))
         os.makedirs(os.path.join(self.log_dir, "texts"))
 
+        self.files = {}
+
     def add_scalar(self, name: str, value: float, global_step: Optional[int] = None):
         if global_step is None:
             global_step = len(self.scalars[name])
         value = float(value)
         self.scalars[name].append((global_step, value))
         filepath = os.path.join(self.log_dir, "scalars", "".join([name, ".csv"]))
-        with open(filepath, "a") as fd:
-            fd.write(",".join([str(global_step), str(value)]) + "\n")
+        if filepath not in self.files:
+            self.files[filepath] = open(filepath, "a")
+        fd = self.files[filepath]
+        fd.write(",".join([str(global_step), str(value)]) + "\n")
 
     def add_video(self, tag, vid_tensor, global_step: Optional[int] = None, **kwargs):
         if global_step is None:
@@ -53,11 +57,17 @@ class CSVExperiment:
         filepath = os.path.join(
             self.log_dir, "texts", "".join([tag, str(global_step)]) + ".txt"
         )
-        with open(filepath, "w+") as f:
-            f.writelines(text)
+        if filepath not in self.files:
+            self.files[filepath] = open(filepath, "w+")
+        fd = self.files[filepath]
+        fd.writelines(text)
 
     def __repr__(self) -> str:
         return f"CSVExperiment(log_dir={self.log_dir})"
+
+    def __del__(self):
+        for val in getattr(self, "files", {}).values():
+            val.close()
 
 
 class CSVLogger(Logger):
