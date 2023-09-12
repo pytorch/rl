@@ -2,15 +2,15 @@
 env:
   name: HalfCheetah-v3
   task: ""
-  exp_name: "HalfCheetah-SAC"
+  exp_name: "HalfCheetah-SAC-ICLR"
   library: gym
   frame_skip: 1
   seed: 1
 
-# Collection
+# collector
 collector:
   total_frames: 1000000
-  init_random_frames: 10000
+  init_random_frames: 25000
   frames_per_batch: 1000
   max_frames_per_traj: 1000
   init_env_steps: 1000
@@ -19,13 +19,13 @@ collector:
   env_per_collector: 1
   num_workers: 1
 
-# Replay Buffer
+# replay buffer
 replay_buffer:
   size: 1000000
   prb: 0 # use prioritized experience replay
 
-# Optimization
-optimization:
+# optim
+optim:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: smooth_l1
@@ -35,7 +35,7 @@ optimization:
   batch_size: 256
   target_update_polyak: 0.995
 
-# Algorithm
+# network
 network:
   hidden_sizes: [256, 256]
   activation: relu
@@ -43,7 +43,7 @@ network:
   scale_lb: 0.1
   device: "cuda:0"
 
-# Logging
+# logging
 logger:
   backend: wandb
   mode: online
