@@ -144,7 +144,7 @@ class GymLikeEnv(_EnvWrapper):
             done (np.ndarray, boolean or other format): done state obtained from the environment
 
         """
-        return done, done
+        return done, done.any() if not isinstance(done, bool) else done
 
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.

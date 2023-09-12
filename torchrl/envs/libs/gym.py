@@ -10,6 +10,7 @@ from typing import Dict, List
 from warnings import warn
 
 import torch
+from torchrl.envs.vec_env import CloudpickleWrapper
 
 try:
     from torch.utils._contextlib import _DecoratorContextManager
@@ -22,8 +23,6 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
-    MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
@@ -198,7 +197,18 @@ def _gym_to_torchrl_spec_transform(
     """
     gym = gym_backend()
     if isinstance(spec, gym.spaces.tuple.Tuple):
-        raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
+        return torch.stack(
+            [
+                _gym_to_torchrl_spec_transform(
+                    s,
+                    device=device,
+                    categorical_action_encoding=categorical_action_encoding,
+                    remap_state_to_observation=remap_state_to_observation,
+                )
+                for s in spec
+            ],
+            0,
+        )
     if isinstance(spec, gym.spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
@@ -216,16 +226,28 @@ def _gym_to_torchrl_spec_transform(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        dtype = (
-            numpy_to_torch_dtype_dict[spec.dtype]
-            if categorical_action_encoding
-            else torch.long
+        # dtype = (
+        #     numpy_to_torch_dtype_dict[spec.dtype]
+        #     if categorical_action_encoding
+        #     else torch.long
+        # )
+        return torch.stack(
+            [
+                _gym_to_torchrl_spec_transform(
+                    spec[i],
+                    device=device,
+                    categorical_action_encoding=categorical_action_encoding,
+                    remap_state_to_observation=remap_state_to_observation,
+                )
+                for i in range(len(spec.nvec))
+            ],
+            0,
         )
-        return (
-            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
-            if categorical_action_encoding
-            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
-        )
+        # return (
+        #     MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+        #     if categorical_action_encoding
+        #     else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+        # )
     elif isinstance(spec, gym.spaces.Box):
         shape = spec.shape
         if not len(shape):
@@ -386,6 +408,13 @@ class GymWrapper(GymLikeEnv):
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
+
+    def _get_batch_size(self, env):
+        if hasattr(env, "num_envs"):
+            batch_size = torch.Size([env.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
 
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
@@ -551,9 +580,13 @@ class GymWrapper(GymLikeEnv):
         )
         if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
-                observation_spec = CompositeSpec(pixels=observation_spec)
+                observation_spec = CompositeSpec(
+                    pixels=observation_spec, shape=self.batch_size
+                )
             else:
-                observation_spec = CompositeSpec(observation=observation_spec)
+                observation_spec = CompositeSpec(
+                    observation=observation_spec, shape=self.batch_size
+                )
         if hasattr(env, "reward_space") and env.reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
@@ -572,7 +605,10 @@ class GymWrapper(GymLikeEnv):
                 *batch_size, *observation_spec.shape
             )
         self.action_spec = action_spec
-        self.reward_spec = reward_spec
+        if reward_spec.shape[: len(self.batch_size)] != self.batch_size:
+            self.reward_spec = reward_spec.expand(*self.batch_size, *reward_spec.shape)
+        else:
+            self.reward_spec = reward_spec
         self.observation_spec = observation_spec
 
     def _init_env(self):
@@ -643,6 +679,14 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
+    @implement_for("gym", None, "0.27")
+    def _async_env(self, *args, **kwargs):
+        return gym_backend("vector").aSyncVectorEnv(*args, **kwargs)
+
+    @implement_for("gymnasium", "0.27", None)
+    def _async_env(self, *args, **kwargs):  # noqa: F811
+        return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)
+
     def _build_env(
         self,
         env_name: str,
@@ -654,13 +698,10 @@ class GymEnv(GymWrapper):
                 f"Consider downloading and installing gym from"
                 f" {self.git_url}"
             )
-        from_pixels = kwargs.get("from_pixels", False)
+        from_pixels = kwargs.pop("from_pixels", False)
         self._set_gym_default(kwargs, from_pixels)
-        if "from_pixels" in kwargs:
-            del kwargs["from_pixels"]
-        pixels_only = kwargs.get("pixels_only", True)
-        if "pixels_only" in kwargs:
-            del kwargs["pixels_only"]
+        pixels_only = kwargs.pop("pixels_only", True)
+        num_envs = kwargs.pop("num_envs", 0)
         made_env = False
         kwargs["frameskip"] = self.frame_skip
         self.wrapper_frame_skip = 1
@@ -687,7 +728,11 @@ class GymEnv(GymWrapper):
                     kwargs.pop("render_mode")
                 else:
                     raise err
-        return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+        env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+        if num_envs > 0:
+            return self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+        else:
+            return env
 
     @implement_for("gym", None, "0.25.1")
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
