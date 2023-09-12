@@ -172,6 +172,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
                 i * frames_in_batch
             ) // cfg.logger.test_interval:
+                eval_start = time.time()
                 actor.eval()
                 test_rewards = []
                 for _ in range(cfg.logger.num_test_episodes):
@@ -185,6 +186,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
+                eval_time = time.time() - eval_start
+                logger.log_scalar("eval/time", eval_time, collected_frames)
                 logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
                 actor.train()
 
