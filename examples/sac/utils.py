@@ -7,7 +7,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import RewardScaling
+from torchrl.envs.transforms import RewardScaling, RewardSum
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
@@ -29,7 +29,8 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(),
+            DoubleToFloat("observation"),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -65,6 +66,7 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
@@ -214,24 +216,31 @@ def make_loss_module(cfg, model):
         actor_network=model[0],
         qvalue_network=model[1],
         num_qvalue_nets=2,
-        loss_function=cfg.optimization.loss_function,
+        loss_function=cfg.optim.loss_function,
         delay_actor=False,
         delay_qvalue=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optim.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(
-        loss_module, eps=cfg.optimization.target_update_polyak
-    )
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
     return loss_module, target_net_updater
 
 
 def make_sac_optimizer(cfg, loss_module):
-    """Make SAC optimizer."""
-    optimizer = optim.Adam(
-        loss_module.parameters(),
-        lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
+    critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    actor_params = list(loss_module.actor_network_params.flatten_keys().values())
+
+    optimizer_actor = optim.Adam(
+        actor_params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
     )
-    return optimizer
+    optimizer_critic = optim.Adam(
+        critic_params,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
+    )
+    optimizer_alpha = optim.Adam(
+        [loss_module.log_alpha],
+        lr=cfg.optim.lr,
+    )
+    return optimizer_actor, optimizer_critic, optimizer_alpha

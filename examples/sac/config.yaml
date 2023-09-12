@@ -28,7 +28,7 @@ replay_buffer:
 optim:
   utd_ratio: 1.0
   gamma: 0.99
-  loss_function: smooth_l1
+  loss_function: l2
   lr: 3e-4
   weight_decay: 2e-4
   lr_scheduler: ""
