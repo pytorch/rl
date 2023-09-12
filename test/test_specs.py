@@ -89,17 +89,7 @@ def test_unbounded(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
+@pytest.mark.parametrize("shape", [[], torch.Size([3])])
 def test_ndbounded(dtype, shape):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -122,7 +112,14 @@ def test_ndbounded(dtype, shape):
         assert ts.is_in(r)
         ts.encode(lb + torch.rand(10) * (ub - lb))
         ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
+
         with pytest.raises(AssertionError), set_global_var(
             torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
         ):
@@ -172,7 +169,12 @@ def test_ndunbounded(dtype, n, shape):
         ts.to_numpy(r)
         assert ts.is_in(r)
         assert r.dtype is dtype
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
 
 @pytest.mark.parametrize("n", range(3, 10))
@@ -202,8 +204,12 @@ def test_binary(n, shape):
         )
         assert ts.is_in(r)
         assert ((r == 0) | (r == 1)).all()
-        assert (ts.encode(r.numpy()) == r).all()
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -247,7 +253,13 @@ def test_mult_onehot(shape, ns):
             assert _r.shape[-1] == _n
         categorical = ts.to_categorical(r)
         assert not ts.is_in(categorical)
-        assert (ts.encode(categorical) == r).all()
+        # assert (ts.encode(categorical) == r).all()
+        if not shape:
+            assert (ts.encode(categorical) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="is invalid for input of size"):
+                ts.encode(categorical)
+            assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -260,15 +272,7 @@ def test_mult_onehot(shape, ns):
         [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
     ],
 )
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
 def test_multi_discrete(shape, ns, dtype):
     torch.manual_seed(0)
@@ -305,27 +309,9 @@ def test_multi_discrete(shape, ns, dtype):
     assert not ts.is_in(projection)
 
 
-@pytest.mark.parametrize(
-    "n",
-    [
-        1,
-        4,
-        7,
-        99,
-    ],
-)
+@pytest.mark.parametrize("n", [1, 4, 7, 99])
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        [
-            1,
-        ],
-        [1, 2],
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
 def test_discrete_conversion(n, device, shape):
     categorical = DiscreteTensorSpec(n, device=device, shape=shape)
     shape_one_hot = [n] if not shape else [*shape, n]
@@ -339,23 +325,8 @@ def test_discrete_conversion(n, device, shape):
     assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
 
 
-@pytest.mark.parametrize(
-    "ns",
-    [
-        [
-            5,
-        ],
-        [5, 2, 3],
-        [4, 5, 1, 3],
-    ],
-)
-@pytest.mark.parametrize(
-    "shape",
-    [
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
+@pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
@@ -849,32 +820,30 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
-        )
+        ts = BoundedTensorSpec(low=minimum, high=maximum, device=device, dtype=dtype)
 
         ts_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
+            low=minimum, high=maximum, device=device, dtype=dtype
         )
         assert ts == ts_same
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum + 1, maximum=maximum, device=device, dtype=dtype
+            low=minimum + 1, high=maximum, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device="cpu:0", dtype=dtype
+            low=minimum, high=maximum, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=torch.float64
+            low=minimum, high=maximum, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
@@ -1064,14 +1033,12 @@ class TestEquality:
         bounded_other = BoundedTensorSpec(0, 2, torch.Size((1,)), device, dtype)
 
         nd = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         nd_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
-        _ = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
-        )
+        _ = BoundedTensorSpec(low=minimum, high=maximum + 3, device=device, dtype=dtype)
 
         # Equality tests
         ts = CompositeSpec(ts1=bounded)
@@ -2206,7 +2173,7 @@ class TestLazyStackedCompositeSpecs:
         batch_size=(),
         stack_dim: int = 0,
     ):
-        shared = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
+        shared = BoundedTensorSpec(low=0, high=1, shape=(*batch_size, 32, 32, 3))
         hetero_3d = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
@@ -2220,8 +2187,8 @@ class TestLazyStackedCompositeSpecs:
             )
         )
         lidar = BoundedTensorSpec(
-            minimum=0,
-            maximum=5,
+            low=0,
+            high=5,
             shape=(
                 *batch_size,
                 20,
@@ -2243,7 +2210,7 @@ class TestLazyStackedCompositeSpecs:
         individual_1_obs = CompositeSpec(
             {
                 "individual_1_obs_0": BoundedTensorSpec(
-                    minimum=0, maximum=3, shape=(*batch_size, 3, 1, 2)
+                    low=0, high=3, shape=(*batch_size, 3, 1, 2)
                 )
             },
             shape=(*batch_size, 3),
@@ -2593,7 +2560,7 @@ class TestLazyStackedCompositeSpecs:
         assert not c == c2 and c != c2
 
         c2 = self._get_het_specs(batch_size=batch_size)
-        c2[0]["lidar"].space.minimum += 1
+        c2[0]["lidar"].space.low += 1
         assert not c == c2 and c != c2
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
@@ -2708,8 +2675,8 @@ class TestLazyStackedCompositeSpecs:
         shared: BoundedTensorSpec(
             shape=torch.Size([3, 32, 32, 3]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
@@ -2718,8 +2685,8 @@ class TestLazyStackedCompositeSpecs:
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
@@ -2734,8 +2701,8 @@ class TestLazyStackedCompositeSpecs:
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
@@ -2743,8 +2710,8 @@ class TestLazyStackedCompositeSpecs:
                 individual_1_obs_0: BoundedTensorSpec(
                     shape=torch.Size([3, 1, 2]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([3])),
@@ -2771,16 +2738,16 @@ class TestLazyStackedCompositeSpecs:
         lidar: BoundedTensorSpec(
             shape=torch.Size([2, 20]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous),
         shared: BoundedTensorSpec(
             shape=torch.Size([2, 32, 32, 3]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
@@ -2871,13 +2838,11 @@ class TestLazyStackedCompositeSpecs:
         spec.update(spec2)
         assert spec["hetero"].shape == (3, *batch_size, -1, 1)
 
-        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum += 1
-        assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
-        )
+        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.low += 1
+        assert spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         spec.update(spec2)
         assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
+            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         )  # Only non exclusive keys will be updated
 
         new = torch.stack(

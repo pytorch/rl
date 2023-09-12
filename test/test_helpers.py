@@ -475,7 +475,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
     if keys:
         obs_spec = CompositeSpec(
             **{
-                key: BoundedTensorSpec(maximum=1, minimum=1, shape=torch.Size([1]))
+                key: BoundedTensorSpec(high=1, low=1, shape=torch.Size([1]))
                 for key in keys
             }
         )
@@ -483,7 +483,7 @@ def test_initialize_stats_from_observation_norms(device, keys, composed, initial
         env = ContinuousActionVecMockEnv(
             device=device,
             observation_spec=obs_spec,
-            action_spec=BoundedTensorSpec(minimum=1, maximum=2, shape=torch.Size((1,))),
+            action_spec=BoundedTensorSpec(low=1, high=2, shape=torch.Size((1,))),
         )
         env.out_key = "observation"
     else:

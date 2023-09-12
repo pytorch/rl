@@ -53,6 +53,7 @@ from .tensordict_module import (
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    EGreedyModule,
     EGreedyWrapper,
     LMHeadActorValueOperator,
     LSTMModule,
