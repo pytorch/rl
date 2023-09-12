@@ -2,7 +2,7 @@
 env:
   name: HalfCheetah-v2
   task: ""
-  exp_name: "HalfCheetah-TD2-ICLR"
+  exp_name: "HalfCheetah-TD3-ICLR"
   library: gym
   frame_skip: 1
   seed: 42
