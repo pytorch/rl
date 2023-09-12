@@ -36,6 +36,7 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
+    # Create Logger
     exp_name = generate_exp_name("TD3", cfg.env.exp_name)
     logger = None
     if cfg.logger.backend:
@@ -46,6 +47,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             wandb_kwargs={"mode": cfg.logger.mode, "config": cfg},
         )
 
+    # Set seeds
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
 
@@ -101,6 +103,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
+        # add to replay buffer
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
@@ -115,17 +118,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
+                # compute loss
                 loss_td = loss_module(sampled_tensordict)
 
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
 
+                # update critic
                 optimizer_critic.zero_grad()
                 update_actor = i % delayed_updates == 0
                 q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
+                # update actor
                 if update_actor:
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
@@ -133,7 +139,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                     actor_losses.append(actor_loss.item())
 
-                    # update qnet_target params
+                    # update target params
                     target_net_updater.step()
 
                 # update priority
