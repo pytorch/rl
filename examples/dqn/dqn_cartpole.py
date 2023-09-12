@@ -99,6 +99,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
+        init_random_frames=cfg.collector.init_random_frames
     )
 
     # Create the replay buffer
@@ -168,49 +169,48 @@ def main(cfg: "DictConfig"):  # noqa: F821
         model_explore.step(current_frames)
 
         # optimization steps
-        if collected_frames >= cfg.collector.init_random_frames:
-            q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
-            for j in range(cfg.loss.num_updates):
-                sampled_tensordict = replay_buffer.sample(cfg.buffer.batch_size)
-                loss_td = loss_module(sampled_tensordict)
-                q_loss = loss_td["loss"]
-                optimizer.zero_grad()
-                q_loss.backward()
-                optimizer.step()
-                target_net_updater.step()
-                q_losses[j] = loss_td.select("loss").detach()
+        q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
+        for j in range(cfg.loss.num_updates):
+            sampled_tensordict = replay_buffer.sample(cfg.buffer.batch_size)
+            loss_td = loss_module(sampled_tensordict)
+            q_loss = loss_td["loss"]
+            optimizer.zero_grad()
+            q_loss.backward()
+            optimizer.step()
+            target_net_updater.step()
+            q_losses[j] = loss_td.select("loss").detach()
 
-            q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
-            for key, value in q_losses.items():
-                logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar("epsilon", model_explore.eps, collected_frames)
+        q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
+        for key, value in q_losses.items():
+            logger.log_scalar(key, value.item(), collected_frames)
+        logger.log_scalar("epsilon", model_explore.eps, collected_frames)
 
-            # Test logging
-            with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-                if (
-                    collected_frames - cfg.collector.frames_per_batch
-                ) // cfg.logger.test_interval < (
-                    collected_frames // cfg.logger.test_interval
-                ):
-                    model.eval()
-                    test_rewards = []
-                    for _ in range(cfg.logger.num_test_episodes):
-                        td_test = test_env.rollout(
-                            policy=model,
-                            auto_reset=True,
-                            auto_cast_to_device=True,
-                            break_when_any_done=True,
-                            max_steps=10_000_000,
-                        )
-                        reward = td_test["next", "episode_reward"][
-                            td_test["next", "done"]
-                        ]
-                        test_rewards = np.append(test_rewards, reward.cpu().numpy())
-                        del td_test
-                    logger.log_scalar(
-                        "reward_test", test_rewards.mean(), collected_frames
+        # Test logging
+        with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
+            if (
+                collected_frames - cfg.collector.frames_per_batch
+            ) // cfg.logger.test_interval < (
+                collected_frames // cfg.logger.test_interval
+            ):
+                model.eval()
+                test_rewards = []
+                for _ in range(cfg.logger.num_test_episodes):
+                    td_test = test_env.rollout(
+                        policy=model,
+                        auto_reset=True,
+                        auto_cast_to_device=True,
+                        break_when_any_done=True,
+                        max_steps=10_000_000,
                     )
-                    model.train()
+                    reward = td_test["next", "episode_reward"][
+                        td_test["next", "done"]
+                    ]
+                    test_rewards = np.append(test_rewards, reward.cpu().numpy())
+                    del td_test
+                logger.log_scalar(
+                    "reward_test", test_rewards.mean(), collected_frames
+                )
+                model.train()
 
         # update weights of the inference policy
         collector.update_policy_weights_()
