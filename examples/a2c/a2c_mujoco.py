@@ -29,7 +29,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
         (cfg.collector.total_frames // cfg.collector.frames_per_batch)
-        * cfg.loss.ppo_epochs
         * num_mini_batches
     )
 
