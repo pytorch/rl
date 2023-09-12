@@ -788,7 +788,7 @@ class SyncDataCollector(DataCollectorBase):
 
                 if self._frames >= self.total_frames:
                     break
-
+    @profile
     def _step_and_maybe_reset(self) -> None:
 
         any_done = False
@@ -800,7 +800,7 @@ class SyncDataCollector(DataCollectorBase):
                 None,
             )
             done = (done | truncated) if truncated is not None else done
-            any_sub_done = done.any().item()
+            any_sub_done = done.any() #.item()
             if any_sub_done and self.reset_when_done:
                 # Add this done to the map, we will need it to reset
                 done_map.update({done_key: done.clone()})
@@ -855,7 +855,8 @@ class SyncDataCollector(DataCollectorBase):
             )
             self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
-    @torch.no_grad()
+    @torch.inference_mode()
+    @profile
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
@@ -877,6 +878,7 @@ class SyncDataCollector(DataCollectorBase):
                     self.policy(self._tensordict)
                     self.env.step(self._tensordict)
                 # we must clone all the values, since the step / traj_id updates are done in-place
+                assert self._tensordict.device == self.storing_device, (self._tensordict.device, self.storing_device)
                 tensordicts.append(self._tensordict.to(self.storing_device))
 
                 self._step_and_maybe_reset()
@@ -899,19 +901,19 @@ class SyncDataCollector(DataCollectorBase):
                             )
                     break
             else:
-                try:
-                    self._tensordict_out = torch.stack(
-                        tensordicts,
-                        self._tensordict_out.ndim - 1,
-                        out=self._tensordict_out,
-                    )
-                except RuntimeError:
-                    with self._tensordict_out.unlock_():
-                        self._tensordict_out = torch.stack(
-                            tensordicts,
-                            self._tensordict_out.ndim - 1,
-                            out=self._tensordict_out,
-                        )
+#                try:
+                self._tensordict_out = torch.stack(
+                    tensordicts,
+                    self._tensordict_out.ndim - 1,
+                    out=self._tensordict_out,
+                )
+#                except RuntimeError:
+#                    with self._tensordict_out.unlock_():
+#                        self._tensordict_out = torch.stack(
+#                            tensordicts,
+#                            self._tensordict_out.ndim - 1,
+#                            out=self._tensordict_out,
+#                        )
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:

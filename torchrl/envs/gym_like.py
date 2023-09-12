@@ -154,7 +154,7 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         return self.reward_spec.encode(reward, ignore_device=True)
-
+    @profile
     def read_obs(
         self, observations: Union[Dict[str, Any], torch.Tensor, np.ndarray]
     ) -> Dict[str, Any]:
@@ -172,15 +172,17 @@ class GymLikeEnv(_EnvWrapper):
                 # when queried with and without pixels
                 observations["observation"] = observations.pop("state")
         if not isinstance(observations, (TensorDict, dict)):
-            (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
-            observations = {key: observations}
-        for key, val in observations.items():
-            observations[key] = self.observation_spec[key].encode(
-                val, ignore_device=True
-            )
+            for key, spec in self.observation_spec.items(True, True):
+                observations = {key: spec.encode(observations, ignore_device=True)}
+                break
+        else:
+            for key, val in observations.items():
+                observations[key] = self.observation_spec[key].encode(
+                    val, ignore_device=True
+                )
         # observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
-
+    @profile
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         action_np = self.read_action(action)
@@ -213,10 +215,10 @@ class GymLikeEnv(_EnvWrapper):
 
             reward = reward + _reward
 
-            if isinstance(done, bool) or (
-                isinstance(done, np.ndarray) and not len(done)
-            ):
-                done = torch.tensor([done])
+            #if isinstance(done, bool) or (
+            #    isinstance(done, np.ndarray) and not len(done)
+            #):
+            #    done = torch.tensor([done])
             done, do_break = self.read_done(done)
             if do_break:
                 break
@@ -229,11 +231,11 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict[self.reward_key] = reward
         obs_dict[self.done_key] = done
 
-        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size, device=self.device)
 
         if self.info_dict_reader is not None and info is not None:
             self.info_dict_reader(info, tensordict_out)
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+#        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(

@@ -520,6 +520,7 @@ class TensorSpec:
 
         return decorator
 
+    @profile
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
     ) -> torch.Tensor:
@@ -580,6 +581,7 @@ class TensorSpec:
             value = torch.Size(value)
         super().__setattr__(key, value)
 
+    @profile
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
         """Returns the np.ndarray correspondent of an input tensor.
 
@@ -995,6 +997,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     def __len__(self):
         return self.shape[0]
 
+    @profile
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -1093,6 +1096,7 @@ class LazyStackedTensorSpec(_LazyStackedMixin[TensorSpec], TensorSpec):
     def _project(self, val: TensorDictBase) -> TensorDictBase:
         raise NOT_IMPLEMENTED_ERROR
 
+    @profile
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device=False
     ) -> torch.Tensor:
@@ -1289,6 +1293,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         # out.scatter_(-1, m, 1)
         return out
 
+    @profile
     def encode(
         self,
         val: Union[np.ndarray, torch.Tensor],
@@ -1316,6 +1321,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
         val = torch.nn.functional.one_hot(val.long(), space.n).to(self.dtype)
         return val
 
+    @profile
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> np.ndarray:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -2035,6 +2041,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
             out.append(m)
         return torch.cat(out, -1)
 
+    @profile
     def encode(
         self, val: Union[np.ndarray, torch.Tensor], *, ignore_device: bool = False
     ) -> torch.Tensor:
@@ -2340,12 +2347,15 @@ class DiscreteTensorSpec(TensorSpec):
             and mask_equal
         )
 
+    @profile
     def to_numpy(self, val: torch.Tensor, safe: bool = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
         # if not val.shape and not safe:
         #     return val.item()
-        return super().to_numpy(val, safe)
+        if self.device.type == "cuda":
+            return val.cpu().numpy()
+        return val.numpy()
 
     def to_one_hot(self, val: torch.Tensor, safe: bool = None) -> torch.Tensor:
         """Encodes a discrete tensor from the spec domain into its one-hot correspondent.
@@ -3180,6 +3190,7 @@ class CompositeSpec(TensorSpec):
             raise AttributeError(f"CompositeSpec has no key {key}")
         del self._specs[key]
 
+    @profile
     def encode(
         self, vals: Dict[str, Any], *, ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
@@ -3381,6 +3392,7 @@ class CompositeSpec(TensorSpec):
             shape=self.shape,
         )
 
+    @profile
     def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         return {key: self[key].to_numpy(val) for key, val in val.items()}
 
@@ -3611,6 +3623,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
                 return False
         return True
 
+    @profile
     def to_numpy(self, val: TensorDict, safe: bool = None) -> dict:
         if safe is None:
             safe = _CHECK_SPEC_ENCODE
@@ -3824,6 +3837,7 @@ class LazyStackedCompositeSpec(_LazyStackedMixin[CompositeSpec], CompositeSpec):
     def empty(self):
         return torch.stack([spec.empty() for spec in self._specs], dim=self.stack_dim)
 
+    @profile
     def encode(
         self, vals: Dict[str, Any], ignore_device: bool = False
     ) -> Dict[str, torch.Tensor]:
@@ -3993,17 +4007,18 @@ class _CompositeSpecKeysView:
 
     def __iter__(self):
         for key, item in self.composite.items():
-            if self.include_nested and isinstance(item, CompositeSpec):
-                for subkey in item.keys(
-                    include_nested=True, leaves_only=self.leaves_only
-                ):
-                    if not isinstance(subkey, tuple):
-                        subkey = (subkey,)
-                    yield (key, *subkey)
+            if not isinstance(item, CompositeSpec):
+                yield key
+            elif self.include_nested and isinstance(item, CompositeSpec):
                 if not self.leaves_only:
                     yield key
-            elif not isinstance(item, CompositeSpec) or not self.leaves_only:
-                yield key
+                def sub(key):
+                    if not isinstance(subkey, tuple):
+                        subkey = (subkey,)
+                    return (key, *subkey)
+                yield from map(sub, item.keys(
+                    include_nested=True, leaves_only=self.leaves_only
+                ))
 
     def __len__(self):
         i = 0

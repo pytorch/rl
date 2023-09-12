@@ -57,7 +57,7 @@ class _classproperty(property):
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
-
+@profile
 def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
@@ -221,8 +221,7 @@ def step_mdp(
     elif not exclude_action:
         for action_key in action_keys:
             _set_single_key(tensordict, out, action_key)
-    for key in next_td.keys():
-        _set(next_td, out, key, total_key, excluded)
+    list(map(lambda key: _set(next_td, out, key, total_key, excluded), next_td.keys()))
     if next_tensordict is not None:
         return next_tensordict.update(out)
     else:

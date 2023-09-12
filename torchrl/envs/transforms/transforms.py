@@ -633,7 +633,7 @@ but got an object of type {type(transform)}."""
         else:
             input_spec = self.__dict__.get("_input_spec", None)
         return input_spec
-
+    @profile
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
@@ -2704,10 +2704,11 @@ class DTypeCastTransform(Transform):
                     tensordict.set(out_key, data)
             return tensordict
         return super()._inv_call(tensordict)
-
+    @profile
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(self.dtype_out)
 
+    @profile
     def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
         return state.to(self.dtype_in)
 
@@ -3979,15 +3980,15 @@ class RewardSum(Transform):
                             f"{list(self.parent.observation_spec.keys(True))}. "
                         ) from err
         return tensordict
-
+    @profile
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         """Updates the episode rewards with the step rewards."""
         # Update episode rewards
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in next_tensordict.keys(include_nested=True):
-                reward = next_tensordict.get(in_key)
+            reward = next_tensordict.get(in_key, None)
+            if reward is not None:
                 prev_reward = tensordict.get(out_key, 0.0)
                 next_tensordict.set(out_key, prev_reward + reward)
             elif not self.missing_tolerance:
@@ -4149,7 +4150,7 @@ class StepCounter(Transform):
             truncated = step_count >= self.max_steps
             tensordict.set(self.truncated_key, truncated)
         return tensordict
-
+    @profile
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:

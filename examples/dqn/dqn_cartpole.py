@@ -34,7 +34,7 @@ torch.set_num_threads(1)
 
 
 def make_env(env_name="CartPole-v1", device="cpu"):
-    env = GymEnv(env_name, device=device)
+    env = GymEnv(env_name, device=device, categorical_action_encoding=True)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
@@ -93,14 +93,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ).to(device)
 
     # Create the collector
-    collector = MultiaSyncDataCollector(
-        [EnvCreator(lambda: make_env(cfg.env.env_name, device))],
+    collector = SyncDataCollector(
+        make_env(cfg.env.env_name, device),
         policy=model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.device,
         storing_device=cfg.collector.storing_device,
         max_frames_per_traj=-1,
+        init_random_frames=cfg.collector.init_random_frames,
     )
 
     # Create the replay buffer
@@ -144,23 +145,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for data in collector:
 
         # Train loging
-        logger.log_scalar(
-            "q_values",
-            (data["action_value"] * data["action"]).sum().item()
-            / cfg.collector.frames_per_batch,
-            collected_frames,
-        )
+#        logger.log_scalar(
+#            "q_values",
+#            (data["action_value"] * data["action"]).sum().item()
+#            / cfg.collector.frames_per_batch,
+#            collected_frames,
+#        )
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
-            )
-            logger.log_scalar(
-                "episode_length_train",
-                episode_length.sum().item() / len(episode_length),
-                collected_frames,
-            )
+            #logger.log_scalar(
+            #    "reward_train", episode_rewards.mean().item(), collected_frames
+            #)
+            #logger.log_scalar(
+            #    "episode_length_train",
+            #    episode_length.sum().item() / len(episode_length),
+            #    collected_frames,
+            #)
 
         pbar.update(data.numel())
         data = data.reshape(-1)
@@ -183,9 +184,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_losses[j] = loss_td.select("loss").detach()
 
             q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
-            for key, value in q_losses.items():
-                logger.log_scalar(key, value.item(), collected_frames)
-            logger.log_scalar("epsilon", model_explore.eps, collected_frames)
+            #for key, value in q_losses.items():
+            #    #logger.log_scalar(key, value.item(), collected_frames)
+            #logger.log_scalar("epsilon", model_explore.eps, collected_frames)
 
             # Test logging
             with torch.no_grad(), set_exploration_type(ExplorationType.MODE):

@@ -1112,6 +1112,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
+    @profile
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -1142,6 +1143,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         tensordict.set("next", next_tensordict)
         return tensordict
 
+    @profile
     def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         # unsqueeze rewards if needed
@@ -1356,6 +1358,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"got {tensordict.batch_size} and {self.batch_size}"
             )
 
+    @profile
     def rand_action(self, tensordict: Optional[TensorDictBase] = None):
         """Performs a random action given the action_spec attribute.
 
@@ -1379,12 +1382,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 f"Non batch-locked environment require the env batch-size to be either empty or to"
                 f" match the tensordict one."
             )
+        if len(self.action_keys) == 1 and tensordict is not None:
+            return tensordict.set(self.action_key, self.action_spec.rand(shape))
         r = self.input_spec["full_action_spec"].rand(shape)
         if tensordict is None:
             return r
         tensordict.update(r)
         return tensordict
 
+    @profile
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         """Performs a random step in the environment given the action_spec attribute.
 
