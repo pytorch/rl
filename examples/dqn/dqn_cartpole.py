@@ -99,7 +99,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
-        init_random_frames=cfg.collector.init_random_frames
+        init_random_frames=cfg.collector.init_random_frames,
     )
 
     # Create the replay buffer
@@ -139,12 +139,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collected_frames = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    sampling_start = time.time()
 
     for data in collector:
 
-        # Train loging
+        sampling_time = time.time() - sampling_start
+        pbar.update(data.numel())
+        data = data.reshape(-1)
+        current_frames = data.numel()
+        replay_buffer.extend(data.to(device))
+        collected_frames += current_frames
+        model_explore.step(current_frames)
+
+        # Log training rewards, episode lengths and q-values
         logger.log_scalar(
-            "q_values",
+            "train/q_values",
             (data["action_value"] * data["action"]).sum().item()
             / cfg.collector.frames_per_batch,
             collected_frames,
@@ -153,23 +162,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
+                "train/reward", episode_rewards.mean().item(), collected_frames
             )
             logger.log_scalar(
-                "episode_length_train",
+                "train/episode_length",
                 episode_length.sum().item() / len(episode_length),
                 collected_frames,
             )
 
-        pbar.update(data.numel())
-        data = data.reshape(-1)
-        current_frames = data.numel()
-        replay_buffer.extend(data.to(device))
-        collected_frames += current_frames
-        model_explore.step(current_frames)
-
         # optimization steps
         q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
+        training_start = time.time()
         for j in range(cfg.loss.num_updates):
             sampled_tensordict = replay_buffer.sample(cfg.buffer.batch_size)
             loss_td = loss_module(sampled_tensordict)
@@ -180,10 +183,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
             q_losses[j] = loss_td.select("loss").detach()
 
+        training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in q_losses.items():
-            logger.log_scalar(key, value.item(), collected_frames)
-        logger.log_scalar("epsilon", model_explore.eps, collected_frames)
+            logger.log_scalar("train/" + key, value.item(), collected_frames)
+        logger.log_scalar("train/epsilon", model_explore.eps, collected_frames)
+        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
+        logger.log_scalar("train/training_time", training_time, collected_frames)
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
@@ -202,18 +208,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         break_when_any_done=True,
                         max_steps=10_000_000,
                     )
-                    reward = td_test["next", "episode_reward"][
-                        td_test["next", "done"]
-                    ]
+                    reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
-                logger.log_scalar(
-                    "reward_test", test_rewards.mean(), collected_frames
-                )
+                logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
                 model.train()
 
         # update weights of the inference policy
         collector.update_policy_weights_()
+        sampling_start = time.time()
 
     collector.shutdown()
     end_time = time.time()

@@ -25,10 +25,10 @@ from torchrl.envs import (
     GrayScale,
     NoopResetEnv,
     ParallelEnv,
-    SerialEnv,
     Resize,
     RewardClipping,
     RewardSum,
+    SerialEnv,
     set_exploration_type,
     StepCounter,
     ToTensorImage,
@@ -206,7 +206,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
-        init_random_frames=init_random_frames
+        init_random_frames=init_random_frames,
     )
     collector.set_seed(seed)
 
@@ -261,9 +261,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         model_explore.step(current_frames)
         replay_buffer.extend(data.to(device))
 
-        # Train loging
+        # Log training rewards, episode lengths and q-values
         logger.log_scalar(
-            "q_values",
+            "train/q_values",
             (data["action_value"] * data["action"]).sum().item() / frames_per_batch,
             collected_frames,
         )
@@ -295,6 +295,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
             q_losses[j] = loss_td.select("loss").detach()
 
+        # Log training losses, epsilon and times
         training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in q_losses.items():
@@ -303,7 +304,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
         logger.log_scalar("train/training_time", training_time, collected_frames)
 
-        # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (collected_frames - frames_per_batch) // cfg.logger.test_interval < (
                 collected_frames // cfg.logger.test_interval
@@ -318,14 +318,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         break_when_any_done=True,
                         max_steps=10_000_000,
                     )
-                    reward = td_test["next", "episode_reward"][
-                        td_test["next", "done"]
-                    ]
+                    reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
-                logger.log_scalar(
-                    "eval/reward", test_rewards.mean(), collected_frames
-                )
+                logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
                 model.train()
 
         # update weights of the inference policy
