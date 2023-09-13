@@ -108,7 +108,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
 
-        # Train loging
+        # Log training rewards and lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
@@ -167,6 +167,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             optim.step()
             optim.zero_grad()
 
+        # Log training losses and times
         training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
