@@ -2,15 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import abc
 import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List
+from typing import Dict, List, Optional
 from warnings import warn
 
 import numpy as np
 import torch
+
+from tensordict import TensorDictBase
 from torchrl.envs.vec_env import CloudpickleWrapper
 
 try:
@@ -31,7 +34,8 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 
-from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv, \
+    BaseInfoDictReader
 from torchrl.envs.utils import _classproperty
 
 DEFAULT_GYM = None
@@ -42,7 +46,7 @@ if not _has_gym:
     _has_gym = importlib.util.find_spec("gymnasium") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
-
+_has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
 
 class set_gym_backend(_DecoratorContextManager):
     """Sets the gym-backend to a certain value.
@@ -366,7 +370,24 @@ def _is_from_pixels(env):
     return False
 
 
-class GymWrapper(GymLikeEnv):
+class _AsyncMeta(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        instance: GymWrapper = super().__call__(*args, **kwargs)
+        if instance._is_batched:
+            from torchrl.envs.transforms.transforms import TransformedEnv, VecGymEnvTransform
+            if _has_sb3:
+                from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+                if isinstance(instance._env, VecEnv):
+                    backend = "sb3"
+                else:
+                    backend = "gym"
+            else:
+                backend = "gym"
+            instance.set_info_dict_reader(terminal_obs_reader(instance.observation_spec, backend=backend))
+            return TransformedEnv(instance, VecGymEnvTransform())
+        return instance
+
+class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
 
     Examples:
@@ -412,6 +433,15 @@ class GymWrapper(GymLikeEnv):
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
+
+    @property
+    def _is_batched(self):
+        if _has_sb3:
+            from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+            tuple_of_classes = (VecEnv,)
+        else:
+            tuple_of_classes = ()
+        return isinstance(self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,))
 
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
@@ -638,6 +668,18 @@ class GymWrapper(GymLikeEnv):
     def info_dict_reader(self, value: callable):
         self._info_dict_reader = value
 
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
+        if self._is_batched:
+            if tensordict is None:
+                return super()._reset(tensordict)
+            reset = tensordict.get("_reset", None)
+            if reset is None or reset.all():
+                return super()._reset(tensordict)
+            elif reset is not None:
+                return tensordict.clone(False)
+        return super()._reset(tensordict)
 
 ACCEPTED_TYPE_ERRORS = {
     "render_mode": "__init__() got an unexpected keyword argument 'render_mode'",
@@ -683,12 +725,7 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
-    @implement_for("gym", None, "0.27")
     def _async_env(self, *args, **kwargs):
-        return gym_backend("vector").aSyncVectorEnv(*args, **kwargs)
-
-    @implement_for("gymnasium", "0.27", None)
-    def _async_env(self, *args, **kwargs):  # noqa: F811
         return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)
 
     def _build_env(
@@ -810,3 +847,33 @@ class MOGymEnv(GymEnv):
                 raise ImportError("MO-gymnasium not found, check installation") from err
 
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+
+class terminal_obs_reader(BaseInfoDictReader):
+    backend_key = {
+        "sb3": "terminal_observation",
+        "gym": "final_observation",
+    }
+    def __init__(self, observation_spec: CompositeSpec, backend):
+        self._info_spec = CompositeSpec(
+            {("final", key): item.clone() for key, item in observation_spec.items()}, shape=observation_spec.shape
+        )
+        self.backend = backend
+
+    @property
+    def info_spec(self):
+        return self._info_spec
+
+    def __call__(self, info_dict, tensordict):
+        terminal_obs = info_dict.get(self.backend_key[self.backend], None)
+        for key, item in self.info_spec.items(True, True):
+            final_obs = item.zero()
+            break
+        else:
+            raise RuntimeError("The info spec cannot be empty.")
+        if terminal_obs is not None:
+            for i, obs in enumerate(terminal_obs):
+                if obs is not None:
+                    final_obs[i] = torch.as_tensor(obs, device=final_obs.device)
+        tensordict.set(key, final_obs)
+        return tensordict

@@ -115,11 +115,11 @@ class GymLikeEnv(_EnvWrapper):
     It is also expected that env.reset() returns an observation similar to the one observed after a step is completed.
     """
 
-    _info_dict_reader: BaseInfoDictReader
+    _info_dict_reader: List[BaseInfoDictReader]
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._info_dict_reader = None
+        cls._info_dict_reader = []
         return super().__new__(cls, *args, _batch_locked=True, **kwargs)
 
     def read_action(self, action):
@@ -231,8 +231,11 @@ class GymLikeEnv(_EnvWrapper):
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
-        if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out)
+        if self.info_dict_reader and info is not None:
+            for info_dict_reader in self.info_dict_reader:
+                out = info_dict_reader(info, tensordict_out)
+                if out is not None:
+                    tensordict_out = out
         tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
@@ -255,9 +258,12 @@ class GymLikeEnv(_EnvWrapper):
             source=source,
             batch_size=self.batch_size,
         )
-        if self.info_dict_reader is not None and info is not None:
-            self.info_dict_reader(info, tensordict_out)
-        elif info is None and self.info_dict_reader is not None:
+        if self.info_dict_reader and info is not None:
+            for info_dict_reader in self.info_dict_reader:
+                out = info_dict_reader(info, tensordict_out)
+                if out is not None:
+                    tensordict_out = out
+        elif info is None and self.info_dict_reader:
             # populate the reset with the items we have not seen from info
             for key, item in self.observation_spec.items(True, True):
                 if key not in tensordict_out.keys(True, True):
@@ -298,7 +304,7 @@ class GymLikeEnv(_EnvWrapper):
             >>> assert "my_info_key" in tensordict.keys()
 
         """
-        self.info_dict_reader = info_dict_reader
+        self.info_dict_reader.append(info_dict_reader)
         for info_key, spec in info_dict_reader.info_spec.items():
             self.observation_spec[info_key] = spec.to(self.device)
         return self
@@ -314,4 +320,6 @@ class GymLikeEnv(_EnvWrapper):
 
     @info_dict_reader.setter
     def info_dict_reader(self, value: callable):
-        self._info_dict_reader = value
+        warnings.warn(f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. Setting info_dict_reader directly will be soon deprecated.")
+        self._info_dict_reader = [value]
+
