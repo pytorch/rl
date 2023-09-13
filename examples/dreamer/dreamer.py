@@ -24,11 +24,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives.dreamer import (
-    DreamerActorLoss,
-    DreamerModelLoss,
-    DreamerValueLoss,
-)
+from torchrl.objectives.dreamer import DreamerActorLoss, DreamerLoss, DreamerValueLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -141,7 +137,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model)
+    world_model_loss = DreamerLoss(
+        world_model,
+        actor_model,
+        value_model,
+        model_based_env,
+    )
     actor_loss = DreamerActorLoss(
         actor_model,
         value_model,

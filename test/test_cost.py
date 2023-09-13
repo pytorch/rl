@@ -103,7 +103,7 @@ from torchrl.objectives import (
     DistributionalDQNLoss,
     DQNLoss,
     DreamerActorLoss,
-    DreamerModelLoss,
+    DreamerLoss,
     DreamerValueLoss,
     DTLoss,
     IQLLoss,
@@ -6534,9 +6534,15 @@ class TestDreamer(LossModuleTestBase):
         tensordict = self._create_world_model_data(
             batch_size=2, temporal_length=3, rssm_hidden_dim=10, state_dim=5
         ).to(device)
-        world_model = self._create_world_model_model(10, 5).to(device)
-        loss_module = DreamerModelLoss(
-            world_model,
+        world_model = self._create_world_model_model(10, 5)
+        mb_env = self._create_mb_env(10, 5)
+        actor_model = self._create_actor_model(10, 5)
+        value_model = self._create_value_model(10, 5)
+        loss_module = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
             lambda_reco=lambda_reco,
             lambda_kl=lambda_kl,
             lambda_reward=lambda_reward,
@@ -6680,7 +6686,15 @@ class TestDreamer(LossModuleTestBase):
 
     def test_dreamer_model_tensordict_keys(self, device):
         world_model = self._create_world_model_model(10, 5)
-        loss_fn = DreamerModelLoss(world_model)
+        mb_env = self._create_mb_env(10, 5)
+        actor_model = self._create_actor_model(10, 5)
+        value_model = self._create_value_model(10, 5)
+        loss_fn = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
+        )
 
         default_keys = {
             "reward": "reward",
