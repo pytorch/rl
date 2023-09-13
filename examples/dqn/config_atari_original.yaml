@@ -8,9 +8,9 @@ collector:
   total_frames: 40_000_100
   frames_per_batch: 16
   start_e: 1.0
-  end_e: 0.01
+  end_e: 0.1
   annealing_frames: 4_000_000
-  init_random_frames: 320_000
+  init_random_frames: 200_000
 
 # buffer
 buffer:
@@ -31,5 +31,5 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  hard_update_freq: 250
-  num_updates: 128
+  hard_update_freq: 10_000
+  num_updates: 1

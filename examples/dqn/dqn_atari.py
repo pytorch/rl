@@ -25,6 +25,7 @@ from torchrl.envs import (
     GrayScale,
     NoopResetEnv,
     ParallelEnv,
+    SerialEnv,
     Resize,
     RewardClipping,
     RewardSum,
@@ -108,7 +109,8 @@ def make_base_env(env_name, frame_skip, device, is_test=False):
 
 def make_env(env_name, frame_skip, device, is_test=False):
     num_envs = 1
-    env = ParallelEnv(
+    # env = ParallelEnv(
+    env = SerialEnv(
         num_envs,
         EnvCreator(
             lambda: make_base_env(env_name, frame_skip, device=device, is_test=is_test)
@@ -124,7 +126,7 @@ def make_env(env_name, frame_skip, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(VecNorm(in_keys=["pixels"]))
+    # env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
