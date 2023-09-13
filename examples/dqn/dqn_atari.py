@@ -249,8 +249,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
     collected_frames = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
+    sampling_start = time.time()
 
     for data in collector:
+
+        sampling_time = time.time() - sampling_start
+        pbar.update(data.numel())
+        data = data.reshape(-1)
+        current_frames = data.numel() * frame_skip
+        collected_frames += current_frames
+        model_explore.step(current_frames)
+        replay_buffer.extend(data.to(device))
 
         # Train loging
         logger.log_scalar(
@@ -262,22 +271,16 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
+                "train/reward", episode_rewards.mean().item(), collected_frames
             )
             logger.log_scalar(
-                "episode_length_train",
+                "train/episode_length",
                 episode_length.sum().item() / len(episode_length),
                 collected_frames,
             )
 
-        pbar.update(data.numel())
-        data = data.reshape(-1)
-        current_frames = data.numel() * frame_skip
-        collected_frames += current_frames
-        model_explore.step(current_frames)
-        replay_buffer.extend(data.to(device))
-
         # optimization steps
+        training_start = time.time()
         q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
         for j in range(cfg.loss.num_updates):
 
@@ -292,10 +295,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
             q_losses[j] = loss_td.select("loss").detach()
 
+        training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in q_losses.items():
-            logger.log_scalar(key, value.item(), collected_frames)
-        logger.log_scalar("epsilon", model_explore.eps, collected_frames)
+            logger.log_scalar("train/" + key, value.item(), collected_frames)
+        logger.log_scalar("train/epsilon", model_explore.eps, collected_frames)
+        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
+        logger.log_scalar("train/training_time", training_time, collected_frames)
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
@@ -318,12 +324,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
                 logger.log_scalar(
-                    "reward_test", test_rewards.mean(), collected_frames
+                    "eval/reward", test_rewards.mean(), collected_frames
                 )
                 model.train()
 
         # update weights of the inference policy
         collector.update_policy_weights_()
+        sampling_start = time.time()
 
     collector.shutdown()
     end_time = time.time()
