@@ -701,7 +701,7 @@ class SACLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
@@ -749,7 +749,7 @@ class SACLoss(LossModule):
 
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
+            alpha_loss = -self.log_alpha.exp() * (log_prob + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)

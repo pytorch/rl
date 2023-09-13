@@ -188,7 +188,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
             logger.log_scalar("train/training_time", training_time, collected_frames)
 
         # evaluation
-
         if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
