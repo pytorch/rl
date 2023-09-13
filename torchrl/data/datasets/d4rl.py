@@ -136,6 +136,8 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
         if split_trajs:
             dataset = split_trajectories(dataset)
+            dataset["next", "done"][:, -1] = True
+
         storage = LazyMemmapStorage(dataset.shape[0])
         super().__init__(
             batch_size=batch_size,
@@ -186,11 +188,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if "timeouts" in dataset.keys():
             dataset.rename_key("timeouts", "timeout")
         if self.use_timeout_as_done:
-            dataset.set(
-                "done",
-                dataset.get("terminal")
-                | dataset.get("timeout", torch.zeros((), dtype=torch.bool)),
+            done = dataset.get("terminal") | dataset.get(
+                "timeout", torch.zeros((), dtype=torch.bool)
             )
+            dataset.set("done", done)
         else:
             dataset.set("done", dataset.get("terminal"))
         dataset.rename_key("rewards", "reward")
@@ -261,6 +262,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             )
         else:
             dataset.set("done", dataset.get("terminal"))
+
         dataset.rename_key("rewards", "reward")
         dataset.rename_key("actions", "action")
         try:

@@ -2,6 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
+
+_has_isaac = importlib.util.find_spec("isaacgym") is not None
+
+if _has_isaac:
+    # isaac gym asks to be imported before torch...
+    import isaacgym  # noqa
+    import isaacgymenvs  # noqa
+    from torchrl.envs.libs.isaacgym import IsaacGymEnv
+
 import argparse
 import importlib
 
@@ -18,11 +28,13 @@ from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
     get_available_devices,
+    get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
 )
 from packaging import version
+from tensordict import LazyStackedTensorDict
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
@@ -50,6 +62,7 @@ from torchrl.envs.libs.gym import (
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
@@ -279,6 +292,25 @@ class TestGym:
         env.reset()
         env.rand_step()
         env.rollout(3)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    def test_one_hot_and_categorical(self):
+        # tests that one-hot and categorical work ok when an integer is expected as action
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=True)
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
+        cliff_walking = GymEnv("CliffWalking-v0", categorical_action_encoding=False)
+        cliff_walking.rollout(10)
+        check_env_specs(cliff_walking)
+
+    @implement_for("gym", None, "0.27.0")
+    def test_one_hot_and_categorical(self):  # noqa: F811
+        # we do not skip (bc we may want to make sure nothing is skipped)
+        # but CliffWalking-v0 in earlier Gym versions uses np.bool, which
+        # was deprecated after np 1.20, and we don't want to install multiple np
+        # versions.
+        return
 
 
 @implement_for("gym", None, "0.26")
@@ -1102,7 +1134,8 @@ class TestVmas:
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_batch_size(self, scenario_name, num_envs, n_agents):
         torch.manual_seed(0)
@@ -1114,15 +1147,31 @@ class TestVmas:
         )
         env.set_seed(0)
         tdreset = env.reset()
-        tdrollout = env.rollout(max_steps=n_rollout_samples)
+        tdrollout = env.rollout(
+            max_steps=n_rollout_samples,
+            return_contiguous=False if env.het_specs else True,
+        )
         env.close()
 
+        if env.het_specs:
+            assert isinstance(tdreset["agents"], LazyStackedTensorDict)
+        else:
+            assert isinstance(tdreset["agents"], TensorDict)
+
         assert tdreset.batch_size == (num_envs,)
-        assert tdreset["agents", "observation"].shape[1] == env.n_agents
+        assert tdreset["agents"].batch_size == (num_envs, env.n_agents)
+        if not env.het_specs:
+            assert tdreset["agents", "observation"].shape[1] == env.n_agents
         assert tdreset["done"].shape[1] == 1
 
         assert tdrollout.batch_size == (num_envs, n_rollout_samples)
-        assert tdrollout["agents", "observation"].shape[2] == env.n_agents
+        assert tdrollout["agents"].batch_size == (
+            num_envs,
+            n_rollout_samples,
+            env.n_agents,
+        )
+        if not env.het_specs:
+            assert tdrollout["agents", "observation"].shape[2] == env.n_agents
         assert tdrollout["next", "agents", "reward"].shape[2] == env.n_agents
         assert tdrollout["agents", "action"].shape[2] == env.n_agents
         assert tdrollout["done"].shape[2] == 1
@@ -1132,7 +1181,8 @@ class TestVmas:
     @pytest.mark.parametrize("n_agents", [1, 5])
     @pytest.mark.parametrize("continuous_actions", [True, False])
     @pytest.mark.parametrize(
-        "scenario_name", ["simple_reference", "waterfall", "flocking", "discovery"]
+        "scenario_name",
+        ["simple_reference", "simple_tag", "waterfall", "flocking", "discovery"],
     )
     def test_vmas_spec_rollout(
         self, scenario_name, num_envs, n_agents, continuous_actions
@@ -1153,7 +1203,7 @@ class TestVmas:
         )
         for e in [env, wrapped]:
             e.set_seed(0)
-            check_env_specs(e)
+            check_env_specs(e, return_contiguous=False if e.het_specs else True)
             del e
 
     @pytest.mark.parametrize("num_envs", [1, 20])
@@ -1287,7 +1337,6 @@ class TestVmas:
     @pytest.mark.parametrize("n_workers", [1, 2])
     @pytest.mark.parametrize("n_agents", [1, 3])
     def test_collector(self, n_envs, n_workers, n_agents, frames_per_batch=80):
-
         torch.manual_seed(1)
         env_fun = lambda: VmasEnv(
             scenario="flocking", num_envs=n_envs, n_agents=n_agents, max_steps=7
@@ -1341,6 +1390,41 @@ class TestVmas:
         assert _td["next", "agents", "observation"].shape == agents_td_batch + (
             n_observations_per_agent,
         )
+        assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
+        assert _td[env.done_key].shape == td_batch + (1,)
+        assert _td["next", env.done_key].shape == td_batch + (1,)
+
+        assert env.reward_key not in _td.keys(True, True)
+        assert env.action_key not in _td["next"].keys(True, True)
+
+    def test_collector_hetero(self, n_envs=10, frames_per_batch=20):
+        env = VmasEnv(
+            scenario="simple_tag",
+            num_envs=n_envs,
+        )
+        torch.manual_seed(1)
+
+        ccollector = SyncDataCollector(
+            create_env_fn=env,
+            policy=None,
+            frames_per_batch=frames_per_batch,
+            total_frames=1000,
+            device="cpu",
+        )
+
+        for i, _td in enumerate(ccollector):
+            if i == 1:
+                break
+        ccollector.shutdown()
+
+        td_batch = (n_envs, frames_per_batch // n_envs)
+        agents_td_batch = td_batch + (env.n_agents,)
+
+        assert _td.shape == td_batch
+        assert _td["next"].shape == td_batch
+        assert _td["agents"].shape == agents_td_batch
+        assert _td["next", "agents"].shape == agents_td_batch
+        assert _td["collector"].shape == td_batch
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
         assert _td[env.done_key].shape == td_batch + (1,)
         assert _td["next", env.done_key].shape == td_batch + (1,)
@@ -1479,6 +1563,100 @@ class TestOpenML:
         for i, _ in enumerate(data):  # noqa: B007
             continue
         assert len(data) // 2048 in (i, i - 1)
+
+
+@pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
+@pytest.mark.parametrize(
+    "task",
+    [
+        "AllegroHand",
+        # "AllegroKuka",
+        # "AllegroKukaTwoArms",
+        # "AllegroHandManualDR",
+        # "AllegroHandADR",
+        "Ant",
+        # "Anymal",
+        # "AnymalTerrain",
+        # "BallBalance",
+        # "Cartpole",
+        # "FactoryTaskGears",
+        # "FactoryTaskInsertion",
+        # "FactoryTaskNutBoltPick",
+        # "FactoryTaskNutBoltPlace",
+        # "FactoryTaskNutBoltScrew",
+        # "FrankaCabinet",
+        # "FrankaCubeStack",
+        "Humanoid",
+        # "HumanoidAMP",
+        # "Ingenuity",
+        # "Quadcopter",
+        # "ShadowHand",
+        "Trifinger",
+    ],
+)
+@pytest.mark.parametrize("num_envs", [10, 20])
+@pytest.mark.parametrize("device", get_default_devices())
+class TestIsaacGym:
+    @classmethod
+    def _run_on_proc(cls, q, task, num_envs, device):
+        try:
+            env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+            check_env_specs(env)
+            q.put(("succeeded!", None))
+        except Exception as err:
+            q.put(("failed!", err))
+            raise err
+
+    def test_env(self, task, num_envs, device):
+        from torch import multiprocessing as mp
+
+        q = mp.Queue(1)
+        proc = mp.Process(target=self._run_on_proc, args=(q, task, num_envs, device))
+        try:
+            proc.start()
+            msg, error = q.get()
+            if msg != "succeeded!":
+                raise error
+        finally:
+            q.close()
+            proc.join()
+
+    #
+    # def test_collector(self, task, num_envs, device):
+    #     env = IsaacGymEnv(task=task, num_envs=num_envs, device=device)
+    #     collector = SyncDataCollector(
+    #         env,
+    #         policy=SafeModule(nn.LazyLinear(out_features=env.observation_spec['obs'].shape[-1]), in_keys=["obs"], out_keys=["action"]),
+    #         frames_per_batch=20,
+    #         total_frames=-1
+    #     )
+    #     for c in collector:
+    #         assert c.shape == torch.Size([num_envs, 20])
+    #         break
+
+
+class TestRoboHive:
+    @pytest.mark.parametrize("envname", RoboHiveEnv.env_list)
+    @pytest.mark.parametrize("from_pixels", [True, False])
+    def test_robohive(self, envname, from_pixels):
+        if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
+            print("not testing envs with prebuilt rendering")
+            return
+        if "Adroit" in envname:
+            print("tcdm are broken")
+            return
+        try:
+            env = RoboHiveEnv(envname)
+        except AttributeError as err:
+            if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
+                print("tcdm are broken")
+                return
+            else:
+                raise err
+        if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
+            print("no camera")
+            return
+        check_env_specs(env)
 
 
 if __name__ == "__main__":

@@ -69,8 +69,8 @@ def _jumanji_to_torchrl_spec_transform(
             dtype = numpy_to_torch_dtype_dict[spec.dtype]
         return BoundedTensorSpec(
             shape=shape,
-            minimum=np.asarray(spec.minimum),
-            maximum=np.asarray(spec.maximum),
+            low=np.asarray(spec.minimum),
+            high=np.asarray(spec.maximum),
             dtype=dtype,
             device=device,
         )
@@ -252,7 +252,6 @@ class JumanjiWrapper(GymLikeEnv):
         # prepare inputs
         state = _tensordict_to_object(tensordict.get("state"), self._state_example)
         action = self.read_action(tensordict.get("action"))
-        reward = self.reward_spec.zero()
 
         # flatten batch size into vector
         state = _tree_flatten(state, self.batch_size)
@@ -268,7 +267,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        reward = self.read_reward(reward, np.asarray(timestep.reward))
+        reward = self.read_reward(np.asarray(timestep.reward))
         done = timestep.step_type == self.lib.types.StepType.LAST
         done = _ndarray_to_tensor(done).view(torch.bool).to(self.device)
 
@@ -282,7 +281,7 @@ class JumanjiWrapper(GymLikeEnv):
         tensordict_out.set("done", done)
         tensordict_out["state"] = state_dict
 
-        return tensordict_out.select().set("next", tensordict_out)
+        return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs

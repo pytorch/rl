@@ -179,12 +179,21 @@ __all__ = ["GymWrapper", "GymEnv"]
 
 
 def _gym_to_torchrl_spec_transform(
-    spec, dtype=None, device="cpu", categorical_action_encoding=False
+    spec,
+    dtype=None,
+    device="cpu",
+    categorical_action_encoding=False,
+    remap_state_to_observation: bool = True,
 ) -> TensorSpec:
     """Maps the gym specs to the TorchRL specs.
 
-    By convention, 'state' keys of Dict specs will be renamed "observation" to match the
-    default TorchRL keys.
+    Args:
+        spec: the gym space to transform
+        dtype: a dtype to use for the spec. Defaults to`spec.dtype`.
+        device: the device for the spec. Defaults to "cpu".
+        categorical_action_encoding: whether discrete spaces should be mapped to categorical or one-hot.
+            Defaults to one-hot.
+        remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
     gym = gym_backend()
@@ -241,7 +250,11 @@ def _gym_to_torchrl_spec_transform(
         spec_out = {}
         for k in spec.keys():
             key = k
-            if k == "state" and "observation" not in spec.keys():
+            if (
+                remap_state_to_observation
+                and k == "state"
+                and "observation" not in spec.keys()
+            ):
                 # we rename "state" in "observation" as "observation" is the conventional name
                 # for single observation in torchrl.
                 # naming it 'state' will result in envs that have a different name for the state vector
@@ -251,6 +264,7 @@ def _gym_to_torchrl_spec_transform(
                 spec[k],
                 device=device,
                 categorical_action_encoding=categorical_action_encoding,
+                remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
     elif isinstance(spec, gym.spaces.dict.Dict):
@@ -258,6 +272,7 @@ def _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
             categorical_action_encoding=categorical_action_encoding,
+            remap_state_to_observation=remap_state_to_observation,
         )
     else:
         raise NotImplementedError(
@@ -404,6 +419,16 @@ class GymWrapper(GymLikeEnv):
             env = self._build_gym_env(env, pixels_only)
         return env
 
+    def read_action(self, action):
+        action = super().read_action(action)
+        if (
+            isinstance(self.action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec))
+            and action.size == 1
+        ):
+            # some envs require an integer for indexing
+            action = int(action)
+        return action
+
     @implement_for("gym", None, "0.19.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
         from .utils import GymPixelObservationWrapper as PixelObservationWrapper
@@ -513,8 +538,8 @@ class GymWrapper(GymLikeEnv):
             self._seed_calls_reset = False
             self._env.seed(seed=seed)
 
-    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
-        self.action_spec = _gym_to_torchrl_spec_transform(
+    def _make_specs(self, env: "gym.Env", batch_size=None) -> None:  # noqa: F821
+        action_spec = _gym_to_torchrl_spec_transform(
             env.action_space,
             device=self.device,
             categorical_action_encoding=self._categorical_action_encoding,
@@ -529,18 +554,26 @@ class GymWrapper(GymLikeEnv):
                 observation_spec = CompositeSpec(pixels=observation_spec)
             else:
                 observation_spec = CompositeSpec(observation=observation_spec)
-        self.observation_spec = observation_spec
         if hasattr(env, "reward_space") and env.reward_space is not None:
-            self.reward_spec = _gym_to_torchrl_spec_transform(
+            reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
                 device=self.device,
                 categorical_action_encoding=self._categorical_action_encoding,
             )
         else:
-            self.reward_spec = UnboundedContinuousTensorSpec(
+            reward_spec = UnboundedContinuousTensorSpec(
                 shape=[1],
                 device=self.device,
             )
+        if batch_size is not None:
+            action_spec = action_spec.expand(*batch_size, *action_spec.shape)
+            reward_spec = reward_spec.expand(*batch_size, *reward_spec.shape)
+            observation_spec = observation_spec.expand(
+                *batch_size, *observation_spec.shape
+            )
+        self.action_spec = action_spec
+        self.reward_spec = reward_spec
+        self.observation_spec = observation_spec
 
     def _init_env(self):
         self.reset()

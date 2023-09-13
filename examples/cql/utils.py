@@ -41,7 +41,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+            DoubleToFloat(),
         ),
     )
     return transformed_env
@@ -129,12 +129,7 @@ def make_offline_replay_buffer(rb_cfg):
         sampler=SamplerWithoutReplacement(drop_last=False),
     )
 
-    data.append_transform(
-        DoubleToFloat(
-            in_keys=["observation", ("next", "observation")],
-            in_keys_inv=[],
-        )
-    )
+    data.append_transform(DoubleToFloat())
 
     return data
 
@@ -169,8 +164,8 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.minimum,
-            "max": action_spec.space.maximum,
+            "min": action_spec.space.low,
+            "max": action_spec.space.high,
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
