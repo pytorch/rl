@@ -114,7 +114,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 actor_losses,
                 q_losses,
             ) = ([], [])
-            for i in range(num_updates):
+            for _ in range(num_updates):
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
@@ -126,7 +126,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update critic
                 optimizer_critic.zero_grad()
-                update_actor = i % delayed_updates == 0
+                update_actor = collected_frames % delayed_updates == 0
                 q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
@@ -165,9 +165,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         if collected_frames >= init_random_frames:
             logger.log_scalar("train/q_loss", np.mean(q_losses), step=collected_frames)
-            logger.log_scalar(
-                "train/a_loss", np.mean(actor_losses), step=collected_frames
-            )
+            if update_actor:
+                logger.log_scalar(
+                    "train/a_loss", np.mean(actor_losses), step=collected_frames
+                )
             logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
             logger.log_scalar("train/training_time", training_time, collected_frames)
 

@@ -352,7 +352,7 @@ class TD3Loss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
-        tensordict_save = tensordict
+
         tensordict = tensordict.clone(False).to_tensordict()
         act = tensordict.get(self.tensor_keys.action)
         action_shape = act.shape
@@ -403,6 +403,7 @@ class TD3Loss(LossModule):
         _next_val_td = (
             tensordict_actor[1]
             .select(*self.qvalue_network.in_keys)
+            .detach()
             .expand(self.num_qvalue_nets, *tensordict_actor[1].batch_size)
         )  # for next value estimation
         tensordict_qval = torch.cat(
@@ -417,7 +418,7 @@ class TD3Loss(LossModule):
         # cat params
         qvalue_params = torch.cat(
             [
-                self._cached_detach_qvalue_network_params,  # self.qvalue_network_params,  #
+                self.qvalue_network_params,
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],
@@ -440,16 +441,17 @@ class TD3Loss(LossModule):
             dim=0,
         )
 
-        loss_actor = -(state_action_value_actor[0]).mean()  # .min(0)
+        loss_actor = -(state_action_value_actor[0]).mean()
 
         next_state_value = next_state_action_value_qvalue.min(0)[0]
         tensordict.set(
             ("next", self.tensor_keys.state_action_value),
             next_state_value.unsqueeze(-1),
         )
-        target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
+        target_value = (
+            self.value_estimator.value_estimate(tensordict).squeeze(-1).detach()
+        )
         pred_val = state_action_value_qvalue
-        td_error = (pred_val - target_value).pow(2)
         loss_qval = (
             distance_loss(
                 pred_val,
@@ -460,16 +462,14 @@ class TD3Loss(LossModule):
             .sum()
         )
 
-        tensordict_save.set(self.tensor_keys.priority, td_error.detach().max(0)[0])
-
         if not loss_qval.shape == loss_actor.shape:
             raise RuntimeError(
                 f"QVal and actor loss have different shape: {loss_qval.shape} and {loss_actor.shape}"
             )
         td_out = TensorDict(
             source={
-                "loss_actor": loss_actor.mean(),
-                "loss_qvalue": loss_qval.mean(),
+                "loss_actor": loss_actor,
+                "loss_qvalue": loss_qval,
                 "pred_value": pred_val.mean().detach(),
                 "state_action_value_actor": state_action_value_actor.mean().detach(),
                 "next_state_value": next_state_value.mean().detach(),
