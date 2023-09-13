@@ -6657,7 +6657,7 @@ class TestDreamer(LossModuleTestBase):
     def test_dreamer_value(self, device, discount_loss):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerValueLoss(value_model, discount_loss=discount_loss)
+        loss_module = DreamerValueLoss(value_model, value_discount_loss=discount_loss)
         loss_td, fake_data = loss_module(tensordict)
         assert loss_td.get("loss_value") is not None
         assert not fake_data.requires_grad

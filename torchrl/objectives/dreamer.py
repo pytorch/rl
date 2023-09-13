@@ -24,6 +24,147 @@ from torchrl.objectives.utils import (
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 
+class DreamerLoss(LossModule):
+    """Combined Loss for Dreamer, includes model, actor and value loss.
+
+    Reference: https://arxiv.org/abs/1912.01603.
+
+    Args:
+        world_model (TensorDictModule): the world model.
+        actor_model (TensorDictModule): the actor model.
+        value_model (TensorDictModule): the value model.
+        model_based_env (DreamerEnv): the model based environment.
+        lambda_kl (float, optional): the weight of the kl divergence loss. Default: 1.0.
+        lambda_reco (float, optional): the weight of the reconstruction loss. Default: 1.0.
+        lambda_reward (float, optional): the weight of the reward loss. Default: 1.0.
+        reco_loss (str, optional): the reconstruction loss. Default: "l2".
+        reward_loss (str, optional): the reward loss. Default: "l2".
+        free_nats (int, optional): the free nats. Default: 3.
+        delayed_clamp (bool, optional): if ``True``, the KL clamping occurs after
+            averaging. If False (default), the kl divergence is clamped to the
+            free nats value first and then averaged.
+        global_average (bool, optional): if ``True``, the losses will be averaged
+            over all dimensions. Otherwise, a sum will be performed over all
+            non-batch/time dimensions and an average over batch and time.
+            Default: False.
+        imagination_horizon (int, optional): The number of steps to unroll the
+            model. Defaults to ``15``.
+        discount_loss (bool, optional): if ``True``, the actor loss is discounted with a
+            gamma discount factor. Default to ``False``.
+        value_gamma (float, optional): the actor gamma discount factor. Default: ``0.99``.
+        value_loss (str, optional): the loss to use for the value loss.
+            Default: ``"l2"``.
+        value_discount_loss (bool, optional): if ``True``, the value loss is discounted with a
+            gamma discount factor. Default: False.
+        value_gamma (float, optional): the value gamma discount factor. Default: ``0.99``.
+    """
+
+    @dataclass
+    class _AcceptedKeys:
+        """Maintains default values for all configurable tensordict keys.
+
+        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
+        default values
+
+        Attributes:
+            belief (NestedKey): The input tensordict key where the belief is expected.
+                Defaults to ``"belief"``.
+            value (NestedKey): The reward is expected to be in the tensordict key ("next", value).
+                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
+            done (NestedKey): The input tensordict key where the flag if a
+                trajectory is done is expected ("next", done). Defaults to ``"done"``.
+            reward (NestedKey): The reward is expected to be in the tensordict
+                key ("next", reward). Defaults to ``"reward"``.
+            true_reward (NestedKey): The `true_reward` will be stored in the
+                tensordict key ("next", true_reward). Defaults to ``"true_reward"``.
+            prior_mean (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            prior_std (NestedKey): The prior mean is expected to be in the
+                tensordict key ("next", prior_mean). Defaults to ``"prior_mean"``.
+            posterior_mean (NestedKey): The posterior mean is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_mean"``.
+            posterior_std (NestedKey): The posterior std is expected to be in
+                the tensordict key ("next", prior_mean). Defaults to ``"posterior_std"``.
+            pixels (NestedKey): The pixels is expected to be in the tensordict key ("next", pixels).
+                Defaults to ``"pixels"``.
+            reco_pixels (NestedKey): The reconstruction pixels is expected to be
+                in the tensordict key ("next", reco_pixels). Defaults to ``"reco_pixels"``.
+        """
+
+        reward: NestedKey = "reward"
+        true_reward: NestedKey = "true_reward"
+        prior_mean: NestedKey = "prior_mean"
+        prior_std: NestedKey = "prior_std"
+        posterior_mean: NestedKey = "posterior_mean"
+        posterior_std: NestedKey = "posterior_std"
+        pixels: NestedKey = "pixels"
+        reco_pixels: NestedKey = "reco_pixels"
+        belief: NestedKey = "belief"
+        value: NestedKey = "state_value"
+        done: NestedKey = "done"
+
+    default_keys = _AcceptedKeys()
+    default_value_estimator = ValueEstimators.TDLambda
+
+    def __init__(
+        self,
+        world_model: TensorDictModule,
+        actor_model: TensorDictModule,
+        value_model: TensorDictModule,
+        model_based_env: DreamerEnv,
+        *,
+        lambda_kl: float = 1.0,
+        lambda_reco: float = 1.0,
+        lambda_reward: float = 1.0,
+        reco_loss: Optional[str] = None,
+        reward_loss: Optional[str] = None,
+        free_nats: int = 3,
+        delayed_clamp: bool = False,
+        global_average: bool = False,
+        imagination_horizon: int = 15,
+        discount_loss: bool = False,  # for consistency with paper
+        gamma: int = None,
+        lmbda: int = None,
+        value_loss: Optional[str] = None,
+        value_discount_loss: bool = False,  # for consistency with paper
+        value_gamma: int = 0.99,
+    ):
+        super().__init__()
+        # world
+        self.world_model = world_model
+        self.reco_loss = reco_loss if reco_loss is not None else "l2"
+        self.reward_loss = reward_loss if reward_loss is not None else "l2"
+        self.lambda_kl = lambda_kl
+        self.lambda_reco = lambda_reco
+        self.lambda_reward = lambda_reward
+        self.free_nats = free_nats
+        self.delayed_clamp = delayed_clamp
+        self.global_average = global_average
+        # actor
+        self.actor_model = actor_model
+        self.value_model = value_model
+        self.model_based_env = model_based_env
+        self.imagination_horizon = imagination_horizon
+        self.discount_loss = discount_loss
+        if gamma is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
+            self.gamma = gamma
+        if lmbda is not None:
+            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
+            self.lmbda = lmbda
+        # value
+        self.value_model = value_model
+        self.value_loss = value_loss if value_loss is not None else "l2"
+        self.gamma = value_gamma
+        self.discount_loss = value_discount_loss
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        if self._value_estimator is not None:
+            self._value_estimator.set_keys(
+                value=self._tensor_keys.value,
+            )
+
+
 class DreamerModelLoss(LossModule):
     """Dreamer Model Loss.
 
@@ -361,9 +502,9 @@ class DreamerValueLoss(LossModule):
         value_model (TensorDictModule): the value model.
         value_loss (str, optional): the loss to use for the value loss.
             Default: ``"l2"``.
-        discount_loss (bool, optional): if ``True``, the loss is discounted with a
+        value_discount_loss (bool, optional): if ``True``, the loss is discounted with a
             gamma discount factor. Default: False.
-        gamma (float, optional): the gamma discount factor. Default: ``0.99``.
+        value_gamma (float, optional): the gamma discount factor. Default: ``0.99``.
 
     """
 
@@ -387,14 +528,14 @@ class DreamerValueLoss(LossModule):
         self,
         value_model: TensorDictModule,
         value_loss: Optional[str] = None,
-        discount_loss: bool = False,  # for consistency with paper
-        gamma: int = 0.99,
+        value_discount_loss: bool = False,  # for consistency with paper
+        value_gamma: int = 0.99,
     ):
         super().__init__()
         self.value_model = value_model
         self.value_loss = value_loss if value_loss is not None else "l2"
-        self.gamma = gamma
-        self.discount_loss = discount_loss
+        self.gamma = value_gamma
+        self.discount_loss = value_discount_loss
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         pass
