@@ -5,7 +5,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import torch
 from torch import Tensor
@@ -122,13 +122,13 @@ class CSVLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
-            cfg (DictConfig): The configuration of the experiment.
+            cfg (DictConfig or dict): The configuration of the experiment.
         """
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
+        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(cfg.items())])
         self.experiment.add_text("hparams", txt)
 
     def __repr__(self) -> str:

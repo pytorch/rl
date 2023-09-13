@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import os
-from typing import Sequence
+from typing import Dict, Sequence, Union
 
 from torch import Tensor
 
@@ -92,14 +92,14 @@ class TensorboardLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
-            cfg (DictConfig): The configuration of the experiment.
+            cfg (DictConfig or dict): The configuration of the experiment.
 
         """
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
+        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(cfg.items())])
         self.experiment.add_text("hparams", txt)
 
     def __repr__(self) -> str:

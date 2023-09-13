@@ -5,7 +5,7 @@
 
 import os
 import warnings
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 from torch import Tensor
 
@@ -159,11 +159,11 @@ class WandbLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
-            cfg (DictConfig): The configuration of the experiment.
+            cfg (DictConfig or dict): The configuration of the experiment.
 
         """
         if type(cfg) is not dict and _has_omgaconf:
