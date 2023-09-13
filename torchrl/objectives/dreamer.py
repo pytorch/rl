@@ -91,6 +91,9 @@ class DreamerLoss(LossModule):
                 in the tensordict key ("next", reco_pixels). Defaults to ``"reco_pixels"``.
         """
 
+        belief: NestedKey = "belief"
+        value: NestedKey = "state_value"
+        done: NestedKey = "done"
         reward: NestedKey = "reward"
         true_reward: NestedKey = "true_reward"
         prior_mean: NestedKey = "prior_mean"
@@ -99,9 +102,6 @@ class DreamerLoss(LossModule):
         posterior_std: NestedKey = "posterior_std"
         pixels: NestedKey = "pixels"
         reco_pixels: NestedKey = "reco_pixels"
-        belief: NestedKey = "belief"
-        value: NestedKey = "state_value"
-        done: NestedKey = "done"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TDLambda
