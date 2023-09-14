@@ -56,7 +56,7 @@ cd $root_dir/.mujoco/
 #wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
 wget https://www.roboti.us/download/mujoco200_linux.zip
 unzip mujoco200_linux.zip
-wget https://www.roboti.us/file/mjkey.txt
+wget https://pytorch.s3.amazonaws.com/torchrl/github-artifacts/mjkey.txt
 cp mjkey.txt ./mujoco200_linux/bin/
 # install mujoco-py locally
 git clone https://github.com/vmoens/mujoco-py.git
