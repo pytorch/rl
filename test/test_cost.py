@@ -102,7 +102,6 @@ from torchrl.objectives import (
     DiscreteSACLoss,
     DistributionalDQNLoss,
     DQNLoss,
-    DreamerActorLoss,
     DreamerLoss,
     DreamerValueLoss,
     DTLoss,
@@ -6619,13 +6618,15 @@ class TestDreamer(LossModuleTestBase):
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_dreamer_actor(self, device, imagination_horizon, discount_loss, td_est):
         tensordict = self._create_actor_data(2, 3, 10, 5).to(device)
-        mb_env = self._create_mb_env(10, 5).to(device)
-        actor_model = self._create_actor_model(10, 5).to(device)
-        value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerActorLoss(
-            actor_model,
-            value_model,
-            mb_env,
+        world_model = self._create_world_model_model(10, 5)
+        mb_env = self._create_mb_env(10, 5)
+        actor_model = self._create_actor_model(10, 5)
+        value_model = self._create_value_model(10, 5)
+        loss_module = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
             imagination_horizon=imagination_horizon,
             discount_loss=discount_loss,
         )
@@ -6635,7 +6636,7 @@ class TestDreamer(LossModuleTestBase):
             return
         if td_est is not None:
             loss_module.make_value_estimator(td_est)
-        loss_td, fake_data = loss_module(tensordict)
+        loss_td, fake_data = loss_module.actor_loss(tensordict)
         assert not fake_data.requires_grad
         assert fake_data.shape == torch.Size([tensordict.numel(), imagination_horizon])
         if discount_loss:
@@ -6712,13 +6713,15 @@ class TestDreamer(LossModuleTestBase):
         "td_est", [ValueEstimators.TD1, ValueEstimators.TD0, ValueEstimators.TDLambda]
     )
     def test_dreamer_actor_tensordict_keys(self, td_est, device):
+        world_model = self._create_world_model_model(10, 5)
         mb_env = self._create_mb_env(10, 5)
         actor_model = self._create_actor_model(10, 5)
         value_model = self._create_value_model(10, 5)
-        loss_fn = DreamerActorLoss(
-            actor_model,
-            value_model,
-            mb_env,
+        loss_fn = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
         )
 
         default_keys = {
@@ -6731,12 +6734,6 @@ class TestDreamer(LossModuleTestBase):
             loss_fn,
             default_keys=default_keys,
             td_est=td_est,
-        )
-
-        loss_fn = DreamerActorLoss(
-            actor_model,
-            value_model,
-            mb_env,
         )
 
         key_mapping = {"value": ("value", "value_test")}

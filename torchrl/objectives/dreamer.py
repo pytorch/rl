@@ -10,7 +10,6 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
-
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
@@ -153,10 +152,9 @@ class DreamerLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
         # value
-        self.value_model = value_model
         self.value_loss = value_loss if value_loss is not None else "l2"
-        self.gamma = value_gamma
-        self.discount_loss = value_discount_loss
+        self.value_gamma = value_gamma
+        self.value_discount_loss = value_discount_loss
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -165,7 +163,16 @@ class DreamerLoss(LossModule):
             )
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        return self.model_loss(tensordict)
+        result_tensordict, sampled_tensordict_world = self.model_loss(tensordict)
+        # with autocast(dtype=torch.float16):
+        #     actor_tensordict, sampled_tensordict_actor = self.actor_loss(
+        #         sampled_tensordict_world
+        #     )
+        # result_tensordict.update(actor_tensordict)
+        return (
+            result_tensordict,
+            sampled_tensordict_world,
+        )
 
     def model_loss(self, tensordict: TensorDict) -> torch.Tensor:
         """Dreamer Model Loss.
@@ -241,83 +248,14 @@ class DreamerLoss(LossModule):
             kl = kl.clamp_min(self.free_nats).mean()
         return kl
 
+    def actor_loss(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
+        """Dreamer Actor Loss.
 
-class DreamerActorLoss(LossModule):
-    """Dreamer Actor Loss.
+        Computes the loss of the dreamer actor. The actor loss is computed as the
+        negative average lambda return.
 
-    Computes the loss of the dreamer actor. The actor loss is computed as the
-    negative average lambda return.
-
-    Reference: https://arxiv.org/abs/1912.01603.
-
-    Args:
-        actor_model (TensorDictModule): the actor model.
-        value_model (TensorDictModule): the value model.
-        model_based_env (DreamerEnv): the model based environment.
-        imagination_horizon (int, optional): The number of steps to unroll the
-            model. Defaults to ``15``.
-        discount_loss (bool, optional): if ``True``, the loss is discounted with a
-            gamma discount factor. Default to ``False``.
-
-    """
-
-    @dataclass
-    class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
-
-        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
-        default values.
-
-        Attributes:
-            belief (NestedKey): The input tensordict key where the belief is expected.
-                Defaults to ``"belief"``.
-            reward (NestedKey): The reward is expected to be in the tensordict key ("next", reward).
-                Defaults to ``"reward"``.
-            value (NestedKey): The reward is expected to be in the tensordict key ("next", value).
-                Will be used for the underlying value estimator. Defaults to ``"state_value"``.
-            done (NestedKey): The input tensordict key where the flag if a
-                trajectory is done is expected ("next", done). Defaults to ``"done"``.
+        Reference: https://arxiv.org/abs/1912.01603.
         """
-
-        belief: NestedKey = "belief"
-        reward: NestedKey = "reward"
-        value: NestedKey = "state_value"
-        done: NestedKey = "done"
-
-    default_keys = _AcceptedKeys()
-    default_value_estimator = ValueEstimators.TDLambda
-
-    def __init__(
-        self,
-        actor_model: TensorDictModule,
-        value_model: TensorDictModule,
-        model_based_env: DreamerEnv,
-        *,
-        imagination_horizon: int = 15,
-        discount_loss: bool = False,  # for consistency with paper
-        gamma: int = None,
-        lmbda: int = None,
-    ):
-        super().__init__()
-        self.actor_model = actor_model
-        self.value_model = value_model
-        self.model_based_env = model_based_env
-        self.imagination_horizon = imagination_horizon
-        self.discount_loss = discount_loss
-        if gamma is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.gamma = gamma
-        if lmbda is not None:
-            warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
-            self.lmbda = lmbda
-
-    def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
-            self._value_estimator.set_keys(
-                value=self._tensor_keys.value,
-            )
-
-    def forward(self, tensordict: TensorDict) -> Tuple[TensorDict, TensorDict]:
         with torch.no_grad():
             tensordict = tensordict.select("state", self.tensor_keys.belief)
             tensordict = tensordict.reshape(-1)

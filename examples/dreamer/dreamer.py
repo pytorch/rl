@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives.dreamer import DreamerActorLoss, DreamerLoss, DreamerValueLoss
+from torchrl.objectives.dreamer import DreamerLoss, DreamerValueLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -137,13 +137,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerLoss(
+    dreamer_loss = DreamerLoss(
         world_model,
-        actor_model,
-        value_model,
-        model_based_env,
-    )
-    actor_loss = DreamerActorLoss(
         actor_model,
         value_model,
         model_based_env,
@@ -262,7 +257,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                 # update world model
                 with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
+                    model_loss_td, sampled_tensordict = dreamer_loss.model_loss(
                         sampled_tensordict
                     )
                     loss_world_model = (
@@ -321,7 +316,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update actor network
                 with autocast(dtype=torch.float16):
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
+                    actor_loss_td, sampled_tensordict = dreamer_loss.actor_loss(
+                        sampled_tensordict
+                    )
                 scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
                 scaler_actor.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
