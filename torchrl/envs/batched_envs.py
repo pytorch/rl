@@ -25,10 +25,10 @@ from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TY
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
+from torchrl.envs.utils import _set_single_key, _sort_keys, clear_mpi_env_vars
+
 # legacy
 from .libs.envpool import MultiThreadedEnv, MultiThreadedEnvWrapper  # noqa: F401
-
-from torchrl.envs.utils import _set_single_key, _sort_keys, clear_mpi_env_vars
 
 
 def _check_start(fun):
@@ -1128,4 +1128,3 @@ def _run_worker_pipe_shared_mem(
             else:
                 # don't send env through pipe
                 child_pipe.send(("_".join([cmd, "done"]), None))
-

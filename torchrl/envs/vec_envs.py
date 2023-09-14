@@ -6,4 +6,4 @@ import warnings
 
 warnings.warn("vec_env.py has moved to batch_envs.py.", category=DeprecationWarning)
 
-from .batched_envs import *  # noqa: F403
+from .batched_envs import *  # noqa: F403, F401
