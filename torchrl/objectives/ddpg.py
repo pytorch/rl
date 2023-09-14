@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+
 from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
-
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -269,7 +269,6 @@ class DDPGLoss(LossModule):
         """
         loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
         td_error = td_error.detach()
-        td_error = td_error.unsqueeze(tensordict.ndimension())
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)
         tensordict.set(

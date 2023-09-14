@@ -278,8 +278,8 @@ def make_ppo_modules_state(proof_environment):
         num_outputs = proof_environment.action_spec.shape[-1] * 2
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
             "tanh_loc": False,
         }
 
@@ -352,8 +352,8 @@ def make_ppo_modules_pixels(proof_environment):
         num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
         }
 
     # Define input keys

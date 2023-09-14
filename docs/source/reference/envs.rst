@@ -219,6 +219,8 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 Multi-agent environments
 ------------------------
 
+.. currentmodule:: torchrl.envs
+
 TorchRL supports multi-agent learning out-of-the-box.
 *The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
 without any modification or dedicated multi-agent infrastructure.*
@@ -344,6 +346,15 @@ single agent standards.
   Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
 
 
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
+
+
 Transforms
 ----------
 .. currentmodule:: torchrl.envs.transforms
@@ -450,6 +461,7 @@ to be able to create this other composition:
     CatFrames
     CatTensors
     CenterCrop
+    ClipTransform
     Compose
     DeviceCastTransform
     DiscreteActionProjection
@@ -673,7 +685,9 @@ the following function will return ``1`` when queried:
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
-    smacv2.SMACv2Wrapper
+    pettingzoo.PettingZooEnv
+    pettingzoo.PettingZooWrapper
     smacv2.SMACv2Env
+    smacv2.SMACv2Wrapper
     vmas.VmasEnv
     vmas.VmasWrapper

@@ -35,13 +35,13 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
         
         ## setup_env.sh
-        ./.circleci/unittest/windows_optdepts/scripts/setup_env.sh
+        ./.github/unittest/windows_optdepts/scripts/setup_env.sh
 
         ## install.sh
-        ./.circleci/unittest/windows_optdepts/scripts/install.sh
+        ./.github/unittest/windows_optdepts/scripts/install.sh
 
         ## run_test.sh
-        ./.circleci/unittest/windows_optdepts/scripts/run_test.sh
+        ./.github/unittest/windows_optdepts/scripts/run_test.sh
 
         ## post_process.sh
-        ./.circleci/unittest/windows_optdepts/scripts/post_process.sh
+        ./.github/unittest/windows_optdepts/scripts/post_process.sh

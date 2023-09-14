@@ -100,8 +100,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
             out_keys=[env.action_key],
             distribution_class=TanhNormal,
             distribution_kwargs={
-                "min": env.unbatched_action_spec[("agents", "action")].space.minimum,
-                "max": env.unbatched_action_spec[("agents", "action")].space.maximum,
+                "min": env.unbatched_action_spec[("agents", "action")].space.low,
+                "max": env.unbatched_action_spec[("agents", "action")].space.high,
             },
             return_log_prob=True,
         )
@@ -189,7 +189,10 @@ def train(cfg: "DictConfig"):  # noqa: F821
 
     if cfg.env.continuous_actions:
         loss_module = SACLoss(
-            actor_network=policy, qvalue_network=value_module, delay_qvalue=True
+            actor_network=policy,
+            qvalue_network=value_module,
+            delay_qvalue=True,
+            action_spec=env.unbatched_action_spec,
         )
         loss_module.set_keys(
             state_action_value=("agents", "state_action_value"),
