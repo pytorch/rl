@@ -813,17 +813,7 @@ class TestMultiAgent:
     @pytest.mark.parametrize("n_agents", [1, 3])
     @pytest.mark.parametrize("share_params", [True, False])
     @pytest.mark.parametrize("centralised", [True, False])
-    @pytest.mark.parametrize(
-        "batch",
-        [
-            (10,),
-            (
-                10,
-                3,
-            ),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch", [(10,), (10, 3), ()])
     def test_cnn(
         self, n_agents, centralised, share_params, batch, x=50, y=50, channels=3
     ):
