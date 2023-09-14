@@ -1,11 +1,11 @@
 # task and env
 env:
-  name: HalfCheetah-v2
+  name: HalfCheetah-v3
   task: ""
   exp_name: "HalfCheetah-TD3-ICLR"
   library: gym
   frame_skip: 1
-  seed: 0 #42
+  seed: 42
 
 # collector
 collector:

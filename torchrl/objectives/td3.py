@@ -418,7 +418,7 @@ class TD3Loss(LossModule):
         # cat params
         qvalue_params = torch.cat(
             [
-                self.qvalue_network_params,
+                self._cached_detach_qvalue_network_params,
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],
