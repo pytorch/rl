@@ -38,6 +38,7 @@ from torchrl._utils import (
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
+from torchrl.envs.batched_envs import _BatchedEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
@@ -47,7 +48,6 @@ from torchrl.envs.utils import (
     set_exploration_type,
     step_mdp,
 )
-from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory

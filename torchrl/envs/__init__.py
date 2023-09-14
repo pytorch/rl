@@ -3,9 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .env_creator import EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
+from .libs.envpool import MultiThreadedEnv
 from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
@@ -66,4 +68,3 @@ from .utils import (
     set_exploration_type,
     step_mdp,
 )
-from .vec_env import MultiThreadedEnv, ParallelEnv, SerialEnv
