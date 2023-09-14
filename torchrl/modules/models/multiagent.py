@@ -235,7 +235,7 @@ class MultiAgentConvNet(nn.Module):
 
     This is a CNN that can operate in multi-agent contexts.
 
-    It expects inputs with shape (*B, n_agents, channels, x, y)
+    It expects inputs with shape ``(*B, n_agents, channels, x, y)``.
 
     Args:
         n_agents (int): number of agents.
