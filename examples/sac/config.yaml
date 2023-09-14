@@ -1,4 +1,4 @@
-# Environment
+# environment and task
 env:
   name: HalfCheetah-v3
   task: ""
