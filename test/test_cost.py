@@ -466,6 +466,19 @@ class TestDQN(LossModuleTestBase):
             p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
 
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    def test_dqn_state_dict(self, delay_value, device, action_spec_type):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
+        sd = loss_fn.state_dict()
+        loss_fn2 = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
+        loss_fn2.load_state_dict(sd)
+
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
     @pytest.mark.parametrize("device", get_default_devices())
@@ -932,6 +945,20 @@ class TestQMixer(LossModuleTestBase):
             if p.requires_grad:
                 p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize("delay_value", (False, True))
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("action_spec_type", ("one_hot", "categorical"))
+    def test_qmixer_state_dict(self, delay_value, device, action_spec_type):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(
+            action_spec_type=action_spec_type, device=device
+        )
+        mixer = self._create_mock_mixer(device=device)
+        loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+        sd = loss_fn.state_dict()
+        loss_fn2 = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("n", range(4))
     @pytest.mark.parametrize("delay_value", (False, True))
@@ -1424,6 +1451,29 @@ class TestDDPG(LossModuleTestBase):
             if p.requires_grad:
                 p.data += torch.randn_like(p)
         assert all((p1 != p2).all() for p1, p2 in zip(parameters, actor.parameters()))
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("delay_actor,delay_value", [(False, False), (True, True)])
+    def test_ddpg_state_dict(self, delay_actor, delay_value, device):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        loss_fn = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+            delay_actor=delay_actor,
+            delay_value=delay_value,
+        )
+        state_dict = loss_fn.state_dict()
+        loss_fn2 = DDPGLoss(
+            actor,
+            value,
+            loss_function="l2",
+            delay_actor=delay_actor,
+            delay_value=delay_value,
+        )
+        loss_fn2.load_state_dict(state_dict)
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
@@ -1975,6 +2025,57 @@ class TestTD3(LossModuleTestBase):
                     assert (
                         p.grad is None or p.grad.norm() == 0.0
                     ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize(
+        "delay_actor, delay_qvalue", [(False, False), (True, True)]
+    )
+    @pytest.mark.parametrize("policy_noise", [0.1])
+    @pytest.mark.parametrize("noise_clip", [0.1])
+    @pytest.mark.parametrize("use_action_spec", [True, False])
+    def test_td3_state_dict(
+        self,
+        delay_actor,
+        delay_qvalue,
+        device,
+        policy_noise,
+        noise_clip,
+        use_action_spec,
+    ):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        if use_action_spec:
+            action_spec = actor.spec
+            bounds = None
+        else:
+            bounds = (-1, 1)
+            action_spec = None
+        loss_fn = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = TD3Loss(
+            actor,
+            value,
+            action_spec=action_spec,
+            bounds=bounds,
+            loss_function="l2",
+            policy_noise=policy_noise,
+            noise_clip=noise_clip,
+            delay_actor=delay_actor,
+            delay_qvalue=delay_qvalue,
+        )
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.skipif(not _has_functorch, reason="functorch not installed")
     @pytest.mark.parametrize("device", get_default_devices())
@@ -2641,6 +2742,59 @@ class TestSAC(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_value", (True, False))
+    @pytest.mark.parametrize("delay_actor", (True, False))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_sac_state_dict(
+        self,
+        delay_value,
+        delay_actor,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        version,
+    ):
+        if (delay_actor or delay_qvalue) and not delay_value:
+            pytest.skip("incompatible config")
+
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        if version == 1:
+            value = self._create_mock_value(device=device)
+        else:
+            value = None
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+        if delay_value:
+            kwargs["delay_value"] = True
+
+        loss_fn = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            **kwargs,
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = SACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            **kwargs,
+        )
+        loss_fn2.load_state_dict(sd)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_sac_separate_losses(
@@ -3275,6 +3429,51 @@ class TestDiscreteSAC(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("target_entropy_weight", [0.5])
+    @pytest.mark.parametrize("target_entropy", ["auto"])
+    def test_discrete_sac_state_dict(
+        self,
+        delay_qvalue,
+        num_qvalue,
+        device,
+        target_entropy_weight,
+        target_entropy,
+    ):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        kwargs = {}
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+
+        loss_fn = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            num_qvalue_nets=num_qvalue,
+            target_entropy_weight=target_entropy_weight,
+            target_entropy=target_entropy,
+            loss_function="l2",
+            **kwargs,
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = DiscreteSACLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_actions=actor.spec["action"].space.n,
+            num_qvalue_nets=num_qvalue,
+            target_entropy_weight=target_entropy_weight,
+            target_entropy=target_entropy,
+            loss_function="l2",
+            **kwargs,
+        )
+        loss_fn2.load_state_dict(sd)
+
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
     @pytest.mark.parametrize("num_qvalue", [2])
@@ -3830,6 +4029,32 @@ class TestREDQ(LossModuleTestBase):
                     assert (
                         p.grad is None or p.grad.norm() == 0.0
                     ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_redq_state_dict(self, delay_qvalue, num_qvalue, device):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        loss_fn = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            delay_qvalue=delay_qvalue,
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = REDQLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            num_qvalue_nets=num_qvalue,
+            loss_function="l2",
+            delay_qvalue=delay_qvalue,
+        )
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_redq_separate_losses(self, separate_losses):
@@ -4597,6 +4822,56 @@ class TestCQL(LossModuleTestBase):
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
 
+    @pytest.mark.parametrize("delay_actor", (True, False))
+    @pytest.mark.parametrize("delay_qvalue", (True, False))
+    @pytest.mark.parametrize("max_q_backup", [True])
+    @pytest.mark.parametrize("deterministic_backup", [True])
+    @pytest.mark.parametrize("with_lagrange", [True])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_cql_state_dict(
+        self,
+        delay_actor,
+        delay_qvalue,
+        max_q_backup,
+        deterministic_backup,
+        with_lagrange,
+        device,
+    ):
+        if delay_actor or delay_qvalue:
+            pytest.skip("incompatible config")
+
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+
+        kwargs = {}
+        if delay_actor:
+            kwargs["delay_actor"] = True
+        if delay_qvalue:
+            kwargs["delay_qvalue"] = True
+
+        loss_fn = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            **kwargs,
+        )
+        sd = loss_fn.load_
+        loss_fn2 = CQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            loss_function="l2",
+            max_q_backup=max_q_backup,
+            deterministic_backup=deterministic_backup,
+            with_lagrange=with_lagrange,
+            **kwargs,
+        )
+        loss_fn2.load_state_dict(sd)
+
     @pytest.mark.parametrize("n", list(range(4)))
     @pytest.mark.parametrize("delay_actor", (True, False))
     @pytest.mark.parametrize("delay_qvalue", (True, False))
@@ -4982,6 +5257,19 @@ class TestPPO(LossModuleTestBase):
                 assert ("critic" in name) or ("target_" in name)
         assert counter == 2
         actor.zero_grad()
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    @pytest.mark.parametrize("gradient_mode", (True,))
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_ppo_state_dict(self, loss_class, device, gradient_mode):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        loss_fn = loss_class(actor, value, loss_critic_type="l2")
+        sd = loss_fn.state_dict()
+        loss_fn2 = loss_class(actor, value, loss_critic_type="l2")
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
@@ -5629,6 +5917,17 @@ class TestA2C(LossModuleTestBase):
 
         # test reset
         loss_fn.reset()
+
+    @pytest.mark.parametrize("gradient_mode", (True, False))
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_a2c_state_dict(self, device, gradient_mode):
+        torch.manual_seed(self.seed)
+        actor = self._create_mock_actor(device=device)
+        value = self._create_mock_value(device=device)
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+        sd = loss_fn.state_dict()
+        loss_fn2 = A2CLoss(actor, value, loss_critic_type="l2")
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_a2c_separate_losses(self, separate_losses):
@@ -6841,6 +7140,17 @@ class TestOnlineDT(LossModuleTestBase):
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
 
     @pytest.mark.parametrize("device", get_available_devices())
+    def test_odt_state_dict(self, device):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = OnlineDTLoss(actor)
+        sd = loss_fn.state_dict()
+        loss_fn2 = OnlineDTLoss(actor)
+        loss_fn2.load_state_dict(sd)
+
+    @pytest.mark.parametrize("device", get_available_devices())
     def test_seq_odt(self, device):
         torch.manual_seed(self.seed)
         td = self._create_seq_mock_data_odt(device=device)
@@ -7056,6 +7366,17 @@ class TestDT(LossModuleTestBase):
 
         for name, p in named_parameters:
             assert p.grad.norm() > 0.0, f"parameter {name} has a null gradient"
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_dt_state_dict(self, device):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+
+        loss_fn = DTLoss(actor)
+        sd = loss_fn.state_dict()
+        loss_fn2 = DTLoss(actor)
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_seq_dt(self, device):
@@ -7428,6 +7749,44 @@ class TestIQL(LossModuleTestBase):
                 assert (
                     p.grad is None or p.grad.norm() == 0.0
                 ), f"target parameter {name} (shape: {p.shape}) has a non-null gradient"
+
+    @pytest.mark.parametrize("num_qvalue", [2])
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("temperature", [0.0])
+    @pytest.mark.parametrize("expectile", [0.1])
+    def test_iql_state_dict(
+        self,
+        num_qvalue,
+        device,
+        temperature,
+        expectile,
+    ):
+        torch.manual_seed(self.seed)
+
+        actor = self._create_mock_actor(device=device)
+        qvalue = self._create_mock_qvalue(device=device)
+        value = self._create_mock_value(device=device)
+
+        loss_fn = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+        sd = loss_fn.state_dict()
+        loss_fn2 = IQLLoss(
+            actor_network=actor,
+            qvalue_network=qvalue,
+            value_network=value,
+            num_qvalue_nets=num_qvalue,
+            temperature=temperature,
+            expectile=expectile,
+            loss_function="l2",
+        )
+        loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("separate_losses", [False, True])
     def test_iql_separate_losses(self, separate_losses):
