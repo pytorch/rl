@@ -656,6 +656,8 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
+        if tensordict is not None:
+            out_tensordict = tensordict.update(out_tensordict)
         out_tensordict = self.transform.reset(out_tensordict)
 
         mt_mode = self.transform.missing_tolerance
@@ -5036,7 +5038,7 @@ class VecGymEnvTransform(Transform):
     """A transform for GymWrapper subclasses that handles the auto-reset in a consistent way.
 
     Gym, gymnasium and SB3 provide vectorized (read, parallel or batched) environments
-    that are automatically reset. When this occur, the actual observation resulting
+    that are automatically reset. When this occurs, the actual observation resulting
     from the action is saved within a key in the info.
     The class :class:`torchrl.envs.libs.gym.terminal_obs_reader` reads that observation
     and stores it in a ``"final"`` key within the output tensordict.
@@ -5050,8 +5052,18 @@ class VecGymEnvTransform(Transform):
 
     This transform is automatically appended to the gym env whenever the wrapper
     is created with an async env.
+
+    Args:
+        final_name (str, optional): the name of the final observation in the dict.
+            Defaults to `"final"`.
+
+    .. note:: In general, this class should not be handled directly. It is
+        created whenever a vectorized environment is placed within a :class:`GymWrapper`.
+
     """
-    def __init__(self):
+
+    def __init__(self, final_name="final"):
+        self.final_name = final_name
         super().__init__(in_keys=[])
         self._memo = {}
 
@@ -5059,16 +5071,16 @@ class VecGymEnvTransform(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # save the final info
-        done = self._memo['done'] = next_tensordict.get("done")
+        done = self._memo["done"] = next_tensordict.get("done")
         final = next_tensordict.pop("final")
         # if anything's done, we need to swap the final obs
         if done.any():
             done = done.squeeze(-1)
-            saved_next = next_tensordict.select(*final.keys(True, True))[done].clone()
+            saved_next = next_tensordict.select(*final.keys(True, True)).clone()
             next_tensordict[done] = final[done]
-            self._memo['saved_done'] = saved_next
+            self._memo["saved_done"] = saved_next
         else:
-            self._memo['saved_done'] = None
+            self._memo["saved_done"] = None
         return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -5076,16 +5088,28 @@ class VecGymEnvTransform(Transform):
         reset = tensordict.get("_reset", done)
         if done is not None:
             done = done.view_as(reset)
-        if reset is not done and (reset != done).any() and (not reset.all() or not reset.any()):
-            raise RuntimeError("Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
-                               f"Got reset={reset}\nand done={done}")
+        if (
+            reset is not done
+            and (reset != done).any()
+            and (not reset.all() or not reset.any())
+        ):
+            raise RuntimeError(
+                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                f"Got reset={reset}\nand done={done}"
+            )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
         if reset is not None and reset.any() and not reset.all():
-            saved_done = self._memo['saved_done']
+            saved_done = self._memo["saved_done"]
             reset = reset.view(tensordict.shape)
-            updated_td = torch.where(~reset, tensordict.select(*saved_done.keys(True, True)), saved_done)
+            updated_td = torch.where(
+                ~reset, tensordict.select(*saved_done.keys(True, True)), saved_done
+            )
             tensordict.update(updated_td)
             tensordict.set("done", tensordict.get("done").clone().fill_(0))
         tensordict.pop("final", None)
         return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        del observation_spec[self.final_name]
+        return observation_spec

@@ -27,15 +27,19 @@ from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
     DiscreteTensorSpec,
+    MultiDiscreteTensorSpec,
+    MultiOneHotDiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     TensorSpec,
-    UnboundedContinuousTensorSpec, MultiDiscreteTensorSpec,
-    MultiOneHotDiscreteTensorSpec,
+    UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 
-from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv, \
-    BaseInfoDictReader
+from torchrl.envs.gym_like import (
+    BaseInfoDictReader,
+    default_info_dict_reader,
+    GymLikeEnv,
+)
 from torchrl.envs.utils import _classproperty
 
 DEFAULT_GYM = None
@@ -47,6 +51,7 @@ if not _has_gym:
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 _has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
+
 
 class set_gym_backend(_DecoratorContextManager):
     """Sets the gym-backend to a certain value.
@@ -241,7 +246,9 @@ def _gym_to_torchrl_spec_transform(
             return (
                 MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
                 if categorical_action_encoding
-                else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+                else MultiOneHotDiscreteTensorSpec(
+                    spec.nvec, device=device, dtype=dtype
+                )
             )
 
         return torch.stack(
@@ -374,18 +381,26 @@ class _AsyncMeta(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
         if instance._is_batched:
-            from torchrl.envs.transforms.transforms import TransformedEnv, VecGymEnvTransform
+            from torchrl.envs.transforms.transforms import (
+                TransformedEnv,
+                VecGymEnvTransform,
+            )
+
             if _has_sb3:
                 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+
                 if isinstance(instance._env, VecEnv):
                     backend = "sb3"
                 else:
                     backend = "gym"
             else:
                 backend = "gym"
-            instance.set_info_dict_reader(terminal_obs_reader(instance.observation_spec, backend=backend))
+            instance.set_info_dict_reader(
+                terminal_obs_reader(instance.observation_spec, backend=backend)
+            )
             return TransformedEnv(instance, VecGymEnvTransform())
         return instance
+
 
 class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
@@ -438,10 +453,13 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _is_batched(self):
         if _has_sb3:
             from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+
             tuple_of_classes = (VecEnv,)
         else:
             tuple_of_classes = ()
-        return isinstance(self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,))
+        return isinstance(
+            self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
+        )
 
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
@@ -621,6 +639,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 observation_spec = CompositeSpec(
                     observation=observation_spec, shape=self.batch_size
                 )
+        elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
+            observation_spec.shape = self.batch_size
+
         if hasattr(env, "reward_space") and env.reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
@@ -679,7 +700,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 return super()._reset(tensordict)
             elif reset is not None:
                 return tensordict.clone(False)
-        return super()._reset(tensordict)
+        return super()._reset(tensordict, **kwargs)
+
 
 ACCEPTED_TYPE_ERRORS = {
     "render_mode": "__init__() got an unexpected keyword argument 'render_mode'",
@@ -850,13 +872,42 @@ class MOGymEnv(GymEnv):
 
 
 class terminal_obs_reader(BaseInfoDictReader):
+    """Terminal observation reader for 'vectorized' gym environments.
+
+    When running envs in parallel, Gym(nasium) writes the result of the true call
+    to `step` in `"final_observation"` entry within the `info` dictionary.
+
+    This breaks the natural flow and makes single-processed and multiprocessed envs
+    incompatible.
+
+    This class reads the info obs, removes the `"final_observation"` from
+    the env and writes its content in the data.
+
+    Next, a :class:`torchrl.envs.VecGymEnvTransform` transform will reorganise the
+    data by caching the result of the (implicit) reset and swap the true next
+    observation with the reset one. At reset time, the true reset data will be
+    replaced.
+
+    Args:
+        observation_spec (CompositeSpec): The observation spec of the gym env.
+        backend (str, optional): the backend of the env. One of `"sb3"` for
+            stable-baselines3 or `"gym"` for gym/gymnasium.
+
+    .. note:: In general, this class should not be handled directly. It is
+        created whenever a vectorized environment is placed within a :class:`GymWrapper`.
+
+    """
+
     backend_key = {
         "sb3": "terminal_observation",
         "gym": "final_observation",
     }
-    def __init__(self, observation_spec: CompositeSpec, backend):
+
+    def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
+        self.name = name
         self._info_spec = CompositeSpec(
-            {("final", key): item.clone() for key, item in observation_spec.items()}, shape=observation_spec.shape
+            {(self.name, key): item.clone() for key, item in observation_spec.items()},
+            shape=observation_spec.shape,
         )
         self.backend = backend
 
@@ -864,16 +915,42 @@ class terminal_obs_reader(BaseInfoDictReader):
     def info_spec(self):
         return self._info_spec
 
+    def _read_obs(self, obs, key, tensor, index):
+        if obs is None:
+            return
+        if isinstance(obs, np.ndarray):
+            # Simplest case: there is one observation,
+            # presented as a np.ndarray. The key should be pixels or observation.
+            # We just write that value at its location in the tensor
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        elif isinstance(obs, dict):
+            if key not in obs:
+                raise KeyError(
+                    f"The observation {key} could not be found in the final observation dict."
+                )
+            subobs = obs[key]
+            if subobs is not None:
+                # if the obs is a dict, we expect that the key points also to
+                # a value in the obs. We retrieve this value and write it in the
+                # tensor
+                tensor[index] = torch.as_tensor(subobs, device=tensor.device)
+
+        elif isinstance(obs, (list, tuple)):
+            # tuples are stacked along the first dimension when passing gym spaces
+            # to torchrl specs. As such, we can simply stack the tuple and set it
+            # at the relevant index (assuming stacking can be achieved)
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        else:
+            raise NotImplementedError(
+                f"Observations of type {type(obs)} are not supported yet."
+            )
+
     def __call__(self, info_dict, tensordict):
         terminal_obs = info_dict.get(self.backend_key[self.backend], None)
         for key, item in self.info_spec.items(True, True):
             final_obs = item.zero()
-            break
-        else:
-            raise RuntimeError("The info spec cannot be empty.")
-        if terminal_obs is not None:
-            for i, obs in enumerate(terminal_obs):
-                if obs is not None:
-                    final_obs[i] = torch.as_tensor(obs, device=final_obs.device)
-        tensordict.set(key, final_obs)
+            if terminal_obs is not None:
+                for i, obs in enumerate(terminal_obs):
+                    self._read_obs(obs, key[-1], final_obs, index=i)
+            tensordict.set(key, final_obs)
         return tensordict

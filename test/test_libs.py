@@ -75,6 +75,7 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
+_has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 
 if _has_gym:
     try:
@@ -314,44 +315,57 @@ class TestGym:
         return
 
     @implement_for("gymnasium", "0.27.0", None)
-    def test_vecenvs(self):
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    def test_vecenvs(self, envname):
         import gymnasium
+        from _utils_internal import rollout_consistency_assertion
 
         # we can't use parametrize with implement_for
-        for envname in ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]:
-            env = GymWrapper(
-                gymnasium.vector.SyncVectorEnv(2 * [lambda envname=envname: gymnasium.make(envname)])
+        env = GymWrapper(
+            gymnasium.vector.SyncVectorEnv(
+                2 * [lambda envname=envname: gymnasium.make(envname)]
             )
-            assert env.batch_size == torch.Size([2])
-            check_env_specs(env)
-            env = GymWrapper(
-                gymnasium.vector.AsyncVectorEnv(2 * [lambda envname=envname: gymnasium.make(envname)])
+        )
+        assert env.batch_size == torch.Size([2])
+        check_env_specs(env)
+        env = GymWrapper(
+            gymnasium.vector.AsyncVectorEnv(
+                2 * [lambda envname=envname: gymnasium.make(envname)]
             )
-            assert env.batch_size == torch.Size([2])
+        )
+        assert env.batch_size == torch.Size([2])
+        check_env_specs(env)
+        with set_gym_backend("gymnasium"):
+            env = GymEnv(envname, num_envs=2, from_pixels=False)
             check_env_specs(env)
-            with set_gym_backend("gymnasium"):
-                env = GymEnv(envname, num_envs=2, from_pixels=False)
-                check_env_specs(env)
-            # with set_gym_backend("gymnasium"):
-            #     env = GymEnv(envname, num_envs=2, from_pixels=True)
-            #     check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout, done_key="done", observation_key=obs_key
+                )
 
-    @implement_for("gym", "0.24", "0.27.0")
+    @implement_for("gym", "0.18", "0.27.0")
     def test_vecenvs(self):  # noqa: F811
-        import gymnasium
+        import gym
+        from _utils_internal import rollout_consistency_assertion
 
         # we can't use parametrize with implement_for
         for envname in ["CartPole-v1", "HalfCheetah-v4"]:
             env = GymWrapper(
-                gymnasium.vector.SyncVectorEnv(
-                    2 * [lambda envname=envname: gymnasium.make(envname)]
+                gym.vector.SyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
                 )
             )
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
             env = GymWrapper(
-                gymnasium.vector.aSyncVectorEnv(
-                    2 * [lambda envname=envname: gymnasium.make(envname)]
+                gym.vector.AsyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
                 )
             )
             assert env.batch_size == torch.Size([2])
@@ -359,6 +373,12 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 check_env_specs(env)
+                rollout = env.rollout(100, break_when_any_done=False)
+                for obs_key in env.observation_spec.keys(True, True):
+                    rollout_consistency_assertion(
+                        rollout, done_key="done", observation_key=obs_key
+                    )
+
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
                 check_env_specs(env)

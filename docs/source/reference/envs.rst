@@ -484,6 +484,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
@@ -618,6 +619,7 @@ the following function will return ``1`` when queried:
     dm_control.DMControlWrapper
     gym.GymEnv
     gym.GymWrapper
+    gym.terminal_obs_reader
     gym.MOGymEnv
     gym.MOGymWrapper
     gym.set_gym_backend

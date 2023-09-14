@@ -320,3 +320,29 @@ def make_tc(td):
     for key in td.keys():
         MyClass.__annotations__[key] = torch.Tensor
     return tensorclass(MyClass)
+
+
+def rollout_consistency_assertion(
+    rollout, *, done_key="done", observation_key="observation"
+):
+    """Tests that observations in "next" match observations in the next root tensordict when done is False, and don't match otherwise."""
+
+    done = rollout[:, :-1]["next", done_key].squeeze(-1)
+    # data resulting from step, when it's not done
+    r_not_done = rollout[:, :-1]["next"][~done]
+    # data resulting from step, when it's not done, after step_mdp
+    r_not_done_tp1 = rollout[:, 1:][~done]
+    torch.testing.assert_close(
+        r_not_done[observation_key], r_not_done_tp1[observation_key]
+    )
+
+    if not done.any():
+        return
+
+    # data resulting from step, when it's done
+    r_done = rollout[:, :-1]["next"][done]
+    # data resulting from step, when it's done, after step_mdp and reset
+    r_done_tp1 = rollout[:, 1:][done]
+    assert (
+        (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
+    ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)

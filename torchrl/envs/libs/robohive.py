@@ -22,7 +22,8 @@ from torchrl.envs.libs.gym import (
 )
 from torchrl.envs.utils import make_composite_from_td
 
-_has_robohive = importlib.util.find_spec("robohive") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
+_has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
