@@ -248,6 +248,7 @@ class implement_for:
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
     _implementations = {}
     _setters = []
+    _memo = {}
 
     def __init__(
         self,
@@ -285,11 +286,13 @@ class implement_for:
             cls = inspect.getmodule(self.fn)
         setattr(cls, self.fn.__name__, self.fn)
 
-    @staticmethod
-    def import_module(module_name: Union[Callable, str]) -> str:
+    @classmethod
+    def import_module(cls, module_name: Union[Callable, str]) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
-            module = import_module(module_name)
+            module = cls._memo.get(module_name, None)
+            if module is None:
+                module = cls._memo[module_name] = import_module(module_name)
         else:
             module = module_name()
         return module.__version__

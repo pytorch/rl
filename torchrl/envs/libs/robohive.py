@@ -171,7 +171,7 @@ class RoboHiveEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
         if kwargs.get("read_info", True):
-            self.info_dict_reader = self.read_info
+            self.set_info_dict_reader(self.read_info)
         return env
 
     @classmethod

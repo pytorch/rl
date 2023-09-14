@@ -305,8 +305,11 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         self.info_dict_reader.append(info_dict_reader)
-        for info_key, spec in info_dict_reader.info_spec.items():
-            self.observation_spec[info_key] = spec.to(self.device)
+        if isinstance(info_dict_reader, BaseInfoDictReader):
+            # if we have a BaseInfoDictReader, we know what the specs will be
+            # In other cases (eg, RoboHive) we will need to figure it out empirically.
+            for info_key, spec in info_dict_reader.info_spec.items():
+                self.observation_spec[info_key] = spec.to(self.device)
         return self
 
     def __repr__(self) -> str:
@@ -321,7 +324,9 @@ class GymLikeEnv(_EnvWrapper):
     @info_dict_reader.setter
     def info_dict_reader(self, value: callable):
         warnings.warn(
-            f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. Setting info_dict_reader directly will be soon deprecated.",
+            f"Please use {type(self)}.set_info_dict_reader method to set a new info reader. "
+            f"This method will append a reader to the list of existing readers (if any). "
+            f"Setting info_dict_reader directly will be soon deprecated.",
             category=DeprecationWarning,
         )
-        self._info_dict_reader = [value]
+        self._info_dict_reader.append(value)
