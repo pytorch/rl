@@ -10,12 +10,14 @@ from torchrl.envs import (
     EnvCreator,
     InitTracker,
     ParallelEnv,
+    RewardSum,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import RewardScaling
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
+    AdditiveGaussianWrapper,
     MLP,
     OrnsteinUhlenbeckProcessWrapper,
     SafeModule,
@@ -43,7 +45,8 @@ def apply_env_transforms(env, reward_scaling=1.0):
         Compose(
             InitTracker(),
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(),
+            DoubleToFloat("observation"),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -80,6 +83,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         train_env,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
+        init_random_frames=cfg.collector.init_random_frames,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
@@ -199,10 +203,23 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
     eval_env.close()
 
     # Exploration wrappers:
-    actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
-        model[0],
-        annealing_num_steps=1_000_000,
-    ).to(device)
+    if cfg.network.noise_type == "ou":
+        actor_model_explore = OrnsteinUhlenbeckProcessWrapper(
+            model[0],
+            annealing_num_steps=1_000_000,
+        ).to(device)
+    elif cfg.network.noise_type == "gaussian":
+        actor_model_explore = AdditiveGaussianWrapper(
+            model[0],
+            sigma_end=1.0,
+            sigma_init=1.0,
+            mean=0.0,
+            std=0.1,
+            scale=cfg.network.noise_scale,
+        ).to(device)
+    else:
+        raise NotImplementedError
+
     return model, actor_model_explore
 
 
@@ -217,14 +234,14 @@ def make_loss_module(cfg, model):
     loss_module = DDPGLoss(
         actor_network=model[0],
         value_network=model[1],
-        loss_function=cfg.optimization.loss_function,
+        loss_function=cfg.optim.loss_function,
+        delay_actor=True,
+        delay_value=True,
     )
-    loss_module.make_value_estimator(gamma=cfg.optimization.gamma)
+    loss_module.make_value_estimator(gamma=cfg.optim.gamma)
 
     # Define Target Network Updater
-    target_net_updater = SoftUpdate(
-        loss_module, eps=cfg.optimization.target_update_polyak
-    )
+    target_net_updater = SoftUpdate(loss_module, eps=cfg.optim.target_update_polyak)
     return loss_module, target_net_updater
 
 
@@ -233,11 +250,11 @@ def make_optimizer(cfg, loss_module):
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
-        actor_params, lr=cfg.optimization.lr, weight_decay=cfg.optimization.weight_decay
+        actor_params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
     )
     optimizer_critic = optim.Adam(
         critic_params,
-        lr=cfg.optimization.lr,
-        weight_decay=cfg.optimization.weight_decay,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
     )
     return optimizer_actor, optimizer_critic
