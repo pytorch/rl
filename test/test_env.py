@@ -61,7 +61,13 @@ from torchrl.envs.gym_like import default_info_dict_reader
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv, GymWrapper
 from torchrl.envs.transforms import Compose, StepCounter, TransformedEnv
-from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
+from torchrl.envs.utils import (
+    check_env_specs,
+    check_marl_grouping,
+    make_composite_from_td,
+    MarlGroupMapType,
+    step_mdp,
+)
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
 
@@ -1645,6 +1651,23 @@ def test_make_spec_from_td():
     assert (spec.zero() == data.zero_()).all()
     for key, val in data.items(True, True):
         assert val.dtype is spec[key].dtype
+
+
+@pytest.mark.parametrize("group_type", list(MarlGroupMapType))
+def test_marl_group_type(group_type):
+    agent_names = ["agent"]
+    check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
+
+    agent_names = ["agent", "agent"]
+    with pytest.raises(ValueError):
+        check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
+
+    agent_names = ["agent_0", "agent_1"]
+    check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
+
+    agent_names = []
+    with pytest.raises(ValueError):
+        check_marl_grouping(group_type.get_group_map(agent_names), agent_names)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
