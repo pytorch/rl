@@ -219,6 +219,8 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 Multi-agent environments
 ------------------------
 
+.. currentmodule:: torchrl.envs
+
 TorchRL supports multi-agent learning out-of-the-box.
 *The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
 without any modification or dedicated multi-agent infrastructure.*
@@ -342,6 +344,15 @@ single agent standards.
   To get the full composite spec with the "agents" key, you can run
   `env.output_spec["full_reward_spec"]`. The same is valid for action and done specs.
   Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
 
 
 Transforms
@@ -626,5 +637,7 @@ the following function will return ``1`` when queried:
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
+    pettingzoo.PettingZooEnv
+    pettingzoo.PettingZooWrapper
     vmas.VmasEnv
     vmas.VmasWrapper
