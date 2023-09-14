@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs.vec_env import CloudpickleWrapper
+from torchrl.envs.batched_envs import CloudpickleWrapper
 
 try:
     from torch.utils._contextlib import _DecoratorContextManager
