@@ -138,6 +138,7 @@ class PettingZooWrapper(_EnvWrapper):
 
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
     libname = "pettingzoo"
+
     @property
     def available_envs(self):
         return _get_envs()
