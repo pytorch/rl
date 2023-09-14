@@ -265,7 +265,7 @@ And it is `functorch` and `torch.compile` compatible!
 - A common [interface for environments](torchrl/envs)
   which supports common libraries (OpenAI gym, deepmind control lab, etc.)<sup>(1)</sup> and state-less execution 
   (e.g. Model-based environments).
-  The [batched environments](torchrl/envs/vec_env.py) containers allow parallel execution<sup>(2)</sup>.
+  The [batched environments](torchrl/envs/batched_envs.py) containers allow parallel execution<sup>(2)</sup>.
   A common PyTorch-first class of [tensor-specification class](torchrl/data/tensor_specs.py) is also provided.
   TorchRL's environments API is simple but stringent and specific. Check the 
   [documentation](https://pytorch.org/rl/reference/envs.html)

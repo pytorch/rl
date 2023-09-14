@@ -20,7 +20,8 @@ import torch.cuda
 from tensordict import tensorclass
 from torchrl._utils import implement_for, seed_generator
 
-from torchrl.envs import ObservationNorm
+from torchrl.envs import MultiThreadedEnv, ObservationNorm
+from torchrl.envs.batched_envs import _has_envpool, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -28,7 +29,6 @@ from torchrl.envs.transforms import (
     ToTensorImage,
     TransformedEnv,
 )
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnv, ParallelEnv, SerialEnv
 
 # Specified for test_utils.py
 __version__ = "0.3"
