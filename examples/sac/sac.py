@@ -37,7 +37,7 @@ from utils import (
 def main(cfg: "DictConfig"):  # noqa: F821
     device = torch.device(cfg.network.device)
 
-    # Create Logger
+    # Create logger
     exp_name = generate_exp_name("SAC", cfg.env.exp_name)
     logger = None
     if cfg.logger.backend:
@@ -51,19 +51,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
     torch.manual_seed(cfg.env.seed)
     np.random.seed(cfg.env.seed)
 
-    # Create Environments
+    # Create environments
     train_env, eval_env = make_environment(cfg)
 
-    # Create Agent
+    # Create agent
     model, exploration_policy = make_sac_agent(cfg, train_env, eval_env, device)
 
     # Create SAC loss
     loss_module, target_net_updater = make_loss_module(cfg, model)
 
-    # Create Off-Policy Collector
+    # Create off-policy collector
     collector = make_collector(cfg, train_env, exploration_policy)
 
-    # Create Replay Buffer
+    # Create replay buffer
     replay_buffer = make_replay_buffer(
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
@@ -71,7 +71,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
     )
 
-    # Create Optimizers
+    # Create optimizers
     optimizer_actor, optimizer_critic, optimizer_alpha = make_sac_optimizer(
         cfg, loss_module
     )
@@ -96,18 +96,18 @@ def main(cfg: "DictConfig"):  # noqa: F821
     for i, tensordict in enumerate(collector):
         sampling_time = time.time() - sampling_start
 
-        # update weights of the inference policy
+        # Update weights of the inference policy
         collector.update_policy_weights_()
 
         pbar.update(tensordict.numel())
 
         tensordict = tensordict.reshape(-1)
         current_frames = tensordict.numel()
-        # add to replay buffer
+        # Add to replay buffer
         replay_buffer.extend(tensordict.cpu())
         collected_frames += current_frames
 
-        # optimization steps
+        # Optimization steps
         training_start = time.time()
         if collected_frames >= init_random_frames:
             losses = TensorDict(
@@ -117,27 +117,27 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 ],
             )
             for i in range(num_updates):
-                # sample from replay buffer
+                # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
-                # compute loss
+                # Compute loss
                 loss_td = loss_module(sampled_tensordict)
 
                 actor_loss = loss_td["loss_actor"]
                 q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
 
-                # update actor
+                # Update actor
                 optimizer_actor.zero_grad()
                 actor_loss.backward()
                 optimizer_actor.step()
 
-                # update critic
+                # Update critic
                 optimizer_critic.zero_grad()
                 q_loss.backward()
                 optimizer_critic.step()
 
-                # update alpha
+                # Update alpha
                 optimizer_alpha.zero_grad()
                 alpha_loss.backward()
                 optimizer_alpha.step()
@@ -146,16 +146,19 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     "loss_actor", "loss_qvalue", "loss_alpha"
                 ).detach()
 
-                # update qnet_target params
+                # Update qnet_target params
                 target_net_updater.step()
 
-                # update priority
+                # Update priority
                 if prb:
                     replay_buffer.update_priority(sampled_tensordict)
+
         training_time = time.time() - training_start
         episode_rewards = tensordict["next", "episode_reward"][
             tensordict["next", "done"]
         ]
+
+        # Logging
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
@@ -187,7 +190,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
             logger.log_scalar("train/training_time", training_time, collected_frames)
 
-        # evaluation
+        # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
