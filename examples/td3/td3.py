@@ -150,6 +150,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
         episode_rewards = tensordict["next", "episode_reward"][
             tensordict["next", "done"]
         ]
+
+        # logging
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
