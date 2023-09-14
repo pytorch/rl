@@ -297,8 +297,6 @@ class MultiAgentConvNet(nn.Module):
         >>>     share_params = True
         >>> )
         >>> print(cnn)
-        >>> print(result.shape)
-        >>> print(all(result[0,0,0] == result[0,0,1]))
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0): ConvNet(
@@ -312,7 +310,9 @@ class MultiAgentConvNet(nn.Module):
                 )
             )
         )
+        >>> print(result.shape)
         torch.Size([3, 2, 7, 2592])
+        >>> print(all(result[0,0,0] == result[0,0,1]))
         False
 
         Or multiple local networks identical in structure but with differing weights.
