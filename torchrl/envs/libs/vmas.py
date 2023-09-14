@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Dict, List, Optional, Union
 
 import torch
@@ -116,7 +121,7 @@ class VmasWrapper(_EnvWrapper):
                 raise TypeError("Env device is different from vmas device")
             kwargs["device"] = str(env.device)
         self.categorical_actions = categorical_actions
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, allow_done_after_reset=True)
 
     @property
     def lib(self):
