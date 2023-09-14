@@ -243,6 +243,7 @@ def _gym_to_torchrl_spec_transform(
                 if categorical_action_encoding
                 else torch.long
             )
+
             return (
                 MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
                 if categorical_action_encoding
