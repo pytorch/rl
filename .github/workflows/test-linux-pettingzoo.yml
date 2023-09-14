@@ -34,7 +34,7 @@ jobs:
 
         nvidia-smi
 
-        bash .circleci/unittest/linux_libs/scripts_pettingzoo/setup_env.sh
-        bash .circleci/unittest/linux_libs/scripts_pettingzoo/install.sh
-        bash .circleci/unittest/linux_libs/scripts_pettingzoo/run_test.sh
-        bash .circleci/unittest/linux_libs/scripts_pettingzoo/post_process.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/install.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/run_test.sh
+        bash .github/unittest/linux_libs/scripts_pettingzoo/post_process.sh
