@@ -239,23 +239,23 @@ class MultiAgentConvNet(nn.Module):
 
     Args:
         n_agents (int): number of agents.
-        centralised (bool): If `centralised` is True, each agent will use the inputs of all agents to compute its output
-            ,resulting in input of shape (*B, n_agents * channels, x, y). Otherwise, each agent will only use its data as input.
-        share_params (bool): If `share_params` is True, the same ConvNet will be used to make the forward pass
-            for all agents (homogeneous policies). Otherwise, each agent will use a different ConvNet to process
+        centralised (bool): If ``True``, each agent will use the inputs of all agents to compute its output, resulting in input of shape ``(*B, n_agents * channels, x, y)``. Otherwise, each agent will only use its data as input.
+        share_params (bool): If ``True``, the same :class:`~torchrl.modules.ConvNet` will be used to make the forward pass
+            for all agents (homogeneous policies). Otherwise, each agent will use a different :class:`~torchrl.modules.ConvNet` to process
             its input (heterogeneous policies).
         device (str or torch.device, optional): device to create the module on.
         num_cells (int or Sequence[int], optional): number of cells of every layer in between the input and output. If
             an integer is provided, every layer will have the same number of cells. If an iterable is provided,
-            the linear layers out_features will match the content of num_cells.
-        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the conv network.
-            default: 5
-        strides (int or Sequence[int]): Stride(s) of the conv network. If iterable, the length must match the
+            the linear layers ``out_features`` will match the content of ``num_cells``.
+        kernel_sizes (int, Sequence[Union[int, Sequence[int]]]): Kernel size(s) of the convolutional network.
+            Defaults to ``5``.
+        strides (int or Sequence[int]): Stride(s) of the convolutional network. If iterable, the length must match the
             depth, defined by the num_cells or depth arguments.
-            default: 2
+            Defaults to ``2``.
         activation_class (Type[nn.Module]): activation class to be used.
-            default: nn.ELU
-        **kwargs: for :class:`torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.Args:
+            Default to :class:`torch.nn.ELU`.
+        **kwargs: for :class:`~torchrl.modules.models.ConvNet` can be passed to customize the ConvNet.
+
 
     Examples:
         >>> import torch
