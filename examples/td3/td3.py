@@ -90,6 +90,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     eval_rollout_steps = cfg.collector.max_frames_per_traj // cfg.env.frame_skip
     eval_iter = cfg.logger.eval_iter
     frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
+    update_counter = 0
 
     sampling_start = time.time()
     for tensordict in collector:
@@ -115,6 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_losses,
             ) = ([], [])
             for _ in range(num_updates):
+                update_counter += 1
                 # sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
@@ -126,7 +128,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update critic
                 optimizer_critic.zero_grad()
-                update_actor = collected_frames % delayed_updates == 0
+                update_actor = update_counter % delayed_updates == 0
                 q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
