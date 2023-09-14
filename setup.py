@@ -235,7 +235,7 @@ def _main(argv):
             "checkpointing": [
                 "torchsnapshot",
             ],
-            "marl": ["vmas", "pettingzoo>=1.24.1"],
+            "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
         },
         zip_safe=False,
         classifiers=[
