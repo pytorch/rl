@@ -215,7 +215,6 @@ def make_ddpg_agent(cfg, train_env, eval_env, device):
             sigma_init=1.0,
             mean=0.0,
             std=0.1,
-            scale=cfg.network.noise_scale,
         ).to(device)
     else:
         raise NotImplementedError
