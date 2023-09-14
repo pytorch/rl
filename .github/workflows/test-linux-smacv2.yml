@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   unittests:
-    if: ${{ github.event.label.name == 'Environments' }}
+    if: contains(github.event.pull_request.labels.*.name, 'Environments')
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       repository: pytorch/rl
