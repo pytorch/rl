@@ -286,7 +286,7 @@ class TestWandbLogger:
         wandb_logger.log_hparams(config)
         for key, value in config.items():
             if isinstance(value, tuple):
-                value = list(value)  # wandb does not support tuples
+                value = list(value)  # wandb converts tuples to lists
             assert wandb_logger.experiment.config[key] == value
 
     def test_log_histogram(self, wandb_logger):
