@@ -39,7 +39,7 @@ network:
   hidden_sizes: [256, 256]
   activation: relu
   device: "cuda:0"
-  noise_type: "gaussian" # ou or gaussian
+  noise_type: "ou" # ou or gaussian
 
 # logging
 logger:
