@@ -5,7 +5,6 @@
 
 import copy
 import importlib
-import typing
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -23,9 +22,6 @@ from torchrl.envs.utils import _replace_last, check_marl_grouping, MarlGroupMapT
 
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
-
-if typing.TYPE_CHECKING and _has_pettingzoo:
-    import pettingzoo
 
 
 def _get_envs() -> List[str]:
