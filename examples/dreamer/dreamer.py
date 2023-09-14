@@ -24,7 +24,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives.dreamer import DreamerLoss, DreamerValueLoss
+from torchrl.objectives.dreamer import DreamerLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -144,7 +144,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
     )
-    value_loss = DreamerValueLoss(value_model)
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
@@ -339,7 +338,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # update value network
                 with autocast(dtype=torch.float16):
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
+                    value_loss_td, sampled_tensordict = dreamer_loss.value_loss(
+                        sampled_tensordict
+                    )
                 scaler_value.scale(value_loss_td["loss_value"]).backward()
                 scaler_value.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)

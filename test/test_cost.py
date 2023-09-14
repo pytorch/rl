@@ -103,7 +103,6 @@ from torchrl.objectives import (
     DistributionalDQNLoss,
     DQNLoss,
     DreamerLoss,
-    DreamerValueLoss,
     DTLoss,
     IQLLoss,
     KLPENPPOLoss,
@@ -6664,8 +6663,17 @@ class TestDreamer(LossModuleTestBase):
     def test_dreamer_value(self, device, discount_loss):
         tensordict = self._create_value_data(2, 3, 10, 5).to(device)
         value_model = self._create_value_model(10, 5).to(device)
-        loss_module = DreamerValueLoss(value_model, value_discount_loss=discount_loss)
-        loss_td, fake_data = loss_module(tensordict)
+        world_model = self._create_world_model_model(10, 5).to(device)
+        mb_env = self._create_mb_env(10, 5).to(device)
+        actor_model = self._create_actor_model(10, 5).to(device)
+        loss_module = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
+            value_discount_loss=discount_loss,
+        )
+        loss_td, fake_data = loss_module.value_loss(tensordict)
         assert loss_td.get("loss_value") is not None
         assert not fake_data.requires_grad
         loss = loss_td.get("loss_value")
@@ -6740,8 +6748,16 @@ class TestDreamer(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     def test_dreamer_value_tensordict_keys(self, device):
+        world_model = self._create_world_model_model(10, 5)
+        mb_env = self._create_mb_env(10, 5)
+        actor_model = self._create_actor_model(10, 5)
         value_model = self._create_value_model(10, 5)
-        loss_fn = DreamerValueLoss(value_model)
+        loss_fn = DreamerLoss(
+            world_model=world_model,
+            actor_model=actor_model,
+            value_model=value_model,
+            model_based_env=mb_env,
+        )
 
         default_keys = {
             "value": "state_value",

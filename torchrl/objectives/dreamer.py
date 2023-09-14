@@ -152,7 +152,7 @@ class DreamerLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.lmbda = lmbda
         # value
-        self.value_loss = value_loss if value_loss is not None else "l2"
+        self.value_loss_function = value_loss if value_loss is not None else "l2"
         self.value_gamma = value_gamma
         self.value_discount_loss = value_discount_loss
 
@@ -347,58 +347,14 @@ class DreamerLoss(LossModule):
         }
         self._value_estimator.set_keys(**tensor_keys)
 
+    def value_loss(self, fake_data) -> torch.Tensor:
+        """Dreamer Value Loss.
 
-class DreamerValueLoss(LossModule):
-    """Dreamer Value Loss.
+        Computes the loss of the dreamer value model. The value loss is computed
+        between the predicted value and the lambda target.
 
-    Computes the loss of the dreamer value model. The value loss is computed
-    between the predicted value and the lambda target.
-
-    Reference: https://arxiv.org/abs/1912.01603.
-
-    Args:
-        value_model (TensorDictModule): the value model.
-        value_loss (str, optional): the loss to use for the value loss.
-            Default: ``"l2"``.
-        value_discount_loss (bool, optional): if ``True``, the loss is discounted with a
-            gamma discount factor. Default: False.
-        value_gamma (float, optional): the gamma discount factor. Default: ``0.99``.
-
-    """
-
-    @dataclass
-    class _AcceptedKeys:
-        """Maintains default values for all configurable tensordict keys.
-
-        This class defines which tensordict keys can be set using '.set_keys(key_name=key_value)' and their
-        default values
-
-        Attributes:
-            value (NestedKey): The input tensordict key where the state value is expected.
-                Defaults to ``"state_value"``.
+        Reference: https://arxiv.org/abs/1912.01603.
         """
-
-        value: NestedKey = "state_value"
-
-    default_keys = _AcceptedKeys()
-
-    def __init__(
-        self,
-        value_model: TensorDictModule,
-        value_loss: Optional[str] = None,
-        value_discount_loss: bool = False,  # for consistency with paper
-        value_gamma: int = 0.99,
-    ):
-        super().__init__()
-        self.value_model = value_model
-        self.value_loss = value_loss if value_loss is not None else "l2"
-        self.gamma = value_gamma
-        self.discount_loss = value_discount_loss
-
-    def _forward_value_estimator_keys(self, **kwargs) -> None:
-        pass
-
-    def forward(self, fake_data) -> torch.Tensor:
         lambda_target = fake_data.get("lambda_target")
         tensordict_select = fake_data.select(*self.value_model.in_keys)
         self.value_model(tensordict_select)
@@ -414,7 +370,7 @@ class DreamerValueLoss(LossModule):
                     * distance_loss(
                         tensordict_select.get(self.tensor_keys.value),
                         lambda_target,
-                        self.value_loss,
+                        self.value_loss_function,
                     )
                 )
                 .sum((-1, -2))
@@ -425,7 +381,7 @@ class DreamerValueLoss(LossModule):
                 distance_loss(
                     tensordict_select.get(self.tensor_keys.value),
                     lambda_target,
-                    self.value_loss,
+                    self.value_loss_function,
                 )
                 .sum((-1, -2))
                 .mean()
