@@ -2,12 +2,17 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib
 import os
 from typing import Dict, Sequence, Union
 
 from torch import Tensor
 
 from .common import Logger
+
+_has_omgaconf = importlib.util.find_spec("omegaconf") is not None
+if _has_omgaconf:
+    from omegaconf import OmegaConf
 
 
 try:
@@ -99,8 +104,14 @@ class TensorboardLogger(Logger):
             cfg (DictConfig or dict): The configuration of the experiment.
 
         """
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(cfg.items())])
-        self.experiment.add_text("hparams", txt)
+        if type(cfg) is not dict and _has_omgaconf:
+            if not _has_omgaconf:
+                raise ImportError(
+                    "OmegaConf could not be imported. "
+                    "Cannot log hydra configs without OmegaConf."
+                )
+            cfg = OmegaConf.to_container(cfg, resolve=True)
+        self.experiment.add_hparams(cfg, metric_dict={})
 
     def __repr__(self) -> str:
         return f"TensorboardLogger(experiment={self.experiment.__repr__()})"
