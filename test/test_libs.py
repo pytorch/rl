@@ -49,8 +49,10 @@ from torchrl.envs import (
     ParallelEnv,
     RenameTransform,
 )
+from torchrl.envs.batched_envs import SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
+from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.envs.libs.gym import (
     _has_gym,
     _is_from_pixels,
@@ -66,7 +68,6 @@ from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import RoboHiveEnv
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
-from torchrl.envs.vec_env import _has_envpool, MultiThreadedEnvWrapper, SerialEnv
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
