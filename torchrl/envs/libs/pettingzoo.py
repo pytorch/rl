@@ -143,7 +143,8 @@ class PettingZooWrapper(_EnvWrapper):
     def __init__(
         self,
         env: Union[
-            "pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"
+            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
+            "pettingzoo.utils.env.AECEnv",  # noqa: F821
         ] = None,
         return_state: Optional[bool] = False,
         group_map: Optional[Union[MarlGroupMapType, Dict[str, List[str]]]] = None,
@@ -204,7 +205,10 @@ class PettingZooWrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
+        env: Union[
+            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
+            "pettingzoo.utils.env.AECEnv",  # noqa: F821
+        ],
     ):
         import pettingzoo
 
@@ -221,7 +225,10 @@ class PettingZooWrapper(_EnvWrapper):
     @set_gym_backend("gymnasium")
     def _make_specs(
         self,
-        env: Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"],
+        env: Union[
+            "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
+            "pettingzoo.utils.env.AECEnv",  # noqa: F821
+        ],
     ) -> None:
 
         # Create and check group map
@@ -843,7 +850,10 @@ class PettingZooEnv(PettingZooWrapper):
         task: str,
         parallel: bool,
         **kwargs,
-    ) -> Union["pettingzoo.utils.env.ParallelEnv", "pettingzoo.utils.env.AECEnv"]:
+    ) -> Union[
+        "pettingzoo.utils.env.ParallelEnv",  # noqa: F821
+        "pettingzoo.utils.env.AECEnv",  # noqa: F821
+    ]:
         self.task_name = task
 
         from pettingzoo.utils.all_modules import all_environments
