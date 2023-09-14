@@ -49,10 +49,10 @@ from torchrl.envs import (
     ParallelEnv,
     RenameTransform,
 )
-from torchrl.envs.batched_envs import _has_envpool, SerialEnv
+from torchrl.envs.batched_envs import SerialEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv, DMControlWrapper
-from torchrl.envs.libs.envpool import MultiThreadedEnvWrapper
+from torchrl.envs.libs.envpool import _has_envpool, MultiThreadedEnvWrapper
 from torchrl.envs.libs.gym import (
     _has_gym,
     _is_from_pixels,

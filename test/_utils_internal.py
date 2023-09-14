@@ -21,7 +21,8 @@ from tensordict import tensorclass
 from torchrl._utils import implement_for, seed_generator
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
-from torchrl.envs.batched_envs import _has_envpool, ParallelEnv, SerialEnv
+from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
+from torchrl.envs.libs.envpool import _has_envpool
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import (
     Compose,
