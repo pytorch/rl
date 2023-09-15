@@ -132,17 +132,6 @@ def make_replay_buffer(
 # -----
 
 
-def get_activation(cfg):
-    if cfg.network.activation == "relu":
-        return nn.ReLU
-    elif cfg.network.activation == "tanh":
-        return nn.Tanh
-    elif cfg.network.activation == "leaky_relu":
-        return nn.LeakyReLU
-    else:
-        raise NotImplementedError
-
-
 def make_ddpg_agent(cfg, train_env, eval_env, device):
     """Make DDPG agent."""
     # Define Actor Network
@@ -257,3 +246,24 @@ def make_optimizer(cfg, loss_module):
         weight_decay=cfg.optim.weight_decay,
     )
     return optimizer_actor, optimizer_critic
+
+
+# ====================================================================
+# General utils
+# ---------
+
+
+def log_metrics(logger, metrics, step):
+    for metric_name, metric_value in metrics.items():
+        logger.log_scalar(metric_name, metric_value, step)
+
+
+def get_activation(cfg):
+    if cfg.network.activation == "relu":
+        return nn.ReLU
+    elif cfg.network.activation == "tanh":
+        return nn.Tanh
+    elif cfg.network.activation == "leaky_relu":
+        return nn.LeakyReLU
+    else:
+        raise NotImplementedError
