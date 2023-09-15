@@ -23,6 +23,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
+    log_metrics,
     make_collector,
     make_environment,
     make_loss_module,
@@ -116,7 +117,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 q_losses,
             ) = ([], [])
             for _ in range(num_updates):
+
+                # Update actor every delayed_updates
                 update_counter += 1
+                update_actor = update_counter % delayed_updates == 0
+
                 # Sample from replay buffer
                 sampled_tensordict = replay_buffer.sample().clone()
 
@@ -128,7 +133,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
                 # Update critic
                 optimizer_critic.zero_grad()
-                update_actor = update_counter % delayed_updates == 0
                 q_loss.backward(retain_graph=update_actor)
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
@@ -154,27 +158,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
         ]
 
         # Logging
+        metrics_to_log = {}
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
             ]
-            logger.log_scalar(
-                "train/reward", episode_rewards.mean().item(), collected_frames
-            )
-            logger.log_scalar(
-                "train/episode_length",
-                episode_length.sum().item() / len(episode_length),
-                collected_frames,
+            metrics_to_log["train/reward"] = episode_rewards.mean().item()
+            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+                episode_length
             )
 
         if collected_frames >= init_random_frames:
-            logger.log_scalar("train/q_loss", np.mean(q_losses), step=collected_frames)
+            metrics_to_log["train/q_loss"] = np.mean(q_losses)
             if update_actor:
-                logger.log_scalar(
-                    "train/a_loss", np.mean(actor_losses), step=collected_frames
-                )
-            logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
-            logger.log_scalar("train/training_time", training_time, collected_frames)
+                metrics_to_log["train/a_loss"] = np.mean(actor_losses)
+            metrics_to_log["train/sampling_time"] = sampling_time
+            metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
@@ -188,9 +187,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                logger.log_scalar("eval/reward", eval_reward, step=collected_frames)
-                logger.log_scalar("eval/time", eval_time, step=collected_frames)
+                metrics_to_log["eval/reward"] = eval_reward
+                metrics_to_log["eval/time"] = eval_time
 
+        log_metrics(logger, metrics_to_log, collected_frames)
         sampling_start = time.time()
 
     collector.shutdown()
