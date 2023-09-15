@@ -594,7 +594,7 @@ Domain-specific
 Libraries
 ---------
 
-.. currentmodule:: torchrl.envs.libs
+.. currentmodule:: torchrl.envs
 
 TorchRL's mission is to make the training of control and decision algorithm as
 easy as it gets, irrespective of the simulator being used (if any).
@@ -670,28 +670,28 @@ the following function will return ``1`` when queried:
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    brax.BraxEnv
-    brax.BraxWrapper
-    dm_control.DMControlEnv
-    dm_control.DMControlWrapper
-    envpool.MultiThreadedEnv
-    envpool.MultiThreadedEnvWrapper
-    gym.GymEnv
-    gym.GymWrapper
-    gym.MOGymEnv
-    gym.MOGymWrapper
-    gym.set_gym_backend
-    gym.gym_backend
-    habitat.HabitatEnv
-    isaacgym.IsaacGymWrapper
-    isaacgym.IsaacGymEnv
-    jumanji.JumanjiEnv
-    jumanji.JumanjiWrapper
-    openml.OpenMLEnv
-    pettingzoo.PettingZooEnv
-    pettingzoo.PettingZooWrapper
-    robohive.RoboHiveEnv
-    smacv2.SMACv2Env
-    smacv2.SMACv2Wrapper
-    vmas.VmasEnv
-    vmas.VmasWrapper
+    BraxEnv
+    BraxWrapper
+    DMControlEnv
+    DMControlWrapper
+    GymEnv
+    GymWrapper
+    HabitatEnv
+    IsaacGymEnv
+    IsaacGymWrapper
+    JumanjiEnv
+    JumanjiWrapper
+    MOGymEnv
+    MOGymWrapper
+    MultiThreadedEnv
+    MultiThreadedEnvWrapper
+    OpenMLEnv
+    PettingZooEnv
+    PettingZooWrapper
+    RoboHiveEnv
+    SMACv2Env
+    SMACv2Wrapper
+    VmasEnv
+    VmasWrapper
+    gym_backend
+    set_gym_backend
