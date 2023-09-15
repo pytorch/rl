@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 
 import os
 import warnings
@@ -11,21 +12,8 @@ from torch import Tensor
 
 from .common import Logger
 
-
-try:
-    import wandb
-
-    _has_wandb = True
-except ImportError:
-    _has_wandb = False
-
-
-try:
-    from omegaconf import OmegaConf
-
-    _has_omgaconf = True
-except ImportError:
-    _has_omgaconf = False
+_has_wandb = importlib.util.find_spec("wandb") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class WandbLogger(Logger):
@@ -92,11 +80,13 @@ class WandbLogger(Logger):
         Returns:
             WandbLogger: The wandb experiment logger.
         """
+        if not _has_wandb:
+            raise ImportError("Wandb is not installed")
+        import wandb
+
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 
-        if not _has_wandb:
-            raise ImportError("Wandb is not installed")
         return wandb.init(**self._wandb_kwargs)
 
     def log_scalar(self, name: str, value: float, step: Optional[int] = None) -> None:
@@ -124,6 +114,8 @@ class WandbLogger(Logger):
                 (default is 'mp4') and 'fps' (default: 6). Other kwargs are
                 passed as-is to the :obj:`experiment.log` method.
         """
+        import wandb
+
         # check for correct format of the video tensor ((N), T, C, H, W)
         # check that the color channel (C) is either 1 or 3
         if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
@@ -166,12 +158,14 @@ class WandbLogger(Logger):
             cfg (DictConfig or dict): The configuration of the experiment.
 
         """
-        if type(cfg) is not dict and _has_omgaconf:
-            if not _has_omgaconf:
+        if type(cfg) is not dict and _has_omegaconf:
+            if not _has_omegaconf:
                 raise ImportError(
                     "OmegaConf could not be imported. "
                     "Cannot log hydra configs without OmegaConf."
                 )
+            from omegaconf import OmegaConf
+
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.config.update(cfg, allow_val_change=True)
 
@@ -190,6 +184,8 @@ class WandbLogger(Logger):
             bins (str): One of {‘tensorflow’,’auto’, ‘fd’, …}. This determines how the bins are made. You can find other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
 
         """
+        import wandb
+
         num_bins = kwargs.pop("bins", None)
         step = kwargs.pop("step", None)
         extra_kwargs = {}

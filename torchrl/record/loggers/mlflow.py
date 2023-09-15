@@ -2,37 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import importlib.util
 
 import os
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional, Sequence, Union
 
-try:
-    import torchvision
-
-    _has_tv = True
-except ImportError:
-    _has_tv = False
-
 from torch import Tensor
 
-from .common import Logger
+from torchrl.record.loggers.common import Logger
 
-MLFLOW_ERR = None
-try:
-    import mlflow
+_has_tv = importlib.util.find_spec("torchvision") is not None
 
-    _has_mlflow = True
-except ImportError as err:
-    _has_mlflow = False
-    MLFLOW_ERR = err
-
-try:
-    from omegaconf import OmegaConf
-
-    _has_omgaconf = True
-except ImportError:
-    _has_omgaconf = False
+_has_mlflow = importlib.util.find_spec("mlflow") is not None
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 class MLFlowLogger(Logger):
@@ -50,6 +33,8 @@ class MLFlowLogger(Logger):
         tags: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
+        import mlflow
+
         self._mlflow_kwargs = {
             "name": exp_name,
             "artifact_location": tracking_uri,
@@ -59,14 +44,16 @@ class MLFlowLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
         self.video_log_counter = 0
 
-    def _create_experiment(self) -> "mlflow.ActiveRun":
+    def _create_experiment(self) -> "mlflow.ActiveRun":  # noqa
+        import mlflow
+
         """Creates an mlflow experiment.
 
         Returns:
             mlflow.ActiveRun: The mlflow experiment object.
         """
         if not _has_mlflow:
-            raise ImportError("MLFlow is not installed") from MLFLOW_ERR
+            raise ImportError("MLFlow is not installed")
         self.id = mlflow.create_experiment(**self._mlflow_kwargs)
         return mlflow.start_run(experiment_id=self.id)
 
@@ -79,6 +66,8 @@ class MLFlowLogger(Logger):
             step (int, optional): The step at which the scalar is logged.
                 Defaults to None.
         """
+        import mlflow
+
         mlflow.set_experiment(experiment_id=self.id)
         mlflow.log_metric(key=name, value=value, step=step)
 
@@ -92,6 +81,9 @@ class MLFlowLogger(Logger):
             **kwargs: Other keyword arguments. By construction, log_video
                 supports 'step' (integer indicating the step index) and 'fps' (default: 6).
         """
+        import mlflow
+        import torchvision
+
         if not _has_tv:
             raise ImportError(
                 "Loggin a video with MLFlow requires torchvision to be installed."
@@ -119,8 +111,11 @@ class MLFlowLogger(Logger):
         Args:
             cfg (DictConfig or dict): The configuration of the experiment.
         """
+        import mlflow
+        from omegaconf import OmegaConf
+
         mlflow.set_experiment(experiment_id=self.id)
-        if type(cfg) is not dict and _has_omgaconf:
+        if type(cfg) is not dict and _has_omegaconf:
             cfg = OmegaConf.to_container(cfg, resolve=True)
         mlflow.log_params(cfg)
 

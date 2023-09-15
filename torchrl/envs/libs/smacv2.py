@@ -19,15 +19,14 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 
-from torchrl.envs.utils import ACTION_MASK_ERROR
-
+from torchrl.envs.utils import _classproperty, ACTION_MASK_ERROR
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
 
 
 def _get_envs():
     if not _has_smacv2:
-        return []
+        raise ImportError("SMAC-v2 is not installed in your virtual environment.")
     from smacv2.env.starcraft2.maps import smac_maps
 
     return list(smac_maps.get_smac_map_registry().keys())
@@ -174,7 +173,12 @@ class SMACv2Wrapper(_EnvWrapper):
 
     git_url = "https://github.com/oxwhirl/smacv2"
     libname = "smacv2"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_smacv2:
+            return
+        yield from _get_envs()
 
     def __init__(
         self,
@@ -259,8 +263,8 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _make_observation_spec(self) -> CompositeSpec:
         obs_spec = BoundedTensorSpec(
-            minimum=-1.0,
-            maximum=1.0,
+            low=-1.0,
+            high=1.0,
             shape=torch.Size([self.n_agents, self.get_obs_size()]),
             device=self.device,
             dtype=torch.float32,
@@ -274,15 +278,15 @@ class SMACv2Wrapper(_EnvWrapper):
                     2, dtype=torch.bool, device=self.device
                 ),
                 "dead_allies": BoundedTensorSpec(
-                    minimum=0,
-                    maximum=self.n_agents,
+                    low=0,
+                    high=self.n_agents,
                     dtype=torch.long,
                     device=self.device,
                     shape=(),
                 ),
                 "dead_enemies": BoundedTensorSpec(
-                    minimum=0,
-                    maximum=self.n_enemies,
+                    low=0,
+                    high=self.n_enemies,
                     dtype=torch.long,
                     device=self.device,
                     shape=(),
@@ -302,8 +306,8 @@ class SMACv2Wrapper(_EnvWrapper):
                     shape=torch.Size((self.n_agents,)),
                 ),
                 "state": BoundedTensorSpec(
-                    minimum=-1.0,
-                    maximum=1.0,
+                    low=-1.0,
+                    high=1.0,
                     shape=torch.Size((self.get_state_size(),)),
                     device=self.device,
                     dtype=torch.float32,
@@ -448,6 +452,15 @@ class SMACv2Wrapper(_EnvWrapper):
             return "zealot"
         else:
             raise AssertionError(f"Agent type {agent_info.unit_type} unidentified")
+
+    # This patches the bug in https://github.com/oxwhirl/smacv2/issues/33
+    def render(self, mode: str = "human"):
+        import smacv2
+
+        if isinstance(self._env, smacv2.env.StarCraftCapabilityEnvWrapper):
+            return self._env.env.render(mode=mode)
+        else:
+            return self._env.render(mode=mode)
 
 
 class SMACv2Env(SMACv2Wrapper):
@@ -618,7 +631,7 @@ class SMACv2Env(SMACv2Wrapper):
         seed: Optional[int] = None,
         **kwargs,
     ) -> "smacv2.env.StarCraft2Env":  # noqa: F821
-        import smacv2
+        import smacv2.env
 
         if capability_config is not None:
             env = smacv2.env.StarCraftCapabilityEnvWrapper(

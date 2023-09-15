@@ -2,7 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import importlib
+import importlib.util
+
 import os
 from typing import Dict, Sequence, Union
 
@@ -10,15 +11,8 @@ from torch import Tensor
 
 from .common import Logger
 
+_has_tb = importlib.util.find_spec("tensorboard") is not None
 _has_omgaconf = importlib.util.find_spec("omegaconf") is not None
-
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
 
 
 class TensorboardLogger(Logger):
@@ -37,7 +31,7 @@ class TensorboardLogger(Logger):
 
         self._has_imported_moviepy = False
 
-    def _create_experiment(self) -> "SummaryWriter":
+    def _create_experiment(self) -> "SummaryWriter":  # noqa
         """Creates a tensorboard experiment.
 
         Args:
@@ -49,6 +43,8 @@ class TensorboardLogger(Logger):
         """
         if not _has_tb:
             raise ImportError("torch.utils.tensorboard could not be imported")
+
+        from torch.utils.tensorboard import SummaryWriter
 
         log_dir = str(os.path.join(self.log_dir, self.exp_name))
         return SummaryWriter(log_dir=log_dir)

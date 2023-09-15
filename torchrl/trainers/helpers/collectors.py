@@ -15,8 +15,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.data import MultiStep
-from torchrl.envs import ParallelEnv
+from torchrl.data.postprocs import MultiStep
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.common import EnvBase
 from torchrl.envs.utils import ExplorationType
 
