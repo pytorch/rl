@@ -24,6 +24,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
+    log_metrics,
     make_collector,
     make_environment,
     make_loss_module,
@@ -159,36 +160,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
         ]
 
         # Logging
+        metrics_to_log = {}
         if len(episode_rewards) > 0:
             episode_length = tensordict["next", "step_count"][
                 tensordict["next", "done"]
             ]
-            logger.log_scalar(
-                "train/reward", episode_rewards.mean().item(), collected_frames
-            )
-            logger.log_scalar(
-                "train/episode_length",
-                episode_length.sum().item() / len(episode_length),
-                collected_frames,
+            metrics_to_log["train/reward"] = episode_rewards.mean().item()
+            metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
+                episode_length
             )
         if collected_frames >= init_random_frames:
-            logger.log_scalar(
-                "train/q_loss", losses.get("loss_qvalue").mean(), step=collected_frames
-            )
-            logger.log_scalar(
-                "train/a_loss", losses.get("loss_actor").mean(), step=collected_frames
-            )
-            logger.log_scalar(
-                "train/alpha_loss",
-                losses.get("loss_alpha").mean(),
-                step=collected_frames,
-            )
-            logger.log_scalar("train/alpha", loss_td["alpha"], step=collected_frames)
-            logger.log_scalar(
-                "train/entropy", loss_td["entropy"], step=collected_frames
-            )
-            logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
-            logger.log_scalar("train/training_time", training_time, collected_frames)
+            metrics_to_log["train/q_loss"] = losses.get("loss_qvalue").mean().item()
+            metrics_to_log["train/actor_loss"] = losses.get("loss_actor").mean().item()
+            metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha").mean().item()
+            metrics_to_log["train/alpha"] = loss_td["alpha"].item()
+            metrics_to_log["train/entropy"] = loss_td["entropy"].item()
+            metrics_to_log["train/sampling_time"] = sampling_time
+            metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
         if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
@@ -202,8 +190,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 )
                 eval_time = time.time() - eval_start
                 eval_reward = eval_rollout["next", "reward"].sum(-2).mean().item()
-                logger.log_scalar("eval/reward", eval_reward, step=collected_frames)
-                logger.log_scalar("eval/time", eval_time, step=collected_frames)
+                metrics_to_log["eval/reward"] = eval_reward
+                metrics_to_log["eval/time"] = eval_time
+
+        log_metrics(logger, metrics_to_log, collected_frames)
+        sampling_start = time.time()
 
     collector.shutdown()
     end_time = time.time()
