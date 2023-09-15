@@ -371,7 +371,11 @@ class TestGym:
                 )
 
     @implement_for("gym", "0.18", "0.27.0")
-    def test_vecenvs(self):  # noqa: F811
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_wrapper(self):  # noqa: F811
         import gym
         from _utils_internal import rollout_consistency_assertion
 
@@ -391,6 +395,13 @@ class TestGym:
             )
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
+
+        @implement_for("gym", "0.18", "0.27.0")
+        @pytest.mark.parametrize(
+            "envname",
+            ["CartPole-v1", "HalfCheetah-v4"],
+        )
+        def test_vecenvs_env(self):  # noqa: F811
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 check_env_specs(env)
@@ -405,7 +416,12 @@ class TestGym:
                 check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
-    def test_vecenvs(self):  # noqa: F811
+    def test_vecenvs_wrapper(self):  # noqa: F811
+        # skipping tests for older versions of gym
+        return
+
+    @implement_for("gym", None, "0.18")
+    def test_vecenvs_env(self):  # noqa: F811
         # skipping tests for older versions of gym
         return
 
