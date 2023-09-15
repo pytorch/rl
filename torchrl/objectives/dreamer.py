@@ -10,6 +10,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
+from torch.cuda.amp import autocast
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
@@ -163,15 +164,23 @@ class DreamerLoss(LossModule):
             )
 
     def forward(self, tensordict: TensorDict) -> torch.Tensor:
-        result_tensordict, sampled_tensordict_world = self.model_loss(tensordict)
-        # with autocast(dtype=torch.float16):
-        #     actor_tensordict, sampled_tensordict_actor = self.actor_loss(
-        #         sampled_tensordict_world
-        #     )
-        # result_tensordict.update(actor_tensordict)
+        world_tensordict, sampled_tensordict_world = self.model_loss(tensordict)
+        with autocast(dtype=torch.float16):
+            actor_tensordict, sampled_tensordict_actor = self.actor_loss(
+                sampled_tensordict_world
+            )
+            value_tensordict, sampled_tensordict_value = self.value_loss(
+                sampled_tensordict_actor
+            )
+        # result_tensordict.update(actor_tensordict) # Ultimately we could all lossed together everything,
+        # result_tensordict.update(value_tensordict) # but for the sake of simplicity of demonstration I pass the result as raw as possible
         return (
-            result_tensordict,
+            world_tensordict,
+            actor_tensordict,
+            value_tensordict,
             sampled_tensordict_world,
+            sampled_tensordict_actor,
+            sampled_tensordict_value,
         )
 
     def model_loss(self, tensordict: TensorDict) -> torch.Tensor:

@@ -6549,7 +6549,7 @@ class TestDreamer(LossModuleTestBase):
             delayed_clamp=delayed_clamp,
             free_nats=free_nats,
         )
-        loss_td, _ = loss_module(tensordict)
+        loss_td, _ = loss_module.model_loss(tensordict)
         for loss_str, lmbda in zip(
             ["loss_model_kl", "loss_model_reco", "loss_model_reward"],
             [lambda_kl, lambda_reco, lambda_reward],
