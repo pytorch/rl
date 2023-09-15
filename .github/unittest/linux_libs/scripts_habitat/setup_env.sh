@@ -46,7 +46,17 @@ pip3 install "cython<3"
 conda install -c anaconda cython="<3.0.0" -y
 
 
-# 3. Install Conda dependencies
+# 3. Install git LFS
+mkdir git_lfs
+wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-amd64-v2.9.0.tar.gz --directory-prefix git_lfs
+cd git_lfs
+tar -xf git-lfs-linux-amd64-v2.9.0.tar.gz
+chmod 755 install.sh
+./install.sh
+cd ..
+git lfs install
+
+# 4. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
 echo "  - python=${PYTHON_VERSION}" >> "${this_dir}/environment.yml"
 cat "${this_dir}/environment.yml"
