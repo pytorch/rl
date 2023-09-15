@@ -28,9 +28,9 @@ from torchrl.envs.utils import (
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
 
-def _get_envs() -> List[str]:
+def _get_envs():
     if not _has_pettingzoo:
-        return []
+        raise ImportError("PettingZoo is not installed in your virtual environment.")
     from pettingzoo.utils.all_modules import all_environments
 
     return list(all_environments.keys())

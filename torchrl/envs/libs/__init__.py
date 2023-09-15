@@ -3,5 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .brax import BraxEnv
-from .dm_control import DMControlEnv
+from .brax import BraxEnv, BraxWrapper
+from .dm_control import DMControlEnv, DMControlWrapper
+from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
+from .gym import GymEnv, GymWrapper
+from .habitat import HabitatEnv
+from .isaacgym import IsaacGymEnv, IsaacGymWrapper
+from .jumanji import JumanjiEnv, JumanjiWrapper
+from .openml import OpenMLEnv
+from .robohive import RoboHiveEnv
+from .smacv2 import SMACv2Env, SMACv2Wrapper
+from .vmas import VmasEnv, VmasWrapper

@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -32,9 +32,9 @@ except ImportError as err:
 __all__ = ["VmasWrapper", "VmasEnv"]
 
 
-def _get_envs() -> List:
+def _get_envs():
     if not _has_vmas:
-        return []
+        raise ImportError("SMAC-v2 is not installed in your virtual environment.")
     all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
     # TODO heterogenous spaces
     # For now torchrl does not support heterogenous spaces (Tple(Box)) so many OpenAI MPE scenarios do not work

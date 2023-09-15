@@ -27,7 +27,7 @@ _has_smacv2 = importlib.util.find_spec("smacv2") is not None
 
 def _get_envs():
     if not _has_smacv2:
-        return []
+        raise ImportError("SMAC-v2 is not installed in your virtual environment.")
     from smacv2.env.starcraft2.maps import smac_maps
 
     return list(smac_maps.get_smac_map_registry().keys())

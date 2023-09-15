@@ -3,23 +3,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import functools
+import importlib.util
 
 import torch
 
-from torchrl.data import DEVICE_TYPING
-from torchrl.envs import EnvBase
+from torchrl.data.utils import DEVICE_TYPING
+from torchrl.envs.common import EnvBase
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import _classproperty
 
-IMPORT_ERR = None
-try:
-    import habitat
-    import habitat.gym  # noqa
-
-    _has_habitat = True
-except ImportError as err:
-    _has_habitat = False
-    IMPORT_ERR = err
+_has_habitat = importlib.util.find_spec("habitat") is not None
 
 
 def _wrap_import_error(fun):
@@ -31,7 +24,7 @@ def _wrap_import_error(fun):
                 "it or solving the import bugs (see attached error message). "
                 "Refer to TorchRL's knowledge base in the documentation to "
                 "debug habitat installation."
-            ) from IMPORT_ERR
+            )
         return fun(*args, **kwargs)
 
     return new_fun
@@ -55,6 +48,9 @@ class HabitatEnv(GymEnv):
     @_wrap_import_error
     @set_gym_backend("gym")
     def __init__(self, env_name, **kwargs):
+        import habitat  # noqa
+        import habitat.gym  # noqa
+
         device_num = torch.device(kwargs.pop("device", 0)).index
         kwargs["override_options"] = [
             f"habitat.simulator.habitat_sim_v0.gpu_device_id={device_num}",

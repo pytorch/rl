@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import collections
-import os
 
 import importlib
+import os
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+
+from torchrl._utils import VERBOSE
 
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
@@ -20,8 +22,6 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
-
-from torchrl._utils import VERBOSE
 
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from torchrl.envs.gym_like import GymLikeEnv
@@ -33,7 +33,7 @@ if torch.cuda.device_count() > 1:
     if VERBOSE:
         print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
-_has_dmc = _has_dm_control = importlib.util.find_spec('dm_control') is not None
+_has_dmc = _has_dm_control = importlib.util.find_spec("dm_control") is not None
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -297,7 +297,7 @@ class DMControlEnv(DMControlWrapper):
             del kwargs["pixels_only"]
 
         if not _has_dmc:
-            raise RuntimeError(
+            raise ImportError(
                 f"dm_control not found, unable to create {env_name}:"
                 f" {task_name}. Consider downloading and installing "
                 f"dm_control from {self.git_url}"

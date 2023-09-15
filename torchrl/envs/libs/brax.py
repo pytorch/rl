@@ -17,7 +17,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.utils import _classproperty
 
-_has_brax = importlib.util.find_spec('brax') is not None
+_has_brax = importlib.util.find_spec("brax") is not None
 from torchrl.envs.libs.jax_utils import (
     _extract_spec,
     _ndarray_to_tensor,
@@ -26,13 +26,15 @@ from torchrl.envs.libs.jax_utils import (
     _tensordict_to_object,
     _tree_flatten,
     _tree_reshape,
-    )
+)
+
 
 def _get_envs():
+    if not _has_brax:
+        raise ImportError("BRAX is not installed in your virtual environment.")
+
     import brax.envs
 
-    if not _has_brax:
-        return []
     return list(brax.envs._envs.keys())
 
 
@@ -88,6 +90,7 @@ class BraxWrapper(_EnvWrapper):
 
         cls._lib = brax
         return brax
+
     @_classproperty
     def jax(cls):
         if cls._jax is not None:
@@ -133,7 +136,7 @@ class BraxWrapper(_EnvWrapper):
             raise NotImplementedError("TODO")
         return env
 
-    def _make_state_spec(self, env: "brax.envs.env.Env"):
+    def _make_state_spec(self, env: "brax.envs.env.Env"):  # noqa: F821
         jax = self.jax
 
         key = jax.random.PRNGKey(0)
@@ -330,9 +333,9 @@ class BraxEnv(BraxWrapper):
         self,
         env_name: str,
         **kwargs,
-    ) -> "brax.envs.env.Env":
+    ) -> "brax.envs.env.Env":  # noqa: F821
         if not _has_brax:
-            raise RuntimeError(
+            raise ImportError(
                 f"brax not found, unable to create {env_name}. "
                 f"Consider downloading and installing brax from"
                 f" {self.git_url}"
@@ -401,15 +404,6 @@ class _BraxEnvStep(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, _, grad_next_obs, grad_next_reward, *grad_next_qp_values):
-
-        # build gradient tensordict with zeros in fields with no grad
-        # if grad_next_reward is None:
-        #     raise RuntimeError("grad_next_reward")
-        #     grad_next_reward = torch.zeros((*ctx.env.batch_size, 1), device=ctx.env.device)
-        # if grad_next_obs is None:
-        #     raise RuntimeError("grad_next_obs")
-        # if any(val is None for val in grad_next_qp_values):
-        #     raise RuntimeError("grad_next_qp_values")
 
         pipeline_state = dict(
             zip(ctx.next_state.get("pipeline_state").keys(), grad_next_qp_values)

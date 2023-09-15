@@ -12,9 +12,8 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs import make_composite_from_td
 from torchrl.envs.libs.gym import GymWrapper
-from torchrl.envs.utils import _classproperty
+from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -35,6 +34,12 @@ class IsaacGymWrapper(GymWrapper):
         has GPUs available and the required setup for IsaacGym (eg, Ubuntu 20.04).
 
     """
+
+    @property
+    def lib(self):
+        import isaacgym
+
+        return isaacgym
 
     def __init__(
         self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821

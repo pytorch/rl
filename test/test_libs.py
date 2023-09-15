@@ -660,6 +660,11 @@ ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
 
 @pytest.mark.skipif(not _has_envpool, reason="No envpool library found")
 class TestEnvPool:
+    def test_lib(self):
+        import envpool
+
+        assert MultiThreadedEnvWrapper.lib is envpool
+
     @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     def test_env_wrapper_creation(self, env_name):
         env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
