@@ -15,10 +15,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
 from torchrl.data import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import (
-    _gym_to_torchrl_spec_transform,
-    GymEnv,
-)
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_robohive = importlib.util.find_spec("robohive") is not None
