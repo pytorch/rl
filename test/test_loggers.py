@@ -36,7 +36,8 @@ def tb_logger(tmp_path_factory):
     del logger
 
 
-def get_example_config():
+@fixture
+def config():
     return {
         "value": "value",
         "nested": {"inner": 3, "value": "value"},
