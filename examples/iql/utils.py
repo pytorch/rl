@@ -17,6 +17,7 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     RewardScaling,
+    RewardSum,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
@@ -42,6 +43,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
+            RewardSum(),
         ),
     )
     return transformed_env
