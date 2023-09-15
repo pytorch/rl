@@ -6,6 +6,7 @@ import abc
 import argparse
 
 import itertools
+import sys
 from copy import copy
 from functools import partial
 
@@ -7058,6 +7059,11 @@ class TestVecNorm:
         queue_in.close()
         del parallel_env, queue_out, queue_in
 
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 11),
+        reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+        "See https://github.com/python/cpython/pull/108568 for info and fix.",
+    )
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
