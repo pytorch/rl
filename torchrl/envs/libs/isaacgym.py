@@ -154,11 +154,11 @@ class IsaacGymEnv(IsaacGymWrapper):
 
     """
 
-    @property
-    def available_envs(cls) -> List[str]:
+    @classmethod
+    def available_envs(cls):
         import isaacgymenvs  # noqa
 
-        return list(isaacgymenvs.tasks.isaacgym_task_map.keys())
+        yield from isaacgymenvs.tasks.isaacgym_task_map.keys()
 
     def __init__(self, task=None, *, env=None, num_envs, device, **kwargs):
         if env is not None and task is not None:

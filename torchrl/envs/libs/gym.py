@@ -488,9 +488,9 @@ class GymWrapper(GymLikeEnv):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @_classproperty
-    def available_envs(cls) -> List[str]:
-        return _get_envs()
+    @classmethod
+    def available_envs(cls):
+        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:

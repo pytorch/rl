@@ -139,9 +139,9 @@ class PettingZooWrapper(_EnvWrapper):
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
     libname = "pettingzoo"
 
-    @property
-    def available_envs(self):
-        return _get_envs()
+    @classmethod
+    def available_envs(cls):
+        yield from _get_envs()
 
     def __init__(
         self,
