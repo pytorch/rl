@@ -31,7 +31,6 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
-from torchrl.envs.utils import _classproperty
 
 DEFAULT_GYM = None
 IMPORT_ERROR = None

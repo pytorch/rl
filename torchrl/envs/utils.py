@@ -54,12 +54,6 @@ def _convert_exploration_type(*, exploration_mode, exploration_type):
         return ExplorationType.from_str(exploration_mode)
     return exploration_type
 
-
-class _classproperty(property):
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
-
-
 def step_mdp(
     tensordict: TensorDictBase,
     next_tensordict: TensorDictBase = None,
