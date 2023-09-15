@@ -1750,20 +1750,9 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         self._constructor_kwargs = kwargs
         self._check_kwargs(kwargs)
         self._env = self._build_env(**kwargs)  # writes the self._env attribute
-        if self.batch_size in (None, torch.Size([])):
-            self.__dict__["_batch_size"] = self._get_batch_size(self._env)
         self._make_specs(self._env)  # writes the self._env attribute
         self.is_closed = False
         self._init_env()  # runs all the steps to have a ready-to-use env
-
-    def _get_batch_size(self, env):
-        """Batch-size adjustment.
-
-        This is executed after super().__init__(), ie. when the batch-size has been set.
-        By default, it is a no-op. For some envs (batched envs) we adapt the batch-size
-        according to the number of sub-envs. See GymWrapper._get_batch_size for an example.
-        """
-        return self.batch_size
 
     @abc.abstractmethod
     def _check_kwargs(self, kwargs: Dict):

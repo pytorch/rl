@@ -485,6 +485,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         from_pixels: bool = False,
         pixels_only: bool = False,
     ) -> "gym.core.Env":  # noqa: F821
+        self.batch_size = self._get_batch_size(env)
         env_from_pixels = _is_from_pixels(env)
         from_pixels = from_pixels or env_from_pixels
         self.from_pixels = from_pixels
