@@ -36,7 +36,7 @@ def tb_logger(tmp_path_factory):
     del logger
 
 
-@fixture
+@pytest.fixture
 def config():
     return {
         "value": "value",
@@ -111,8 +111,7 @@ class TestTensorboard:
                 step=steps[i] if steps else None,
             )
 
-    def test_log_hparams(self, tb_logger):
-        config = get_example_config()
+    def test_log_hparams(self, tb_logger, config):
         del config["nested"]  # not supported in tensorboard
         del config["list"]  # not supported in tensorboard
         del config["tuple"]  # not supported in tensorboard
@@ -197,12 +196,11 @@ class TestCSVLogger:
                 data = torch.randn(10)
                 logger.log_histogram("hist", data, step=0, bins=2)
 
-    def test_log_config(self, tmpdir):
+    def test_log_config(self, tmpdir, config):
         torch.manual_seed(0)
 
         exp_name = "ramala"
         logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
-        config = get_example_config()
         logger.log_hparams(cfg=config)
 
         with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
@@ -276,8 +274,7 @@ class TestWandbLogger:
                 video=video_wrong_format,
             )
 
-    def test_log_hparams(self, wandb_logger):
-        config = get_example_config()
+    def test_log_hparams(self, wandb_logger, config):
         wandb_logger.log_hparams(config)
         for key, value in config.items():
             if isinstance(value, tuple):
@@ -367,9 +364,8 @@ class TestMLFlowLogger:
             data = torch.randn(10)
             logger.log_histogram("hist", data, step=0, bins=2)
 
-    def test_log_hparams(self, mlflow_fixture):
+    def test_log_hparams(self, mlflow_fixture, config):
         logger, client = mlflow_fixture
-        config = get_example_config()
         logger.log_hparams(config)
 
 

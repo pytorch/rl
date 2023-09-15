@@ -11,8 +11,6 @@ from torch import Tensor
 from .common import Logger
 
 _has_omgaconf = importlib.util.find_spec("omegaconf") is not None
-if _has_omgaconf:
-    from omegaconf import OmegaConf
 
 
 try:
@@ -110,6 +108,8 @@ class TensorboardLogger(Logger):
                     "OmegaConf could not be imported. "
                     "Cannot log hydra configs without OmegaConf."
                 )
+            from omegaconf import OmegaConf
+
             cfg = OmegaConf.to_container(cfg, resolve=True)
         self.experiment.add_hparams(cfg, metric_dict={})
 
