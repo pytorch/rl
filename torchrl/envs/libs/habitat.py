@@ -9,7 +9,7 @@ import torch
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs import EnvBase
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import classproperty
+from torchrl.envs.utils import _classproperty
 
 IMPORT_ERR = None
 try:
@@ -61,7 +61,7 @@ class HabitatEnv(GymEnv):
         ]
         super().__init__(env_name=env_name, **kwargs)
 
-    @classproperty
+    @_classproperty
     def available_envs(cls):
         yield from _get_available_envs()
 

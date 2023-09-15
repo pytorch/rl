@@ -213,7 +213,6 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
 
 Multi-agent environments
@@ -501,6 +500,54 @@ to be able to create this other composition:
     VIPRewardTransform
     VIPTransform
 
+Environments with masked actions
+--------------------------------
+
+In some environments with discrete actions, the actions available to the agent might change throughout execution.
+In such cases the environments will output an action mask (under the ``"action_mask"`` key by default).
+This mask needs to be used to filter out unavailable actions for that step.
+
+If you are using a custom policy you can pass this mask to your probability distribution like so:
+
+.. code-block::
+   :caption: Categorical policy with action mask
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.modules import MaskedCategorical
+        >>> module = TensorDictModule(
+        >>>     nn.Linear(in_feats, out_feats),
+        >>>     in_keys=["observation"],
+        >>>     out_keys=["logits"],
+        >>> )
+        >>> dist = ProbabilisticTensorDictModule(
+        >>>     in_keys={"logits": "logits", "mask": "action_mask"},
+        >>>     out_keys=["action"],
+        >>>     distribution_class=MaskedCategorical,
+        >>> )
+        >>> actor = TensorDictSequential(module, dist)
+
+If you want to use a default policy, you will need to wrap your environment in the :class:`~torchrl.envs.transforms.ActionMask`
+transform. This transform can take care of updating the action mask in the action spec in order for the default policy
+to always know what the latest available actions are. You can do this like so:
+
+.. code-block::
+   :caption: How to use the action mask transform
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.envs.transforms import TransformedEnv, ActionMask
+        >>> env = TransformedEnv(
+        >>>     your_base_env
+        >>>     ActionMask(action_key="action", mask_key="action_mask"),
+        >>> )
+
+.. note::
+  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  and not to its sub-environments.
+
+
+
 Recorders
 ---------
 
@@ -628,6 +675,8 @@ the following function will return ``1`` when queried:
     brax.BraxWrapper
     dm_control.DMControlEnv
     dm_control.DMControlWrapper
+    envpool.MultiThreadedEnv
+    envpool.MultiThreadedEnvWrapper
     gym.GymEnv
     gym.GymWrapper
     gym.terminal_obs_reader
@@ -636,10 +685,15 @@ the following function will return ``1`` when queried:
     gym.set_gym_backend
     gym.gym_backend
     habitat.HabitatEnv
+    isaacgym.IsaacGymWrapper
+    isaacgym.IsaacGymEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
     pettingzoo.PettingZooEnv
     pettingzoo.PettingZooWrapper
+    robohive.RoboHiveEnv
+    smacv2.SMACv2Env
+    smacv2.SMACv2Wrapper
     vmas.VmasEnv
     vmas.VmasWrapper

@@ -16,10 +16,7 @@ import torch
 from tensordict import TensorDictBase
 from torchrl.envs.batched_envs import CloudpickleWrapper
 
-try:
-    from torch.utils._contextlib import _DecoratorContextManager
-except ModuleNotFoundError:
-    from torchrl._utils import _DecoratorContextManager
+from torchrl.envs.utils import _classproperty
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -41,6 +38,12 @@ from torchrl.envs.gym_like import (
     GymLikeEnv,
 )
 from torchrl.envs.utils import _classproperty
+from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+
+try:
+    from torch.utils._contextlib import _DecoratorContextManager
+except ModuleNotFoundError:
+    from torchrl._utils import _DecoratorContextManager
 
 DEFAULT_GYM = None
 IMPORT_ERROR = None
@@ -571,8 +574,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
     @_classproperty
-    def available_envs(cls) -> List[str]:
-        return _get_envs()
+    def available_envs(cls):
+        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:
