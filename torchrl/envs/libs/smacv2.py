@@ -19,15 +19,14 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 
-from torchrl.envs.utils import ACTION_MASK_ERROR
-
+from torchrl.envs.utils import _classproperty, ACTION_MASK_ERROR
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
 
 
 def _get_envs():
     if not _has_smacv2:
-        return []
+        raise ImportError("SMAC-v2 is not installed in your virtual environment.")
     from smacv2.env.starcraft2.maps import smac_maps
 
     return list(smac_maps.get_smac_map_registry().keys())
@@ -174,7 +173,12 @@ class SMACv2Wrapper(_EnvWrapper):
 
     git_url = "https://github.com/oxwhirl/smacv2"
     libname = "smacv2"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_smacv2:
+            return
+        yield from _get_envs()
 
     def __init__(
         self,

@@ -44,7 +44,8 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     SyncDataCollector,
 )
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
 
 def _rpc_init_collection_node(

@@ -320,6 +320,8 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
+    if not _has_gym:
+        raise ImportError("Gym(nasium) could not be found in your virtual environment.")
     envs = _get_gym_envs()
     envs = list(envs)
     envs = sorted(envs)
@@ -436,7 +438,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 return gymnasium
         except ImportError:
             pass
-        raise RuntimeError(
+        raise ImportError(
             f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
         )
 
@@ -573,6 +575,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_gym:
+            return
         yield from _get_envs()
 
     @property

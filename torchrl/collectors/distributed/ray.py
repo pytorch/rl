@@ -14,7 +14,8 @@ from torchrl.collectors.collectors import (
     SyncDataCollector,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 
 logger = logging.getLogger(__name__)
 
