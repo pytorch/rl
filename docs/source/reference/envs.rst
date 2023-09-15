@@ -213,7 +213,6 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
 
 Multi-agent environments
@@ -675,6 +674,8 @@ the following function will return ``1`` when queried:
     brax.BraxWrapper
     dm_control.DMControlEnv
     dm_control.DMControlWrapper
+    envpool.MultiThreadedEnv
+    envpool.MultiThreadedEnvWrapper
     gym.GymEnv
     gym.GymWrapper
     gym.MOGymEnv
@@ -682,11 +683,14 @@ the following function will return ``1`` when queried:
     gym.set_gym_backend
     gym.gym_backend
     habitat.HabitatEnv
+    isaacgym.IsaacGymWrapper
+    isaacgym.IsaacGymEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
     pettingzoo.PettingZooEnv
     pettingzoo.PettingZooWrapper
+    robohive.RoboHiveEnv
     smacv2.SMACv2Env
     smacv2.SMACv2Wrapper
     vmas.VmasEnv
