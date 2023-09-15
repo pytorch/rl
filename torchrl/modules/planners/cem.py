@@ -6,7 +6,7 @@
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
 
-from torchrl.envs import EnvBase
+from torchrl.envs.common import EnvBase
 from torchrl.modules.planners.common import MPCPlannerBase
 
 

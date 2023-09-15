@@ -26,7 +26,6 @@ import numpy as np
 import pytest
 import torch
 
-import torchrl
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,
@@ -660,6 +659,11 @@ ENVPOOL_ALL_ENVS = ENVPOOL_GYM_ENVS + ENVPOOL_DM_ENVS
 
 @pytest.mark.skipif(not _has_envpool, reason="No envpool library found")
 class TestEnvPool:
+    def test_lib(self):
+        import envpool
+
+        assert MultiThreadedEnvWrapper.lib is envpool
+
     @pytest.mark.parametrize("env_name", ENVPOOL_ALL_ENVS)
     def test_env_wrapper_creation(self, env_name):
         env_name = env_name.replace("ALE/", "")  # EnvPool naming convention
@@ -1073,7 +1077,7 @@ class TestBrax:
 
 @pytest.mark.skipif(not _has_vmas, reason="vmas not installed")
 class TestVmas:
-    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
+    @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     @pytest.mark.parametrize("continuous_actions", [True, False])
     def test_all_vmas_scenarios(self, scenario_name, continuous_actions):
         env = VmasEnv(
@@ -1109,7 +1113,7 @@ class TestVmas:
     @pytest.mark.parametrize(
         "batch_size", [(), (12,), (12, 2), (12, 3), (12, 3, 1), (12, 3, 4)]
     )
-    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
+    @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     def test_vmas_batch_size_error(self, scenario_name, batch_size):
         num_envs = 12
         n_agents = 2
@@ -1220,7 +1224,7 @@ class TestVmas:
 
     @pytest.mark.parametrize("num_envs", [1, 20])
     @pytest.mark.parametrize("n_agents", [1, 5])
-    @pytest.mark.parametrize("scenario_name", torchrl.envs.libs.vmas._get_envs())
+    @pytest.mark.parametrize("scenario_name", VmasWrapper.available_envs)
     def test_vmas_repr(self, scenario_name, num_envs, n_agents):
         if n_agents == 1 and scenario_name == "balance":
             return

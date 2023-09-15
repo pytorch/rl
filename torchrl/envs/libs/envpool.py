@@ -20,6 +20,7 @@ from torchrl.data import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.utils import _classproperty
 
 _has_envpool = importlib.util.find_spec("envpool") is not None
 
@@ -28,6 +29,12 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
     """Wrapper for envpool-based multithreaded environments."""
 
     _verbose: bool = False
+
+    @_classproperty
+    def lib(cls):
+        import envpool
+
+        return envpool
 
     def __init__(
         self,
