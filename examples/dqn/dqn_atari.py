@@ -101,8 +101,9 @@ def make_base_env(env_name, frame_skip, device, is_test=False):
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
     env = TransformedEnv(env)
-    env.append_transform(NoopResetEnv(noops=30, random=True))
-    reader = default_info_dict_reader(["end_of_life"])
+    if not is_test:
+        env.append_transform(NoopResetEnv(noops=30, random=True))
+        reader = default_info_dict_reader(["end_of_life"])
     env.set_info_dict_reader(reader)
     return env
 
