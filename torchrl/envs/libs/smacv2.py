@@ -174,7 +174,10 @@ class SMACv2Wrapper(_EnvWrapper):
 
     git_url = "https://github.com/oxwhirl/smacv2"
     libname = "smacv2"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        yield from _get_envs()
 
     def __init__(
         self,

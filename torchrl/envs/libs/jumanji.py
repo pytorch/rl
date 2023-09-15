@@ -9,6 +9,7 @@ from typing import Dict, Optional, Union
 import numpy as np
 import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
+from torchrl.envs.utils import _classproperty
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
 
@@ -129,8 +130,11 @@ class JumanjiWrapper(GymLikeEnv):
     """
 
     git_url = "https://github.com/instadeepai/jumanji"
-    available_envs = _get_envs()
     libname = "jumanji"
+
+    @_classproperty
+    def available_envs(cls):
+        yield from _get_envs()
 
     @property
     def lib(self):

@@ -17,7 +17,7 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper, EnvBase
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _selective_unsqueeze
+from torchrl.envs.utils import _selective_unsqueeze, _classproperty
 
 IMPORT_ERR = None
 try:
@@ -107,7 +107,10 @@ class VmasWrapper(_EnvWrapper):
 
     git_url = "https://github.com/proroklab/VectorizedMultiAgentSimulator"
     libname = "vmas"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        yield from _get_envs()
 
     def __init__(
         self,
