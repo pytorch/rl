@@ -18,8 +18,8 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _replace_last, check_marl_grouping, MarlGroupMapType
-
+from torchrl.envs.utils import _replace_last, check_marl_grouping, \
+    MarlGroupMapType, _classproperty
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
@@ -139,7 +139,7 @@ class PettingZooWrapper(_EnvWrapper):
     git_url = "https://github.com/Farama-Foundation/PettingZoo"
     libname = "pettingzoo"
 
-    @classmethod
+    @_classproperty
     def available_envs(cls):
         yield from _get_envs()
 

@@ -14,6 +14,7 @@ import torch
 from tensordict import TensorDictBase
 from torchrl.envs import make_composite_from_td
 from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.utils import _classproperty
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -154,7 +155,7 @@ class IsaacGymEnv(IsaacGymWrapper):
 
     """
 
-    @classmethod
+    @_classproperty
     def available_envs(cls):
         import isaacgymenvs  # noqa
 

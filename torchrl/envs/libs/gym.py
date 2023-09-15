@@ -11,6 +11,8 @@ from warnings import warn
 
 import torch
 
+from torchrl.envs.utils import _classproperty
+
 try:
     from torch.utils._contextlib import _DecoratorContextManager
 except ModuleNotFoundError:
@@ -487,7 +489,7 @@ class GymWrapper(GymLikeEnv):
 
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
-    @classmethod
+    @_classproperty
     def available_envs(cls):
         yield from _get_envs()
 
