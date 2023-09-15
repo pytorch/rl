@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib
 import re
-import typing
+
 from typing import Dict, Optional
 
 import torch
@@ -23,9 +23,6 @@ from torchrl.envs.utils import ACTION_MASK_ERROR
 
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
-
-if typing.TYPE_CHECKING and _has_smacv2:
-    import smacv2
 
 
 def _get_envs():
@@ -181,7 +178,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def __init__(
         self,
-        env: "smacv2.env.StarCraft2Env" = None,
+        env: "smacv2.env.StarCraft2Env" = None,  # noqa: F821
         categorical_actions: bool = True,
         **kwargs,
     ):
@@ -208,7 +205,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
     def _build_env(
         self,
-        env: "smacv2.env.StarCraft2Env",
+        env: "smacv2.env.StarCraft2Env",  # noqa: F821
     ):
         if len(self.batch_size):
             raise RuntimeError(
@@ -217,7 +214,7 @@ class SMACv2Wrapper(_EnvWrapper):
 
         return env
 
-    def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:
+    def _make_specs(self, env: "smacv2.env.StarCraft2Env") -> None:  # noqa: F821
         self.group_map = {"agents": [str(i) for i in range(self.n_agents)]}
         self.reward_spec = UnboundedContinuousTensorSpec(
             shape=torch.Size((1,)),
@@ -620,7 +617,7 @@ class SMACv2Env(SMACv2Wrapper):
         capability_config: Optional[Dict] = None,
         seed: Optional[int] = None,
         **kwargs,
-    ) -> "smacv2.env.StarCraft2Env":
+    ) -> "smacv2.env.StarCraft2Env":  # noqa: F821
         import smacv2
 
         if capability_config is not None:
