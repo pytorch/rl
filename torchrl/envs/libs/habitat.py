@@ -9,7 +9,7 @@ import torch
 from torchrl.data import DEVICE_TYPING
 from torchrl.envs import EnvBase
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.utils import classproperty, _classproperty
+from torchrl.envs.utils import _classproperty
 
 IMPORT_ERR = None
 try:

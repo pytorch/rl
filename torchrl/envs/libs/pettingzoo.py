@@ -18,8 +18,12 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, set_gym_backend
-from torchrl.envs.utils import _replace_last, check_marl_grouping, \
-    MarlGroupMapType, _classproperty
+from torchrl.envs.utils import (
+    _classproperty,
+    _replace_last,
+    check_marl_grouping,
+    MarlGroupMapType,
+)
 
 _has_pettingzoo = importlib.util.find_spec("pettingzoo") is not None
 
