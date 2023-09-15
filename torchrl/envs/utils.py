@@ -527,19 +527,6 @@ def _selective_unsqueeze(tensor: torch.Tensor, batch_size: torch.Size, dim: int 
     return tensor
 
 
-class classproperty:
-    """A class-property object.
-
-    Usage: Allows for iterators coded as properties.
-    """
-
-    def __init__(self, fget):
-        self.fget = fget
-
-    def __get__(self, owner_self, owner_cls):
-        return self.fget(owner_cls)
-
-
 def _sort_keys(element):
     if isinstance(element, tuple):
         element = unravel_key(element)
