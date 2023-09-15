@@ -30,7 +30,7 @@ optim:
   gamma: 0.99
   loss_function: l2
   lr: 3e-4
-  weight_decay: 0.0
+  weight_decay: 1.0e-4
   batch_size: 256
   target_update_polyak: 0.995
   alpha_init: 0.2
