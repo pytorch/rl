@@ -36,6 +36,19 @@ def tb_logger(tmp_path_factory):
     del logger
 
 
+@pytest.fixture
+def config():
+    return {
+        "value": "value",
+        "nested": {"inner": 3, "value": "value"},
+        "int": 3,
+        "list": [3, 4, 5],
+        "tuple": (2,),
+        "float": 3.45,
+        "bool": True,
+    }
+
+
 @pytest.mark.skipif(not _has_tb, reason="TensorBoard not installed")
 class TestTensorboard:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
@@ -97,6 +110,12 @@ class TestTensorboard:
                 video=video_wrong_format,
                 step=steps[i] if steps else None,
             )
+
+    def test_log_hparams(self, tb_logger, config):
+        del config["nested"]  # not supported in tensorboard
+        del config["list"]  # not supported in tensorboard
+        del config["tuple"]  # not supported in tensorboard
+        tb_logger.log_hparams(config)
 
     def test_log_histogram(self, tb_logger):
         torch.manual_seed(0)
@@ -177,6 +196,18 @@ class TestCSVLogger:
                 data = torch.randn(10)
                 logger.log_histogram("hist", data, step=0, bins=2)
 
+    def test_log_config(self, tmpdir, config):
+        torch.manual_seed(0)
+
+        exp_name = "ramala"
+        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
+        logger.log_hparams(cfg=config)
+
+        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
+            txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
+            text = "".join(file.readlines())
+            assert text == txt
+
 
 @pytest.fixture(scope="class")
 def wandb_logger(tmp_path_factory):
@@ -242,6 +273,13 @@ class TestWandbLogger:
                 name="foo",
                 video=video_wrong_format,
             )
+
+    def test_log_hparams(self, wandb_logger, config):
+        wandb_logger.log_hparams(config)
+        for key, value in config.items():
+            if isinstance(value, tuple):
+                value = list(value)  # wandb converts tuples to lists
+            assert wandb_logger.experiment.config[key] == value
 
     def test_log_histogram(self, wandb_logger):
         torch.manual_seed(0)
@@ -325,6 +363,10 @@ class TestMLFlowLogger:
         with pytest.raises(NotImplementedError):
             data = torch.randn(10)
             logger.log_histogram("hist", data, step=0, bins=2)
+
+    def test_log_hparams(self, mlflow_fixture, config):
+        logger, client = mlflow_fixture
+        logger.log_hparams(config)
 
 
 if __name__ == "__main__":
