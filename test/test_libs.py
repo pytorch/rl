@@ -75,10 +75,10 @@ from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import RoboHiveEnv
+from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
-from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 
@@ -394,6 +394,11 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
                 check_env_specs(env)
+
+    @implement_for("gym", None, "0.18")
+    def test_vecenvs(self):  # noqa: F811
+        # skipping tests for older versions of gym
+        return
 
 
 @implement_for("gym", None, "0.26")

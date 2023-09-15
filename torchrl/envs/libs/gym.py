@@ -14,9 +14,6 @@ import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs.batched_envs import CloudpickleWrapper
-
-from torchrl.envs.utils import _classproperty
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -31,14 +28,15 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
+from torchrl.envs.batched_envs import CloudpickleWrapper
 
 from torchrl.envs.gym_like import (
     BaseInfoDictReader,
     default_info_dict_reader,
     GymLikeEnv,
 )
+
 from torchrl.envs.utils import _classproperty
-from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
 
 try:
     from torch.utils._contextlib import _DecoratorContextManager
