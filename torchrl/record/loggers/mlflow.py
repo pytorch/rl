@@ -44,7 +44,7 @@ class MLFlowLogger(Logger):
         super().__init__(exp_name=exp_name, log_dir=tracking_uri)
         self.video_log_counter = 0
 
-    def _create_experiment(self) -> "mlflow.ActiveRun":
+    def _create_experiment(self) -> "mlflow.ActiveRun":  # noqa
         import mlflow
 
         """Creates an mlflow experiment.
