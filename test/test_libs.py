@@ -332,9 +332,8 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
-    def test_vecenvs(self, envname):
+    def test_vecenvs_wrapper(self, envname):
         import gymnasium
-        from _utils_internal import rollout_consistency_assertion
 
         # we can't use parametrize with implement_for
         env = GymWrapper(
@@ -351,6 +350,17 @@ class TestGym:
         )
         assert env.batch_size == torch.Size([2])
         check_env_specs(env)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    def test_vecenvs_env(self, envname):
+        from _utils_internal import rollout_consistency_assertion
+
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
             check_env_specs(env)

@@ -486,6 +486,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         pixels_only: bool = False,
     ) -> "gym.core.Env":  # noqa: F821
         self.batch_size = self._get_batch_size(env)
+
         env_from_pixels = _is_from_pixels(env)
         from_pixels = from_pixels or env_from_pixels
         self.from_pixels = from_pixels
@@ -803,9 +804,9 @@ class GymEnv(GymWrapper):
                     raise err
         env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
         if num_envs > 0:
-            return self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
-        else:
-            return env
+            env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            self.batch_size = torch.Size([num_envs, *self.batch_size])
+        return env
 
     @implement_for("gym", None, "0.25.1")
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
