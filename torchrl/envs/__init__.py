@@ -68,3 +68,4 @@ from .utils import (
     set_exploration_type,
     step_mdp,
 )
+from .libs import BraxEnv, DMControlEnv

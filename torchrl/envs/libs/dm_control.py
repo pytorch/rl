@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import collections
 import os
+
+import importlib
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -19,10 +21,11 @@ from torchrl.data.tensor_specs import (
     UnboundedDiscreteTensorSpec,
 )
 
-from ..._utils import VERBOSE
+from torchrl._utils import VERBOSE
 
-from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
-from ..gym_like import GymLikeEnv
+from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
+from torchrl.envs.gym_like import GymLikeEnv
+from torchrl.envs.utils import _classproperty
 
 if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
@@ -30,20 +33,7 @@ if torch.cuda.device_count() > 1:
     if VERBOSE:
         print("EGL_DEVICE_ID: ", os.environ["EGL_DEVICE_ID"])
 
-try:
-
-    import dm_control
-    import dm_env
-    from dm_control import suite
-    from dm_control.suite.wrappers import pixels
-
-    _has_dmc = True
-
-except ImportError as err:
-    _has_dmc = False
-    IMPORT_ERR = err
-else:
-    IMPORT_ERR = None
+_has_dmc = _has_dm_control = importlib.util.find_spec('dm_control') is not None
 
 __all__ = ["DMControlEnv", "DMControlWrapper"]
 
@@ -53,6 +43,8 @@ def _dmcontrol_to_torchrl_spec_transform(
     dtype: Optional[torch.dtype] = None,
     device: DEVICE_TYPING = None,
 ) -> TensorSpec:
+    import dm_env
+
     if isinstance(spec, collections.OrderedDict):
         spec = {
             k: _dmcontrol_to_torchrl_spec_transform(item, device=device)
@@ -90,8 +82,10 @@ def _dmcontrol_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
-    if not _has_dmc:
-        return {}
+    if not _has_dm_control:
+        raise ImportError("Cannot find dm_control in virtual environment.")
+    from dm_control import suite
+
     if not to_dict:
         return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA)
     d = {}
@@ -101,7 +95,7 @@ def _get_envs(to_dict: bool = True) -> Dict[str, Any]:
     for tup in suite.EXTRA:
         env_name = tup[0]
         d.setdefault(env_name, []).append(tup[1])
-    return d
+    return d.items()
 
 
 def _robust_to_tensor(array: Union[float, np.ndarray]) -> torch.Tensor:
@@ -130,7 +124,16 @@ class DMControlWrapper(GymLikeEnv):
 
     git_url = "https://github.com/deepmind/dm_control"
     libname = "dm_control"
-    available_envs = _get_envs()
+
+    @_classproperty
+    def available_envs(cls):
+        yield from _get_envs()
+
+    @property
+    def lib(self):
+        import dm_control
+
+        return dm_control
 
     def __init__(self, env=None, **kwargs):
         if env is not None:
@@ -151,6 +154,8 @@ class DMControlWrapper(GymLikeEnv):
         self.pixels_only = pixels_only
 
         if from_pixels:
+            from dm_control.suite.wrappers import pixels
+
             self._set_egl_device(self.device)
             self.render_kwargs = {"camera_id": camera_id}
             if render_kwargs is not None:
@@ -180,6 +185,9 @@ class DMControlWrapper(GymLikeEnv):
         )
 
     def _check_kwargs(self, kwargs: Dict):
+        dm_control = self.lib
+        from dm_control.suite.wrappers import pixels
+
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
         env = kwargs["env"]
@@ -207,6 +215,8 @@ class DMControlWrapper(GymLikeEnv):
         return seed
 
     def _set_seed(self, _seed: Optional[int]) -> Optional[int]:
+        from dm_control.suite.wrappers import pixels
+
         if _seed is None:
             return None
         random_state = np.random.RandomState(_seed)
@@ -262,7 +272,7 @@ class DMControlEnv(DMControlWrapper):
         if not _has_dmc:
             raise ImportError(
                 "dm_control python package was not found. Please install this dependency."
-            ) from IMPORT_ERR
+            )
         kwargs["env_name"] = env_name
         kwargs["task_name"] = task_name
         super().__init__(**kwargs)
@@ -274,6 +284,8 @@ class DMControlEnv(DMControlWrapper):
         _seed: Optional[int] = None,
         **kwargs,
     ):
+        from dm_control import suite
+
         self.env_name = env_name
         self.task_name = task_name
 
@@ -314,9 +326,10 @@ class DMControlEnv(DMControlWrapper):
             env_name = kwargs["env_name"]
             if "task_name" in kwargs:
                 task_name = kwargs["task_name"]
+                available_envs = dict(self.available_envs)
                 if (
-                    env_name not in self.available_envs
-                    or task_name not in self.available_envs[env_name]
+                    env_name not in available_envs
+                    or task_name not in available_envs[env_name]
                 ):
                     raise RuntimeError(
                         f"{env_name} with task {task_name} is unknown in {self.libname}"
