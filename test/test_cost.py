@@ -4860,7 +4860,7 @@ class TestCQL(LossModuleTestBase):
             with_lagrange=with_lagrange,
             **kwargs,
         )
-        sd = loss_fn.load_
+        sd = loss_fn.state_dict()
         loss_fn2 = CQLLoss(
             actor_network=actor,
             qvalue_network=qvalue,
