@@ -631,7 +631,7 @@ class SMACv2Env(SMACv2Wrapper):
         seed: Optional[int] = None,
         **kwargs,
     ) -> "smacv2.env.StarCraft2Env":  # noqa: F821
-        import smacv2
+        import smacv2.env
 
         if capability_config is not None:
             env = smacv2.env.StarCraftCapabilityEnvWrapper(
