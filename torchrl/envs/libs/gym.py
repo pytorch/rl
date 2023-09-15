@@ -493,6 +493,8 @@ class GymWrapper(GymLikeEnv):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_gym:
+            return
         yield from _get_envs()
 
     @property

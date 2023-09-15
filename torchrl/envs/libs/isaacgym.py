@@ -162,6 +162,9 @@ class IsaacGymEnv(IsaacGymWrapper):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_isaac:
+            return
+
         import isaacgymenvs  # noqa
 
         yield from isaacgymenvs.tasks.isaacgym_task_map.keys()

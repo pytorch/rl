@@ -34,7 +34,7 @@ __all__ = ["VmasWrapper", "VmasEnv"]
 
 def _get_envs():
     if not _has_vmas:
-        raise ImportError("SMAC-v2 is not installed in your virtual environment.")
+        raise ImportError("VMAS is not installed in your virtual environment.")
     all_scenarios = vmas.scenarios + vmas.mpe_scenarios + vmas.debug_scenarios
     # TODO heterogenous spaces
     # For now torchrl does not support heterogenous spaces (Tple(Box)) so many OpenAI MPE scenarios do not work
@@ -110,6 +110,8 @@ class VmasWrapper(_EnvWrapper):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_vmas:
+            return
         yield from _get_envs()
 
     def __init__(

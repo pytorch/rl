@@ -145,6 +145,8 @@ class PettingZooWrapper(_EnvWrapper):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_pettingzoo:
+            return
         yield from _get_envs()
 
     def __init__(

@@ -73,6 +73,8 @@ class BraxWrapper(_EnvWrapper):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_brax:
+            return
         yield from _get_envs()
 
     libname = "brax"

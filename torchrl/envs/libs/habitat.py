@@ -59,6 +59,8 @@ class HabitatEnv(GymEnv):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_habitat:
+            return
         yield from _get_available_envs()
 
     def _build_gym_env(self, env, pixels_only):

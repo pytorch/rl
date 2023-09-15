@@ -176,6 +176,8 @@ class SMACv2Wrapper(_EnvWrapper):
 
     @_classproperty
     def available_envs(cls):
+        if not _has_smacv2:
+            return
         yield from _get_envs()
 
     def __init__(
