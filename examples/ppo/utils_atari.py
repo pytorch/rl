@@ -71,8 +71,9 @@ def make_base_env(
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
-    reader = default_info_dict_reader(["end_of_life"])
-    env.set_info_dict_reader(reader)
+    if not is_test:
+        reader = default_info_dict_reader(["end_of_life"])
+        env.set_info_dict_reader(reader)
     return env
 
 
