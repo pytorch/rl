@@ -1,4 +1,4 @@
-# Task and env
+# env and task
 env:
   name: HalfCheetah-v2
   task: ""
@@ -6,8 +6,6 @@ env:
   exp_name: iql_halfcheetah-medium-v2
   n_samples_stats: 1000
   frame_skip: 1
-  reward_scaling: 1.0
-  noop: 1
   seed: 0
 
 # logger
@@ -18,19 +16,19 @@ logger:
   mode: online
   eval_envs: 5
 
-# Buffer
+# replay buffer
 replay_buffer:
   dataset: halfcheetah-medium-v2
   batch_size: 256
 
-# Optimization
+# optimization
 optim:
   device: cuda:0
   lr: 3e-4
   weight_decay: 0.0
   gradient_steps: 100000
 
-# Policy and model
+# network
 model:
   hidden_sizes: [256, 256]
   activation: relu
@@ -39,9 +37,10 @@ model:
 
 # loss
 loss: 
-  loss_function: smooth_l1
+  loss_function: l2
   gamma: 0.99
   tau: 0.005
-  # IQL hyperparameter
+
+# IQL specific hyperparameter
   temperature: 3.0
   expectile: 0.7
