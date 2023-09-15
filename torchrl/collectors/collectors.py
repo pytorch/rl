@@ -47,7 +47,6 @@ from torchrl.envs.utils import (
     set_exploration_type,
     step_mdp,
 )
-from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -623,6 +622,8 @@ class SyncDataCollector(DataCollectorBase):
         reset_when_done: bool = True,
         interruptor=None,
     ):
+        from torchrl.envs.batched_envs import _BatchedEnv
+
         self.closed = True
 
         exploration_type = _convert_exploration_type(
@@ -1079,6 +1080,8 @@ class SyncDataCollector(DataCollectorBase):
             `"env_state_dict"`.
 
         """
+        from torchrl.envs.batched_envs import _BatchedEnv
+
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
