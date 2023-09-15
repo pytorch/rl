@@ -67,9 +67,11 @@ def write_version_file(version):
         f.write("git_version = {}\n".format(repr(sha)))
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
+    if is_nightly:
+        return "torch>=2.1.0.dev"
     return "torch"
 
 
@@ -164,6 +166,10 @@ def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
     is_nightly = "nightly" in name
+    if is_nightly:
+        tensordict_dep = "tensordict-nightly"
+    else:
+        tensordict_dep = "tensordict>=0.1.1"
 
     if is_nightly:
         version = get_nightly_version()
@@ -173,7 +179,7 @@ def _main(argv):
     else:
         version = get_version()
 
-    pytorch_package_dep = _get_pytorch_version()
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)
     # branch = _run_cmd(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     # tag = _run_cmd(["git", "describe", "--tags", "--exact-match", "@"])
@@ -204,7 +210,7 @@ def _main(argv):
             "numpy",
             "packaging",
             "cloudpickle",
-            "tensordict>=0.1.1",
+            tensordict_dep,
         ],
         extras_require={
             "atari": [
@@ -224,17 +230,19 @@ def _main(argv):
                 "tqdm",
                 "hydra-core>=1.1",
                 "hydra-submitit-launcher",
+                "git",
             ],
             "checkpointing": [
                 "torchsnapshot",
             ],
+            "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
+            "Programming Language :: Python :: 3.11",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
             "Development Status :: 4 - Beta",
@@ -247,5 +255,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
     _main(sys.argv[1:])

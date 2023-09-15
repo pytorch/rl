@@ -24,7 +24,7 @@ from ..._utils import VERBOSE
 from ...data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
 from ..gym_like import GymLikeEnv
 
-if torch.has_cuda and torch.cuda.device_count() > 1:
+if torch.cuda.device_count() > 1:
     n = torch.cuda.device_count() - 1
     os.environ["EGL_DEVICE_ID"] = str(1 + (os.getpid() % n))
     if VERBOSE:
@@ -67,8 +67,8 @@ def _dmcontrol_to_torchrl_spec_transform(
             shape = torch.Size([1])
         return BoundedTensorSpec(
             shape=shape,
-            minimum=spec.minimum,
-            maximum=spec.maximum,
+            low=spec.minimum,
+            high=spec.maximum,
             dtype=dtype,
             device=device,
         )

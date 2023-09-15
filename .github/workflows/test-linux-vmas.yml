@@ -9,6 +9,12 @@ on:
       - release/*
   workflow_dispatch:
 
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   unittests:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
@@ -28,7 +34,7 @@ jobs:
 
         nvidia-smi
 
-        bash .circleci/unittest/linux_libs/scripts_vmas/setup_env.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/install.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/run_test.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/post_process.sh
+        bash .github/unittest/linux_libs/scripts_vmas/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_vmas/install.sh
+        bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
+        bash .github/unittest/linux_libs/scripts_vmas/post_process.sh

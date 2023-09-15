@@ -34,6 +34,16 @@ from torchrl.objectives.value.functional import (
     vec_td_lambda_return_estimate,
 )
 
+try:
+    from torch import vmap
+except ImportError as err:
+    try:
+        from functorch import vmap
+    except ImportError:
+        raise ImportError(
+            "vmap couldn't be found. Make sure you have torch>1.13 installed."
+        ) from err
+
 
 def _self_set_grad_enabled(fun):
     @wraps(fun)
@@ -65,26 +75,42 @@ def _call_value_nets(
     detach_next: bool,
 ):
     in_keys = value_net.in_keys
-    for i, name in enumerate(data.names):
-        if name == "time":
-            ndim = i + 1
-            break
-    else:
-        if RL_WARNINGS:
-            warnings.warn(
-                "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
-                "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
-            )
-        ndim = i + 1
     if single_call:
-        # get data at t and last of t+1
-        data_in = torch.cat(
-            [
-                data.select(*in_keys, value_key, strict=False),
-                data.get("next").select(*in_keys, value_key, strict=False)[..., -1:],
-            ],
-            -1,
-        )
+        for i, name in enumerate(data.names):
+            if name == "time":
+                ndim = i + 1
+                break
+        else:
+            ndim = None
+        if ndim is not None:
+            # get data at t and last of t+1
+            idx0 = (slice(None),) * (ndim - 1) + (slice(-1, None),)
+            idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False)[idx0],
+                ],
+                ndim - 1,
+            )
+        else:
+            if RL_WARNINGS:
+                warnings.warn(
+                    "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                    "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                )
+            ndim = data.ndim
+            idx = (slice(None),) * (ndim - 1) + (slice(None, data.shape[ndim - 1]),)
+            idx_ = (slice(None),) * (ndim - 1) + (slice(data.shape[ndim - 1], None),)
+            data_in = torch.cat(
+                [
+                    data.select(*in_keys, value_key, strict=False),
+                    data.get("next").select(*in_keys, value_key, strict=False),
+                ],
+                ndim - 1,
+            )
+
         # next_params should be None or be identical to params
         if next_params is not None and next_params is not params:
             raise ValueError(
@@ -94,8 +120,6 @@ def _call_value_nets(
             value_est = value_net(data_in, params).get(value_key)
         else:
             value_est = value_net(data_in).get(value_key)
-        idx = (slice(None),) * (ndim - 1) + (slice(None, -1),)
-        idx_ = (slice(None),) * (ndim - 1) + (slice(1, None),)
         value, value_ = value_est[idx], value_est[idx_]
     else:
         data_in = torch.stack(
@@ -111,9 +135,9 @@ def _call_value_nets(
             )
         elif params is not None:
             params_stack = torch.stack([params, next_params], 0)
-            data_out = torch.vmap(value_net, (0, 0))(data_in, params_stack)
+            data_out = vmap(value_net, (0, 0))(data_in, params_stack)
         else:
-            data_out = torch.vmap(value_net, (0,))(data_in)
+            data_out = vmap(value_net, (0,))(data_in)
         value_est = data_out.get(value_key)
         value, value_ = value_est[0], value_est[1]
     data.set(value_key, value)
@@ -167,6 +191,30 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
+
+    @property
+    def advantage_key(self):
+        return self.tensor_keys.advantage
+
+    @property
+    def value_key(self):
+        return self.tensor_keys.value
+
+    @property
+    def value_target_key(self):
+        return self.tensor_keys.value_target
+
+    @property
+    def reward_key(self):
+        return self.tensor_keys.reward
+
+    @property
+    def done_key(self):
+        return self.tensor_keys.done
+
+    @property
+    def steps_to_next_obs_key(self):
+        return self.tensor_keys.steps_to_next_obs
 
     @abc.abstractmethod
     def forward(
@@ -341,7 +389,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         return self.value_network._is_stateless
 
     def _next_value(self, tensordict, target_params, kwargs):
-        step_td = step_mdp(tensordict)
+        step_td = step_mdp(tensordict, keep_other=False)
         if self.value_network is not None:
             if target_params is not None:
                 kwargs["params"] = target_params

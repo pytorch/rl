@@ -38,10 +38,10 @@ Each env will have the following attributes:
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the done-flag spec.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the input keys (:obj:`"_action_spec"` and :obj:`"_state_spec"`).
+  all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
   It is locked and should not be modified directly.
 - :obj:`env.output_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
-  all the output keys (:obj:`"_observation_spec"`, :obj:`"_reward_spec"` and :obj:`"_done_spec"`).
+  all the output keys (:obj:`"full_observation_spec"`, :obj:`"full_reward_spec"` and :obj:`"full_done_spec"`).
   It is locked and should not be modified directly.
 
 Importantly, the environment spec shapes should contain the batch size, e.g.
@@ -165,13 +165,13 @@ It is also possible to reset some but not all of the environments:
 .. code-block::
    :caption: Parallel environment reset
 
-        >>> tensordict = TensorDict({"reset_workers": [True, False, True, True]}, [4])
+        >>> tensordict = TensorDict({"_reset": [[True], [False], [True], [True]]}, [4])
         >>> env.reset(tensordict)
         TensorDict(
             fields={
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                reset_workers: Tensor(torch.Size([4]), dtype=torch.bool)},
+                _reset: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -213,8 +213,145 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
+
+Multi-agent environments
+------------------------
+
+.. currentmodule:: torchrl.envs
+
+TorchRL supports multi-agent learning out-of-the-box.
+*The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
+without any modification or dedicated multi-agent infrastructure.*
+
+In this view, environments play a core role for multi-agent. In multi-agent environments,
+many decision-making agents act in a shared world.
+Agents can observe different things, act in different ways and also be rewarded differently.
+Therefore, many paradigms exist to model multi-agent environments (DecPODPs, Markov Games).
+Some of the main differences between these paradigms include:
+
+- **observation** can be per-agent and also have some shared components
+- **reward** can be per-agent or shared
+- **done** can be per-agent or shared
+
+TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
+In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
+This TensorDict will have the additional agent dimension and thus group data that is different for each agent.
+The shared keys, on the other hand, will be kept in the first level, as in single-agent cases.
+
+Let's look at an example to understand this better. For this example we are going to use
+`VMAS <https://github.com/proroklab/VectorizedMultiAgentSimulator>`_, a multi-robot task simulator also
+based on PyTorch, which runs parallel batched simulation on device.
+
+We can create a VMAS environment and look at what the output from a random step looks like:
+
+.. code-block::
+   :caption: Example of multi-agent step tensordict
+
+        >>> from torchrl.envs.libs.vmas import VmasEnv
+        >>> env = VmasEnv("balance", num_envs=3, n_agents=5)
+        >>> td = env.rand_step()
+        >>> td
+        TensorDict(
+            fields={
+                agents: TensorDict(
+                    fields={
+                        action: Tensor(shape=torch.Size([3, 5, 2]))},
+                    batch_size=torch.Size([3, 5])),
+                next: TensorDict(
+                    fields={
+                        agents: TensorDict(
+                            fields={
+                                info: TensorDict(
+                                    fields={
+                                        ground_rew: Tensor(shape=torch.Size([3, 5, 1])),
+                                        pos_rew: Tensor(shape=torch.Size([3, 5, 1]))},
+                                    batch_size=torch.Size([3, 5])),
+                                observation: Tensor(shape=torch.Size([3, 5, 16])),
+                                reward: Tensor(shape=torch.Size([3, 5, 1]))},
+                            batch_size=torch.Size([3, 5])),
+                        done: Tensor(shape=torch.Size([3, 1]))},
+                    batch_size=torch.Size([3]))},
+            batch_size=torch.Size([3]))
+
+We can observe that *keys that are shared by all agents*, such as **done** are present in the root tensordict with
+batch size `(num_envs,)`, which represents the number of environments simulated.
+
+On the other hand, *keys that are different between agents*, such as **action**, **reward**, **observation**,
+and **info** are present in the nested "agents" tensordict with batch size `(num_envs, n_agents)`,
+which represents the additional agent dimension.
+
+Multi-agent tensor specs will follow the same style as in tensordicts.
+Specs relating to values that vary between agents will need to be nested in the "agents" entry.
+
+Here is an example of how specs can be created in a multi-agent environment where
+only the done flag is shared across agents (as in VMAS):
+
+.. code-block::
+   :caption: Example of multi-agent spec creation
+
+        >>> action_specs = []
+        >>> observation_specs = []
+        >>> reward_specs = []
+        >>> info_specs = []
+        >>> for i in range(env.n_agents):
+        ...    action_specs.append(agent_i_action_spec)
+        ...    reward_specs.append(agent_i_reward_spec)
+        ...    observation_specs.append(agent_i_observation_spec)
+        >>> env.action_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"action": torch.stack(action_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.reward_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"reward": torch.stack(reward_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.observation_spec = CompositeSpec(
+        ...    {
+        ...        "agents": CompositeSpec(
+        ...            {"observation": torch.stack(observation_specs)}, shape=(env.n_agents,)
+        ...        )
+        ...    }
+        ...)
+        >>> env.done_spec = DiscreteTensorSpec(
+        ...    n=2,
+        ...    shape=torch.Size((1,)),
+        ...    dtype=torch.bool,
+        ... )
+
+As you can see, it is very simple! Per-agent keys will have the nested composite spec and shared keys will follow
+single agent standards.
+
+.. note::
+  Since reward, done and action keys may have the additional "agent" prefix (e.g., `("agents","action")`),
+  the default keys used in the arguments of other TorchRL components (e.g. "action") will not match exactly.
+  Therefore, TorchRL provides the `env.action_key`, `env.reward_key`, and `env.done_key` attributes,
+  which will automatically point to the right key to use. Make sure you pass these attributes to the various
+  components in TorchRL to inform them of the right key (e.g., the `loss.set_keys()` function).
+
+.. note::
+  TorchRL abstracts these nested specs away for ease of use.
+  This means that accessing `env.reward_spec` will always return the leaf
+  spec if the accessed spec is Composite. Therefore, if in the example above
+  we run `env.reward_spec` after env creation, we would get the same output as `torch.stack(reward_specs)}`.
+  To get the full composite spec with the "agents" key, you can run
+  `env.output_spec["full_reward_spec"]`. The same is valid for action and done specs.
+  Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
+
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
 
 
 Transforms
@@ -318,13 +455,17 @@ to be able to create this other composition:
 
     Transform
     TransformedEnv
+    ActionMask
     BinarizeReward
     CatFrames
     CatTensors
     CenterCrop
+    ClipTransform
     Compose
+    DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
+    DTypeCastTransform
     ExcludeTransform
     FiniteTensorDictCheck
     FlattenObservation
@@ -354,8 +495,57 @@ to be able to create this other composition:
     ToTensorImage
     UnsqueezeTransform
     VecNorm
+    VC1Transform
     VIPRewardTransform
     VIPTransform
+
+Environments with masked actions
+--------------------------------
+
+In some environments with discrete actions, the actions available to the agent might change throughout execution.
+In such cases the environments will output an action mask (under the ``"action_mask"`` key by default).
+This mask needs to be used to filter out unavailable actions for that step.
+
+If you are using a custom policy you can pass this mask to your probability distribution like so:
+
+.. code-block::
+   :caption: Categorical policy with action mask
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.modules import MaskedCategorical
+        >>> module = TensorDictModule(
+        >>>     nn.Linear(in_feats, out_feats),
+        >>>     in_keys=["observation"],
+        >>>     out_keys=["logits"],
+        >>> )
+        >>> dist = ProbabilisticTensorDictModule(
+        >>>     in_keys={"logits": "logits", "mask": "action_mask"},
+        >>>     out_keys=["action"],
+        >>>     distribution_class=MaskedCategorical,
+        >>> )
+        >>> actor = TensorDictSequential(module, dist)
+
+If you want to use a default policy, you will need to wrap your environment in the :class:`~torchrl.envs.transforms.ActionMask`
+transform. This transform can take care of updating the action mask in the action spec in order for the default policy
+to always know what the latest available actions are. You can do this like so:
+
+.. code-block::
+   :caption: How to use the action mask transform
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.envs.transforms import TransformedEnv, ActionMask
+        >>> env = TransformedEnv(
+        >>>     your_base_env
+        >>>     ActionMask(action_key="action", mask_key="action_mask"),
+        >>> )
+
+.. note::
+  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  and not to its sub-environments.
+
+
 
 Recorders
 ---------
@@ -484,6 +674,8 @@ the following function will return ``1`` when queried:
     brax.BraxWrapper
     dm_control.DMControlEnv
     dm_control.DMControlWrapper
+    envpool.MultiThreadedEnv
+    envpool.MultiThreadedEnvWrapper
     gym.GymEnv
     gym.GymWrapper
     gym.MOGymEnv
@@ -491,8 +683,15 @@ the following function will return ``1`` when queried:
     gym.set_gym_backend
     gym.gym_backend
     habitat.HabitatEnv
+    isaacgym.IsaacGymWrapper
+    isaacgym.IsaacGymEnv
     jumanji.JumanjiEnv
     jumanji.JumanjiWrapper
     openml.OpenMLEnv
+    pettingzoo.PettingZooEnv
+    pettingzoo.PettingZooWrapper
+    robohive.RoboHiveEnv
+    smacv2.SMACv2Env
+    smacv2.SMACv2Wrapper
     vmas.VmasEnv
     vmas.VmasWrapper

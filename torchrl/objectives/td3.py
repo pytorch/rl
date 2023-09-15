@@ -16,6 +16,7 @@ from torchrl.data import BoundedTensorSpec, CompositeSpec, TensorSpec
 from torchrl.envs.utils import step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
@@ -71,6 +72,10 @@ class TD3Loss(LossModule):
         spec (TensorSpec, optional): the action tensor spec. If not provided
             and the target entropy is ``"auto"``, it will be retrieved from
             the actor.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -216,6 +221,7 @@ class TD3Loss(LossModule):
         delay_qvalue: bool = True,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         if not _has_functorch:
             raise ImportError(
@@ -234,13 +240,18 @@ class TD3Loss(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         for p in self.parameters():
@@ -259,13 +270,24 @@ class TD3Loss(LossModule):
             )
         elif action_spec is not None:
             if isinstance(action_spec, CompositeSpec):
-                action_spec = action_spec[self.tensor_keys.action]
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
+                action_spec = action_spec[self.tensor_keys.action][
+                    (0,) * len(action_container_shape)
+                ]
             if not isinstance(action_spec, BoundedTensorSpec):
                 raise ValueError(
                     f"action_spec is not of type BoundedTensorSpec but {type(action_spec)}."
                 )
-            low = action_spec.space.minimum
-            high = action_spec.space.maximum
+            low = action_spec.space.low
+            high = action_spec.space.high
         else:
             low, high = bounds
         if not isinstance(low, torch.Tensor):
@@ -282,6 +304,8 @@ class TD3Loss(LossModule):
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
+        self._vmap_actor_network00 = vmap(self.actor_network)
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -313,15 +337,32 @@ class TD3Loss(LossModule):
     def in_keys(self, values):
         self._in_keys = values
 
+    @property
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
+        return self.qvalue_network_params.detach()
+
+    @property
+    @_cache_values
+    def _cached_stack_actor_params(self):
+        return torch.stack(
+            [self.actor_network_params, self.target_actor_network_params], 0
+        )
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
         tensordict_save = tensordict
         tensordict = tensordict.clone(False)
-
-        actor_params = torch.stack(
-            [self.actor_network_params, self.target_actor_network_params], 0
-        )
+        act = tensordict.get(self.tensor_keys.action)
+        action_shape = act.shape
+        action_device = act.device
+        # computing early for reprod
+        noise = torch.normal(
+            mean=torch.zeros(action_shape),
+            std=torch.full(action_shape, self.policy_noise),
+        ).to(action_device)
+        noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
         tensordict_actor_grad = tensordict.select(
             *obs_keys
@@ -330,24 +371,17 @@ class TD3Loss(LossModule):
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        tensordict_actor = tensordict_actor.contiguous()
-
-        actor_output_td = vmap(self.actor_network)(
+        # DO NOT call contiguous bc we'll update the tds later
+        actor_output_td = self._vmap_actor_network00(
             tensordict_actor,
-            actor_params,
+            self._cached_stack_actor_params,
         )
         # add noise to target policy
-        action = actor_output_td[1].get(self.tensor_keys.action)
-        noise = torch.normal(
-            mean=torch.zeros(action.shape),
-            std=torch.full(action.shape, self.policy_noise),
-        ).to(action.device)
-        noise = noise.clamp(-self.noise_clip, self.noise_clip)
-
-        next_action = (actor_output_td[1][self.tensor_keys.action] + noise).clamp(
+        actor_output_td1 = actor_output_td[1]
+        next_action = (actor_output_td1.get(self.tensor_keys.action) + noise).clamp(
             self.min_action, self.max_action
         )
-        actor_output_td[1].set(self.tensor_keys.action, next_action)
+        actor_output_td1.set(self.tensor_keys.action, next_action)
         tensordict_actor.set(
             self.tensor_keys.action,
             actor_output_td.get(self.tensor_keys.action),
@@ -378,16 +412,15 @@ class TD3Loss(LossModule):
         )
 
         # cat params
-        q_params_detach = self.qvalue_network_params.detach()
         qvalue_params = torch.cat(
             [
-                q_params_detach,
+                self._cached_detach_qvalue_network_params,
                 self.target_qvalue_network_params,
                 self.qvalue_network_params,
             ],
             0,
         )
-        tensordict_qval = vmap(self.qvalue_network)(
+        tensordict_qval = self._vmap_qvalue_network00(
             tensordict_qval,
             qvalue_params,
         )

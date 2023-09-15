@@ -1,0 +1,20 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-error-for-skips
+    - pytest-rerunfailures
+    - expecttest
+    - pyyaml
+    - scipy==1.9.1
+    - hydra-core
+    - ninja

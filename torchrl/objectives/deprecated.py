@@ -19,14 +19,9 @@ from torch import Tensor
 
 from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-from torchrl.objectives import (
-    default_value_kwargs,
-    distance_loss,
-    hold_out_params,
-    ValueEstimators,
-)
+from torchrl.objectives import default_value_kwargs, distance_loss, ValueEstimators
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _GAMMA_LMBDA_DEPREC_WARNING
+from torchrl.objectives.utils import _cache_values, _GAMMA_LMBDA_DEPREC_WARNING
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
 
 try:
@@ -85,6 +80,10 @@ class REDQLoss_deprecated(LossModule):
         priority_key (str, optional): [Deprecated] Key where to write the priority value
             for prioritized replay buffers. Default is
             ``"td_error"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
     """
 
     @dataclass
@@ -142,6 +141,7 @@ class REDQLoss_deprecated(LossModule):
         gSDE: bool = False,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ):
         self._in_keys = None
         self._out_keys = None
@@ -155,7 +155,12 @@ class REDQLoss_deprecated(LossModule):
             "actor_network",
             create_target_params=self.delay_actor,
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # let's make sure that actor_network has `return_log_prob` set to True
         self.actor_network.return_log_prob = True
 
@@ -165,7 +170,7 @@ class REDQLoss_deprecated(LossModule):
             "qvalue_network",
             expand_dim=num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=actor_network.parameters(),
+            compare_against=policy_params,
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
@@ -198,6 +203,8 @@ class REDQLoss_deprecated(LossModule):
         self._action_spec = action_spec
         self.target_entropy_buffer = None
         self.gSDE = gSDE
+
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
 
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
@@ -307,6 +314,11 @@ class REDQLoss_deprecated(LossModule):
 
         return td_out
 
+    @property
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
+        return self.qvalue_network_params.detach()
+
     def _actor_loss(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         obs_keys = self.actor_network.in_keys
         tensordict_clone = tensordict.select(*obs_keys)
@@ -316,12 +328,11 @@ class REDQLoss_deprecated(LossModule):
                 params=self.actor_network_params,
             )
 
-        with hold_out_params(self.qvalue_network_params) as params:
-            tensordict_expand = vmap(self.qvalue_network, (None, 0))(
-                tensordict_clone.select(*self.qvalue_network.in_keys),
-                params,
-            )
-            state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
+        tensordict_expand = self._vmap_qvalue_networkN0(
+            tensordict_clone.select(*self.qvalue_network.in_keys),
+            self._cached_detach_qvalue_network_params,
+        )
+        state_action_value = tensordict_expand.get("state_action_value").squeeze(-1)
         loss_actor = -(
             state_action_value
             - self.alpha * tensordict_clone.get("sample_log_prob").squeeze(-1)
@@ -354,7 +365,7 @@ class REDQLoss_deprecated(LossModule):
                 )
             sample_log_prob = next_td.get("sample_log_prob")
             # get q-values
-            next_td = vmap(self.qvalue_network, (None, 0))(
+            next_td = self._vmap_qvalue_networkN0(
                 next_td,
                 selected_q_params,
             )
@@ -371,7 +382,7 @@ class REDQLoss_deprecated(LossModule):
 
         tensordict.set(("next", "state_value"), next_state_value)
         target_value = self.value_estimator.value_estimate(tensordict).squeeze(-1)
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )

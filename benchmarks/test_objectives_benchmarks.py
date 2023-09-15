@@ -435,11 +435,11 @@ def test_td3_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=
     loss = TD3Loss(
         actor,
         value,
-        action_spec=BoundedTensorSpec(shape=(n_act,), minimum=-1, maximum=1),
+        action_spec=BoundedTensorSpec(shape=(n_act,), low=-1, high=1),
     )
 
     loss(td)
-    benchmark(loss, td)
+    benchmark.pedantic(loss, args=(td,), rounds=100, iterations=10)
 
 
 def test_cql_speed(benchmark, n_obs=8, n_act=4, ncells=128, batch=128, n_hidden=64):

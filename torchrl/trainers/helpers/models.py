@@ -128,7 +128,7 @@ def make_dqn_actor(
     atoms = cfg.atoms if cfg.distributional else None
     linear_layer_class = torch.nn.Linear if not cfg.noisy else NoisyLinear
 
-    action_spec = env_specs["input_spec", "_action_spec", "action"]
+    action_spec = env_specs["input_spec", "full_action_spec", "action"]
     if action_spec.domain != "discrete":
         raise ValueError(
             f"env {proof_environment} has an action domain "
@@ -158,7 +158,9 @@ def make_dqn_actor(
             "mlp_kwargs_output": {"num_cells": 512, "layer_class": linear_layer_class},
         }
         # automatically infer in key
-        (in_key,) = itertools.islice(env_specs["output_spec", "_observation_spec"], 1)
+        (in_key,) = itertools.islice(
+            env_specs["output_spec", "full_observation_spec"], 1
+        )
 
     actor_class = QValueActor
     actor_kwargs = {}
@@ -167,7 +169,7 @@ def make_dqn_actor(
         # if action spec is modeled as categorical variable, we still need to have features equal
         # to the number of possible choices and also set categorical behavioural for actors.
         actor_kwargs.update({"action_space": "categorical"})
-        out_features = env_specs["input_spec", "_action_spec", "action"].space.n
+        out_features = env_specs["input_spec", "full_action_spec", "action"].space.n
     else:
         out_features = action_spec.shape[0]
 
@@ -373,8 +375,8 @@ def make_redq_model(
 
     dist_class = TanhNormal
     dist_kwargs = {
-        "min": action_spec.space.minimum,
-        "max": action_spec.space.maximum,
+        "min": action_spec.space.low,
+        "max": action_spec.space.high,
         "tanh_loc": tanh_loc,
     }
 
@@ -398,8 +400,8 @@ def make_redq_model(
         )
 
         if action_spec.domain == "continuous":
-            min = action_spec.space.minimum
-            max = action_spec.space.maximum
+            min = action_spec.space.low
+            max = action_spec.space.high
             transform = SafeTanhTransform()
             if (min != -1).any() or (max != 1).any():
                 transform = d.ComposeTransform(

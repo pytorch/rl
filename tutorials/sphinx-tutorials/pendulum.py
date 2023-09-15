@@ -28,7 +28,7 @@ Key learnings:
 - Transforming your environment inputs and outputs, and writing your own
   transforms;
 - How to use :class:`tensordict.TensorDict` to carry arbitrary data structures
-  from sep to step.
+  from step to step.
 
 In the process, we will touch three crucial components of TorchRL:
 
@@ -241,16 +241,13 @@ def _step(tensordict):
     new_th = th + new_thdot * dt
     reward = -costs.view(*tensordict.shape, 1)
     done = torch.zeros_like(reward, dtype=torch.bool)
-    # The output must be written in a ``"next"`` entry
     out = TensorDict(
         {
-            "next": {
-                "th": new_th,
-                "thdot": new_thdot,
-                "params": tensordict["params"],
-                "reward": reward,
-                "done": done,
-            }
+            "th": new_th,
+            "thdot": new_thdot,
+            "params": tensordict["params"],
+            "reward": reward,
+            "done": done,
         },
         tensordict.shape,
     )
@@ -389,14 +386,14 @@ def _make_spec(self, td_params):
     # Under the hood, this will populate self.output_spec["observation"]
     self.observation_spec = CompositeSpec(
         th=BoundedTensorSpec(
-            minimum=-torch.pi,
-            maximum=torch.pi,
+            low=-torch.pi,
+            high=torch.pi,
             shape=(),
             dtype=torch.float32,
         ),
         thdot=BoundedTensorSpec(
-            minimum=-td_params["params", "max_speed"],
-            maximum=td_params["params", "max_speed"],
+            low=-td_params["params", "max_speed"],
+            high=td_params["params", "max_speed"],
             shape=(),
             dtype=torch.float32,
         ),
@@ -411,8 +408,8 @@ def _make_spec(self, td_params):
     # action-spec will be automatically wrapped in input_spec when
     # `self.action_spec = spec` will be called supported
     self.action_spec = BoundedTensorSpec(
-        minimum=-td_params["params", "max_torque"],
-        maximum=td_params["params", "max_torque"],
+        low=-td_params["params", "max_torque"],
+        high=td_params["params", "max_torque"],
         shape=(1,),
         dtype=torch.float32,
     )
@@ -440,7 +437,7 @@ def make_composite_from_td(td):
 # Reproducible experiments: seeding
 # ---------------------------------
 #
-# Seeding an environment is a commong operation when initializing an experiment.
+# Seeding an environment is a common operation when initializing an experiment.
 # :func:`EnvBase._set_seed` only goal is to set the seed of the contained
 # simulator. If possible, this operation should not call `reset()` or interact
 # with the environment execution. The parent :func:`EnvBase.set_seed` method
@@ -661,8 +658,8 @@ class SinTransform(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec):
         return BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=observation_spec.shape,
             dtype=observation_spec.dtype,
             device=observation_spec.device,
@@ -679,8 +676,8 @@ class CosTransform(Transform):
     @_apply_to_composite
     def transform_observation_spec(self, observation_spec):
         return BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=observation_spec.shape,
             dtype=observation_spec.dtype,
             device=observation_spec.device,

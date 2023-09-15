@@ -17,7 +17,19 @@ from .replay_buffers import (
     TensorDictPrioritizedReplayBuffer,
     TensorDictReplayBuffer,
     TensorDictRoundRobinWriter,
+    TensorStorage,
     Writer,
+)
+from .rlhf import (
+    create_infinite_iterator,
+    get_dataloader,
+    PairwiseDataset,
+    PromptData,
+    PromptTensorDictTokenizer,
+    RewardData,
+    RolloutFromModel,
+    TensorDictTokenizer,
+    TokenizedDatasetLoader,
 )
 from .tensor_specs import (
     BinaryDiscreteTensorSpec,
@@ -34,3 +46,4 @@ from .tensor_specs import (
     UnboundedContinuousTensorSpec,
     UnboundedDiscreteTensorSpec,
 )
+from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec

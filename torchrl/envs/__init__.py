@@ -3,18 +3,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .env_creator import EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
+from .libs.envpool import MultiThreadedEnv
 from .model_based import ModelBasedEnvBase
 from .transforms import (
+    ActionMask,
     BinarizeReward,
     CatFrames,
     CatTensors,
     CenterCrop,
+    ClipTransform,
     Compose,
+    DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
+    DTypeCastTransform,
     ExcludeTransform,
     FiniteTensorDictCheck,
     FlattenObservation,
@@ -45,18 +51,20 @@ from .transforms import (
     Transform,
     TransformedEnv,
     UnsqueezeTransform,
+    VC1Transform,
     VecNorm,
     VIPRewardTransform,
     VIPTransform,
 )
 from .utils import (
     check_env_specs,
+    check_marl_grouping,
     exploration_mode,
     exploration_type,
     ExplorationType,
     make_composite_from_td,
+    MarlGroupMapType,
     set_exploration_mode,
     set_exploration_type,
     step_mdp,
 )
-from .vec_env import MultiThreadedEnv, ParallelEnv, SerialEnv

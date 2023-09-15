@@ -474,10 +474,10 @@ sequence(tensordict, params)
 
 ###############################################################################
 
-import functorch
+from torch import vmap
 
 params_expand = params.expand(4)
-tensordict_exp = functorch.vmap(sequence, (None, 0))(tensordict, params_expand)
+tensordict_exp = vmap(sequence, (None, 0))(tensordict, params_expand)
 print(tensordict_exp)
 
 ###############################################################################

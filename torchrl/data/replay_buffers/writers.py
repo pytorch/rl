@@ -58,16 +58,8 @@ class RoundRobinWriter(Writer):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        if cur_size + batch_size <= self._storage.max_size:
-            index = np.arange(cur_size, cur_size + batch_size)
-            self._cursor = (self._cursor + batch_size) % self._storage.max_size
-        else:
-            d = self._storage.max_size - cur_size
-            index = np.empty(batch_size, dtype=np.int64)
-            index[:d] = np.arange(cur_size, self._storage.max_size)
-            index[d:] = np.arange(batch_size - d)
-            self._cursor = batch_size - d
-        # storage must convert the data to the appropriate format if needed
+        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        self._cursor = (batch_size + cur_size) % self._storage.max_size
         self._storage[index] = data
         return index
 
@@ -94,15 +86,8 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
     def extend(self, data: Sequence) -> torch.Tensor:
         cur_size = self._cursor
         batch_size = len(data)
-        if cur_size + batch_size <= self._storage.max_size:
-            index = np.arange(cur_size, cur_size + batch_size)
-            self._cursor = (self._cursor + batch_size) % self._storage.max_size
-        else:
-            d = self._storage.max_size - cur_size
-            index = np.empty(batch_size, dtype=np.int64)
-            index[:d] = np.arange(cur_size, self._storage.max_size)
-            index[d:] = np.arange(batch_size - d)
-            self._cursor = batch_size - d
+        index = np.arange(cur_size, batch_size + cur_size) % self._storage.max_size
+        self._cursor = (batch_size + cur_size) % self._storage.max_size
         # storage must convert the data to the appropriate format if needed
         data["index"] = index
         self._storage[index] = data

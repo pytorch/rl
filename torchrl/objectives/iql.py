@@ -59,6 +59,10 @@ class IQLLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
             tensordict key where to write the priority (for prioritized replay
             buffer usage). Default is `"td_error"`.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -233,6 +237,7 @@ class IQLLoss(LossModule):
         expectile: float = 0.5,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -252,32 +257,42 @@ class IQLLoss(LossModule):
             create_target_params=False,
             funs_to_decorate=["forward", "get_dist"],
         )
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         # Value Function Network
         self.convert_to_functional(
             value_network,
             "value_network",
             create_target_params=False,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
 
         # Q Function Network
         self.delay_qvalue = True
         self.num_qvalue_nets = num_qvalue_nets
-
+        if separate_losses and policy_params is not None:
+            qvalue_policy_params = list(actor_network.parameters()) + list(
+                value_network.parameters()
+            )
+        else:
+            qvalue_policy_params = None
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=True,
-            compare_against=list(actor_network.parameters())
-            + list(value_network.parameters()),
+            compare_against=qvalue_policy_params,
         )
 
         self.loss_function = loss_function
         if gamma is not None:
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
 
     @property
     def device(self) -> torch.device:
@@ -372,10 +387,7 @@ class IQLLoss(LossModule):
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
         if log_prob.shape != min_q.shape:
@@ -403,9 +415,7 @@ class IQLLoss(LossModule):
     def _loss_value(self, tensordict: TensorDictBase) -> Tuple[Tensor, Tensor]:
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.target_qvalue_network_params
-        )
+        td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys)
@@ -424,7 +434,7 @@ class IQLLoss(LossModule):
         target_value = self.value_estimator.value_estimate(
             tensordict, target_params=self.target_value_network_params
         ).squeeze(-1)
-        tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+        tensordict_expand = self._vmap_qvalue_networkN0(
             tensordict.select(*self.qvalue_network.in_keys),
             self.qvalue_network_params,
         )

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from numbers import Number
 from typing import Union
 
-import numpy as np
 import torch
 
 from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
@@ -20,6 +19,7 @@ from torchrl.data import CompositeSpec
 from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
@@ -83,6 +83,10 @@ class REDQLoss(LossModule):
         priority_key (str, optional): [Deprecated, use .set_keys() instead] Key where to write the priority value
             for prioritized replay buffers. Default is
             ``"td_error"``.
+        separate_losses (bool, optional): if ``True``, shared parameters between
+            policy and critic will only be trained on the policy loss.
+            Defaults to ``False``, ie. gradients are propagated to shared
+            parameters for both policy and critic losses.
 
     Examples:
         >>> import torch
@@ -253,6 +257,7 @@ class REDQLoss(LossModule):
         gSDE: bool = False,
         gamma: float = None,
         priority_key: str = None,
+        separate_losses: bool = False,
     ):
         if not _has_functorch:
             raise ImportError("Failed to import functorch.") from FUNCTORCH_ERR
@@ -270,14 +275,19 @@ class REDQLoss(LossModule):
 
         # let's make sure that actor_network has `return_log_prob` set to True
         self.actor_network.return_log_prob = True
-
+        if separate_losses:
+            # we want to make sure there are no duplicates in the params: the
+            # params of critic must be refs to actor if they're shared
+            policy_params = list(actor_network.parameters())
+        else:
+            policy_params = None
         self.delay_qvalue = delay_qvalue
         self.convert_to_functional(
             qvalue_network,
             "qvalue_network",
             num_qvalue_nets,
             create_target_params=self.delay_qvalue,
-            compare_against=list(actor_network.parameters()),
+            compare_against=policy_params,
         )
         self.num_qvalue_nets = num_qvalue_nets
         self.sub_sample_len = max(1, min(sub_sample_len, num_qvalue_nets - 1))
@@ -315,6 +325,9 @@ class REDQLoss(LossModule):
             warnings.warn(_GAMMA_LMBDA_DEPREC_WARNING, category=DeprecationWarning)
             self.gamma = gamma
 
+        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
+        self._vmap_getdist = vmap(self.actor_network.get_dist_params)
+
     @property
     def target_entropy(self):
         target_entropy = self.target_entropy_buffer
@@ -338,8 +351,19 @@ class REDQLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    action_spec[self.tensor_keys.action]
+                    .shape[len(action_container_shape) :]
+                    .numel()
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)
@@ -385,6 +409,22 @@ class REDQLoss(LossModule):
     def in_keys(self, values):
         self._in_keys = values
 
+    @property
+    @_cache_values
+    def _cached_detach_qvalue_network_params(self):
+        return self.qvalue_network_params.detach()
+
+    def _qvalue_params_cat(self, selected_q_params):
+        qvalue_params = torch.cat(
+            [
+                self._cached_detach_qvalue_network_params,
+                selected_q_params,
+                self.qvalue_network_params,
+            ],
+            0,
+        )
+        return qvalue_params
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         obs_keys = self.actor_network.in_keys
@@ -407,7 +447,7 @@ class REDQLoss(LossModule):
             *self.actor_network.in_keys
         )  # next_observation ->
         tensordict_actor = torch.stack([tensordict_actor_grad, next_td_actor], 0)
-        tensordict_actor = tensordict_actor.contiguous()
+        # tensordict_actor = tensordict_actor.contiguous()
 
         with set_exploration_type(ExplorationType.RANDOM):
             if self.gSDE:
@@ -416,7 +456,7 @@ class REDQLoss(LossModule):
                     torch.zeros(tensordict_actor.shape, device=tensordict_actor.device),
                 )
             # vmap doesn't support sampling, so we take it out from the vmap
-            td_params = vmap(self.actor_network.get_dist_params)(
+            td_params = self._vmap_getdist(
                 tensordict_actor,
                 actor_params,
             )
@@ -461,13 +501,9 @@ class REDQLoss(LossModule):
         )
 
         # cat params
-        q_params_detach = self.qvalue_network_params.detach()
-        qvalue_params = torch.cat(
-            [q_params_detach, selected_q_params, self.qvalue_network_params], 0
-        )
-        tensordict_qval = vmap(self.qvalue_network)(
+        tensordict_qval = self._vmap_qvalue_network00(
             tensordict_qval,
-            qvalue_params,
+            self._qvalue_params_cat(selected_q_params),
         )
 
         state_action_value = tensordict_qval.get(

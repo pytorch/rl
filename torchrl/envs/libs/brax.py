@@ -123,8 +123,8 @@ class BraxWrapper(_EnvWrapper):
 
     def _make_specs(self, env: "brax.envs.env.Env") -> None:  # noqa: F821
         self.action_spec = BoundedTensorSpec(
-            minimum=-1,
-            maximum=1,
+            low=-1,
+            high=1,
             shape=(
                 *self.batch_size,
                 env.action_size,
@@ -282,7 +282,6 @@ class BraxWrapper(_EnvWrapper):
             out = self._step_with_grad(tensordict)
         else:
             out = self._step_without_grad(tensordict)
-        out = out.select().set("next", out)
         return out
 
 
@@ -386,7 +385,7 @@ class _BraxEnvStep(torch.autograd.Function):
         #     raise RuntimeError("grad_next_qp_values")
 
         pipeline_state = dict(
-            zip(ctx.next_state["pipeline_state"].keys(), grad_next_qp_values)
+            zip(ctx.next_state.get("pipeline_state").keys(), grad_next_qp_values)
         )
         none_keys = []
 
@@ -394,24 +393,25 @@ class _BraxEnvStep(torch.autograd.Function):
             if val is not None:
                 return val
             none_keys.append(key)
-            return torch.zeros_like(ctx.next_state["pipeline_state"][key])
+            return torch.zeros_like(ctx.next_state.get(("pipeline_state", key)))
 
         pipeline_state = {
             key: _make_none(key, val) for key, val in pipeline_state.items()
         }
-
+        metrics = ctx.next_state.get("metrics", None)
+        if metrics is None:
+            metrics = {}
+        info = ctx.next_state.get("info", None)
+        if info is None:
+            info = {}
         grad_next_state_td = TensorDict(
             source={
                 "pipeline_state": pipeline_state,
                 "obs": grad_next_obs,
                 "reward": grad_next_reward,
-                "done": torch.zeros_like(ctx.next_state["done"]),
-                "metrics": {
-                    k: torch.zeros_like(v) for k, v in ctx.next_state["metrics"].items()
-                },
-                "info": {
-                    k: torch.zeros_like(v) for k, v in ctx.next_state["info"].items()
-                },
+                "done": torch.zeros_like(ctx.next_state.get("done")),
+                "metrics": {k: torch.zeros_like(v) for k, v in metrics.items()},
+                "info": {k: torch.zeros_like(v) for k, v in info.items()},
             },
             device=ctx.env.device,
             batch_size=ctx.env.batch_size,

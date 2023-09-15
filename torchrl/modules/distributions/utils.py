@@ -46,7 +46,7 @@ class FasterTransformedDistribution(TransformedDistribution):
                 transforms,
             ]
         elif isinstance(transforms, list):
-            raise ValueError("Mae a ComposeTransform first.")
+            raise ValueError("Make a ComposeTransform first.")
         else:
             raise ValueError(
                 "transforms must be a Transform or list, but was {}".format(transforms)
@@ -160,5 +160,4 @@ else:
 
     def safeatanh(y, eps):  # noqa: D103
         lim = 1.0 - eps
-        y = y.clone()
-        return y.clamp(-lim, lim)
+        return y.clamp(-lim, lim).atanh()

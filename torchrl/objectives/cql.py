@@ -21,6 +21,7 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import ProbabilisticActor
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
+    _cache_values,
     _GAMMA_LMBDA_DEPREC_WARNING,
     default_value_kwargs,
     distance_loss,
@@ -339,6 +340,9 @@ class CQLLoss(LossModule):
                 torch.nn.Parameter(torch.tensor(math.log(1.0), device=device)),
             )
 
+        self._vmap_qvalue_networkN0 = vmap(self.qvalue_network, (None, 0))
+        self._vmap_qvalue_network00 = vmap(self.qvalue_network)
+
     @property
     def target_entropy(self):
         target_entropy = self.target_entropy_buffer
@@ -362,8 +366,19 @@ class CQLLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    action_spec[self.tensor_keys.action]
+                    .shape[len(action_container_shape) :]
+                    .numel()
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)
@@ -491,6 +506,11 @@ class CQLLoss(LossModule):
 
         return TensorDict(out, [])
 
+    @property
+    @_cache_values
+    def _cached_detach_qvalue_params(self):
+        return self.qvalue_network_params.detach()
+
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
@@ -502,8 +522,9 @@ class CQLLoss(LossModule):
 
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
-        td_q = vmap(self.qvalue_network, (None, 0))(
-            td_q, self.qvalue_network_params.detach().clone()
+        td_q = self._vmap_qvalue_networkN0(
+            td_q,
+            self._cached_detach_qvalue_params,
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -554,7 +575,7 @@ class CQLLoss(LossModule):
 
             # get q-values
             if not self.max_q_backup:
-                next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+                next_tensordict_expand = self._vmap_qvalue_networkN0(
                     next_tensordict, qval_params
                 )
                 next_state_value = next_tensordict_expand.get(
@@ -575,7 +596,7 @@ class CQLLoss(LossModule):
                     actor_params,
                     num_actions=self.num_random,
                 )
-                next_tensordict_expand = vmap(self.qvalue_network, (None, 0))(
+                next_tensordict_expand = self._vmap_qvalue_networkN0(
                     next_tensordict, qval_params
                 )
 
@@ -605,7 +626,7 @@ class CQLLoss(LossModule):
         )
 
         tensordict_pred_q = tensordict.select(*self.qvalue_network.in_keys)
-        q_pred = vmap(self.qvalue_network, (None, 0))(
+        q_pred = self._vmap_qvalue_networkN0(
             tensordict_pred_q, self.qvalue_network_params
         ).get(self.tensor_keys.state_action_value)
 
@@ -670,7 +691,9 @@ class CQLLoss(LossModule):
         )
         cql_tensordict = cql_tensordict.contiguous()
 
-        cql_tensordict_expand = vmap(self.qvalue_network)(cql_tensordict, qvalue_params)
+        cql_tensordict_expand = self._vmap_qvalue_network00(
+            cql_tensordict, qvalue_params
+        )
         # get q values
         state_action_value = cql_tensordict_expand.get(
             self.tensor_keys.state_action_value

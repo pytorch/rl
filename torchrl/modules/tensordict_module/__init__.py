@@ -8,9 +8,11 @@ from .actors import (
     ActorCriticOperator,
     ActorCriticWrapper,
     ActorValueOperator,
+    DecisionTransformerInferenceWrapper,
     DistributionalQValueActor,
     DistributionalQValueHook,
     DistributionalQValueModule,
+    LMHeadActorValueOperator,
     ProbabilisticActor,
     QValueActor,
     QValueHook,
@@ -18,9 +20,10 @@ from .actors import (
     TanhModule,
     ValueOperator,
 )
-from .common import SafeModule
+from .common import SafeModule, VmapModule
 from .exploration import (
     AdditiveGaussianWrapper,
+    EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
