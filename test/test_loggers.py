@@ -110,67 +110,63 @@ class TestTensorboard:
 
 class TestCSVLogger:
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_scalar(self, steps):
+    def test_log_scalar(self, steps, tmpdir):
         torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = CSVLogger(log_dir=log_dir, exp_name=exp_name)
+        exp_name = "ramala"
+        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
 
-            values = torch.rand(3)
-            for i in range(3):
-                scalar_name = "foo"
-                scalar_value = values[i].item()
-                logger.log_scalar(
-                    value=scalar_value,
-                    name=scalar_name,
-                    step=steps[i] if steps else None,
-                )
+        values = torch.rand(3)
+        for i in range(3):
+            scalar_name = "foo"
+            scalar_value = values[i].item()
+            logger.log_scalar(
+                value=scalar_value,
+                name=scalar_name,
+                step=steps[i] if steps else None,
+            )
 
-            with open(
-                os.path.join(log_dir, exp_name, "scalars", "foo.csv"), "r"
-            ) as file:
-                for i, row in enumerate(file.readlines()):
-                    step = steps[i] if steps else i
-                    assert row == f"{step},{values[i].item()}\n"
+        with open(os.path.join(tmpdir, exp_name, "scalars", "foo.csv"), "r") as file:
+            for i, row in enumerate(file.readlines()):
+                step = steps[i] if steps else i
+                assert row == f"{step},{values[i].item()}\n"
 
     @pytest.mark.parametrize("steps", [None, [1, 10, 11]])
-    def test_log_video(self, steps):
+    def test_log_video(self, steps, tmpdir):
         torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = CSVLogger(log_dir=log_dir, exp_name=exp_name)
+        exp_name = "ramala"
+        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
 
-            # creating a sample video (T, C, H, W), where T - number of frames,
-            # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
-            # the first 64 frames are black and the next 64 are white
-            video = torch.cat(
-                (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+        # creating a sample video (T, C, H, W), where T - number of frames,
+        # C - number of image channels (e.g. 3 for RGB), H, W - image dimensions.
+        # the first 64 frames are black and the next 64 are white
+        video = torch.cat(
+            (torch.zeros(64, 1, 32, 32), torch.full((64, 1, 32, 32), 255))
+        )
+        video = video[None, :]
+        for i in range(3):
+            logger.log_video(
+                name="foo",
+                video=video,
+                step=steps[i] if steps else None,
             )
-            video = video[None, :]
-            for i in range(3):
-                logger.log_video(
-                    name="foo",
-                    video=video,
-                    step=steps[i] if steps else None,
-                )
-            sleep(0.01)  # wait until events are registered
+        sleep(0.01)  # wait until events are registered
 
-            # check that the logged videos are the same as the initial video
-            video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + ".pt"
-            logged_video = torch.load(
-                os.path.join(log_dir, exp_name, "videos", video_file_name)
+        # check that the logged videos are the same as the initial video
+        video_file_name = "foo_" + ("0" if not steps else str(steps[0])) + ".pt"
+        logged_video = torch.load(
+            os.path.join(tmpdir, exp_name, "videos", video_file_name)
+        )
+        assert torch.equal(video, logged_video), logged_video
+
+        # check that we catch the error in case the format of the tensor is wrong
+        video_wrong_format = torch.zeros(64, 2, 32, 32)
+        video_wrong_format = video_wrong_format[None, :]
+        with pytest.raises(Exception):
+            logger.log_video(
+                name="foo",
+                video=video_wrong_format,
+                step=steps[i] if steps else None,
             )
-            assert torch.equal(video, logged_video), logged_video
-
-            # check that we catch the error in case the format of the tensor is wrong
-            video_wrong_format = torch.zeros(64, 2, 32, 32)
-            video_wrong_format = video_wrong_format[None, :]
-            with pytest.raises(Exception):
-                logger.log_video(
-                    name="foo",
-                    video=video_wrong_format,
-                    step=steps[i] if steps else None,
-                )
 
     def test_log_histogram(self):
         torch.manual_seed(0)

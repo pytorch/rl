@@ -554,11 +554,11 @@ class TensorSpec:
             if not ignore_device:
                 val = torch.tensor(val, device=self.device, dtype=self.dtype)
             else:
-                val = torch.as_tensor(val, dtype=self.dtype)
-            if val != self.shape:
+                val = torch.tensor(val, dtype=self.dtype)
+            if val.shape != self.shape:
                 # if val.shape[-len(self.shape) :] != self.shape:
                 # option 1: add a singleton dim at the end
-                if val == self.shape and self.shape[-1] == 1:
+                if val.shape == self.shape and self.shape[-1] == 1:
                     val = val.unsqueeze(-1)
                 else:
                     try:

@@ -225,12 +225,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
+        allow_done_after_reset: bool = False,
     ):
         if device is None:
             device = torch.device("cpu")
-        self.__dict__["_done_keys"] = None
-        self.__dict__["_reward_keys"] = None
-        self.__dict__["_action_keys"] = None
+        self.__dict__.setdefault("_done_keys", None)
+        self.__dict__.setdefault("_reward_keys", None)
+        self.__dict__.setdefault("_action_keys", None)
+        self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -249,6 +251,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # it's already been set
             self.batch_size = torch.Size(batch_size)
         self._run_type_checks = run_type_checks
+        self._allow_done_after_reset = allow_done_after_reset
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -320,7 +323,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_size(self) -> torch.Size:
-        _batch_size = getattr(self, "_batch_size", None)
+        _batch_size = self.__dict__["_batch_size"]
         if _batch_size is None:
             _batch_size = self._batch_size = torch.Size([])
         return _batch_size
@@ -1299,13 +1302,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         self.output_spec["full_done_spec"][done_key].zero(leading_dim),
                     )
 
-        for done_key in self.done_keys:
-            if done_key not in _reset_map:
-                if tensordict_reset.get(done_key).any():
-                    raise DONE_AFTER_RESET_ERROR
-            else:
-                if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
-                    raise DONE_AFTER_RESET_ERROR
+        if not self._allow_done_after_reset:
+            for done_key in self.done_keys:
+                if done_key not in _reset_map:
+                    if tensordict_reset.get(done_key).any():
+                        raise DONE_AFTER_RESET_ERROR
+                else:
+                    if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
+                        raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1710,6 +1714,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         dtype: Optional[np.dtype] = None,
         device: DEVICE_TYPING = None,
         batch_size: Optional[torch.Size] = None,
+        allow_done_after_reset: bool = False,
         **kwargs,
     ):
         if device is None:
@@ -1718,6 +1723,7 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
             device=device,
             dtype=dtype,
             batch_size=batch_size,
+            allow_done_after_reset=allow_done_after_reset,
         )
         if len(args):
             raise ValueError(

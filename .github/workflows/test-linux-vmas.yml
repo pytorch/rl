@@ -34,7 +34,7 @@ jobs:
 
         nvidia-smi
 
-        bash .circleci/unittest/linux_libs/scripts_vmas/setup_env.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/install.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/run_test.sh
-        bash .circleci/unittest/linux_libs/scripts_vmas/post_process.sh
+        bash .github/unittest/linux_libs/scripts_vmas/setup_env.sh
+        bash .github/unittest/linux_libs/scripts_vmas/install.sh
+        bash .github/unittest/linux_libs/scripts_vmas/run_test.sh
+        bash .github/unittest/linux_libs/scripts_vmas/post_process.sh

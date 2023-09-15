@@ -11,6 +11,8 @@ from warnings import warn
 
 import torch
 
+from torchrl.envs.utils import _classproperty
+
 try:
     from torch.utils._contextlib import _DecoratorContextManager
 except ModuleNotFoundError:
@@ -31,7 +33,6 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 
 from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
-from torchrl.envs.utils import _classproperty
 
 DEFAULT_GYM = None
 IMPORT_ERROR = None
@@ -281,6 +282,8 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
+    if not _has_gym:
+        raise ImportError("Gym(nasium) could not be found in your virtual environment.")
     envs = _get_gym_envs()
     envs = list(envs)
     envs = sorted(envs)
@@ -372,7 +375,7 @@ class GymWrapper(GymLikeEnv):
                 return gymnasium
         except ImportError:
             pass
-        raise RuntimeError(
+        raise ImportError(
             f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
         )
 
@@ -489,8 +492,10 @@ class GymWrapper(GymLikeEnv):
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
     @_classproperty
-    def available_envs(cls) -> List[str]:
-        return _get_envs()
+    def available_envs(cls):
+        if not _has_gym:
+            return
+        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:

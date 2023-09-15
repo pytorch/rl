@@ -208,7 +208,7 @@ class LSTMModule(ModuleBase):
         self._temporal_mode = False
 
     def make_tensordict_primer(self):
-        from torchrl.envs import TensorDictPrimer
+        from torchrl.envs.transforms.transforms import TensorDictPrimer
 
         def make_tuple(key):
             if isinstance(key, tuple):

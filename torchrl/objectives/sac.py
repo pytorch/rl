@@ -619,24 +619,23 @@ class SACLoss(LossModule):
                 f"Batch size={tensordict.shape} is incompatible "
                 f"with num_qvqlue_nets={self.num_qvalue_nets}."
             )
-        tensordict_chunks = torch.stack(
-            tensordict.chunk(self.num_qvalue_nets, dim=0), 0
+        tensordict_chunks = tensordict.reshape(
+            self.num_qvalue_nets, -1, *tensordict.shape[1:]
         )
-        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
+        target_chunks = target_value.reshape(
+            self.num_qvalue_nets, -1, *target_value.shape[1:]
+        )
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = self._vmap_qnetwork00(
             tensordict_chunks, self.qvalue_network_params
         )
-        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value).squeeze(
-            -1
-        )
+        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value)
+        pred_val = pred_val.squeeze(-1)
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        metadata = {
-            "td_error": torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
-        }
+        metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
 
