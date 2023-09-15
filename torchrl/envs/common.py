@@ -229,10 +229,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
     ):
         if device is None:
             device = torch.device("cpu")
-        self.__dict__["_done_keys"] = None
-        self.__dict__["_reward_keys"] = None
-        self.__dict__["_action_keys"] = None
-        self.__dict__["_batch_size"] = None
+        self.__dict__.setdefault("_done_keys", None)
+        self.__dict__.setdefault("_reward_keys", None)
+        self.__dict__.setdefault("_action_keys", None)
+        self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
