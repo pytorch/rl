@@ -47,6 +47,15 @@ from torchrl.data.utils import check_no_exclusive_keys
 DONE_AFTER_RESET_ERROR = RuntimeError(
     "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
 )
+ACTION_MASK_ERROR = RuntimeError(
+    "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
+    " If you are using a custom policy, make sure to take the action mask into account when computing the output."
+    " If you are using a default policy, please add the torchrl.envs.transforms.ActionMask transform to your environment."
+    "If you are using a ParallelEnv or another batched inventor, "
+    "make sure to add the transform to the ParallelEnv (and not to the sub-environments)."
+    " For more info on using action masks, see the docs at: "
+    "https://pytorch.org/rl/reference/envs.html#environments-with-masked-actions"
+)
 
 
 def _convert_exploration_type(*, exploration_mode, exploration_type):
@@ -419,8 +428,9 @@ def check_env_specs(env, return_contiguous=True, check_dtype=True, seed=0):
     of an experiment and as such should be kept out of training scripts.
 
     """
-    torch.manual_seed(seed)
-    env.set_seed(seed)
+    if seed is not None:
+        torch.manual_seed(seed)
+        env.set_seed(seed)
 
     fake_tensordict = env.fake_tensordict()
     real_tensordict = env.rollout(3, return_contiguous=return_contiguous)

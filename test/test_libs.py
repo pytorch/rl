@@ -4,6 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 import importlib
 
+from torchrl.envs.transforms import ActionMask, TransformedEnv
+from torchrl.modules import MaskedCategorical
+
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
 if _has_isaac:
@@ -35,6 +38,11 @@ from _utils_internal import (
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    TensorDictModule,
+    TensorDictSequential,
+)
 from tensordict.tensordict import assert_allclose_td, TensorDict
 from torch import nn
 from torchrl._utils import implement_for
@@ -76,6 +84,7 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
+from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 
 if _has_gym:
     try:
@@ -1876,6 +1885,87 @@ class TestRoboHive:
             print("no camera")
             return
         check_env_specs(env)
+
+
+@pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
+class TestSmacv2:
+    def test_env_procedural(self):
+        distribution_config = {
+            "n_units": 5,
+            "n_enemies": 6,
+            "team_gen": {
+                "dist_type": "weighted_teams",
+                "unit_types": ["marine", "marauder", "medivac"],
+                "exception_unit_types": ["medivac"],
+                "weights": [0.5, 0.2, 0.3],
+                "observe": True,
+            },
+            "start_positions": {
+                "dist_type": "surrounded_and_reflect",
+                "p": 0.5,
+                "n_enemies": 5,
+                "map_x": 32,
+                "map_y": 32,
+            },
+        }
+        env = SMACv2Env(
+            map_name="10gen_terran",
+            capability_config=distribution_config,
+            seed=0,
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    @pytest.mark.parametrize("categorical_actions", [True, False])
+    @pytest.mark.parametrize("map", ["MMM2", "3s_vs_5z"])
+    def test_env(self, map: str, categorical_actions):
+        env = SMACv2Env(
+            map_name=map,
+            categorical_actions=categorical_actions,
+            seed=0,
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    def test_parallel_env(self):
+        env = TransformedEnv(
+            ParallelEnv(
+                num_workers=2,
+                create_env_fn=lambda: SMACv2Env(
+                    map_name="3s_vs_5z",
+                    seed=0,
+                ),
+            ),
+            ActionMask(
+                action_key=("agents", "action"), mask_key=("agents", "action_mask")
+            ),
+        )
+        check_env_specs(env, seed=None)
+        env.close()
+
+    def test_collector(self):
+        env = SMACv2Env(map_name="MMM2", seed=0, categorical_actions=True)
+        in_feats = env.observation_spec["agents", "observation"].shape[-1]
+        out_feats = env.action_spec.space.n
+
+        module = TensorDictModule(
+            nn.Linear(in_feats, out_feats),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "logits")],
+        )
+        prob = ProbabilisticTensorDictModule(
+            in_keys={"logits": ("agents", "logits"), "mask": ("agents", "action_mask")},
+            out_keys=[("agents", "action")],
+            distribution_class=MaskedCategorical,
+        )
+        actor = TensorDictSequential(module, prob)
+
+        collector = SyncDataCollector(
+            env, policy=actor, frames_per_batch=20, total_frames=40
+        )
+        for _ in collector:
+            break
+        collector.shutdown()
 
 
 if __name__ == "__main__":
