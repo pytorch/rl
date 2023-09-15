@@ -11,6 +11,7 @@ from .habitat import HabitatEnv
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
 from .openml import OpenMLEnv
+from .pettingzoo import PettingZooEnv, PettingZooWrapper
 from .robohive import RoboHiveEnv
 from .smacv2 import SMACv2Env, SMACv2Wrapper
 from .vmas import VmasEnv, VmasWrapper

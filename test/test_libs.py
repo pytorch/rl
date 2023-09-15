@@ -26,7 +26,6 @@ import numpy as np
 import pytest
 import torch
 
-import torchrl
 from _utils_internal import (
     _make_multithreaded_env,
     CARTPOLE_VERSIONED,

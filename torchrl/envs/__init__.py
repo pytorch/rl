@@ -22,6 +22,8 @@ from .libs import (
     MultiThreadedEnv,
     MultiThreadedEnvWrapper,
     OpenMLEnv,
+    PettingZooEnv,
+    PettingZooWrapper,
     RoboHiveEnv,
     SMACv2Env,
     SMACv2Wrapper,

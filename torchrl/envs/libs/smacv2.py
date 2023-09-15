@@ -19,7 +19,7 @@ from torchrl.data import (
 )
 from torchrl.envs.common import _EnvWrapper
 
-from torchrl.envs.utils import ACTION_MASK_ERROR, _classproperty
+from torchrl.envs.utils import _classproperty, ACTION_MASK_ERROR
 
 _has_smacv2 = importlib.util.find_spec("smacv2") is not None
 
