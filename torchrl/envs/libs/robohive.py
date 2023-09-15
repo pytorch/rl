@@ -77,9 +77,14 @@ class RoboHiveEnv(GymEnv):
         else:
             return None
 
+    @_classproperty
+    def available_envs(cls):
+        if not _has_robohive:
+            return
+        yield from cls.env_list
+
     @classmethod
     def register_envs(cls):
-
         if not _has_robohive:
             raise ImportError(
                 "Cannot load robohive from the current virtual environment."
