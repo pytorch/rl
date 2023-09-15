@@ -228,14 +228,15 @@ def _check_only_one_entry(
     recursive: bool = True,
 ):
     found_entry = False
-    for value in spec.values():
+    for key, value in spec.items():
         if isinstance(value, CompositeSpec):
             _check_only_one_entry(value, error, recursive)
         else:
-            if not found_entry:
-                found_entry = True
-            else:
-                raise error
+            if key == "done":
+                if found_entry:
+                    raise error
+                else:
+                    found_entry = True
 
 
 class CloudpickleWrapper(object):

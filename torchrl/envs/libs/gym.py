@@ -576,9 +576,68 @@ class GymWrapper(GymLikeEnv):
             observation_spec = observation_spec.expand(
                 *batch_size, *observation_spec.shape
             )
+        self.done_spec = self._make_done_spec()
         self.action_spec = action_spec
         self.reward_spec = reward_spec
         self.observation_spec = observation_spec
+
+    @implement_for("gymnasium", "0.26", None)
+    def _make_done_spec(self):
+        return CompositeSpec(
+            {"done": DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.device,
+            shape=(*self.batch_size, 1)
+            ),        "truncated": DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.device,
+            shape=(*self.batch_size, 1)
+            )}, shape=self.batch_size
+        )
+
+    @implement_for("gym", "0.26", None)
+    def _make_done_spec(self):
+        return CompositeSpec(
+            {"done": DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.device,
+            shape=(*self.batch_size, 1)
+            ),        "truncated": DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.device,
+            shape=(*self.batch_size, 1)
+            )}, shape=self.batch_size
+        )
+
+    @implement_for("gym", None, "0.26")
+    def _make_done_spec(self):
+        return CompositeSpec(
+            {"done": DiscreteTensorSpec(
+            2,
+            dtype=torch.bool,
+            device=self.device,
+            shape=(*self.batch_size, 1)
+            )}, shape=self.batch_size,
+        )
+
+    @implement_for("gym", "0.26", None)
+    def _output_transform(self, step_outputs_tuple):
+        observations, reward, termination, truncation, info = step_outputs_tuple
+        return (observations, reward, termination, truncation, termination | truncation, info)
+
+    @implement_for("gym", None, "0.26")
+    def _output_transform(self, step_outputs_tuple):
+        observations, reward, done, info = step_outputs_tuple
+        return (observations, reward, None, None, done, info)
+
+    @implement_for("gymnasium", "0.26", None)
+    def _output_transform(self, step_outputs_tuple):
+        observations, reward, termination, truncation, info = step_outputs_tuple
+        return (observations, reward, termination, truncation, termination | truncation, info)
 
     def _init_env(self):
         self.reset()
