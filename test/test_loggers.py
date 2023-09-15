@@ -196,20 +196,18 @@ class TestCSVLogger:
                 data = torch.randn(10)
                 logger.log_histogram("hist", data, step=0, bins=2)
 
-    def test_log_config(self):
+    def test_log_config(self, tmpdir):
         torch.manual_seed(0)
-        with tempfile.TemporaryDirectory() as log_dir:
-            exp_name = "ramala"
-            logger = CSVLogger(log_dir=log_dir, exp_name=exp_name)
-            config = get_example_config()
-            logger.log_hparams(cfg=config)
 
-            with open(
-                os.path.join(log_dir, exp_name, "texts", "hparams0.txt"), "r"
-            ) as file:
-                txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
-                text = "".join(file.readlines())
-                assert text == txt
+        exp_name = "ramala"
+        logger = CSVLogger(log_dir=tmpdir, exp_name=exp_name)
+        config = get_example_config()
+        logger.log_hparams(cfg=config)
+
+        with open(os.path.join(tmpdir, exp_name, "texts", "hparams0.txt"), "r") as file:
+            txt = "\n".join([f"{k}: {val}" for k, val in sorted(config.items())])
+            text = "".join(file.readlines())
+            assert text == txt
 
 
 @pytest.fixture(scope="class")
