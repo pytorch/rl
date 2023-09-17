@@ -259,18 +259,18 @@ class MultiAgentConvNet(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from torchrl.modules import MultiAgentConvNet
-        >>> batch = (3,2)
-        >>> n_agents = 7
-        >>> channels, x, y = 3, 100, 100
-        >>> obs = torch.randn(*batch, n_agents, channels, x, y)
-        First lets consider a centralised network with shared parameters.
+        ... from torchrl.modules import MultiAgentConvNet
+        ... batch = (3,2)
+        ... n_agents = 7
+        ... channels, x, y = 3, 100, 100
+        ... obs = torch.randn(*batch, n_agents, channels, x, y)
+        >>> # First lets consider a centralised network with shared parameters.
         >>> cnn = MultiAgentConvNet(
-        >>>     n_agents,
-        >>>     centralised = True,
-        >>>     share_params = True
-        >>> )
-        >>> print(cnn)
+        ...     n_agents,
+        ...     centralised = True,
+        ...     share_params = True
+        ... )
+        ... print(cnn)
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0): ConvNet(
@@ -285,18 +285,20 @@ class MultiAgentConvNet(nn.Module):
             )
         )
         >>> result = cnn(obs)
-        >>> print(result.shape)
-        torch.Size([3, 2, 7, 2592]) - where the final dimension is determined by the input x
+        ... print(result.shape)
+        torch.Size([3, 2, 7, 2592])
+        >>> # where the final dimension is determined by the input x
         >>> print(all(result[0,0,0] == result[0,0,1]))
-        True - since both shared observations and parameters leads to all agents having identical outputs (eg. for a value function)
+        True
+        >>> # Since both shared observations and parameters leads to all agents having identical outputs (eg. for a value function)
 
-        Alternatively, a local network with parameter sharing (eg. decentralised weight sharing policy)
+        >>> # Alternatively, a local network with parameter sharing (eg. decentralised weight sharing policy)
         >>> cnn = MultiAgentConvNet(
-        >>>     n_agents,
-        >>>     centralised = False,
-        >>>     share_params = True
-        >>> )
-        >>> print(cnn)
+        ...     n_agents,
+        ...     centralised = False,
+        ...     share_params = True
+        ... )
+        ... print(cnn)
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0): ConvNet(
@@ -315,15 +317,15 @@ class MultiAgentConvNet(nn.Module):
         >>> print(all(result[0,0,0] == result[0,0,1]))
         False
 
-        Or multiple local networks identical in structure but with differing weights.
+        >>> # Or multiple local networks identical in structure but with differing weights.
         >>> cnn = MultiAgentConvNet(
-        >>>     n_agents,
-        >>>     centralised = False,
-        >>>     share_params = False
-        >>> )
-        >>> print(cnn)
-        >>> print(result.shape)
-        >>> print(all(result[0,0,0] == result[0,0,1]))
+        ...     n_agents,
+        ...     centralised = False,
+        ...     share_params = False
+        ... )
+        ... print(cnn)
+        ... print(result.shape)
+        ... print(all(result[0,0,0] == result[0,0,1]))
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0-6): 7 x ConvNet(
@@ -340,13 +342,13 @@ class MultiAgentConvNet(nn.Module):
         torch.Size([3, 2, 7, 2592])
         False
 
-        Or where inputs are shared but not parameters.
+        >>> # Or where inputs are shared but not parameters.
         >>> cnn = MultiAgentConvNet(
-        >>>     n_agents,
-        >>>     centralised = True,
-        >>>     share_params = False
-        >>> )
-        >>> print(cnn)
+        ...     n_agents,
+        ...     centralised = True,
+        ...     share_params = False
+        ... )
+        ... print(cnn)
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0-6): 7 x ConvNet(
