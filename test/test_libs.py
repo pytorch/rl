@@ -34,6 +34,7 @@ from _utils_internal import (
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rollout_consistency_assertion,
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
@@ -67,12 +68,14 @@ from torchrl.envs.libs.gym import (
     GymWrapper,
     MOGymEnv,
     MOGymWrapper,
+    set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
 from torchrl.envs.libs.robohive import RoboHiveEnv
+from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
 from torchrl.modules import ActorCriticOperator, MLP, SafeModule, ValueOperator
@@ -83,7 +86,7 @@ _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
 
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
 
-from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
+_has_gym_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 
 if _has_gym:
     try:
@@ -322,6 +325,113 @@ class TestGym:
         # was deprecated after np 1.20, and we don't want to install multiple np
         # versions.
         return
+
+    @implement_for("gymnasium", "0.27.0", None)
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    def test_vecenvs_wrapper(self, envname):
+        import gymnasium
+
+        # we can't use parametrize with implement_for
+        env = GymWrapper(
+            gymnasium.vector.SyncVectorEnv(
+                2 * [lambda envname=envname: gymnasium.make(envname)]
+            )
+        )
+        assert env.batch_size == torch.Size([2])
+        check_env_specs(env)
+        env = GymWrapper(
+            gymnasium.vector.AsyncVectorEnv(
+                2 * [lambda envname=envname: gymnasium.make(envname)]
+            )
+        )
+        assert env.batch_size == torch.Size([2])
+        check_env_specs(env)
+
+    @implement_for("gymnasium", "0.27.0", None)
+    # this env has Dict-based observation which is a nice thing to test
+    @pytest.mark.parametrize(
+        "envname",
+        ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
+        + (["FetchReach-v2"] if _has_gym_robotics else []),
+    )
+    def test_vecenvs_env(self, envname):
+        from _utils_internal import rollout_consistency_assertion
+
+        with set_gym_backend("gymnasium"):
+            env = GymEnv(envname, num_envs=2, from_pixels=False)
+            check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout, done_key="done", observation_key=obs_key
+                )
+
+    @implement_for("gym", "0.18", "0.27.0")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_wrapper(self, envname):  # noqa: F811
+        import gym
+
+        # we can't use parametrize with implement_for
+        for envname in ["CartPole-v1", "HalfCheetah-v4"]:
+            env = GymWrapper(
+                gym.vector.SyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
+                )
+            )
+            assert env.batch_size == torch.Size([2])
+            check_env_specs(env)
+            env = GymWrapper(
+                gym.vector.AsyncVectorEnv(
+                    2 * [lambda envname=envname: gym.make(envname)]
+                )
+            )
+            assert env.batch_size == torch.Size([2])
+            check_env_specs(env)
+
+    @implement_for("gym", "0.18", "0.27.0")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        with set_gym_backend("gym"):
+            env = GymEnv(envname, num_envs=2, from_pixels=False)
+            check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout, done_key="done", observation_key=obs_key
+                )
+        if envname != "CartPole-v1":
+            with set_gym_backend("gym"):
+                env = GymEnv(envname, num_envs=2, from_pixels=True)
+                check_env_specs(env)
+
+    @implement_for("gym", None, "0.18")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_wrapper(self, envname):  # noqa: F811
+        # skipping tests for older versions of gym
+        ...
+
+    @implement_for("gym", None, "0.18")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        # skipping tests for older versions of gym
+        ...
 
 
 @implement_for("gym", None, "0.26")

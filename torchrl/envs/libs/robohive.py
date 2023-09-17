@@ -18,7 +18,8 @@ from torchrl.data import UnboundedContinuousTensorSpec
 from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
 from torchrl.envs.utils import _classproperty, make_composite_from_td
 
-_has_robohive = importlib.util.find_spec("robohive") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
+_has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
@@ -164,7 +165,7 @@ class RoboHiveEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
         if kwargs.get("read_info", True):
-            self.info_dict_reader = self.read_info
+            self.set_info_dict_reader(self.read_info)
         return env
 
     @classmethod

@@ -495,6 +495,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
