@@ -617,7 +617,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
 
             if isinstance(value, CompositeSpec):
@@ -791,7 +791,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
@@ -820,6 +820,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # done spec
     def _get_done_keys(self):
+        if "full_done_spec" not in self.output_spec.keys():
+            # populate the "done" entry
+            # this will be raised if there is not full_done_spec (unlikely) or no done_key
+            # Since output_spec is lazily populated with an empty composite spec for
+            # done_spec, the second case is much more likely to occur.
+            self.done_spec = DiscreteTensorSpec(
+                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
+            )
+
         keys = self.output_spec["full_done_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find done spec")
@@ -967,7 +976,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
