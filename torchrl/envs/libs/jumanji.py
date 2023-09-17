@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib.util
 
-from typing import Dict, Optional, Union, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -351,6 +351,7 @@ class JumanjiWrapper(GymLikeEnv):
 
     def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
         ...
+
 
 class JumanjiEnv(JumanjiWrapper):
     """Jumanji environment wrapper.
