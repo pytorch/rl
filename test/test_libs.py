@@ -33,7 +33,7 @@ from _utils_internal import (
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED,
+    PONG_VERSIONED, rollout_consistency_assertion,
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
@@ -396,34 +396,42 @@ class TestGym:
             assert env.batch_size == torch.Size([2])
             check_env_specs(env)
 
-        @implement_for("gym", "0.18", "0.27.0")
-        @pytest.mark.parametrize(
-            "envname",
-            ["CartPole-v1", "HalfCheetah-v4"],
-        )
-        def test_vecenvs_env(self, envname):  # noqa: F811
-            with set_gym_backend("gym"):
-                env = GymEnv(envname, num_envs=2, from_pixels=False)
-                check_env_specs(env)
-                rollout = env.rollout(100, break_when_any_done=False)
-                for obs_key in env.observation_spec.keys(True, True):
-                    rollout_consistency_assertion(
-                        rollout, done_key="done", observation_key=obs_key
-                    )
+    @implement_for("gym", "0.18", "0.27.0")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        with set_gym_backend("gym"):
+            env = GymEnv(envname, num_envs=2, from_pixels=False)
+            check_env_specs(env)
+            rollout = env.rollout(100, break_when_any_done=False)
+            for obs_key in env.observation_spec.keys(True, True):
+                rollout_consistency_assertion(
+                    rollout, done_key="done", observation_key=obs_key
+                )
 
-            with set_gym_backend("gym"):
-                env = GymEnv(envname, num_envs=2, from_pixels=True)
-                check_env_specs(env)
-
-    @implement_for("gym", None, "0.18")
-    def test_vecenvs_wrapper(self):  # noqa: F811
-        # skipping tests for older versions of gym
-        return
+        with set_gym_backend("gym"):
+            env = GymEnv(envname, num_envs=2, from_pixels=True)
+            check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
-    def test_vecenvs_env(self):  # noqa: F811
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_wrapper(self, envname):  # noqa: F811
         # skipping tests for older versions of gym
-        return
+        ...
+
+    @implement_for("gym", None, "0.18")
+    @pytest.mark.parametrize(
+        "envname",
+        ["CartPole-v1", "HalfCheetah-v4"],
+    )
+    def test_vecenvs_env(self, envname):  # noqa: F811
+        # skipping tests for older versions of gym
+        ...
 
 
 @implement_for("gym", None, "0.26")
