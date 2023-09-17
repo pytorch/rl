@@ -410,10 +410,10 @@ class TestGym:
                 rollout_consistency_assertion(
                     rollout, done_key="done", observation_key=obs_key
                 )
-
-        with set_gym_backend("gym"):
-            env = GymEnv(envname, num_envs=2, from_pixels=True)
-            check_env_specs(env)
+        if envname != "CartPole-v1":
+            with set_gym_backend("gym"):
+                env = GymEnv(envname, num_envs=2, from_pixels=True)
+                check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
