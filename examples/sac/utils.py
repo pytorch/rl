@@ -222,12 +222,16 @@ def make_sac_optimizer(cfg, loss_module):
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
-        actor_params, lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
+        actor_params,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
+        eps=cfg.optim.adam_eps,
     )
     optimizer_critic = optim.Adam(
         critic_params,
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
+        eps=cfg.optim.adam_eps,
     )
     optimizer_alpha = optim.Adam(
         [loss_module.log_alpha],
