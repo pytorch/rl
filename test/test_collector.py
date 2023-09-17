@@ -53,6 +53,7 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import _replace_last
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
+from packaging import version
 
 # torch.set_default_dtype(torch.double)
 _os_is_windows = sys.platform == "win32"
@@ -946,7 +947,6 @@ def test_excluded_keys(collector_class, exclude):
     collector.shutdown()
     dummy_env.close()
 
-
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize(
     "collector_class",
@@ -1036,6 +1036,12 @@ def test_collector_output_keys(
     }
     if split_trajs:
         keys.add(("collector", "mask"))
+
+    from torchrl.envs.libs.gym import gym_backend
+
+    if "gymnasium" in str(gym_backend()) or gym_backend().__version__ >= version.parse("0.26"):
+        keys.add(("next", "truncated"))
+        keys.add("truncated")
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys

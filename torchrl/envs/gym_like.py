@@ -181,8 +181,6 @@ class GymLikeEnv(_EnvWrapper):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         for key, val in observations.items():
-            print(val)
-            print(self.observation_spec, key)
             observations[key] = self.observation_spec[key].encode(
                 val, ignore_device=True
             )
