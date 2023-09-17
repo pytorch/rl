@@ -91,12 +91,11 @@ class set_gym_backend(_DecoratorContextManager):
         self.backend = backend
 
     def _call(self):
+        """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        # implement_for.reset()
-        setters = copy(implement_for._setters)
         found_setter = False
-        for setter in setters:
+        for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
                 and setter.module_name.__name__ == self.backend.__name__
@@ -105,21 +104,26 @@ class set_gym_backend(_DecoratorContextManager):
                 self.backend.__version__, setter.from_version, setter.to_version
             )
             if check_module and check_version:
-                setter(setter.fn)
+                setter.module_set()
                 found_setter = True
+        # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
         if not found_setter:
             raise ImportError(
                 f"could not set anything related to gym backend "
-                f"{self.backend.__name__} with version={self.backend.__version__}."
+                f"{self.backend.__name__} with version={self.backend.__version__}. "
+                f"Check that the gym versions match!"
             )
 
     def __enter__(self):
-        self._setters = copy(implement_for._setters)
+        # we save a complete list of setters as well as whether they should be set.
+        # we want the full list becasue we want to be able to nest the calls to set_gym_backend.
+        # we also want to keep track of which ones are set to reproduce what was set before.
+        self._setters_saved = copy(implement_for._implementations)
         self._call()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        implement_for.reset(setters=self._setters)
-        delattr(self, "_setters")
+        implement_for.reset(setters_dict=self._setters_saved)
+        delattr(self, "_setters_saved")
 
     def clone(self):
         # override this method if your children class takes __init__ parameters
@@ -365,14 +369,14 @@ class GymWrapper(GymLikeEnv):
             import gym
 
             if isinstance(env.action_space, gym.spaces.space.Space):
-                return gym
+                return "gym"
         except ImportError:
             pass
         try:
             import gymnasium
 
             if isinstance(env.action_space, gymnasium.spaces.space.Space):
-                return gymnasium
+                return "gymnasium"
         except ImportError:
             pass
         raise ImportError(
@@ -385,7 +389,8 @@ class GymWrapper(GymLikeEnv):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if "env" in kwargs:
-            with set_gym_backend(self.get_library_name(kwargs["env"])):
+            libname = self.get_library_name(kwargs["env"])
+            with set_gym_backend(libname):
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
@@ -581,63 +586,73 @@ class GymWrapper(GymLikeEnv):
         self.reward_spec = reward_spec
         self.observation_spec = observation_spec
 
-    @implement_for("gymnasium", "0.26", None)
+    @implement_for("gymnasium", "0.27", None)
     def _make_done_spec(self):
         return CompositeSpec(
-            {"done": DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.device,
-            shape=(*self.batch_size, 1)
-            ),        "truncated": DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.device,
-            shape=(*self.batch_size, 1)
-            )}, shape=self.batch_size
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
         )
 
     @implement_for("gym", "0.26", None)
     def _make_done_spec(self):
         return CompositeSpec(
-            {"done": DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.device,
-            shape=(*self.batch_size, 1)
-            ),        "truncated": DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.device,
-            shape=(*self.batch_size, 1)
-            )}, shape=self.batch_size
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
         )
 
     @implement_for("gym", None, "0.26")
     def _make_done_spec(self):
         return CompositeSpec(
-            {"done": DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.device,
-            shape=(*self.batch_size, 1)
-            )}, shape=self.batch_size,
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                )
+            },
+            shape=self.batch_size,
         )
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):
         observations, reward, termination, truncation, info = step_outputs_tuple
-        return (observations, reward, termination, truncation, termination | truncation, info)
+        return (
+            observations,
+            reward,
+            termination,
+            truncation,
+            termination | truncation,
+            info,
+        )
 
     @implement_for("gym", None, "0.26")
     def _output_transform(self, step_outputs_tuple):
         observations, reward, done, info = step_outputs_tuple
         return (observations, reward, None, None, done, info)
 
-    @implement_for("gymnasium", "0.26", None)
+    @implement_for("gymnasium", "0.27", None)
     def _output_transform(self, step_outputs_tuple):
         observations, reward, termination, truncation, info = step_outputs_tuple
-        return (observations, reward, termination, truncation, termination | truncation, info)
+        return (
+            observations,
+            reward,
+            termination,
+            truncation,
+            termination | truncation,
+            info,
+        )
 
     def _init_env(self):
         self.reset()

@@ -66,7 +66,7 @@ from torchrl.envs.libs.gym import (
     GymEnv,
     GymWrapper,
     MOGymEnv,
-    MOGymWrapper,
+    MOGymWrapper, set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
@@ -322,6 +322,58 @@ class TestGym:
         # was deprecated after np 1.20, and we don't want to install multiple np
         # versions.
         return
+
+    @implement_for("gym", None, "0.26")
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):
+        # gym has 4 outputs, no truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" not in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    @implement_for("gym", "0.26", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):
+        # gym has 5 outputs, with truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+        if wrapper:
+            # let's further test with a wrapper that exposes the env with old API
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED, apply_api_compatibility=True))
+            assert "truncated" not in env.done_keys
+            assert "done" in env.done_keys
+            check_env_specs(env)
+
+    @implement_for("gymnasium", "0.27", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):
+        # gym has 5 outputs, with truncation
+        import gymnasium as gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gymnasium"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
 
 
 @implement_for("gym", None, "0.26")
