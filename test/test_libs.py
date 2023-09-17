@@ -375,7 +375,7 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
-    def test_vecenvs_wrapper(self):  # noqa: F811
+    def test_vecenvs_wrapper(self, envname):  # noqa: F811
         import gym
         from _utils_internal import rollout_consistency_assertion
 
@@ -401,7 +401,7 @@ class TestGym:
             "envname",
             ["CartPole-v1", "HalfCheetah-v4"],
         )
-        def test_vecenvs_env(self):  # noqa: F811
+        def test_vecenvs_env(self, envname):  # noqa: F811
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=False)
                 check_env_specs(env)
