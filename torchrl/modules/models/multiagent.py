@@ -426,8 +426,8 @@ class MultiAgentConvNet(nn.Module):
             else:
                 output = torch.stack(
                     [
-                        net(inputs[..., i, :, :, :])
-                        for i, net in enumerate(self.agent_networks)
+                        net(inp)
+                        for i, (net, inp) in enumerate(zip(self.agent_networks, inputs.unbind(-4)))
                     ],
                     dim=-2,
                 )
