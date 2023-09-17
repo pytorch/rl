@@ -403,7 +403,7 @@ class MultiAgentConvNet(nn.Module):
         )
 
     def forward(self, inputs: torch.Tensor):
-        if len(inputs) < 4:
+        if len(inputs.shape) < 4:
             raise ValueError("""Multi-agent network expects (*batch_size, agent_index, x, y, channels)""")
         if inputs.shape[-4] != self.n_agents:
             raise ValueError(f"""Multi-agent network expects {self.n_agents} but got {inputs.shape[-4]}""")
