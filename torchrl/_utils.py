@@ -367,8 +367,10 @@ class implement_for:
     def reset(cls, setters_dict: Dict[str, implement_for] = None):
         """Resets the setters in setter_dict.
 
-        setter_dict is a copy of implementations. We just need to iterate through its
-        values and call"""
+        ``setter_dict`` is a copy of implementations. We just need to iterate through its
+        values and call :meth:`~.module_set` for each.
+
+        """
         if VERBOSE:
             print("resetting implement_for")
         if setters_dict is None:

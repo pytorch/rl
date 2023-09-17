@@ -145,7 +145,8 @@ class GymLikeEnv(_EnvWrapper):
 
         Args:
             done (np.ndarray, boolean or other format): done state obtained from the environment
-
+            termination (bool or None): termination signal.
+            truncation (bool or None): truncation signal.
         """
         if termination is not None:
             return termination, truncation, done
@@ -247,8 +248,6 @@ class GymLikeEnv(_EnvWrapper):
 
         source = self.read_obs(obs)
 
-        # if self.done_key not in source:
-        #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,

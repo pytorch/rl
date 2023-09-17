@@ -300,12 +300,12 @@ def torch_foo():
 
 
 @implement_for("torch", "2.0")
-def torch_foo():
+def torch_foo():  # noqa: F811
     return 1
 
 
 @implement_for("torch", None, "1.0")
-def torch_foo():
+def torch_foo():  # noqa: F811
     return 1
 
 

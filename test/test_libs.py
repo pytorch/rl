@@ -66,7 +66,8 @@ from torchrl.envs.libs.gym import (
     GymEnv,
     GymWrapper,
     MOGymEnv,
-    MOGymWrapper, set_gym_backend,
+    MOGymWrapper,
+    set_gym_backend,
 )
 from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
@@ -340,7 +341,7 @@ class TestGym:
 
     @implement_for("gym", "0.26", None)
     @pytest.mark.parametrize("wrapper", [True, False])
-    def test_gym_output_num(self, wrapper):
+    def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
         import gym
 
@@ -355,14 +356,17 @@ class TestGym:
 
         if wrapper:
             # let's further test with a wrapper that exposes the env with old API
-            env = GymWrapper(gym.make(PENDULUM_VERSIONED, apply_api_compatibility=True))
-            assert "truncated" not in env.done_keys
-            assert "done" in env.done_keys
-            check_env_specs(env)
+            from gym.wrappers.compatibility import EnvCompatibility
+
+            with pytest.raises(
+                ValueError,
+                match="GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility",
+            ):
+                GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
 
     @implement_for("gymnasium", "0.27", None)
     @pytest.mark.parametrize("wrapper", [True, False])
-    def test_gym_output_num(self, wrapper):
+    def test_gym_output_num(self, wrapper):  # noqa: F811
         # gym has 5 outputs, with truncation
         import gymnasium as gym
 

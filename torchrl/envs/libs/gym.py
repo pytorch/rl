@@ -389,6 +389,14 @@ class GymWrapper(GymLikeEnv):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if "env" in kwargs:
+            if "EnvCompatibility" in str(
+                kwargs["env"]
+            ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
+                raise ValueError(
+                    "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
+                    "If this feature is needed, detail your use case in an issue of "
+                    "https://github.com/pytorch/rl/issues."
+                )
             libname = self.get_library_name(kwargs["env"])
             with set_gym_backend(libname):
                 super().__init__(**kwargs)
@@ -601,7 +609,7 @@ class GymWrapper(GymLikeEnv):
         )
 
     @implement_for("gym", "0.26", None)
-    def _make_done_spec(self):
+    def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
                 "done": DiscreteTensorSpec(
@@ -615,7 +623,7 @@ class GymWrapper(GymLikeEnv):
         )
 
     @implement_for("gym", None, "0.26")
-    def _make_done_spec(self):
+    def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
                 "done": DiscreteTensorSpec(
@@ -625,6 +633,9 @@ class GymWrapper(GymLikeEnv):
             shape=self.batch_size,
         )
 
+    @implement_for(
+        "gym",
+    )
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):
         observations, reward, termination, truncation, info = step_outputs_tuple
@@ -638,12 +649,12 @@ class GymWrapper(GymLikeEnv):
         )
 
     @implement_for("gym", None, "0.26")
-    def _output_transform(self, step_outputs_tuple):
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
         observations, reward, done, info = step_outputs_tuple
         return (observations, reward, None, None, done, info)
 
     @implement_for("gymnasium", "0.27", None)
-    def _output_transform(self, step_outputs_tuple):
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
         observations, reward, termination, truncation, info = step_outputs_tuple
         return (
             observations,
