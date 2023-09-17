@@ -150,12 +150,14 @@ class Transform(nn.Module):
 
     def __init__(
         self,
-        in_keys: Sequence[NestedKey],
+        in_keys: Sequence[NestedKey] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
+        if in_keys is None:
+            in_keys = []
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
@@ -655,7 +657,9 @@ but got an object of type {type(transform)}."""
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
             tensordict = tensordict.clone(recurse=False)
-        out_tensordict = self.base_env.reset(tensordict=tensordict, **kwargs)
+        out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
+        if tensordict is not None:
+            out_tensordict = tensordict.update(out_tensordict)
         out_tensordict = self.transform.reset(out_tensordict)
 
         mt_mode = self.transform.missing_tolerance
@@ -1804,6 +1808,153 @@ class SqueezeTransform(UnsqueezeTransform):
 
     _apply_transform = UnsqueezeTransform._inv_apply_transform
     _inv_apply_transform = UnsqueezeTransform._apply_transform
+
+
+class PermuteTransform(Transform):
+    """Permutation transform.
+
+    Permutes input tensors along the desired dimensions. The permutations
+    must be provided along the feature dimension (not batch dimension).
+
+    Args:
+        dims (list of int): the permuted order of the dimensions. Must be a reordering
+            of the dims ``[-(len(dims)), ..., -1]``.
+        in_keys (list of NestedKeys): input entries (read).
+        out_keys (list of NestedKeys): input entries (write). Defaults to ``in_keys`` if
+            not provided.
+        in_keys_inv (list of NestedKeys): input entries (read) during :meth:`~.inv` calls.
+        out_keys_inv (list of NestedKeys): input entries (write) during :meth:`~.inv` calls. Defaults to ``in_keys_in`` if
+            not provided.
+
+    Examples:
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> base_env = GymEnv("ALE/Pong-v5")
+        >>> base_env.rollout(2)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([2, 210, 160, 3]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                pixels: Tensor(shape=torch.Size([2, 210, 160, 3]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+        >>> env = TransformedEnv(base_env, PermuteTransform((-1, -3, -2), in_keys=["pixels"]))
+        >>> env.rollout(2)  # channels are at the end
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.int64, is_shared=False),
+                done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        pixels: Tensor(shape=torch.Size([2, 3, 210, 160]), device=cpu, dtype=torch.uint8, is_shared=False),
+                        reward: Tensor(shape=torch.Size([2, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=cpu,
+                    is_shared=False),
+                pixels: Tensor(shape=torch.Size([2, 3, 210, 160]), device=cpu, dtype=torch.uint8, is_shared=False)},
+            batch_size=torch.Size([2]),
+            device=cpu,
+            is_shared=False)
+
+    """
+
+    def __init__(
+        self,
+        dims,
+        in_keys=None,
+        out_keys=None,
+        in_keys_inv=None,
+        out_keys_inv=None,
+    ):
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+        # check dims
+        self.dims = dims
+        if sorted(dims) != list(range(-len(dims), 0)):
+            raise ValueError(
+                f"Only tailing dims with negative indices are supported by {self.__class__.__name__}. Got {dims} instead."
+            )
+
+    @staticmethod
+    def _invert_permute(p):
+        def _find_inv(i):
+            for j, _p in enumerate(p):
+                if _p < 0:
+                    inv = True
+                    _p = len(p) + _p
+                else:
+                    inv = False
+                if i == _p:
+                    if inv:
+                        return j - len(p)
+                    else:
+                        return j
+            else:
+                # unreachable
+                raise RuntimeError
+
+        return [_find_inv(i) for i in range(len(p))]
+
+    def _apply_transform(self, observation: torch.FloatTensor) -> torch.Tensor:
+        observation = observation.permute(
+            *list(range(observation.ndimension() - len(self.dims))), *self.dims
+        )
+        return observation
+
+    def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        permuted_dims = self._invert_permute(self.dims)
+        state = state.permute(
+            *list(range(state.ndimension() - len(self.dims))), *permuted_dims
+        )
+        return state
+
+    @_apply_to_composite
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        observation_spec = self._edit_space(observation_spec)
+        observation_spec.shape = torch.Size(
+            [
+                *observation_spec.shape[: -len(self.dims)],
+                *[observation_spec.shape[dim] for dim in self.dims],
+            ]
+        )
+        return observation_spec
+
+    @_apply_to_composite_inv
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        permuted_dims = self._invert_permute(self.dims)
+        input_spec = self._edit_space_inv(input_spec)
+        input_spec.shape = torch.Size(
+            [
+                *input_spec.shape[: -len(permuted_dims)],
+                *[input_spec.shape[dim] for dim in permuted_dims],
+            ]
+        )
+        return input_spec
+
+    def _edit_space(self, spec: TensorSpec) -> None:
+        if isinstance(spec.space, ContinuousBox):
+            spec.space.high = self._apply_transform(spec.space.high)
+            spec.space.low = self._apply_transform(spec.space.low)
+        return spec
+
+    def _edit_space_inv(self, spec: TensorSpec) -> None:
+        if isinstance(spec.space, ContinuousBox):
+            spec.space.high = self._inv_apply_transform(spec.space.high)
+            spec.space.low = self._inv_apply_transform(spec.space.low)
+        return spec
 
 
 class GrayScale(ObservationTransform):
@@ -5030,3 +5181,84 @@ class ActionMask(Transform):
             )
         action_spec.update_mask(tensordict.get(self.in_keys[1], None))
         return tensordict
+
+
+class VecGymEnvTransform(Transform):
+    """A transform for GymWrapper subclasses that handles the auto-reset in a consistent way.
+
+    Gym, gymnasium and SB3 provide vectorized (read, parallel or batched) environments
+    that are automatically reset. When this occurs, the actual observation resulting
+    from the action is saved within a key in the info.
+    The class :class:`torchrl.envs.libs.gym.terminal_obs_reader` reads that observation
+    and stores it in a ``"final"`` key within the output tensordict.
+    In turn, this transform reads that final data, swaps it with the observation
+    written in its place that results from the actual reset, and saves the
+    reset output in a private container. The resulting data truly reflects
+    the output of the step.
+
+    Then, when calling `env.reset`, the saved data is written back where it belongs
+    (and the `reset` is a no-op).
+
+    This transform is automatically appended to the gym env whenever the wrapper
+    is created with an async env.
+
+    Args:
+        final_name (str, optional): the name of the final observation in the dict.
+            Defaults to `"final"`.
+
+    .. note:: In general, this class should not be handled directly. It is
+        created whenever a vectorized environment is placed within a :class:`GymWrapper`.
+
+    """
+
+    def __init__(self, final_name="final"):
+        self.final_name = final_name
+        super().__init__(in_keys=[])
+        self._memo = {}
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        # save the final info
+        done = self._memo["done"] = next_tensordict.get("done")
+        final = next_tensordict.pop("final")
+        # if anything's done, we need to swap the final obs
+        if done.any():
+            done = done.squeeze(-1)
+            saved_next = next_tensordict.select(*final.keys(True, True)).clone()
+            next_tensordict[done] = final[done]
+            self._memo["saved_done"] = saved_next
+        else:
+            self._memo["saved_done"] = None
+        return next_tensordict
+
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        done = self._memo.get("done", None)
+        reset = tensordict.get("_reset", done)
+        if done is not None:
+            done = done.view_as(reset)
+        if (
+            reset is not done
+            and (reset != done).any()
+            and (not reset.all() or not reset.any())
+        ):
+            raise RuntimeError(
+                "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
+                f"Got reset={reset}\nand done={done}"
+            )
+        # if not reset.any(), we don't need to do anything.
+        # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
+        if reset is not None and reset.any() and not reset.all():
+            saved_done = self._memo["saved_done"]
+            reset = reset.view(tensordict.shape)
+            updated_td = torch.where(
+                ~reset, tensordict.select(*saved_done.keys(True, True)), saved_done
+            )
+            tensordict.update(updated_td)
+            tensordict.set("done", tensordict.get("done").clone().fill_(0))
+        tensordict.pop("final", None)
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
+        del observation_spec[self.final_name]
+        return observation_spec

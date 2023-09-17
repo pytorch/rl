@@ -310,8 +310,8 @@ class implement_for:
             return
         setattr(cls, self.fn.__name__, self.fn)
 
-    @staticmethod
-    def import_module(module_name: Union[Callable, str]) -> str:
+    @classmethod
+    def import_module(cls, module_name: Union[Callable, str]) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
             module = import_module(module_name)

@@ -54,6 +54,7 @@ from .transforms import (
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
+    PermuteTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,

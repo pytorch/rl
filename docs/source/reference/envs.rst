@@ -477,6 +477,7 @@ to be able to create this other composition:
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
@@ -494,6 +495,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
