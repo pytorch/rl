@@ -33,7 +33,8 @@ from _utils_internal import (
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED, rollout_consistency_assertion,
+    PONG_VERSIONED,
+    rollout_consistency_assertion,
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
@@ -377,7 +378,6 @@ class TestGym:
     )
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
         import gym
-        from _utils_internal import rollout_consistency_assertion
 
         # we can't use parametrize with implement_for
         for envname in ["CartPole-v1", "HalfCheetah-v4"]:
