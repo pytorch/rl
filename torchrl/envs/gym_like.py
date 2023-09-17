@@ -181,6 +181,8 @@ class GymLikeEnv(_EnvWrapper):
             (key,) = itertools.islice(self.observation_spec.keys(True, True), 1)
             observations = {key: observations}
         for key, val in observations.items():
+            print(val)
+            print(self.observation_spec, key)
             observations[key] = self.observation_spec[key].encode(
                 val, ignore_device=True
             )
@@ -238,13 +240,7 @@ class GymLikeEnv(_EnvWrapper):
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        reset_data = self._env.reset(**kwargs)
-        if not isinstance(reset_data, tuple):
-            reset_data = (reset_data,)
-        obs, *other = reset_data
-        info = None
-        if len(other) == 1:
-            info = other[0]
+        obs, info = self._reset_output_transform(self._env.reset(**kwargs))
 
         source = self.read_obs(obs)
 
@@ -270,6 +266,10 @@ class GymLikeEnv(_EnvWrapper):
         truncated and terminal can be None, in which case they are discarded.
         If done is None, truncated and terminal mustn't be None.
         """
+        ...
+
+    @abc.abstractmethod
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
         ...
 
     def set_info_dict_reader(self, info_dict_reader: BaseInfoDictReader) -> GymLikeEnv:

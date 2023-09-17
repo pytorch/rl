@@ -633,6 +633,18 @@ class GymWrapper(GymLikeEnv):
             shape=self.batch_size,
         )
 
+    @implement_for("gym", "0.26", None)
+    def _reset_output_transform(self, reset_data):
+        return reset_data
+
+    @implement_for("gymnasium", "0.27", None)
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data
+
+    @implement_for("gym", None, "0.26")
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data, {}
+
     @implement_for(
         "gym",
     )
