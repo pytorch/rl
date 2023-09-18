@@ -67,8 +67,8 @@ def vtrace_correction(
 
     Args:
         gamma (scalar): exponential mean discount.
-        log_pi (Tensor): log probability of taking actions in the environment.
-        log_mu (Tensor): log probability of taking actions in the environment.
+        log_pi (Tensor): collection actor log probability of taking actions in the environment.
+        log_mu (Tensor): current actor log probability of taking actions in the environment.
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
@@ -196,6 +196,9 @@ class VTrace(ValueEstimatorBase):
         self.average_adv = average_adv
         self.actor_network = actor_network
         self._log_prob_key = log_prob_key
+
+        if not isinstance(gamma, torch.Tensor) and gamma.shape != ():
+            raise NotImplementedError("Per-value gamma is not supported yet")
 
     @property
     def log_prob_key(self):
