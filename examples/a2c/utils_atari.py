@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import gymnasium as gym
+import numpy as np
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -215,3 +216,24 @@ def make_ppo_models(env_name):
     del proof_environment
 
     return actor, critic, critic_head
+
+
+# ====================================================================
+# Evaluation utils
+# --------------------------------------------------------------------
+
+
+def eval_model(actor, test_env, num_episodes=3):
+    test_rewards = []
+    for _ in range(num_episodes):
+        td_test = test_env.rollout(
+            policy=actor,
+            auto_reset=True,
+            auto_cast_to_device=True,
+            break_when_any_done=True,
+            max_steps=10_000_000,
+        )
+        reward = td_test["next", "episode_reward"][td_test["next", "done"]]
+        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+    del td_test
+    return test_rewards.mean()
