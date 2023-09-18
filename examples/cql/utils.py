@@ -250,3 +250,13 @@ def make_cql_optimizer(optim_cfg, loss_module):
         weight_decay=optim_cfg.weight_decay,
     )
     return optim
+
+
+# ====================================================================
+# General utils
+# ---------
+
+
+def log_metrics(logger, metrics, step):
+    for metric_name, metric_value in metrics.items():
+        logger.log_scalar(metric_name, metric_value, step)

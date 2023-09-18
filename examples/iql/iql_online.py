@@ -152,8 +152,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q_loss"] = log_loss_td.get("loss_actor").mean()
-            metrics_to_log["train/actor_loss"] = log_loss_td.get("loss_qvalue").mean()
+            metrics_to_log["train/q_loss"] = log_loss_td.get("loss_qvalue").mean()
+            metrics_to_log["train/actor_loss"] = log_loss_td.get("loss_actor").mean()
             metrics_to_log["train/value_loss"] = log_loss_td.get("loss_value").mean()
             metrics_to_log["train/entropy"] = log_loss_td.get("entropy").mean()
             metrics_to_log["train/sampling_time"] = sampling_time
