@@ -44,7 +44,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, device),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -85,11 +85,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create logger
-    exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.backend, logger_name="a2c", experiment_name=exp_name)
+    logger = None
+    if cfg.logger.backend:
+        exp_name = generate_exp_name("A2C", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+        logger = get_logger(cfg.logger.backend, logger_name="a2c", experiment_name=exp_name)
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, device, is_test=True)
+    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
     test_env.eval()
 
     # Main loop

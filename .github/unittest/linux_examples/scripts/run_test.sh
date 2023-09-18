@@ -75,7 +75,14 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
-python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
+python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_mujoco.py \
+  env.num_envs=1 \
+  collector.total_frames=48 \
+  collector.frames_per_batch=16 \
+  collector.collector_device=cuda:0 \
+  logger.backend= \
+  logger.log_interval=4
+python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_atari.py \
   env.num_envs=1 \
   collector.total_frames=48 \
   collector.frames_per_batch=16 \

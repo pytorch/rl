@@ -1,6 +1,7 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
+  num_envs: 1
 
 # collector
 collector:
