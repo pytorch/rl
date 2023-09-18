@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gym
+import gymnasium as gym
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -51,13 +51,13 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.lives = 0
 
     def step(self, action):
-        obs, rew, done, info = self.env.step(action)
+        obs, rew, done, truncated, info = self.env.step(action)
         lives = self.env.unwrapped.ale.lives()
         info["end_of_life"] = False
         if (lives < self.lives) or done:
             info["end_of_life"] = True
         self.lives = lives
-        return obs, rew, done, info
+        return obs, rew, done, truncated, info
 
     def reset(self, **kwargs):
         reset_data = self.env.reset(**kwargs)
