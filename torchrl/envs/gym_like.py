@@ -149,8 +149,12 @@ class GymLikeEnv(_EnvWrapper):
             truncation (bool or None): truncation signal.
         """
         if termination is not None:
-            return termination, truncation, done
-        return done, truncation, done.any() if not isinstance(done, bool) else done
+            done = termination
+        return (
+            termination,
+            truncation,
+            done.any() if not isinstance(done, bool) else done,
+        )
 
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.

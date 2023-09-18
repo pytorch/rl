@@ -739,9 +739,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _reset_output_transform(self, reset_data):  # noqa: F811
         return reset_data, {}
 
-    @implement_for(
-        "gym",
-    )
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):
         observations, reward, termination, truncation, info = step_outputs_tuple
