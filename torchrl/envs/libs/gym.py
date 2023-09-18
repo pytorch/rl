@@ -465,6 +465,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
+        self._post_init()
+
+    def _post_init(self):
+        # writes the functions that are gym-version specific to the instance
+        # once and for all. This is aimed at avoiding the need of decorating code
+        # with set_gym_backend + allowing for parallel execution (which would
+        # be troublesome when both an old version of gym and recent gymnasium
+        # are present within the same virtual env).
+        # These calls seemingly do nothing but they actually get rid of the @implement_for decorator.
+        # We execute them within the set_gym_backend context manager to make sure we get
+        # the right implementation.
+        with set_gym_backend(self.get_library_name(self._env)):
+            self._reset_output_transform = self._reset_output_transform
+            self._output_transform = self._output_transform
 
     @property
     def _is_batched(self):

@@ -133,7 +133,12 @@ class GymLikeEnv(_EnvWrapper):
         """
         return self.action_spec.to_numpy(action, safe=False)
 
-    def read_done(self, gym_done: bool, termination: bool | None=None, truncation: bool | None=None) -> Tuple[bool, bool, bool]:
+    def read_done(
+        self,
+        gym_done: bool,
+        termination: bool | None = None,
+        truncation: bool | None = None,
+    ) -> Tuple[bool, bool, bool]:
         """Done state reader.
 
         In torchrl, a `"done"` signal means that a trajectory is terminated

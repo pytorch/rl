@@ -364,12 +364,16 @@ class TestGym:
 
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+            import gymnasium
+
+            assert env.get_library_name(env._env) is gymnasium
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -404,16 +408,21 @@ class TestGym:
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+            import gym
+
+            assert env.get_library_name(env._env) is gym
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
-                check_env_specs(env)
+            # rollouts can be executed without decorator
+            check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -487,6 +496,33 @@ class TestGym:
         assert "truncated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
+
+    def test_gym_gymnasium_parallel(self):
+        # tests that both gym and gymnasium work with wrappers without
+        # decorating with set_gym_backend during execution
+        if importlib.util.find_spec("gym") is not None:
+            import gym
+
+            old_api = gym.__version__ < version.parse("0.26")
+            make_fun = lambda: EnvCreator(
+                lambda: GymWrapper(gym.make(PENDULUM_VERSIONED))
+            )
+        elif importlib.util.find_spec("gymnasium") is not None:
+            import gymnasium
+
+            old_api = False
+            make_fun = lambda: EnvCreator(
+                lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED))
+            )
+        else:
+            raise ImportError  # unreachable under pytest.skipif
+        penv = ParallelEnv(2, make_fun)
+        rollout = penv.rollout(2)
+        if old_api:
+            assert "truncated" not in rollout.keys()
+        else:
+            assert "truncated" in rollout.keys()
+        check_env_specs(penv)
 
 
 @implement_for("gym", None, "0.26")
