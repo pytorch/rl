@@ -1,5 +1,4 @@
 import gym
-import numpy as np
 import torch.nn
 import torch.optim
 
