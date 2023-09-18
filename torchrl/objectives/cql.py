@@ -524,7 +524,7 @@ class CQLLoss(LossModule):
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
-            self._cached_detach_qvalue_params,
+            self.qvalue_network_params,  # _cached_detach_qvalue_params
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -581,7 +581,6 @@ class CQLLoss(LossModule):
                 next_state_value = next_tensordict_expand.get(
                     self.tensor_keys.state_action_value
                 ).min(0)[0]
-                # could be wrong to min
                 if (
                     next_state_value.shape[-len(next_sample_log_prob.shape) :]
                     != next_sample_log_prob.shape

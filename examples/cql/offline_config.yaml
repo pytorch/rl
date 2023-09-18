@@ -1,4 +1,4 @@
-# Task and env
+# env and task
 env:
   name: HalfCheetah-v2
   task: ""
@@ -7,23 +7,22 @@ env:
   n_samples_stats: 1000
   frame_skip: 1
   reward_scaling: 1.0
-  noop: 1
   seed: 0
 
 # logger
 logger:
   backend: wandb
-  eval_iter: 500
+  eval_iter: 5000
   eval_steps: 1000
   mode: online
   eval_envs: 5
 
-# Buffer
+# replay buffer
 replay_buffer:
   dataset: halfcheetah-medium-v2
   batch_size: 256
 
-# Optimization
+# optimization
 optim:
   device: cuda:0
   lr: 3e-4
@@ -39,14 +38,14 @@ model:
 
 # loss
 loss: 
-  loss_function: smooth_l1
+  loss_function: l2
   gamma: 0.99
   tau: 0.005
-  # CQL hyperparameter
+# CQL specific hyperparameter
   temperature: 1.0
   min_q_weight: 1.0
   max_q_backup: False
-  deterministic_backup: True
+  deterministic_backup: False
   num_random: 10
-  with_lagrange: False
-  lagrange_thresh: 0.0
+  with_lagrange: True
+  lagrange_thresh: 10.0

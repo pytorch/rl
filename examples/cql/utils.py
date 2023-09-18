@@ -17,6 +17,7 @@ from torchrl.envs import (
     EnvCreator,
     ParallelEnv,
     RewardScaling,
+    RewardSum,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv
@@ -41,7 +42,8 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat(),
+            DoubleToFloat("observation"),
+            RewardSum(),
         ),
     )
     return transformed_env
@@ -51,16 +53,18 @@ def make_environment(cfg, num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(parallel_env, cfg.env.reward_scaling)
 
     eval_env = TransformedEnv(
         ParallelEnv(
             num_envs,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(
+                lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)
+            ),
         ),
         train_env.transform.clone(),
     )
@@ -77,6 +81,7 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
+        init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
