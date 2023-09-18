@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-DQN Benchmarks: Reproducing Experiments from Mnih et al. 2015
+DQN: Reproducing experimental results from Mnih et al. 2015 for the
 Deep Q-Learning Algorithm on Atari Environments.
 """
 
