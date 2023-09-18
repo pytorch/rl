@@ -50,8 +50,8 @@ def generate_knowledge_base_references(knowledge_base_path: str) -> None:
     for file_path in file_paths:
         name = Path(file_path).stem
 
-        # Skip README, it is already included in `knowledge_base.rst`
-        if name == "README":
+        # Skip README.md, it is already included in `knowledge_base.rst`
+        if name == "README.md":
             continue
 
         # Existing files will be overwritten in 'w' mode

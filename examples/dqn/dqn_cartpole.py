@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 """
 DQN Benchmarks: CartPole-v1
 """
@@ -11,75 +16,18 @@ import torch.optim
 import tqdm
 from tensordict import TensorDict
 from torchrl.collectors import SyncDataCollector
-from torchrl.data import CompositeSpec, LazyTensorStorage, TensorDictReplayBuffer
-from torchrl.envs import (
-    DoubleToFloat,
-    ExplorationType,
-    RewardSum,
-    set_exploration_type,
-    StepCounter,
-    TransformedEnv,
-)
-from torchrl.envs.libs.gym import GymEnv
-from torchrl.modules import EGreedyWrapper, MLP, QValueActor
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.modules import EGreedyWrapper
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record.loggers import generate_exp_name, get_logger
-
-
-# ====================================================================
-# Environment utils
-# --------------------------------------------------------------------
-
-
-def make_env(env_name="CartPole-v1", device="cpu"):
-    env = GymEnv(env_name, device=device)
-    env = TransformedEnv(env)
-    env.append_transform(RewardSum())
-    env.append_transform(StepCounter())
-    env.append_transform(DoubleToFloat())
-    return env
-
-
-# ====================================================================
-# Model utils
-# --------------------------------------------------------------------
-
-
-def make_dqn_modules(proof_environment):
-
-    # Define input shape
-    input_shape = proof_environment.observation_spec["observation"].shape
-    env_specs = proof_environment.specs
-    num_outputs = env_specs["input_spec", "full_action_spec", "action"].space.n
-    action_spec = env_specs["input_spec", "full_action_spec", "action"]
-
-    # Define Q-Value Module
-    mlp = MLP(
-        in_features=input_shape[-1],
-        activation_class=torch.nn.ReLU,
-        out_features=num_outputs,
-        num_cells=[120, 84],
-    )
-
-    qvalue_module = QValueActor(
-        module=mlp,
-        spec=CompositeSpec(action=action_spec),
-        in_keys=["observation"],
-    )
-    return qvalue_module
-
-
-def make_dqn_model(env_name):
-    proof_environment = make_env(env_name, device="cpu")
-    qvalue_module = make_dqn_modules(proof_environment)
-    del proof_environment
-    return qvalue_module
+from utils_cartpole import eval_model, make_dqn_model, make_env
 
 
 @hydra.main(config_path=".", config_name="config_cartpole", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = "cpu" if not torch.cuda.device_count() else "cuda"
 
     # Make the components
     model = make_dqn_model(cfg.env.env_name)
@@ -143,6 +91,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     for data in collector:
 
+        log_info = {}
         sampling_time = time.time() - sampling_start
         pbar.update(data.numel())
         data = data.reshape(-1)
@@ -151,23 +100,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         collected_frames += current_frames
         model_explore.step(current_frames)
 
-        # Log training rewards, episode lengths and q-values
-        logger.log_scalar(
-            "train/q_values",
-            (data["action_value"] * data["action"]).sum().item()
-            / cfg.collector.frames_per_batch,
-            collected_frames,
+        # Get training rewards, episode lengths and q-values
+        log_info.update(
+            {
+                "train/q_values": (data["action_value"] * data["action"]).sum().item()
+                / cfg.collector.frames_per_batch,
+            }
         )
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
-            logger.log_scalar(
-                "train/reward", episode_rewards.mean().item(), collected_frames
-            )
-            logger.log_scalar(
-                "train/episode_length",
-                episode_length.sum().item() / len(episode_length),
-                collected_frames,
+            log_info.update(
+                {
+                    "train/episode_reward": episode_rewards.mean().item(),
+                    "train/episode_length": episode_length.mean().item(),
+                }
             )
 
         # optimization steps
@@ -183,15 +130,20 @@ def main(cfg: "DictConfig"):  # noqa: F821
             target_net_updater.step()
             q_losses[j] = loss_td.select("loss").detach()
 
+        # Get training losses, epsilon and times
         training_time = time.time() - training_start
         q_losses = q_losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in q_losses.items():
-            logger.log_scalar("train/" + key, value.item(), collected_frames)
-        logger.log_scalar("train/epsilon", model_explore.eps, collected_frames)
-        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
-        logger.log_scalar("train/training_time", training_time, collected_frames)
+            log_info.update({f"train/{key}": value.item()})
+        log_info.update(
+            {
+                "train/epsilon": model_explore.eps,
+                "train/sampling_time": sampling_time,
+                "train/training_time": training_time,
+            }
+        )
 
-        # Test logging
+        # Get evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if (
                 collected_frames - cfg.collector.frames_per_batch
@@ -199,20 +151,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 collected_frames // cfg.logger.test_interval
             ):
                 model.eval()
-                test_rewards = []
-                for _ in range(cfg.logger.num_test_episodes):
-                    td_test = test_env.rollout(
-                        policy=model,
-                        auto_reset=True,
-                        auto_cast_to_device=True,
-                        break_when_any_done=True,
-                        max_steps=10_000_000,
-                    )
-                    reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-                    test_rewards = np.append(test_rewards, reward.cpu().numpy())
-                    del td_test
-                logger.log_scalar("eval/reward", test_rewards.mean(), collected_frames)
+                eval_start = time.time()
+                test_rewards = eval_model(model, test_env, cfg.logger.num_test_episodes)
+                eval_time = time.time() - eval_start
+                log_info.update(
+                    {
+                        "eval/reward": np.mean(test_rewards),
+                        "eval/eval_time": eval_time,
+                    }
+                )
                 model.train()
+
+        # Log all the information
+        if logger:
+            for key, value in log_info.items():
+                logger.log_scalar(key, value, collected_frames)
 
         # update weights of the inference policy
         collector.update_policy_weights_()
