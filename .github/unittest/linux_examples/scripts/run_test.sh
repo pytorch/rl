@@ -80,14 +80,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_mujoco
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
-  loss.ppo_epochs=1 \
   logger.backend= \
   logger.test_interval=40
 python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
-  loss.ppo_epochs=1 \
   logger.backend= \
   logger.test_interval=40
 python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
