@@ -738,6 +738,20 @@ class TensorSpec:
             shape = torch.Size([])
         return torch.zeros((*shape, *self.shape), dtype=self.dtype, device=self.device)
 
+    def one(self, shape=None):
+        """Returns a one-filled tensor in the box.
+
+        Args:
+            shape (torch.Size): shape of the one-tensor
+
+        Returns:
+            a one-filled tensor sampled in the TensorSpec box.
+
+        """
+        if shape is None:
+            shape = torch.Size([])
+        return torch.ones((*shape, *self.shape), dtype=self.dtype, device=self.device)
+
     @abc.abstractmethod
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> "TensorSpec":
         raise NotImplementedError
@@ -887,6 +901,13 @@ class _LazyStackedMixin(Generic[T]):
         else:
             dim = self.dim
         return torch.stack([spec.zero(shape) for spec in self._specs], dim)
+
+    def one(self, shape=None) -> TensorDictBase:
+        if shape is not None:
+            dim = self.dim + len(shape)
+        else:
+            dim = self.dim
+        return torch.stack([spec.one(shape) for spec in self._specs], dim)
 
     def rand(self, shape=None) -> TensorDictBase:
         if shape is not None:
@@ -3394,6 +3415,23 @@ class CompositeSpec(TensorSpec):
         return TensorDict(
             {
                 key: self[key].zero(shape)
+                for key in self.keys(True)
+                if isinstance(key, str) and self[key] is not None
+            },
+            torch.Size([*shape, *self.shape]),
+            device=device,
+        )
+
+    def one(self, shape=None) -> TensorDictBase:
+        if shape is None:
+            shape = torch.Size([])
+        try:
+            device = self.device
+        except RuntimeError:
+            device = self._device
+        return TensorDict(
+            {
+                key: self[key].one(shape)
                 for key in self.keys(True)
                 if isinstance(key, str) and self[key] is not None
             },

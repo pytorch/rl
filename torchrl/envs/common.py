@@ -87,7 +87,7 @@ class EnvMetaData:
         for done_key in env.done_keys:
             tensordict.set(
                 _replace_last(done_key, "_reset"),
-                torch.zeros_like(tensordict.get(("next", done_key))),
+                torch.ones_like(tensordict.get(("next", done_key))),
             )
 
         specs = env.specs.to("cpu")
@@ -1671,18 +1671,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         _ = self.done_spec
         done_spec = self.output_spec["full_done_spec"]
 
-        fake_obs = observation_spec.zero()
+        fake_obs = observation_spec.one()
 
-        fake_state = state_spec.zero()
-        fake_action = action_spec.zero()
+        fake_state = state_spec.one()
+        fake_action = action_spec.one()
         fake_input = fake_state.update(fake_action)
 
         # the input and output key may match, but the output prevails
         # Hence we generate the input, and override using the output
         fake_in_out = fake_input.update(fake_obs)
 
-        fake_reward = reward_spec.zero()
-        fake_done = done_spec.zero()
+        fake_reward = reward_spec.one()
+        fake_done = done_spec.one()
 
         next_output = fake_obs.clone()
         next_output.update(fake_reward)
