@@ -129,10 +129,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             # Linearly decrease the learning rate and clip epsilon
             if cfg.optim.anneal_lr:
                 alpha = 1 - (num_network_updates / total_network_updates)
-                for g in actor_optim.param_groups:
-                    g["lr"] = cfg.optim.lr * alpha
-                for g in critic_optim.param_groups:
-                    g["lr"] = cfg.optim.lr * alpha
+                for group in actor_optim.param_groups:
+                    group["lr"] = cfg.optim.lr * alpha
+                for group in critic_optim.param_groups:
+                    group["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
 
             # Forward pass A2C loss
