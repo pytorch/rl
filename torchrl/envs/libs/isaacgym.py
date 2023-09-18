@@ -103,7 +103,7 @@ class IsaacGymWrapper(GymWrapper):
         """
         return action
 
-    def read_done(self, done):
+    def read_done(self, gym_done):
         """Done state reader.
 
         Reads a done state and returns a tuple containing:
@@ -111,10 +111,10 @@ class IsaacGymWrapper(GymWrapper):
         - a boolean value indicating whether the frame_skip loop should be broken
 
         Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
+            gym_done (np.ndarray, boolean or other format): done state obtained from the environment
 
         """
-        return done.bool(), done.any()
+        return gym_done.bool(), gym_done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.

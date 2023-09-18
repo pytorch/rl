@@ -588,7 +588,7 @@ class TestDMControl:
         assert_allclose_td(rollout0, rollout2)
 
     def test_faketd(self, env_name, task, frame_skip, from_pixels, pixels_only):
-        if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+        if from_pixels and not torch.cuda.device_count():
             raise pytest.skip("no cuda device")
 
         env = DMControlEnv(

@@ -133,27 +133,34 @@ class GymLikeEnv(_EnvWrapper):
         """
         return self.action_spec.to_numpy(action, safe=False)
 
-    def read_done(self, done, termination, truncation):
+    def read_done(self, gym_done: bool, termination: bool | None=None, truncation: bool | None=None) -> Tuple[bool, bool, bool]:
         """Done state reader.
 
-        In TorchRL, done means that a trajectory is terminated (we do not support the
-        terminated signal). Truncated means the trajectory has been interrupted.
-
-        This method returns:
-        - a done state to be set in the environment
-        - a boolean value indicating whether the frame_skip loop should be broken
+        In torchrl, a `"done"` signal means that a trajectory is terminated
+        (what is referred to as `termination` in gymnasium).
+        Truncated means the trajectory has been interrupted.
 
         Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
-            termination (bool or None): termination signal.
-            truncation (bool or None): truncation signal.
+            gym_done (np.ndarray, boolean or other format): done state obtained from the environment
+            termination (bool or None): termination signal. Defaults to `None`.
+            truncation (bool or None): truncation signal. Defaults to `None`.
+
+        Returns: a tuple with 3 boolean values,
+            - a done state to be set in the environment.
+            - a truncated state, possibly None if no truncation is provided.
+            - a boolean value indicating whether the frame_skip loop should be broken.
+
         """
         if termination is not None:
-            done = termination
+            gym_done = termination
+            do_break = gym_done | truncation
+        else:
+            do_break = gym_done
+
         return (
-            termination,
+            gym_done,
             truncation,
-            done.any() if not isinstance(done, bool) else done,
+            do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
     def read_reward(self, reward):
