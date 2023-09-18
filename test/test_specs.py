@@ -3253,6 +3253,31 @@ class TestSpecMasking:
         else:
             assert (sp != s).all()
 
+    def test_false_mask(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        rand_shape = torch.Size(rand_shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        mask = spec.mask
+        zero_mask = torch.zeros_like(spec.mask)
+
+        spec.update_mask(None)
+        s = spec.rand(rand_shape)
+        assert spec.is_in(s)
+        spec.update_mask(zero_mask)
+        assert spec.is_in(s)
+        s = spec.rand(rand_shape)
+        assert spec.is_in(s)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

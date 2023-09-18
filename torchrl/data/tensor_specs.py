@@ -1168,6 +1168,11 @@ class OneHotDiscreteTensorSpec(TensorSpec):
 
     def update_mask(self, mask):
         if mask is not None:
+            # If the mask is all Falses, we do not apply it
+            # This is coherent with the behavior of torchrl.modules.MaskedCategorical
+            if not mask.any():
+                self.mask = None
+                return
             try:
                 mask = mask.expand(self.shape)
             except RuntimeError as err:
@@ -1941,6 +1946,11 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
 
     def update_mask(self, mask):
         if mask is not None:
+            # If the mask is all Falses, we do not apply it
+            # This is coherent with the behavior of torchrl.modules.MaskedCategorical
+            if not mask.any():
+                self.mask = None
+                return
             try:
                 mask = mask.expand(*self.shape)
             except RuntimeError as err:
@@ -2259,6 +2269,11 @@ class DiscreteTensorSpec(TensorSpec):
 
     def update_mask(self, mask):
         if mask is not None:
+            # If the mask is all Falses, we do not apply it
+            # This is coherent with the behavior of torchrl.modules.MaskedCategorical
+            if not mask.any():
+                self.mask = None
+                return
             try:
                 mask = mask.expand(*self.shape, self.space.n)
             except RuntimeError as err:
@@ -2598,6 +2613,11 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
 
     def update_mask(self, mask):
         if mask is not None:
+            # If the mask is all Falses, we do not apply it
+            # This is coherent with the behavior of torchrl.modules.MaskedCategorical
+            if not mask.any():
+                self.mask = None
+                return
             try:
                 mask = mask.expand(*self.shape[:-1], mask.shape[-1])
             except RuntimeError as err:

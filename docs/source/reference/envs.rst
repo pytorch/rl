@@ -543,6 +543,9 @@ to always know what the latest available actions are. You can do this like so:
         >>>     ActionMask(action_key="action", mask_key="action_mask"),
         >>> )
 
+If an action mask with all ``False`` entries is passed to either of these components, it will be considered as
+all actions available.
+
 .. note::
   In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
   and not to its sub-environments.
