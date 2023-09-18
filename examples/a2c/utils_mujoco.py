@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gymnasium as gym
 import torch.nn
 import torch.optim
 
@@ -18,7 +17,7 @@ from torchrl.envs import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 # ====================================================================
@@ -27,8 +26,7 @@ from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
 
 def make_env(env_name="HalfCheetah-v4", device="cpu"):
-    env = gym.make(env_name)
-    env = GymWrapper(env, device=device)
+    env = GymEnv(env_name, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
