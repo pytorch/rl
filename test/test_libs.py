@@ -503,15 +503,15 @@ class TestGym:
         if importlib.util.find_spec("gym") is not None:
             import gym
 
-            old_api = gym.__version__ < version.parse("0.26")
-            make_fun = lambda: EnvCreator(
+            old_api = version.parse(gym.__version__) < version.parse("0.26")
+            make_fun = EnvCreator(
                 lambda: GymWrapper(gym.make(PENDULUM_VERSIONED))
             )
         elif importlib.util.find_spec("gymnasium") is not None:
             import gymnasium
 
             old_api = False
-            make_fun = lambda: EnvCreator(
+            make_fun = EnvCreator(
                 lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED))
             )
         else:
