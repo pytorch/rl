@@ -4956,17 +4956,25 @@ class InitTracker(Transform):
 
     def __init__(self, init_key: NestedKey = "is_init"):
         self.init_key = init_key
+        self._init_keys = None
         self.reset_key = "_reset"
         super().__init__(in_keys=[], out_keys=[])
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        self._init_keys = None
         out = super().set_container(container)
         self.out_keys = self.init_keys
         return out
 
     @property
     def init_keys(self):
+        if self._init_keys is not None:
+            return self._init_keys
         init_keys = []
+        if self.parent is None:
+            raise NotImplementedError(
+                FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+            )
         for done_key in self.parent.done_keys:
             if isinstance(done_key, str):
                 init_key = self.init_key
@@ -4974,11 +4982,16 @@ class InitTracker(Transform):
                 init_key = unravel_key((*done_key[:-1], self.init_key))
             if init_key not in init_keys:
                 init_keys.append(init_key)
-        return init_keys
+        self._init_keys = init_keys
+        return self._init_keys
 
     @property
     def reset_keys(self):
         reset_keys = []
+        if self.parent is None:
+            raise NotImplementedError(
+                FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
+            )
         for done_key in self.parent.done_keys:
             if isinstance(done_key, str):
                 reset_key = self.reset_key
