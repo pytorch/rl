@@ -495,7 +495,7 @@ A series of [examples](examples/) are provided with an illustrative purpose:
 - [IQL](examples/iql/iql.py)
 - [TD3](examples/td3/td3.py)
 - [A2C](examples/a2c_old/a2c.py)
-- [PPO](examples/ppo/ppo.py)
+- [PPO](examples/ppo/ppo_atari.py)
 - [SAC](examples/sac/sac.py)
 - [REDQ](examples/redq/redq.py)
 - [Dreamer](examples/dreamer/dreamer.py)
