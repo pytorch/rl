@@ -24,7 +24,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils_atari import eval_model, make_parallel_env, make_ppo_models
 
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = "cpu" if not torch.cuda.device_count() else "cuda"
 
     # Correct for frame_skip
     frame_skip = 4

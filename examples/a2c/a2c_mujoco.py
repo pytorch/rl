@@ -25,7 +25,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from utils_mujoco import eval_model, make_env, make_ppo_models
 
     # Define paper hyperparameters
-    device = "cpu" if not torch.cuda.is_available() else "cuda"
+    device = "cpu" if not torch.cuda.device_count() else "cuda"
     num_mini_batches = cfg.collector.frames_per_batch // cfg.loss.mini_batch_size
     total_network_updates = (
         cfg.collector.total_frames // cfg.collector.frames_per_batch
