@@ -213,11 +213,12 @@ etc.), but one can not use an arbitrary TorchRL environment, as it is possible w
 
     SerialEnv
     ParallelEnv
-    MultiThreadedEnv
     EnvCreator
 
 Multi-agent environments
 ------------------------
+
+.. currentmodule:: torchrl.envs
 
 TorchRL supports multi-agent learning out-of-the-box.
 *The same classes used in a single-agent learning pipeline can be seamlessly used in multi-agent contexts,
@@ -344,6 +345,15 @@ single agent standards.
   Note that `env.reward_spec == env.output_spec["full_reward_spec"][env.reward_key]`.
 
 
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    MarlGroupMapType
+    check_marl_grouping
+
+
+
 Transforms
 ----------
 .. currentmodule:: torchrl.envs.transforms
@@ -467,6 +477,7 @@ to be able to create this other composition:
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
@@ -484,10 +495,59 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
     VIPTransform
+
+Environments with masked actions
+--------------------------------
+
+In some environments with discrete actions, the actions available to the agent might change throughout execution.
+In such cases the environments will output an action mask (under the ``"action_mask"`` key by default).
+This mask needs to be used to filter out unavailable actions for that step.
+
+If you are using a custom policy you can pass this mask to your probability distribution like so:
+
+.. code-block::
+   :caption: Categorical policy with action mask
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.modules import MaskedCategorical
+        >>> module = TensorDictModule(
+        >>>     nn.Linear(in_feats, out_feats),
+        >>>     in_keys=["observation"],
+        >>>     out_keys=["logits"],
+        >>> )
+        >>> dist = ProbabilisticTensorDictModule(
+        >>>     in_keys={"logits": "logits", "mask": "action_mask"},
+        >>>     out_keys=["action"],
+        >>>     distribution_class=MaskedCategorical,
+        >>> )
+        >>> actor = TensorDictSequential(module, dist)
+
+If you want to use a default policy, you will need to wrap your environment in the :class:`~torchrl.envs.transforms.ActionMask`
+transform. This transform can take care of updating the action mask in the action spec in order for the default policy
+to always know what the latest available actions are. You can do this like so:
+
+.. code-block::
+   :caption: How to use the action mask transform
+
+        >>> from tensordict.nn import TensorDictModule, ProbabilisticTensorDictModule, TensorDictSequential
+        >>> import torch.nn as nn
+        >>> from torchrl.envs.transforms import TransformedEnv, ActionMask
+        >>> env = TransformedEnv(
+        >>>     your_base_env
+        >>>     ActionMask(action_key="action", mask_key="action_mask"),
+        >>> )
+
+.. note::
+  In case you are using a parallel environment it is important to add the transform to the parallel enviornment itself
+  and not to its sub-environments.
+
+
 
 Recorders
 ---------
@@ -536,7 +596,7 @@ Domain-specific
 Libraries
 ---------
 
-.. currentmodule:: torchrl.envs.libs
+.. currentmodule:: torchrl.envs
 
 TorchRL's mission is to make the training of control and decision algorithm as
 easy as it gets, irrespective of the simulator being used (if any).
@@ -612,19 +672,28 @@ the following function will return ``1`` when queried:
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    brax.BraxEnv
-    brax.BraxWrapper
-    dm_control.DMControlEnv
-    dm_control.DMControlWrapper
-    gym.GymEnv
-    gym.GymWrapper
-    gym.MOGymEnv
-    gym.MOGymWrapper
-    gym.set_gym_backend
-    gym.gym_backend
-    habitat.HabitatEnv
-    jumanji.JumanjiEnv
-    jumanji.JumanjiWrapper
-    openml.OpenMLEnv
-    vmas.VmasEnv
-    vmas.VmasWrapper
+    BraxEnv
+    BraxWrapper
+    DMControlEnv
+    DMControlWrapper
+    GymEnv
+    GymWrapper
+    HabitatEnv
+    IsaacGymEnv
+    IsaacGymWrapper
+    JumanjiEnv
+    JumanjiWrapper
+    MOGymEnv
+    MOGymWrapper
+    MultiThreadedEnv
+    MultiThreadedEnvWrapper
+    OpenMLEnv
+    PettingZooEnv
+    PettingZooWrapper
+    RoboHiveEnv
+    SMACv2Env
+    SMACv2Wrapper
+    VmasEnv
+    VmasWrapper
+    gym_backend
+    set_gym_backend

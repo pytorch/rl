@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Sequence
+from typing import Dict, Sequence, Union
 
 from torch import Tensor
 
@@ -33,7 +33,7 @@ class Logger:
         ...
 
     @abc.abstractmethod
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         ...
 
     @abc.abstractmethod

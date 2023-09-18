@@ -87,7 +87,6 @@ class TruncatedStandardNormal(Distribution):
     def variance(self):
         return self._variance
 
-    @property
     def entropy(self):
         return self._entropy
 
