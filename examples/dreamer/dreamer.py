@@ -256,14 +256,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                 # update world model
                 with autocast(dtype=torch.float16):
-                    (
-                        model_loss_td,
-                        actor_loss_td,
-                        value_loss_td,
-                        sampled_tensordict_world,
-                        sampled_tensordict_actor,
-                        sampled_tensordict_value,
-                    ) = dreamer_loss(sampled_tensordict)
+                    model_loss_td, sampled_tensordict = dreamer_loss.model_loss(
+                        sampled_tensordict
+                    )
                     loss_world_model = (
                         model_loss_td["loss_model_kl"]
                         + model_loss_td["loss_model_reco"]
@@ -275,7 +270,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         and (record._count + 1) % cfg.record_interval == 0
                     ):
                         sampled_tensordict_save = (
-                            sampled_tensordict_world.select(
+                            sampled_tensordict.select(
                                 "next" "state",
                                 "belief",
                             )[:4]
@@ -318,6 +313,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     world_model_opt.zero_grad()
                     scaler_world_model.update()
 
+                # update actor network
+                with autocast(dtype=torch.float16):
+                    actor_loss_td, sampled_tensordict = dreamer_loss.actor_loss(
+                        sampled_tensordict
+                    )
                 scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
                 scaler_actor.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
@@ -337,10 +337,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 scaler_actor.update()
 
                 # update value network
-                # with autocast(dtype=torch.float16):
-                #     value_loss_td, sampled_tensordict = dreamer_loss.value_loss(
-                #         sampled_tensordict
-                #     )
+                with autocast(dtype=torch.float16):
+                    value_loss_td, sampled_tensordict = dreamer_loss.value_loss(
+                        sampled_tensordict
+                    )
                 scaler_value.scale(value_loss_td["loss_value"]).backward()
                 scaler_value.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
