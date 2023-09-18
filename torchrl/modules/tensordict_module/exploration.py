@@ -174,6 +174,8 @@ class EGreedyModule(TensorDictModuleBase):
                         raise KeyError(
                             f"Action mask key {self.action_mask_key} not found in {tensordict}."
                         )
+                    if not action_mask.any():
+                        return tensordict
                     spec.update_mask(action_mask)
                 out = cond * spec.rand().to(out.device) + (1 - cond) * out
             else:
