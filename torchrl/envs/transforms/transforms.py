@@ -1172,6 +1172,8 @@ class ClipTransform(Transform):
         self.high_max = high_max
 
     def _apply_transform(self, obs: torch.Tensor) -> None:
+        self.high = self.high.to(obs.device)
+        self.low = self.low.to(obs.device)
         if self.low is None:
             return obs.clamp_max(self.high)
         elif self.high is None:
@@ -1179,6 +1181,8 @@ class ClipTransform(Transform):
         return obs.clamp(self.low, self.high)
 
     def _inv_apply_transform(self, state: torch.Tensor) -> torch.Tensor:
+        self.high = self.high.to(state.device)
+        self.low = self.low.to(state.device)
         if self.low is None:
             return state.clamp_max(self.high)
         elif self.high is None:
