@@ -77,8 +77,7 @@ def make_base_env(
     return env
 
 
-def make_parallel_env(env_name, device, is_test=False):
-    num_envs = 8
+def make_parallel_env(env_name, num_envs, device, is_test=False):
     env = ParallelEnv(
         num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
     )
@@ -187,7 +186,7 @@ def make_ppo_modules_pixels(proof_environment):
 
 def make_ppo_models(env_name):
 
-    proof_environment = make_parallel_env(env_name, device="cpu")
+    proof_environment = make_parallel_env(env_name, 1, device="cpu")
     common_module, policy_module, value_module = make_ppo_modules_pixels(
         proof_environment
     )

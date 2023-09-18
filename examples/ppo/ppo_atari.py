@@ -44,7 +44,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, device),
+        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -87,11 +87,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create logger
-    exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.backend, logger_name="ppo", experiment_name=exp_name)
+    logger = None
+    if cfg.logger.backend:
+        exp_name = generate_exp_name("PPO", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+        logger = get_logger(cfg.logger.backend, logger_name="ppo", experiment_name=exp_name)
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, device, is_test=True)
+    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
     test_env.eval()
 
     # Main loop
@@ -114,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Log training rewards and episode lengths
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
-        if len(episode_rewards) > 0:
+        if logger and len(episode_rewards) > 0:
             episode_length = data["next", "step_count"][data["next", "done"]]
             logger.log_scalar(
                 "train/reward", episode_rewards.mean().item(), collected_frames
@@ -177,20 +179,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Log training losses
         training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
-        for key, value in losses.items():
-            logger.log_scalar("train/" + key, value.item(), collected_frames)
-        logger.log_scalar("train/lr", alpha * cfg.optim.lr, collected_frames)
-        logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
-        logger.log_scalar("train/training_time", training_time, collected_frames)
-        logger.log_scalar(
-            "train/clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
-        )
+        if logger:
+            for key, value in losses.items():
+                logger.log_scalar("train/" + key, value.item(), collected_frames)
+            logger.log_scalar("train/lr", alpha * cfg.optim.lr, collected_frames)
+            logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
+            logger.log_scalar("train/training_time", training_time, collected_frames)
+            logger.log_scalar(
+                "train/clip_epsilon", alpha * cfg.loss.clip_epsilon, collected_frames
+            )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
                 i * frames_in_batch * frame_skip
-            ) // test_interval:
+            ) // test_interval and logger:
                 eval_start = time.time()
                 actor.eval()
                 test_rewards = []
