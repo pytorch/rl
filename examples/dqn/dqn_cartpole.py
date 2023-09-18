@@ -166,7 +166,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Log all the information
         if logger:
             for key, value in log_info.items():
-                logger.log_scalar(key, value, collected_frames)
+                logger.log_scalar(key, value, step=collected_frames)
 
         # update weights of the inference policy
         collector.update_policy_weights_()

@@ -89,7 +89,6 @@ def make_env(env_name, frame_skip, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    # env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
