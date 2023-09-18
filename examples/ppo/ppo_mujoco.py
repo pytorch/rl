@@ -159,6 +159,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             logger.log_scalar("train/" + key, value.item(), collected_frames)
+        alpha = 1 - (num_network_updates / total_network_updates)
         logger.log_scalar("train/lr", alpha * cfg.optim.lr, collected_frames)
         logger.log_scalar("train/sampling_time", sampling_time, collected_frames)
         logger.log_scalar("train/training_time", training_time, collected_frames)
@@ -168,10 +169,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (
-                (i - 1) * frames_in_batch % cfg.logger.test_interval
-                < i * frames_in_batch % cfg.logger.test_interval
-            ):
+            if ((i - 1) * frames_in_batch) // cfg.logger.test_interval < (
+                i * frames_in_batch
+            ) // cfg.logger.test_interval:
 
                 actor.eval()
                 test_rewards = []

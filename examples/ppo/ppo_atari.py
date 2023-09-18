@@ -187,10 +187,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (
-                (i - 1) * frames_in_batch * frame_skip % test_interval
-                < i * frames_in_batch * frame_skip % test_interval
-            ):
+            if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
+                i * frames_in_batch * frame_skip
+            ) // test_interval:
 
                 actor.eval()
                 test_rewards = []

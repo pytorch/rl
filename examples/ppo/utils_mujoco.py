@@ -4,18 +4,7 @@ import torch.optim
 
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 from torchrl.data import CompositeSpec
-<<<<<<< HEAD
 from torchrl.envs import DoubleToFloat, ExplorationType, RewardSum, TransformedEnv
-=======
-from torchrl.envs import (
-    ClipTransform,
-    DoubleToFloat,
-    ExplorationType,
-    RewardSum,
-    TransformedEnv,
-    VecNorm,
-)
->>>>>>> 29fa21fa (replace norm wrapper with transform)
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 
@@ -31,6 +20,9 @@ def make_env(env_name="HalfCheetah-v4", device="cpu"):
     env = GymWrapper(env, device=device)
     env = TransformedEnv(env)
     env.append_transform(RewardSum())
+    env.append_transform(StepCounter())
+    env.append_transform(VecNorm(in_keys=["observation"]))
+    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
 
