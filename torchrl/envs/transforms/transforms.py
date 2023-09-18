@@ -5033,7 +5033,7 @@ class InitTracker(Transform):
                         shape = full_done_spec[done_key].shape
                         break
                 if isinstance(done_key, str):
-                    shape = full_done_spec[done_key]
+                    shape = full_done_spec[done_key].shape
                     break
             else:
                 raise KeyError(f"Could not find root of init_key {init_key}.")
