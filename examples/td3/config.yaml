@@ -31,6 +31,7 @@ optim:
   loss_function: l2
   lr: 3.0e-4
   weight_decay: 0.0
+  adam_eps: 1e-8
   batch_size: 256
   target_update_polyak: 0.995
   policy_update_delay: 2
