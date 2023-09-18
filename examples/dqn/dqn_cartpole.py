@@ -113,7 +113,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_info.update(
                 {
                     "train/episode_reward": episode_rewards.mean().item(),
-                    "train/episode_length": episode_length.mean().item(),
+                    "train/episode_length": episode_length.sum().item()
+                                            / len(episode_length),
                 }
             )
 

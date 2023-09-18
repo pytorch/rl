@@ -1,7 +1,6 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  frame_skip: 4
 
 # collector
 collector:
@@ -19,9 +18,9 @@ buffer:
 
 # logger
 logger:
-  backend: wandb
+  backend: null
   exp_name: DQN
-  test_interval: 40_000_000
+  test_interval: 1_000_000
   num_test_episodes: 3
 
 # Optim

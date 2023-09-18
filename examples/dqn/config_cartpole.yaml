@@ -18,9 +18,9 @@ buffer:
 
 # logger
 logger:
-  backend: csv
+  backend: null
   exp_name: DQN
-  test_interval: 500_000
+  test_interval: 50_000
   num_test_episodes: 5
 
 # Optim
@@ -31,5 +31,5 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  hard_update_freq: 1
+  hard_update_freq: 50
   num_updates: 1
