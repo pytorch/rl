@@ -1382,6 +1382,10 @@ class TestR3M(TransformBase):
 
 
 class TestStepCounter(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(max_steps=10))
+        check_env_specs(env)
+
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
@@ -1406,10 +1410,6 @@ class TestStepCounter(TransformBase):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), StepCounter(10))
         check_env_specs(env)
 
-    def test_single_trans_env_check(self):
-        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
-        check_env_specs(env)
-
     @pytest.mark.skipif(not _has_gym, reason="Gym not found")
     def test_transform_env(self):
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(10))
@@ -1417,7 +1417,7 @@ class TestStepCounter(TransformBase):
         assert td["step_count"].max() == 9
         assert td.shape[-1] == 100
 
-    @pytest.mark.parametrize("step_key", ["step_count", ("other", "key")])
+    @pytest.mark.parametrize("step_key", ["step_count", "other-key"])
     @pytest.mark.parametrize("max_steps", [None, 10])
     @pytest.mark.parametrize("nested_done", [True, False])
     def test_nested(
@@ -1429,10 +1429,13 @@ class TestStepCounter(TransformBase):
         policy = CountingEnvCountPolicy(
             action_spec=env.action_spec, action_key=env.action_key
         )
+        if nested_done:
+            step_key = (*env.done_key[:-1], step_key)
         transformed_env = TransformedEnv(
             env,
             StepCounter(
-                max_steps=max_steps, step_count_key=step_key, truncated_key=env.done_key
+                max_steps=max_steps,
+                step_count_keys=[step_key],
             ),
         )
         td = transformed_env.rollout(
@@ -1450,10 +1453,14 @@ class TestStepCounter(TransformBase):
             assert step[:max_steps].eq(torch.arange(max_steps)).all()
             assert step[max_steps:].eq(torch.arange(rollout_length - max_steps)).all()
 
+        if nested_done:
+            reset_key = (*env.done_key[:-1], "_reset")
+        else:
+            reset_key = "_reset"
         _reset = env.done_spec.rand()
         td_reset = transformed_env.reset(
             TensorDict(
-                {"_reset": _reset, step_key: last_step},
+                {reset_key: _reset, step_key: last_step},
                 batch_size=env.batch_size,
                 device=env.device,
             )

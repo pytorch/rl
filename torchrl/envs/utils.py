@@ -728,3 +728,74 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
     for agent_name, found in found_agents.items():
         if not found:
             raise ValueError(f"Agent {agent_name} not found in any group")
+
+
+def done_or_truncated(
+    data: TensorDictBase, full_done_spec=None, name="_reset"
+) -> TensorDictBase:
+    """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+
+    The modification occurs in-place within the TensorDict instance provided.
+    This function can be used to compute the `"_reset"` signal in batched
+    or multiagent settings, hence the default name of the output key.
+
+    Args:
+        data (TensorDictBase): the input data, generally resulting from a call to :meth:`~torchrl.envs.EnvBase.step`.
+        full_done_spec (TensorSpec, optional): the done_spec from the env, indicating where
+            the done leaves have to be found. If not provided, the default `"done"` and
+            `"truncated"` entries will be searched for in the data.
+        name (NestedKey, optional): where the aggregated result should be written.
+
+    Examples:
+        >>> from torchrl.data.tensor_specs import DiscreteTensorSpec
+        >>> from tensordict import TensorDict
+        >>> spec = CompositeSpec(
+        ...     done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     nested=CompositeSpec(
+        ...         done=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...         truncated=DiscreteTensorSpec(2, dtype=torch.bool),
+        ...     )
+        ... )
+        >>> data = TensorDict({
+        ...     "done": True, "truncated": False,
+        ...     "nested": {"done": False, "truncated": True}},
+        ...     batch_size=[]
+        ... )
+        >>> data = done_or_truncated(data, spec)
+        >>> print(data["_reset"])
+        tensor(True)
+        >>> print(data["nested", "_reset"])
+        tensor(True)
+    """
+    aggregate = None
+    has_entry = name in data.keys(isinstance(name, tuple))
+    if full_done_spec is None:
+        for key, item in data.items():
+            if not has_entry and key in ("done", "truncated"):
+                done = data.get(key, None)
+                if done is None:
+                    done = torch.zeros(
+                        (*data.shape, 1), dtype=torch.bool, device=data.device
+                    )
+                if aggregate is None:
+                    aggregate = torch.tensor(False, device=done.device)
+                aggregate = aggregate | done
+            elif isinstance(item, TensorDictBase):
+                done_or_truncated(data=item, full_done_spec=None, name=name)
+    else:
+        for key, item in full_done_spec.items():
+            if isinstance(item, CompositeSpec):
+                done_or_truncated(data=data.get(key), full_done_spec=item, name=name)
+            elif not has_entry:
+                done = data.get(key, None)
+                if done is None:
+                    done = torch.zeros(
+                        (*data.shape, 1), dtype=torch.bool, device=data.device
+                    )
+                if aggregate is None:
+                    aggregate = torch.tensor(False, device=done.device)
+                aggregate = aggregate | done
+    if aggregate is not None:
+        data.setdefault(name, aggregate)
+    return data

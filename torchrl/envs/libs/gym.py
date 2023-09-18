@@ -702,34 +702,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self.reward_spec = reward_spec
         self.observation_spec = observation_spec
 
-    @implement_for("gymnasium", "0.27", None)
-    def _make_done_spec(self):
-        return CompositeSpec(
-            {
-                "done": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                ),
-                "truncated": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                ),
-            },
-            shape=self.batch_size,
-        )
-
-    @implement_for("gym", "0.26", None)
-    def _make_done_spec(self):  # noqa: F811
-        return CompositeSpec(
-            {
-                "done": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                ),
-                "truncated": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                ),
-            },
-            shape=self.batch_size,
-        )
-
     @implement_for("gym", None, "0.26")
     def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
@@ -742,7 +714,39 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         )
 
     @implement_for("gym", "0.26", None)
-    def _reset_output_transform(self, reset_data):
+    def _make_done_spec(self):  # noqa: F811
+        return CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
+        )
+
+    @implement_for("gymnasium", "0.27", None)
+    def _make_done_spec(self):  # noqa: F811
+        return CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
+        )
+
+    @implement_for("gym", None, "0.26")
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data, {}
+
+    @implement_for("gym", "0.26", None)
+    def _reset_output_transform(self, reset_data):  # noqa: F811
         return reset_data
 
     @implement_for("gymnasium", "0.27", None)
@@ -750,11 +754,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return reset_data
 
     @implement_for("gym", None, "0.26")
-    def _reset_output_transform(self, reset_data):  # noqa: F811
-        return reset_data, {}
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        observations, reward, done, info = step_outputs_tuple
+        return (observations, reward, None, None, done, info)
 
     @implement_for("gym", "0.26", None)
-    def _output_transform(self, step_outputs_tuple):
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
         observations, reward, termination, truncation, info = step_outputs_tuple
         return (
             observations,
@@ -764,11 +769,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             termination | truncation,
             info,
         )
-
-    @implement_for("gym", None, "0.26")
-    def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, done, info = step_outputs_tuple
-        return (observations, reward, None, None, done, info)
 
     @implement_for("gymnasium", "0.27", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811

@@ -41,7 +41,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, step_mdp
+from torchrl.envs.utils import _sort_keys, done_or_truncated, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -4236,20 +4236,32 @@ class RewardSum(Transform):
 
 
 class StepCounter(Transform):
-    """Counts the steps from a reset and sets the done state to True after a certain number of steps.
+    """Counts the steps from a reset and optionally sets the truncated state to ``True`` after a certain number of steps.
 
     Args:
         max_steps (int, optional): a positive integer that indicates the
             maximum number of steps to take before setting the ``truncated_key``
             entry to ``True``.
-            However, the step count will still be
-            incremented on each call to step() into the `step_count` attribute.
-        truncated_key (NestedKey, optional): the key where the truncated key should
-            be written. Defaults to ``"truncated"``, which is recognised by
-            data collectors as a reset signal.
-        step_count_key (NestedKey, optional): the key where the step_count key should
-            be written. Defaults to ``"step_count"``, which is recognised by
-            data collectors.
+        truncated_keys (list of NestedKey, optional): the keys where the truncated entries
+            should be written. Defaults to ``["truncated"]``, which is recognised by
+            data collectors as a reset signal. Must match the length of ``step_count_keys`` and ``done_keys``,
+            if provided.
+            If the transform is nested within a transformed environment, the
+            truncated entry will be part of the ``done_spec``.
+        step_count_keys (list of NestedKeys, optional): the key names of the step
+            count. Must match the length of ``truncated_keys`` and ``done_keys``,
+            if provided. If not, it will default to the ``"step_count"`` key name.
+        done_keys (list of NestedKeys, optional): the keys that are indicative of the
+            done signal. Must match the length of ``truncated_keys`` and ``step_count_keys``,
+            if provided.
+
+    .. note:: To ensure compatibility with environments that have multiple
+        done_key(s), this transform will write a step_count entry for
+        every done entry within the tensordict.
+
+    Examples:
+        TODO
+
     """
 
     invertible = False
@@ -4257,59 +4269,153 @@ class StepCounter(Transform):
     def __init__(
         self,
         max_steps: Optional[int] = None,
-        truncated_key: Optional[NestedKey] = "truncated",
-        step_count_key: Optional[NestedKey] = "step_count",
+        truncated_keys: Optional[List[NestedKey]] = None,
+        step_count_keys: Optional[List[NestedKey]] = None,
+        done_keys: Optional[List[NestedKey]] = None,
+        *,
+        truncated_key: Optional[NestedKey] = None,
+        step_count_key: Optional[NestedKey] = None,
     ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
+        if truncated_key is not None:
+            warnings.warn(
+                "truncated_key will be deprecated in torchrl v0.3. Use truncated_keys instead.",
+                category=DeprecationWarning,
+            )
+            if truncated_keys:
+                if len(truncated_keys) > 1 or truncated_keys[0] != truncated_key:
+                    raise ValueError("truncated_key and truncated_keys mismatch.")
+            truncated_keys = [truncated_key]
+        if isinstance(truncated_keys, (str, tuple)):
+            truncated_keys = [truncated_keys]
+        if isinstance(done_keys, (str, tuple)):
+            done_keys = [done_keys]
+        if step_count_key is not None:
+            warnings.warn(
+                "step_count_key will be deprecated in torchrl v0.3. Use step_count_keys instead.",
+                category=DeprecationWarning,
+            )
+            if step_count_keys:
+                if len(step_count_keys) > 1 or step_count_keys[0] != step_count_key:
+                    raise ValueError("step_count_key and step_count_keys mismatch.")
+            step_count_keys = [step_count_key]
+        if isinstance(step_count_keys, (str, tuple)):
+            step_count_keys = [step_count_keys]
+
         self.max_steps = max_steps
-        self.truncated_key = truncated_key
-        self.step_count_key = step_count_key
+        self._truncated_keys = truncated_keys
+        self.truncated_key = (
+            truncated_keys[0] if truncated_keys and len(truncated_keys) == 1 else None
+        )
+        self._step_count_keys = step_count_keys
+        self.step_count_key = (
+            step_count_keys[0]
+            if step_count_keys and len(step_count_keys) == 1
+            else None
+        )
+        self._done_keys = done_keys
+        self.done_key = done_keys[0] if done_keys and len(done_keys) == 1 else None
+        self._reset_keys = None
         super().__init__([])
 
-    def _get_done(self, tensordict):
-        done_key = self.parent.done_key if self.parent else "done"
-        done = tensordict.get(done_key, None)
-        if done is None:
-            done = torch.ones(
-                self.parent.done_spec.shape,
-                dtype=self.parent.done_spec.dtype,
-                device=self.parent.done_spec.device,
-            )
-        return done
+    @property
+    def truncated_keys(self):
+        truncated_keys = self._truncated_keys
+        if truncated_keys is None:
+            # make the default truncated keys
+            truncated_keys = []
+            for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    key = "truncated"
+                else:
+                    key = (*done_key[:-1], "truncated")
+                if key not in truncated_keys:
+                    truncated_keys.append(key)
+                truncated_keys = self._truncated_keys = truncated_keys
+        return truncated_keys
+
+    @property
+    def done_keys(self):
+        done_keys = self._done_keys
+        if done_keys is None:
+            if self.parent:
+                self._done_keys = done_keys = self.parent.done_keys
+            else:
+                self._done_keys = done_keys = ["done"]
+        return done_keys
+
+    @property
+    def step_count_keys(self):
+        step_count_keys = self._step_count_keys
+        if step_count_keys is None:
+            # make the default step_count keys
+            step_count_keys = []
+            for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    key = "step_count"
+                else:
+                    key = (*done_key[:-1], "step_count")
+                if key not in step_count_keys:
+                    step_count_keys.append(key)
+                step_count_keys = self._step_count_keys = step_count_keys
+        return step_count_keys
+
+    @property
+    def reset_keys(self):
+        reset_keys = self._reset_keys
+        if reset_keys is None:
+            # make the default reset keys
+            reset_keys = []
+            for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    key = "_reset"
+                else:
+                    key = (*done_key[:-1], "_reset")
+                if key not in reset_keys:
+                    reset_keys.append(key)
+                reset_keys = self._reset_keys = reset_keys
+        return reset_keys
+
+    @property
+    def full_done_spec(self):
+        return self.parent.output_spec["full_done_spec"] if self.parent else None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = None
-        _reset = tensordict.get(
-            "_reset",
-            # TODO: decide if using done here, or using a default `True` tensor
-            default=None,
+        # get reset signal
+        tensordict_reset = done_or_truncated(
+            tensordict.clone(False), full_done_spec=self.full_done_spec
         )
-        if _reset is None:
-            done = self._get_done(tensordict)
-            _reset = torch.ones_like(done)
-        step_count = tensordict.get(self.step_count_key, default=None)
-        if step_count is None:
-            if done is None:
-                # avoid getting done if not needed
-                done = self._get_done(tensordict)
-            step_count = torch.zeros_like(done, dtype=torch.int64)
-        step_count = torch.where(~_reset, step_count, 0)
-        tensordict.set(self.step_count_key, step_count)
-        if self.max_steps is not None:
-            truncated = step_count >= self.max_steps
-            tensordict.set(self.truncated_key, truncated)
+
+        for step_count_key, truncated_key, reset_key in zip(
+            self.step_count_keys, self.truncated_keys, self.reset_keys
+        ):
+            step_count = tensordict.get(step_count_key, default=None)
+            reset = tensordict_reset.get(reset_key)
+            if step_count is None:
+                step_count = torch.zeros_like(reset, dtype=torch.int64)
+
+            # zero the step count if reset is needed
+            step_count = torch.where(~reset, step_count, 0)
+            tensordict.set(step_count_key, step_count)
+            if self.max_steps is not None:
+                truncated = step_count >= self.max_steps
+                tensordict.set(truncated_key, truncated)
+
         return tensordict
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        step_count = tensordict.get(self.step_count_key)
-        next_step_count = step_count + 1
-        next_tensordict.set(self.step_count_key, next_step_count)
-        if self.max_steps is not None:
-            truncated = next_step_count >= self.max_steps
-            next_tensordict.set(self.truncated_key, truncated)
+        for step_count_key, truncated_key in zip(
+            self.step_count_keys, self.truncated_keys
+        ):
+            step_count = tensordict.get(step_count_key)
+            next_step_count = step_count + 1
+            next_tensordict.set(step_count_key, next_step_count)
+            if self.max_steps is not None:
+                truncated = next_step_count >= self.max_steps
+                next_tensordict.set(truncated_key, truncated)
         return next_tensordict
 
     def transform_observation_spec(
@@ -4319,19 +4425,51 @@ class StepCounter(Transform):
             raise ValueError(
                 f"observation_spec was expected to be of type CompositeSpec. Got {type(observation_spec)} instead."
             )
-        observation_spec[self.step_count_key] = UnboundedDiscreteTensorSpec(
-            shape=self.parent.done_spec.shape
-            if self.parent
-            else observation_spec.shape,
-            dtype=torch.int64,
-            device=observation_spec.device,
-        )
-        observation_spec[self.step_count_key].space.low = (
-            observation_spec[self.step_count_key].space.low * 0
-        )
-        if self.max_steps is not None and self.truncated_key != self.parent.done_key:
-            observation_spec[self.truncated_key] = self.parent.done_spec.clone()
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        for step_count_key in self.step_count_keys:
+            step_count_key = unravel_key(step_count_key)
+            # find a matching done key (there might be more than one)
+            for done_key in self.done_keys:
+                if type(done_key) == type(step_count_key):
+                    shape = full_done_spec[done_key].shape
+                    break
+            else:
+                raise RuntimeError(
+                    "Could not find a matching done_key to get the step_count shape. "
+                    "Make sure the step_count entries are associated with a done entry."
+                )
+            observation_spec[step_count_key] = BoundedTensorSpec(
+                shape=shape,
+                dtype=torch.int64,
+                device=observation_spec.device,
+                low=0,
+                high=torch.iinfo(torch.int64).max,
+            )
         return observation_spec
+
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        if self.max_steps:
+            full_done_spec = self.parent.output_spec["full_done_spec"]
+            for truncated_key in self.truncated_keys:
+                truncated_key = unravel_key(truncated_key)
+                # find a matching done key (there might be more than one)
+                for done_key in self.done_keys:
+                    if type(done_key) == type(truncated_key):
+                        shape = full_done_spec[done_key].shape
+                        break
+                else:
+                    raise RuntimeError(
+                        "Could not find a matching done_key to get the truncated shape. "
+                        "Make sure the truncated entries are associated with a done entry."
+                    )
+                full_done_spec[truncated_key] = DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=output_spec.device, shape=shape
+                )
+            output_spec["full_done_spec"] = full_done_spec
+        output_spec["full_observation_spec"] = self.transform_observation_spec(
+            output_spec["full_observation_spec"]
+        )
+        return output_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
         if not isinstance(input_spec, CompositeSpec):
@@ -4342,13 +4480,29 @@ class StepCounter(Transform):
             input_spec["full_state_spec"] = CompositeSpec(
                 shape=input_spec.shape, device=input_spec.device
             )
-        step_spec = UnboundedDiscreteTensorSpec(
-            shape=self.parent.done_spec.shape if self.parent else input_spec.shape,
-            dtype=torch.int64,
-            device=input_spec.device,
-        )
-        step_spec.space.low *= 0
-        input_spec["full_state_spec", self.step_count_key] = step_spec
+
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        for step_count_key in self.step_count_keys:
+            step_count_key = unravel_key(step_count_key)
+            # find a matching done key (there might be more than one)
+            for done_key in self.done_keys:
+                if type(done_key) == type(step_count_key):
+                    shape = full_done_spec[done_key].shape
+                    break
+            else:
+                raise RuntimeError(
+                    "Could not find a matching done_key to get the step_count shape. "
+                    "Make sure the step_count entries are associated with a done entry."
+                )
+            input_spec[
+                unravel_key(("full_state_spec", step_count_key))
+            ] = BoundedTensorSpec(
+                shape=shape,
+                dtype=torch.int64,
+                device=input_spec.device,
+                low=0,
+                high=torch.iinfo(torch.int64).max,
+            )
 
         return input_spec
 

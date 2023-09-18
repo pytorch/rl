@@ -50,7 +50,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
 )
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import _replace_last
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
@@ -329,7 +329,8 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
+        with set_gym_backend(gym_backend()):
+            return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
