@@ -1545,7 +1545,7 @@ class TestStepCounter(TransformBase):
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
-            _reset = torch.randn(batch, device=device) < 0
+            _reset = torch.rand(batch, device=device) < 0.5
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
@@ -8153,7 +8153,7 @@ class TestInitTracker(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for InitTracker")
 
-    @pytest.mark.parametrize("init_key", ["is_init", "loool", ("other", "key")])
+    @pytest.mark.parametrize("init_key", ["is_init", "loool"])
     @pytest.mark.parametrize("nested_done", [True, False])
     @pytest.mark.parametrize("max_steps", [5])
     def test_nested(

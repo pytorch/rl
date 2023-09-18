@@ -36,7 +36,6 @@ from torchrl.data.tensor_specs import (
     OneHotDiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec,
 )
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
@@ -2341,6 +2340,10 @@ class CatFrames(ObservationTransform):
         >>> # let's check that our sample is the same as the batch collected during inference
         >>> assert (data.exclude("collector")==s.squeeze(0).exclude("index", "collector")).all()
 
+    .. note:: :class:`~CatFrames` currently only supports ``done`` signal at the root. Nested ``done``,
+        such as those found in MARL settings, are currently not supported.
+        If this feature is needed, please raise an issue on TorchRL repo.
+
     """
 
     inplace = False
@@ -4073,6 +4076,11 @@ class RewardSum(Transform):
     If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
     (e.g. reward1 and reward2) can also be specified. If ´in_keys´ are not present in the provided tensordict,
     this transform hos no effect.
+
+    .. note:: :class:`~RewardSum` currently only supports ``done`` signal at the root.
+        Nested ``done``, such as those found in MARL settings, are currently not supported.
+        If this feature is needed, please raise an issue on TorchRL repo.
+
     """
 
     def __init__(
@@ -4260,7 +4268,38 @@ class StepCounter(Transform):
         every done entry within the tensordict.
 
     Examples:
-        TODO
+        >>> import gymnasium
+        >>> from torchrl.envs import GymWrapper
+        >>> base_env = GymWrapper(gymnasium.make("Pendulum-v1"))
+        >>> env = TransformedEnv(base_env, StepCounter(max_steps=5))
+        >>> rollout = env.rollout(100)
+        >>> print(rollout)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                        step_count: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                        truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([5]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                step_count: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+                truncated: Tensor(shape=torch.Size([5, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([5]),
+            device=cpu,
+            is_shared=False)
+        >>> print(rollout["next", "step_count"])
+        tensor([[1],
+                [2],
+                [3],
+                [4],
+                [5]])
 
     """
 
@@ -4317,6 +4356,7 @@ class StepCounter(Transform):
         self._done_keys = done_keys
         self.done_key = done_keys[0] if done_keys and len(done_keys) == 1 else None
         self._reset_keys = None
+        self._done_keys_sorted = None
         super().__init__([])
 
     @property
@@ -4378,20 +4418,50 @@ class StepCounter(Transform):
         return reset_keys
 
     @property
+    def done_keys_sorted(self):
+        """A list of done keys, grouped as the reset keys.
+
+        This is a list of lists. The outer list has the length of reset keys, the
+        inner lists constain the done keys (eg, done and truncated) that can
+        be read to determine a reset when it is absent.
+
+        """
+        done_keys_sorted = self._done_keys_sorted
+        if done_keys_sorted is not None:
+            return done_keys_sorted
+        # done keys, sorted as reset keys
+        reset_keys = self.reset_keys
+        done_keys = [[] for _ in range(len(reset_keys))]
+        reset_keys = iter(reset_keys)
+        done_keys_iter = iter(done_keys)
+        curr_reset_key = next(reset_keys)
+        curr_done_key = next(done_keys_iter)
+
+        for done_key in self.done_keys:
+            while type(done_key) != type(curr_reset_key) or (isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]): # if they are string, they are at the same level
+                curr_reset_key = next(curr_reset_key)
+                curr_done_key = next(done_keys_iter)
+            curr_done_key.append(done_key)
+        self._done_keys_sorted = done_keys
+        return done_keys
+
+    @property
     def full_done_spec(self):
         return self.parent.output_spec["full_done_spec"] if self.parent else None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # get reset signal
-        tensordict_reset = done_or_truncated(
-            tensordict.clone(False), full_done_spec=self.full_done_spec
-        )
-
-        for step_count_key, truncated_key, reset_key in zip(
-            self.step_count_keys, self.truncated_keys, self.reset_keys
+        for step_count_key, truncated_key, reset_key, done_list_sorted in zip(
+            self.step_count_keys, self.truncated_keys, self.reset_keys, self.done_keys_sorted
         ):
             step_count = tensordict.get(step_count_key, default=None)
-            reset = tensordict_reset.get(reset_key)
+            reset = tensordict.get(reset_key, None)
+            if reset is None:
+                # get done status
+                for entry in done_list_sorted:
+                    done = tensordict.get(entry)
+                    break
+                reset = torch.ones_like(done)
             if step_count is None:
                 step_count = torch.zeros_like(reset, dtype=torch.int64)
 
@@ -4486,14 +4556,21 @@ class StepCounter(Transform):
             step_count_key = unravel_key(step_count_key)
             # find a matching done key (there might be more than one)
             for done_key in self.done_keys:
-                if type(done_key) == type(step_count_key):
+                # check root
+                if type(done_key) != type(step_count_key):
+                    continue
+                if isinstance(done_key, tuple):
+                    if done_key[:-1] == step_count_key:
+                        shape = full_done_spec[done_key].shape
+                        break
+                if isinstance(done_key, str):
                     shape = full_done_spec[done_key].shape
                     break
             else:
-                raise RuntimeError(
-                    "Could not find a matching done_key to get the step_count shape. "
-                    "Make sure the step_count entries are associated with a done entry."
+                raise KeyError(
+                    f"Could not find root of step_count_key {step_count_key}."
                 )
+
             input_spec[
                 unravel_key(("full_state_spec", step_count_key))
             ] = BoundedTensorSpec(
@@ -4626,6 +4703,30 @@ class TimeMaxPool(Transform):
         in_keys (sequence of NestedKey, optional): input keys on which the max pool will be applied. Defaults to "observation" if left empty.
         out_keys (sequence of NestedKey, optional): output keys where the output will be written. Defaults to `in_keys` if left empty.
         T (int, optional): Number of time steps over which to apply max pooling.
+
+    Examples:
+        >>> from torchrl.envs import GymEnv
+        >>> base_env = GymEnv("Pendulum-v1")
+        >>> env = TransformedEnv(base_env, TimeMaxPool(in_keys=["observation"], T=10))
+        >>> torch.manual_seed(0)
+        >>> env.set_seed(0)
+        >>> rollout = env.rollout(10)
+        >>> print(rollout["observation"])  # values should be increasing up until the 10th step
+        tensor([[ 0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0000,  0.0000],
+                [ 0.0000,  0.0216,  0.0000],
+                [ 0.0000,  0.1149,  0.0000],
+                [ 0.0000,  0.1990,  0.0000],
+                [ 0.0000,  0.2749,  0.0000],
+                [ 0.0000,  0.3281,  0.0000],
+                [-0.9290,  0.3702, -0.8978]])
+
+    .. note:: :class:`~TimeMaxPool` currently only supports ``done`` signal at the root.
+        Nested ``done``, such as those found in MARL settings, are currently not supported.
+        If this feature is needed, please raise an issue on TorchRL repo.
+
     """
 
     invertible = False
@@ -4659,7 +4760,6 @@ class TimeMaxPool(Transform):
             )
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Resets _buffers."""
         # Non-batched environments
         if len(tensordict.batch_size) < 1 or tensordict.batch_size[0] == 1:
             for in_key in self.in_keys:
@@ -4855,46 +4955,94 @@ class InitTracker(Transform):
     """
 
     def __init__(self, init_key: NestedKey = "is_init"):
-        super().__init__(in_keys=[], out_keys=[init_key])
+        self.init_key = init_key
+        self.reset_key = "_reset"
+        super().__init__(in_keys=[], out_keys=[])
+
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        self.out_keys = self.init_keys
+        return out
+
+    @property
+    def init_keys(self):
+        init_keys = []
+        for done_key in self.parent.done_keys:
+            if isinstance(done_key, str):
+                init_key = self.init_key
+            else:
+                init_key = unravel_key((*done_key[:-1], self.init_key))
+            if init_key not in init_keys:
+                init_keys.append(init_key)
+        return init_keys
+
+    @property
+    def reset_keys(self):
+        reset_keys = []
+        for done_key in self.parent.done_keys:
+            if isinstance(done_key, str):
+                reset_key = self.reset_key
+            else:
+                reset_key = unravel_key((*done_key[:-1], self.reset_key))
+            if reset_key not in reset_keys:
+                reset_keys.append(reset_key)
+        return reset_keys
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.out_keys[0] not in tensordict.keys(True, True):
-            device = tensordict.device
-            if device is None:
-                device = torch.device("cpu")
-            tensordict.set(
-                self.out_keys[0],
-                torch.zeros(
-                    self.parent.done_spec.shape, device=device, dtype=torch.bool
-                ),
-            )
+        for init_key in self.init_keys:
+            if init_key not in tensordict.keys(True, True):
+                device = tensordict.device
+                if device is None:
+                    device = torch.device("cpu")
+                tensordict.set(
+                    init_key,
+                    torch.zeros(
+                        self.parent.done_spec.shape, device=device, dtype=torch.bool
+                    ),
+                )
         return tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        _reset = tensordict.get("_reset", None)
-        if _reset is None:
-            tensordict.set(
-                self.out_keys[0],
-                torch.ones(
-                    self.parent.done_spec.shape,
-                    device=device,
-                    dtype=torch.bool,
-                ),
-            )
-        else:
-            tensordict.set(self.out_keys[0], _reset.clone())
+        for reset_key, init_key in zip(self.reset_keys, self.init_keys):
+            _reset = tensordict.get(reset_key, None)
+            if _reset is None:
+                tensordict.set(
+                    init_key,
+                    torch.ones(
+                        self.parent.done_spec.shape,
+                        device=device,
+                        dtype=torch.bool,
+                    ),
+                )
+            else:
+                tensordict.set(init_key, _reset.clone())
         return tensordict
 
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        observation_spec[self.out_keys[0]] = DiscreteTensorSpec(
-            2,
-            dtype=torch.bool,
-            device=self.parent.device,
-            shape=self.parent.done_spec.shape,
-        )
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        for init_key in self.init_keys:
+            for done_key in self.parent.done_keys:
+                # check root
+                if type(done_key) != type(init_key):
+                    continue
+                if isinstance(done_key, tuple):
+                    if done_key[:-1] == init_key:
+                        shape = full_done_spec[done_key].shape
+                        break
+                if isinstance(done_key, str):
+                    shape = full_done_spec[done_key]
+                    break
+            else:
+                raise KeyError(f"Could not find root of init_key {init_key}.")
+            observation_spec[init_key] = DiscreteTensorSpec(
+                2,
+                dtype=torch.bool,
+                device=self.parent.device,
+                shape=shape,
+            )
         return observation_spec
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -5071,11 +5219,14 @@ class Reward2GoTransform(Transform):
     and not to the collector.
 
     Args:
+        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
         in_keys (sequence of NestedKey): the entries to rename. Defaults to
             ``("next", "reward")`` if none is provided.
         out_keys (sequence of NestedKey): the entries to rename. Defaults to
             the values of ``in_keys`` if none is provided.
-        gamma (float or torch.Tensor): the discount factor. Defaults to 1.0.
+        done_key (NestedKey): the done entry. Defaults to ``"done"``.
+        truncated_key (NestedKey): the truncated entry. Defaults to ``"truncated"``.
+            If no truncated entry is found, only the ``"done"`` will be used.
 
     Examples:
         >>> # Using this transform as part of a replay buffer
@@ -5157,6 +5308,9 @@ class Reward2GoTransform(Transform):
         >>> t = Reward2GoTransform(gamma=0.99)
         >>> TransformedEnv(GymEnv("Pendulum-v1"), t)  # crashes
 
+    .. note:: In settings where multiple done entries are present, one should build
+        a single :class:`~Reward2GoTransform` for each done-reward pair.
+
     """
 
     ENV_ERR = (
@@ -5169,6 +5323,8 @@ class Reward2GoTransform(Transform):
         gamma: Optional[Union[float, torch.Tensor]] = 1.0,
         in_keys: Optional[Sequence[NestedKey]] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
+        done_key: Optional[NestedKey] = "done",
+        truncated_key: Optional[NestedKey] = "truncated",
     ):
         if in_keys is None:
             in_keys = [("next", "reward")]
@@ -5180,6 +5336,8 @@ class Reward2GoTransform(Transform):
             in_keys_inv=in_keys,
             out_keys_inv=out_keys,
         )
+        self.done_key = done_key
+        self.truncated_key = truncated_key
 
         if not isinstance(gamma, torch.Tensor):
             gamma = torch.tensor(gamma)
@@ -5187,13 +5345,13 @@ class Reward2GoTransform(Transform):
         self.register_buffer("gamma", gamma)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done_key = self.parent.done_key if self.parent else "done"
-        done = tensordict.get(("next", done_key))
-        truncated = tensordict.get(("next", "truncated"), None)
+        done = tensordict.get(("next", self.done_key))
+        truncated = tensordict.get(("next", self.truncated_key), None)
         if truncated is not None:
             done_or_truncated = done | truncated
         else:
             done_or_truncated = done
+
         if not done_or_truncated.any(-2).all():
             raise RuntimeError(
                 "No episode ends found to calculate the reward to go. Make sure that the number of frames_per_batch is larger than number of steps per episode."
@@ -5370,11 +5528,26 @@ class VecGymEnvTransform(Transform):
         super().__init__(in_keys=[])
         self._memo = {}
 
+    def set_container(self, container: Union[Transform, EnvBase]) -> None:
+        out = super().set_container(container)
+        expected_done_keys = {"done", "truncated"}
+        for done_key in self.parent.done_keys:
+            if done_key not in expected_done_keys:
+                raise RuntimeError(
+                    f"VecGymEnvTransform only supports the following "
+                    f"done keys: {expected_done_keys}, but it got {done_key}."
+                )
+        return out
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # save the final info
-        done = self._memo["done"] = next_tensordict.get("done")
+        done = next_tensordict.get("done")
+        truncated = next_tensordict.get("truncated", None)
+        if truncated is not None:
+            done = done | truncated
+        done = self._memo["done"] = done
         final = next_tensordict.pop("final")
         # if anything's done, we need to swap the final obs
         if done.any():
@@ -5409,6 +5582,10 @@ class VecGymEnvTransform(Transform):
                 ~reset, tensordict.select(*saved_done.keys(True, True)), saved_done
             )
             tensordict.update(updated_td)
+            if "truncated" in tensordict.keys():
+                tensordict.set(
+                    "truncated", tensordict.get("truncated").clone().fill_(0)
+                )
             tensordict.set("done", tensordict.get("done").clone().fill_(0))
         tensordict.pop("final", None)
         return tensordict
