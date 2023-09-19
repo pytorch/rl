@@ -191,16 +191,23 @@ class VTrace(ValueEstimatorBase):
             device = next(value_network.parameters()).device
         except (AttributeError, StopIteration):
             device = torch.device("cpu")
-        self.register_buffer("gamma", torch.tensor(gamma, device=device))
-        self.register_buffer("rho_thresh", torch.tensor(rho_thresh, device=device))
-        self.register_buffer("c_thresh", torch.tensor(c_thresh, device=device))
+
+        if not isinstance(gamma, torch.Tensor):
+            gamma = torch.tensor(gamma, device=device)
+        if not isinstance(rho_thresh, torch.Tensor):
+            rho_thresh = torch.tensor(rho_thresh, device=device)
+        if not isinstance(c_thresh, torch.Tensor):
+            c_thresh = torch.tensor(c_thresh, device=device)
+
+        self.register_buffer("gamma", gamma)
+        self.register_buffer("rho_thresh", rho_thresh)
+        self.register_buffer("c_thresh", c_thresh)
         self.average_adv = average_adv
         self.actor_network = actor_network
         self._log_prob_key = log_prob_key
 
-        import ipdb; ipdb.set_trace()
-        if not isinstance(gamma, torch.Tensor) and gamma.shape != ():
-            raise NotImplementedError("Per-value gamma is not supported yet")
+        if isinstance(gamma, torch.Tensor) and gamma.shape != ():
+            raise NotImplementedError("Per-value gamma is not supported yet. Gamma must be a scalar.")
 
     @property
     def log_prob_key(self):
@@ -332,7 +339,7 @@ class VTrace(ValueEstimatorBase):
 
         if self.average_adv:
             loc = adv.mean()
-            scale = adv.std().clamp_min(1e-4)
+            scale = adv.std().clamp_min(1e-8)
             adv = adv - loc
             adv = adv / scale
 

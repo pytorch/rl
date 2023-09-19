@@ -122,9 +122,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_mini_batches = frames_per_batch // mini_batch_size
     total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
 
+    sampling_start = time.time()
     for data in collector:
 
         log_info = None
+        sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
@@ -139,6 +141,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data["next", "done"].copy_(data["next", "end_of_life"])
 
         losses = TensorDict({}, batch_size=[num_mini_batches])
+        training_start = time.time()
 
         # Compute VTrace
         with torch.no_grad():
@@ -183,10 +186,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
             optim_actor.zero_grad()
             optim_critic.zero_grad()
 
+        training_time = time.time() - training_start
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
-            logger.log_scalar(key, value.item(), collected_frames)
-        logger.log_scalar("lr", alpha * cfg.optim.lr, collected_frames)
+            log_info.update({f"train/{key}": value.item()})
+        log_info.update(
+            {
+                "train/lr": alpha * cfg.optim.lr,
+                "train/sampling_time": sampling_time,
+                "train/training_time": training_time,
+            }
+        )
 
         # Test logging
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
@@ -194,6 +204,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     collected_frames // test_interval
             ):
                 actor.eval()
+                eval_start = time.time()
                 test_rewards = []
                 for _ in range(cfg.logger.num_test_episodes):
                     td_test = test_env.rollout(
@@ -206,10 +217,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     reward = td_test["next", "episode_reward"][td_test["next", "done"]]
                     test_rewards = np.append(test_rewards, reward.cpu().numpy())
                     del td_test
-                logger.log_scalar("reward_test", test_rewards.mean(), collected_frames)
+                eval_time = time.time() - eval_start
+                log_info.update(
+                    {
+                        "test/reward": test_rewards.mean(),
+                        "test/eval_time": eval_time,
+                    }
+                )
                 actor.train()
 
+        if logger:
+            for key, value in log_info.items():
+                logger.log_scalar(key, value, collected_frames)
+
         collector.update_policy_weights_()
+        sampling_start = time.time()
 
     end_time = time.time()
     execution_time = end_time - start_time
