@@ -23,7 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
-from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.tensordict import dense_stack_tds, TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
@@ -648,7 +648,11 @@ class SyncDataCollector(DataCollectorBase):
             # See #505 for additional context.
 
             with torch.no_grad():
-                self._tensordict_out = self.env.rollout(max_steps=1, policy=self.policy)
+                lazy_td = self.env.rollout(
+                    max_steps=1, policy=self.policy, return_contiguous=False
+                )
+                self._tensordict_out = dense_stack_tds(lazy_td)
+
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .clone()
