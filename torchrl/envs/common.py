@@ -1413,7 +1413,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 reset_value = tensordict.get(reset_key, None) if tensordict is not None else None
                 if reset_value is not None:
                     for done_key in done_key_group:
-                        print(reset_key, reset_value)
                         if tensordict_reset.get(done_key)[reset_value].any():
                             raise DONE_AFTER_RESET_ERROR
                 else:

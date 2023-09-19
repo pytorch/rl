@@ -465,7 +465,7 @@ class Transform(nn.Module):
 
 class _TEnvPostInit(_EnvPostInit):
     def __call__(self, *args, **kwargs):
-        instance: EnvBase = super().__call__(*args, **kwargs)
+        instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
         # transforms such as ObservationNorm.
         return instance
@@ -5037,6 +5037,12 @@ class InitTracker(Transform):
     @property
     def out_keys(self):
         return self.init_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        if value in (None, []):
+            return
+        raise ValueError("Cannot set non-empty out-keys when out-keys are defined by the init_key value.")
 
     @property
     def init_keys(self):
