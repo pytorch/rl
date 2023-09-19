@@ -161,7 +161,7 @@ class GymLikeEnv(_EnvWrapper):
             do_break = gym_done | truncation
         else:
             do_break = gym_done
-
+            done = gym_done
         return (
             done,
             truncation,
