@@ -661,7 +661,7 @@ class SyncDataCollector(DataCollectorBase):
                 .clone()
                 .zero_()
             )
-        # in addition to outputs of the policy, we add traj_ids and step_count to
+        # in addition to outputs of the policy, we add traj_ids to
         # _tensordict_out which will be collected during rollout
         self._tensordict_out = self._tensordict_out.to(self.storing_device)
         self._tensordict_out.set(
