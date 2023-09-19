@@ -732,7 +732,7 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
 
 def done_or_truncated(
     data: TensorDictBase, full_done_spec=None, name="_reset"
-) -> TensorDictBase:
+) -> bool:
     """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
@@ -745,6 +745,9 @@ def done_or_truncated(
             the done leaves have to be found. If not provided, the default `"done"` and
             `"truncated"` entries will be searched for in the data.
         name (NestedKey, optional): where the aggregated result should be written.
+
+    Returns: a boolean value indicating whether any of the done states found in the data
+        contained a ``True``.
 
     Examples:
         >>> from torchrl.data.tensor_specs import DiscreteTensorSpec
@@ -768,6 +771,7 @@ def done_or_truncated(
         >>> print(data["nested", "_reset"])
         tensor(True)
     """
+    any_done = False
     aggregate = None
     has_entry = name in data.keys(isinstance(name, tuple))
     if full_done_spec is None:
@@ -782,11 +786,11 @@ def done_or_truncated(
                     aggregate = torch.tensor(False, device=done.device)
                 aggregate = aggregate | done
             elif isinstance(item, TensorDictBase):
-                done_or_truncated(data=item, full_done_spec=None, name=name)
+                any_done = any_done | done_or_truncated(data=item, full_done_spec=None, name=name)
     else:
         for key, item in full_done_spec.items():
             if isinstance(item, CompositeSpec):
-                done_or_truncated(data=data.get(key), full_done_spec=item, name=name)
+                any_done = any_done | done_or_truncated(data=data.get(key), full_done_spec=item, name=name)
             elif not has_entry:
                 done = data.get(key, None)
                 if done is None:
@@ -798,4 +802,5 @@ def done_or_truncated(
                 aggregate = aggregate | done
     if aggregate is not None:
         data.setdefault(name, aggregate)
-    return data
+        any_done = any_done | aggregate.any()
+    return any_done

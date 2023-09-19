@@ -28,7 +28,7 @@ from torchrl.envs.utils import (
     _replace_last,
     DONE_AFTER_RESET_ERROR,
     get_available_libraries,
-    step_mdp,
+    step_mdp, done_or_truncated,
 )
 
 LIBRARIES = get_available_libraries()
@@ -1587,6 +1587,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
             any_done = False
             _reset_map = {}
+            # done and truncated are in done_keys
+            # To read the done status, we assess whether any of the done entries
+            # at a given level is True. This is written in the _reset key.
+            any_done = done_or_truncated(tensordict.get("next"), full_done_spec=self.output_spec['full_done_spec'])
             for done_key in self.done_keys:
                 done = tensordict.get(("next", done_key))
                 truncated = tensordict.get(
