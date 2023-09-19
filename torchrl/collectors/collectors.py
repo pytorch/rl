@@ -23,7 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
-from tensordict.tensordict import dense_stack_tds, TensorDict, TensorDictBase
+from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import multiprocessing as mp
 from torch.utils.data import IterableDataset
@@ -611,15 +611,21 @@ class SyncDataCollector(DataCollectorBase):
         )
         self.return_same_td = return_same_td
 
+        self._tensordict = env.reset()
+        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
+        self._tensordict.set(
+            ("collector", "traj_ids"),
+            traj_ids,
+        )
+
+        with torch.no_grad():
+            self._tensordict_out = self.env.fake_tensordict()
         # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
             and all(v is not None for v in self.policy.spec.values(True, True))
         ):
-            with torch.no_grad():
-                self._tensordict_out = self.env.fake_tensordict()
-
             if any(
                 key not in self._tensordict_out.keys(isinstance(key, tuple))
                 for key in self.policy.spec.keys(True, True)
@@ -635,29 +641,22 @@ class SyncDataCollector(DataCollectorBase):
                         continue
                     self._tensordict_out.set(key, spec.zero())
 
-            self._tensordict_out = (
-                self._tensordict_out.unsqueeze(-1)
-                .expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-            )
         else:
             # otherwise, we perform a small number of steps with the policy to
             # determine the relevant keys with which to pre-populate _tensordict_out.
             # This is the safest thing to do if the spec has None fields or if there is
             # no spec at all.
             # See #505 for additional context.
-
             with torch.no_grad():
-                lazy_td = self.env.rollout(
-                    max_steps=1, policy=self.policy, return_contiguous=False
-                )
-                self._tensordict_out = dense_stack_tds(lazy_td)
+                policy_out = self.policy(self._tensordict.to(self.device).clone())
+            self._tensordict_out.update(policy_out)
 
-            self._tensordict_out = (
-                self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-                .zero_()
-            )
+        self._tensordict_out = (
+            self._tensordict_out.unsqueeze(-1)
+            .expand(*env.batch_size, self.frames_per_batch)
+            .clone()
+            .zero_()
+        )
         # in addition to outputs of the policy, we add traj_ids to
         # _tensordict_out which will be collected during rollout
         self._tensordict_out = self._tensordict_out.to(self.storing_device)
@@ -670,13 +669,6 @@ class SyncDataCollector(DataCollectorBase):
             ),
         )
         self._tensordict_out.refine_names(..., "time")
-
-        self._tensordict = env.reset()
-        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
-        self._tensordict.set(
-            ("collector", "traj_ids"),
-            traj_ids,
-        )
 
         if split_trajs is None:
             split_trajs = False
