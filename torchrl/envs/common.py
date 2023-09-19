@@ -797,7 +797,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             # this will be raised if there is not full_reward_spec (unlikely) or no reward_key
             # Since output_spec is lazily populated with an empty composite spec for
             # reward_spec, the second case is much more likely to occur.
-            self.reward_spec = out = UnboundedContinuousTensorSpec(
+            self.reward_spec = UnboundedContinuousTensorSpec(
                 shape=(*self.batch_size, 1),
                 device=self.device,
             )

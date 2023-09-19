@@ -40,7 +40,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, done_or_truncated, step_mdp
+from torchrl.envs.utils import _sort_keys, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
