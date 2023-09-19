@@ -157,7 +157,7 @@ class GymLikeEnv(_EnvWrapper):
 
         """
         if termination is not None:
-            gym_done = termination
+            done = termination
             do_break = gym_done | truncation
         else:
             do_break = gym_done
