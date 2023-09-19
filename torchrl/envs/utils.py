@@ -45,7 +45,7 @@ from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
 
 DONE_AFTER_RESET_ERROR = RuntimeError(
-    "Env was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
+    "Env was done after reset on specified '_reset' dimensions. This is not allowed."
 )
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
@@ -731,7 +731,7 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
 
 
 def done_or_truncated(
-    data: TensorDictBase, full_done_spec=None, name="_reset"
+    data: TensorDictBase, full_done_spec=None, key="_reset"
 ) -> bool:
     """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
@@ -744,7 +744,11 @@ def done_or_truncated(
         full_done_spec (TensorSpec, optional): the done_spec from the env, indicating where
             the done leaves have to be found. If not provided, the default `"done"` and
             `"truncated"` entries will be searched for in the data.
-        name (NestedKey, optional): where the aggregated result should be written.
+        key (NestedKey, optional): where the aggregated result should be written.
+            If ``None``, then the function will not write any key but just output
+            whether any of the done values was true.
+            .. note:: if a value is already present for the ``key`` entry, the previous
+                value will prevail and no update will be achieved.
 
     Returns: a boolean value indicating whether any of the done states found in the data
         contained a ``True``.
@@ -773,10 +777,9 @@ def done_or_truncated(
     """
     any_done = False
     aggregate = None
-    has_entry = name in data.keys(isinstance(name, tuple))
     if full_done_spec is None:
         for key, item in data.items():
-            if not has_entry and key in ("done", "truncated"):
+            if key in ("done", "truncated"):
                 done = data.get(key, None)
                 if done is None:
                     done = torch.zeros(
@@ -786,12 +789,12 @@ def done_or_truncated(
                     aggregate = torch.tensor(False, device=done.device)
                 aggregate = aggregate | done
             elif isinstance(item, TensorDictBase):
-                any_done = any_done | done_or_truncated(data=item, full_done_spec=None, name=name)
+                any_done = any_done | done_or_truncated(data=item, full_done_spec=None, key=key)
     else:
         for key, item in full_done_spec.items():
             if isinstance(item, CompositeSpec):
-                any_done = any_done | done_or_truncated(data=data.get(key), full_done_spec=item, name=name)
-            elif not has_entry:
+                any_done = any_done | done_or_truncated(data=data.get(key), full_done_spec=item, key=key)
+            else:
                 done = data.get(key, None)
                 if done is None:
                     done = torch.zeros(
@@ -801,6 +804,8 @@ def done_or_truncated(
                     aggregate = torch.tensor(False, device=done.device)
                 aggregate = aggregate | done
     if aggregate is not None:
-        data.setdefault(name, aggregate)
+        if key is not None:
+            # we use setdefault to keep previous values of ``name``.
+            data.setdefault(key, aggregate)
         any_done = any_done | aggregate.any()
     return any_done

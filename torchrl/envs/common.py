@@ -837,10 +837,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         return keys
 
     @property
-    def reset_keys(self) -> List[NestedKey]:
-        return [_replace_last(done_key, "_reset") for done_key in self.done_keys]
-
-    @property
     def done_keys(self) -> List[NestedKey]:
         """The done keys of an environment.
 
@@ -1264,24 +1260,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         """
         if tensordict is not None:
             self._assert_tensordict_shape(tensordict)
-            _reset_map = {}
-            for done_key in self.done_keys:
-                _reset_key = _replace_last(done_key, "_reset")
-                _reset = tensordict.get(_reset_key, default=None)
-                if _reset is None:
-                    continue
-                if (
-                    _reset.shape[
-                        -len(self.output_spec["full_done_spec"][done_key].shape) :
-                    ]
-                    != self.output_spec["full_done_spec"][done_key].shape
-                ):
-                    raise RuntimeError(
-                        "_reset flag in tensordict should follow env.done_spec"
-                    )
-                _reset_map.update({done_key: _reset})
-        else:
-            _reset_map = {}
 
         tensordict_reset = self._reset(tensordict, **kwargs)
         #        We assume that this is done properly
@@ -1313,12 +1291,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         if not self._allow_done_after_reset:
             for done_key in self.done_keys:
-                if done_key not in _reset_map:
-                    if tensordict_reset.get(done_key).any():
-                        raise DONE_AFTER_RESET_ERROR
-                else:
-                    if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
-                        raise DONE_AFTER_RESET_ERROR
+                if tensordict_reset.get(done_key).any():
+                    raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1585,24 +1559,10 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
-            any_done = False
-            _reset_map = {}
             # done and truncated are in done_keys
             # To read the done status, we assess whether any of the done entries
             # at a given level is True. This is written in the _reset key.
-            any_done = done_or_truncated(tensordict.get("next"), full_done_spec=self.output_spec['full_done_spec'])
-            for done_key in self.done_keys:
-                done = tensordict.get(("next", done_key))
-                truncated = tensordict.get(
-                    ("next", _replace_last(done_key, "truncated")),
-                    default=torch.zeros((), device=done.device, dtype=torch.bool),
-                )
-                done = done | truncated
-                any_sub_done = done.any().item()
-                if any_sub_done and not break_when_any_done:
-                    # Add this done to the map, we will need it to reset
-                    _reset_map.update({_replace_last(done_key, "_reset"): done})
-                any_done += any_sub_done
+            any_done = done_or_truncated(tensordict.get("next"), full_done_spec=self.output_spec['full_done_spec'], key="_reset" if not break_when_any_done else None)
 
             if (break_when_any_done and any_done) or i == max_steps - 1:
                 break
@@ -1617,11 +1577,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
 
             if not break_when_any_done and any_done:
-                for _reset_key, done in _reset_map.items():
-                    tensordict.set(_reset_key, done.clone())
                 self.reset(tensordict)
-                for _reset_key in _reset_map.keys():
-                    del tensordict[_reset_key]
+                tensordict.exclude(*self.reset_keys, inplace=True)
 
             if callback is not None:
                 callback(self, tensordict)
@@ -1632,6 +1589,37 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             out_td = out_td.contiguous()
         out_td.refine_names(..., "time")
         return out_td
+
+    @property
+    def reset_keys(self) -> List[NestedKey]:
+        """Returns a list of reset keys.
+
+        Reset keys are keys that indicate partial reset, in batched, multitask or multiagent
+        settings. They are structured as ``(*prefix, "_reset")`` where ``prefix`` is
+        a (possibly empty) tuple of strings pointing to a tensordict location
+        where a done state can be found.
+        """
+        reset_keys = self.__dict__.get("_reset_keys", None)
+        if reset_keys is not None:
+            return reset_keys
+        prefixes = set()
+        reset_keys = []
+        def prefix(key: NestedKey):
+            if isinstance(key, str):
+                return None
+            return key[:-1]
+        def combine(prefix_key: tuple | None, key: str):
+            if prefix_key is None:
+                return key
+            return (*prefix_key, key)
+        for done_key in self.done_keys:
+            prefix_key = prefix(done_key)
+            if prefix_key in prefixes:
+                continue
+            prefixes.add(prefix_key)
+            reset_keys.append(combine(prefix_key, "_reset"))
+        self.__dict__['_reset_keys'] = reset_keys
+        return reset_keys
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
         for key in tensordict.keys():

@@ -918,15 +918,7 @@ class TestParallel:
         env1.close()
         env2.close()
 
-    @pytest.mark.parametrize(
-        "batch_size",
-        [
-            (32, 5),
-            (4,),
-            (1,),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch_size",[(32, 5),(4,),(1,),()])
     @pytest.mark.parametrize("n_workers", [2, 1])
     def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
         torch.manual_seed(1)
@@ -955,6 +947,7 @@ class TestParallel:
         while not _reset.any():
             _reset = env.done_spec.rand()
 
+        env._allow_done_after_reset = True
         td_reset = env.reset(
             TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
         )

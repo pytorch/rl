@@ -66,7 +66,7 @@ except ImportError:
 IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
-FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent" "environment."
+FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
 
 
 def _apply_to_composite(function):
@@ -4967,9 +4967,11 @@ class InitTracker(Transform):
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         self._init_keys = None
-        out = super().set_container(container)
-        self.out_keys = self.init_keys
-        return out
+        return super().set_container(container)
+
+    @property
+    def out_keys(self):
+        return self.init_keys
 
     @property
     def init_keys(self):
