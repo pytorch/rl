@@ -25,10 +25,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import A2CLoss, ClipPPOLoss
+    from torchrl.objectives import A2CLoss
     from torchrl.record.loggers import generate_exp_name, get_logger
     from torchrl.objectives.value.vtrace import VTrace
-    from utils import make_parallel_env, make_ppo_models
+    from utils import make_parallel_env, make_ppo_models, eval_model
 
     device = "cpu" if not torch.cuda.is_available() else "cuda"
 
@@ -39,7 +39,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     mini_batch_size = cfg.loss.mini_batch_size // frame_skip
     test_interval = cfg.logger.test_interval // frame_skip
 
-    # Create models (check utils_atari.py)
+    # Create models (check utils.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
     actor, critic, critic_head = (
         actor.to(device),
@@ -58,7 +58,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     #     sync=False,
     # )
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_parallel_env(cfg.env.env_name, device)] * 8,
+        create_env_fn=[make_parallel_env(cfg.env.env_name, device)] * cfg.collector.num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -125,7 +125,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     sampling_start = time.time()
     for data in collector:
 
-        log_info = None
+        log_info = {}
         sampling_time = time.time() - sampling_start
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
@@ -134,7 +134,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get train reward
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            log_info.update({"reward_train": episode_rewards.mean().item()})
+            log_info.update({"train/reward": episode_rewards.mean().item()})
 
         # Apply episodic end of life
         data["done"].copy_(data["end_of_life"])
@@ -205,18 +205,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ):
                 actor.eval()
                 eval_start = time.time()
-                test_rewards = []
-                for _ in range(cfg.logger.num_test_episodes):
-                    td_test = test_env.rollout(
-                        policy=actor,
-                        auto_reset=True,
-                        auto_cast_to_device=True,
-                        break_when_any_done=True,
-                        max_steps=10_000_000,
-                    )
-                    reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-                    test_rewards = np.append(test_rewards, reward.cpu().numpy())
-                    del td_test
+                test_rewards = eval_model(
+                    actor, test_env, num_episodes=cfg.logger.num_test_episodes
+                )
                 eval_time = time.time() - eval_start
                 log_info.update(
                     {

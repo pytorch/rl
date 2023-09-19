@@ -31,7 +31,7 @@ def _c_val(
     log_mu: torch.Tensor,
     c: Union[float, torch.Tensor] = 1,
 ) -> torch.Tensor:
-    return (log_pi - log_mu).clamp_max(math.log(c)).exp().unsqueeze(-1)  # TODO: is unsqueeze needed?
+    return (log_pi - log_mu).clamp_max(math.log(c)).exp()  # TODO: is unsqueeze needed?
 
 def _dv_val(
     rewards: torch.Tensor,
@@ -313,17 +313,17 @@ class VTrace(ValueEstimatorBase):
         # Make sure we have the log prob computed at collection time
         if self.log_prob_key not in tensordict.keys():
             raise ValueError(f"Expected {self.log_prob_key} to be in tensordict")
-        log_mu = tensordict.get(self.log_prob_key)
+        log_mu = tensordict.get(self.log_prob_key).reshape_as(value)
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):
             log_pi = self.actor_network(
                 tensordict.select(self.actor_network.in_keys)
-            ).get(self.log_prob_key)
+            ).get(self.log_prob_key).reshape_as(value)
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))
-        import ipdb; ipdb.set_trace()
+
         adv, value_target = vtrace_correction(
             gamma,
             log_pi,
