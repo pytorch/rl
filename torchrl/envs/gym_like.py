@@ -248,7 +248,9 @@ class GymLikeEnv(_EnvWrapper):
 
         if self.info_dict_reader and info is not None:
             if not isinstance(info, dict):
-                warnings.warn(f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}.")
+                warnings.warn(
+                    f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}."
+                )
             else:
                 for info_dict_reader in self.info_dict_reader:
                     out = info_dict_reader(info, tensordict_out)

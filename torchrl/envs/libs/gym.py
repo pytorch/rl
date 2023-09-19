@@ -6,8 +6,9 @@ import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from warnings import warn
+from packaging import version
 
 import numpy as np
 import torch
@@ -388,6 +389,16 @@ def _is_from_pixels(env):
 class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
+        # before gym 0.22, there was no final_observation
+        backend = instance.get_library_name(instance._env)
+        if backend == "gym":
+            import gym
+            if version.parse(gym.__version__) < version.parse("0.22"):
+                warn("A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
+                     "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
+                     "and discards the true next observation to return the result of the step). "
+                     "This isn't compatible with TorchRL API and should be used with caution.")
+                return instance
         if instance._is_batched:
             from torchrl.envs.transforms.transforms import (
                 TransformedEnv,
@@ -768,6 +779,14 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _reset_output_transform(self, reset_data):  # noqa: F811
         return reset_data
 
+    @implement_for("gym", None, "0.24")
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        observations, reward, done, info = step_outputs_tuple
+        if self._is_batched:
+            # info needs to be flipped
+            info = _flip_info_tuple(info)
+        return (observations, reward, None, None, done, info)
+
     @implement_for("gym", None, "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
         observations, reward, done, info = step_outputs_tuple
@@ -1088,3 +1107,12 @@ class terminal_obs_reader(BaseInfoDictReader):
                     self._read_obs(obs, key[-1], final_obs, index=i)
             tensordict.set(key, final_obs)
         return tensordict
+
+def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
+    # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
+    # We patch this by flipping the tuple -> dict order.
+    info_example = info[0]
+    result = {}
+    for key in info_example:
+        result[key] = tuple(_info[key] for _info in info)
+    return result
