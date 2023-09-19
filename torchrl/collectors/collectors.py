@@ -618,45 +618,30 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids,
         )
 
-        with torch.no_grad():
-            self._tensordict_out = env.fake_tensordict()
+        # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
             and self.policy.spec is not None
-            and all(
-                v is not None for v in self.policy.spec.values(True, True)
-            )  # if a spec is None, we don't know anything about it
-            # and set(self.policy.spec.keys(True, True)) == set(self.policy.out_keys)
-            and any(
+            and all(v is not None for v in self.policy.spec.values(True, True))
+        ):
+            with torch.no_grad():
+                self._tensordict_out = self.env.fake_tensordict()
+
+            if any(
                 key not in self._tensordict_out.keys(isinstance(key, tuple))
                 for key in self.policy.spec.keys(True, True)
-            )
-        ):
-            # if policy spec is non-empty, all the values are not None and the keys
-            # match the out_keys we assume the user has given all relevant information
-            # the policy could have more keys than the env:
-            policy_spec = self.policy.spec
-            if policy_spec.ndim < self._tensordict_out.ndim:
-                policy_spec = policy_spec.expand(self._tensordict_out.shape)
-            for key, spec in policy_spec.items(True, True):
-                if key in self._tensordict_out.keys(isinstance(key, tuple)):
-                    continue
-                self._tensordict_out.set(key, spec.zero())
-            self._tensordict_out = (
-                self._tensordict_out.unsqueeze(-1)
-                .expand(*env.batch_size, self.frames_per_batch)
-                .clone()
-            )
-        elif (
-            hasattr(self.policy, "spec")
-            and self.policy.spec is not None
-            and all(v is not None for v in self.policy.spec.values(True, True))
-            and all(
-                key in self._tensordict_out.keys(isinstance(key, tuple))
-                for key in self.policy.spec.keys(True, True)
-            )
-        ):
-            # reach this if the policy has specs and they match with the fake tensordict
+            ):
+                # if policy spec is non-empty, all the values are not None and the keys
+                # match the out_keys we assume the user has given all relevant information
+                # the policy could have more keys than the env:
+                policy_spec = self.policy.spec
+                if policy_spec.ndim < self._tensordict_out.ndim:
+                    policy_spec = policy_spec.expand(self._tensordict_out.shape)
+                for key, spec in policy_spec.items(True, True):
+                    if key in self._tensordict_out.keys(isinstance(key, tuple)):
+                        continue
+                    self._tensordict_out.set(key, spec.zero())
+
             self._tensordict_out = (
                 self._tensordict_out.unsqueeze(-1)
                 .expand(*env.batch_size, self.frames_per_batch)
@@ -668,9 +653,9 @@ class SyncDataCollector(DataCollectorBase):
             # This is the safest thing to do if the spec has None fields or if there is
             # no spec at all.
             # See #505 for additional context.
+
             with torch.no_grad():
-                self._tensordict_out = self._tensordict_out.to(self.device)
-                self._tensordict_out = self.policy(self._tensordict_out).unsqueeze(-1)
+                self._tensordict_out = self.env.rollout(max_steps=1, policy=policy)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .clone()
