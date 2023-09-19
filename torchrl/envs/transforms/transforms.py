@@ -4457,10 +4457,15 @@ class StepCounter(Transform):
             step_count = tensordict.get(step_count_key, default=None)
             reset = tensordict.get(reset_key, None)
             if reset is None:
-                # get done status
+                # get done status, just to inform the reset shape, dtype and device
                 for entry in done_list_sorted:
-                    done = tensordict.get(entry)
-                    break
+                    done = tensordict.get(entry, None)
+                    if done is not None:
+                        break
+                else:
+                    # It may be the case that reset did not provide a done state, in which case
+                    # we fall back on the spec
+                    done = self.parent.output_spec['full_done_spec', entry].zero()
                 reset = torch.ones_like(done)
             if step_count is None:
                 step_count = torch.zeros_like(reset, dtype=torch.int64)
