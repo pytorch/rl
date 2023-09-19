@@ -32,6 +32,7 @@ from mocking_classes import (
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
     MultiKeyCountingEnv,
+    MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
 from tensordict import unravel_key
@@ -102,7 +103,7 @@ from torchrl.envs.transforms.rlhf import KLRewardTransform
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.transforms.vc1 import _has_vc
 from torchrl.envs.transforms.vip import _VIPNet, VIPRewardTransform
-from torchrl.envs.utils import check_env_specs, step_mdp
+from torchrl.envs.utils import _replace_last, check_env_specs, step_mdp
 from torchrl.modules import LSTMModule, MLP, ProbabilisticActor, TanhNormal
 
 TIMEOUT = 100.0
@@ -4412,15 +4413,26 @@ class TestRewardSum(TransformBase):
         r = env.rollout(4)
         assert r["next", "episode_reward"].unique().numel() > 1
 
-    def test_trans_multi_key(self, n_workers=2, batch_size=(3, 2)):
+    def test_trans_multi_key(self, n_workers=2, batch_size=(3, 2), max_steps=5):
         torch.manual_seed(0)
         env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
         env = TransformedEnv(
             SerialEnv(n_workers, env_fun),
             Compose(RewardSum(in_keys=env_fun().reward_keys)),
         )
+        policy = MultiKeyCountingEnvPolicy(
+            full_action_spec=env.action_spec, deterministic=True
+        )
 
         check_env_specs(env)
+        td = env.rollout(max_steps, policy=policy)
+        for reward_key in env.reward_keys:
+            assert (
+                td.get(("next", _replace_last(reward_key, "episode_reward")))[
+                    (0,) * (len(batch_size) + 1)
+                ][-1]
+                == max_steps
+            ).all()
 
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
