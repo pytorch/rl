@@ -4509,13 +4509,20 @@ class StepCounter(Transform):
                 truncated_key = unravel_key(truncated_key)
                 # find a matching done key (there might be more than one)
                 for done_key in self.done_keys:
-                    if type(done_key) == type(truncated_key):
+                    # check root
+                    if type(done_key) != type(truncated_key):
+                        continue
+                    if isinstance(done_key, tuple):
+                        if done_key[:-1] == truncated_key[:-1]:
+                            shape = full_done_spec[done_key].shape
+                            break
+                    if isinstance(done_key, str):
                         shape = full_done_spec[done_key].shape
                         break
+
                 else:
-                    raise RuntimeError(
-                        "Could not find a matching done_key to get the truncated shape. "
-                        "Make sure the truncated entries are associated with a done entry."
+                    raise KeyError(
+                        f"Could not find root of truncated_key {truncated_key} in done keys {self.done_keys}."
                     )
                 full_done_spec[truncated_key] = DiscreteTensorSpec(
                     2, dtype=torch.bool, device=output_spec.device, shape=shape
@@ -4545,15 +4552,16 @@ class StepCounter(Transform):
                 if type(done_key) != type(step_count_key):
                     continue
                 if isinstance(done_key, tuple):
-                    if done_key[:-1] == step_count_key:
+                    if done_key[:-1] == step_count_key[:-1]:
                         shape = full_done_spec[done_key].shape
                         break
                 if isinstance(done_key, str):
                     shape = full_done_spec[done_key].shape
                     break
+
             else:
                 raise KeyError(
-                    f"Could not find root of step_count_key {step_count_key}."
+                    f"Could not find root of step_count_key {step_count_key} in done keys {self.done_keys}."
                 )
 
             input_spec[
