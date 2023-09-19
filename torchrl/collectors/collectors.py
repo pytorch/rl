@@ -655,7 +655,7 @@ class SyncDataCollector(DataCollectorBase):
             # See #505 for additional context.
 
             with torch.no_grad():
-                self._tensordict_out = self.env.rollout(max_steps=1, policy=policy)
+                self._tensordict_out = self.env.rollout(max_steps=1, policy=self.policy)
             self._tensordict_out = (
                 self._tensordict_out.expand(*env.batch_size, self.frames_per_batch)
                 .clone()
