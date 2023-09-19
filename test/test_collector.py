@@ -1366,6 +1366,26 @@ def test_reset_heterogeneous_envs():
     ).all()
 
 
+def test_policy_with_mask():
+    env = CountingBatchedEnv(start_val=torch.tensor(10), max_steps=torch.tensor(1e5))
+
+    def policy(td):
+        obs = td.get("observation")
+        # This policy cannot work with obs all 0s
+        if not obs.any():
+            raise AssertionError
+        action = obs.clone()
+        td.set("action", action)
+        return td
+
+    collector = SyncDataCollector(
+        env, policy=policy, frames_per_batch=10, total_frames=20
+    )
+    for _ in collector:
+        break
+    collector.shutdown()
+
+
 class TestNestedEnvsCollector:
     def test_multi_collector_nested_env_consistency(self, seed=1):
         env = NestedCountingEnv()
