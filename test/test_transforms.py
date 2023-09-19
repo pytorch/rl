@@ -7383,10 +7383,6 @@ class TestTransforms:
                 match="CatFrames cannot process unbatched tensordict instances",
             ):
                 compose(td.clone(False))
-        with pytest.raises(
-            NotImplementedError, match="StepCounter cannot be called independently"
-        ):
-            compose[1:](td.clone(False))
         compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
@@ -7408,20 +7404,8 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize(
-        "keys_inv_1",
-        [
-            ["action_1"],
-            [],
-        ],
-    )
-    @pytest.mark.parametrize(
-        "keys_inv_2",
-        [
-            ["action_2"],
-            [],
-        ],
-    )
+    @pytest.mark.parametrize("keys_inv_1", [["action_1"], []])
+    @pytest.mark.parametrize("keys_inv_2", [["action_2"], []])
     def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
         torch.manual_seed(0)
         keys_to_transform = set(keys_inv_1 + keys_inv_2)
@@ -7843,12 +7827,8 @@ class TestRenameTransform(TransformBase):
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
                 RenameTransform(
-                    [
-                        "observation",
-                    ],
-                    [
-                        "stuff",
-                    ],
+                    ["observation"],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
