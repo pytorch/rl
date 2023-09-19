@@ -27,8 +27,9 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
     DONE_AFTER_RESET_ERROR,
+    done_or_truncated,
     get_available_libraries,
-    step_mdp, done_or_truncated,
+    step_mdp,
 )
 
 LIBRARIES = get_available_libraries()
@@ -139,6 +140,7 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_spec
         _ = instance.state_spec
         return instance
+
 
 class EnvBase(nn.Module, metaclass=_EnvPostInit):
     """Abstract environment parent class.
@@ -673,7 +675,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 domain=continuous), device=cpu, shape=torch.Size([]))
 
         """
-        return self.input_spec['full_action_spec']
+        return self.input_spec["full_action_spec"]
 
     # Reward spec
     def _get_reward_keys(self):
@@ -698,7 +700,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # TransformedEnv will erase this value when computing a new output_spec though
         # so we should be fine.
         result = list(self.full_reward_spec.keys(True, True))
-        self.__dict__['_reward_keys'] = result
+        self.__dict__["_reward_keys"] = result
         return result
 
     @property
@@ -875,7 +877,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         domain=continuous), device=None, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
 
         """
-        return self.output_spec['full_reward_spec']
+        return self.output_spec["full_reward_spec"]
+
     # done spec
     def _get_done_keys(self):
         if "full_done_spec" not in self.output_spec.keys():
@@ -908,7 +911,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # TransformedEnv will erase this value when computing a new output_spec though
         # so we should be fine.
         result = list(self.full_done_spec.keys(True, True))
-        self.__dict__['_done_keys'] = result
+        self.__dict__["_done_keys"] = result
         return result
 
     @property
@@ -954,7 +957,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     domain=discrete), device=cpu, shape=torch.Size([]))
 
         """
-        return self.output_spec['full_done_spec']
+        return self.output_spec["full_done_spec"]
 
     # Done spec: done specs belong to output_spec
     @property
@@ -1409,8 +1412,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             # we iterate over (reset_key, (done_key, truncated_key)) and check that all
             # values where reset was true now have a done set to False.
             # If no reset was present, all done and truncated must be False
-            for reset_key, done_key_group in zip(self.reset_keys, self.done_keys_groups):
-                reset_value = tensordict.get(reset_key, None) if tensordict is not None else None
+            for reset_key, done_key_group in zip(
+                self.reset_keys, self.done_keys_groups
+            ):
+                reset_value = (
+                    tensordict.get(reset_key, None) if tensordict is not None else None
+                )
                 if reset_value is not None:
                     for done_key in done_key_group:
                         if tensordict_reset.get(done_key)[reset_value].any():
@@ -1690,8 +1697,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             # at a given level is True. This is written in the _reset key.
             any_done = done_or_truncated(
                 tensordict.get("next"),
-                full_done_spec=self.output_spec['full_done_spec'],
-                key="_reset" if not break_when_any_done else None
+                full_done_spec=self.output_spec["full_done_spec"],
+                key="_reset" if not break_when_any_done else None,
             )
 
             if (break_when_any_done and any_done) or i == max_steps - 1:
@@ -1734,21 +1741,24 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return reset_keys
         prefixes = set()
         reset_keys = []
+
         def prefix(key: NestedKey):
             if isinstance(key, str):
                 return None
             return key[:-1]
+
         def combine(prefix_key: tuple | None, key: str):
             if prefix_key is None:
                 return key
             return (*prefix_key, key)
+
         for done_key in self.done_keys:
             prefix_key = prefix(done_key)
             if prefix_key in prefixes:
                 continue
             prefixes.add(prefix_key)
             reset_keys.append(combine(prefix_key, "_reset"))
-        self.__dict__['_reset_keys'] = reset_keys
+        self.__dict__["_reset_keys"] = reset_keys
         return reset_keys
 
     @property
@@ -1775,7 +1785,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return done_keys
 
         for done_key in self.done_keys:
-            while type(done_key) != type(curr_reset_key) or (isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]): # if they are string, they are at the same level
+            while type(done_key) != type(curr_reset_key) or (
+                isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]
+            ):  # if they are string, they are at the same level
                 curr_reset_key = next(reset_keys_iter)
                 curr_done_key = next(done_keys_iter)
             curr_done_key.append(done_key)

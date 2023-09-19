@@ -20,7 +20,8 @@ from _utils_internal import (
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED,rand_reset
+    PONG_VERSIONED,
+    rand_reset,
 )
 from mocking_classes import (
     ActionObsMergeLinear,
@@ -226,8 +227,8 @@ def test_rollout_predictability(device):
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize("env_name",[PENDULUM_VERSIONED])
-@pytest.mark.parametrize("frame_skip",[1])
+@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
+@pytest.mark.parametrize("frame_skip", [1])
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
 @pytest.mark.parametrize("parallel", [False, True])
 def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
@@ -469,9 +470,7 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-        td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
-            batch_size=[N])
+        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -485,10 +484,7 @@ class TestParallel:
             )
             _ = env_parallel.step(td)
 
-        td_reset = TensorDict(
-            source=rand_reset(env_parallel),
-            batch_size=[N]
-        )
+        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
         td = env_parallel.rollout(policy=None, max_steps=T)
@@ -540,10 +536,7 @@ class TestParallel:
             ),
         )
 
-        td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
-            batch_size=[N]
-        )
+        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -557,10 +550,7 @@ class TestParallel:
             )
             _ = env_parallel.step(td)
 
-        td_reset = TensorDict(
-            source=rand_reset(env_parallel),
-            batch_size=[N]
-        )
+        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
         td = env_parallel.rollout(policy=policy, max_steps=T)
@@ -898,7 +888,7 @@ class TestParallel:
         env1.close()
         env2.close()
 
-    @pytest.mark.parametrize("batch_size",[(32, 5),(4,),(1,),()])
+    @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
     def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
         torch.manual_seed(1)
@@ -928,7 +918,7 @@ class TestParallel:
             TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
         )
         env.close()
-        reset = td_reset['_reset']
+        reset = td_reset["_reset"]
 
         assert (td_reset["done"][reset] == 0).all()
         assert (td_reset["observation"][reset] == 0).all()
@@ -1022,7 +1012,7 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     td_reset = env.reset(
         TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
     )
-    reset = td_reset['_reset']
+    reset = td_reset["_reset"]
 
     assert (td_reset["done"][reset] == 0).all()
     assert (td_reset["observation"][reset] == 0).all()

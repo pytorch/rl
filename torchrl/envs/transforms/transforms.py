@@ -37,7 +37,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.common import EnvBase, make_tensordict, _EnvPostInit
+from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import _sort_keys, done_or_truncated, step_mdp
@@ -463,12 +463,14 @@ class Transform(nn.Module):
         self.empty_cache()
         return super().to(*args, **kwargs)
 
+
 class _TEnvPostInit(_EnvPostInit):
     def __call__(self, *args, **kwargs):
         instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
         # transforms such as ObservationNorm.
         return instance
+
 
 class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     """A transformed_in environment.
@@ -620,9 +622,9 @@ but got an object of type {type(transform)}."""
             output_spec = self.base_env.output_spec.clone()
 
             # remove cached key values
-            self.__dict__['_done_keys'] = None
-            self.__dict__['_reward_keys'] = None
-            self.__dict__['_reset_keys'] = None
+            self.__dict__["_done_keys"] = None
+            self.__dict__["_reward_keys"] = None
+            self.__dict__["_reset_keys"] = None
 
             output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
@@ -4433,7 +4435,10 @@ class StepCounter(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # get reset signal
         for step_count_key, truncated_key, reset_key, done_list_sorted in zip(
-            self.step_count_keys, self.truncated_keys, self.reset_keys, self.done_keys_groups
+            self.step_count_keys,
+            self.truncated_keys,
+            self.reset_keys,
+            self.done_keys_groups,
         ):
             step_count = tensordict.get(step_count_key, default=None)
             reset = tensordict.get(reset_key, default=None)
@@ -4446,7 +4451,7 @@ class StepCounter(Transform):
                 else:
                     # It may be the case that reset did not provide a done state, in which case
                     # we fall back on the spec
-                    done = self.parent.output_spec['full_done_spec', entry].zero()
+                    done = self.parent.output_spec["full_done_spec", entry].zero()
                 reset = torch.ones_like(done)
             if step_count is None:
                 step_count = torch.zeros_like(reset, dtype=torch.int64)
@@ -5057,7 +5062,9 @@ class InitTracker(Transform):
     def out_keys(self, value):
         if value in (None, []):
             return
-        raise ValueError("Cannot set non-empty out-keys when out-keys are defined by the init_key value.")
+        raise ValueError(
+            "Cannot set non-empty out-keys when out-keys are defined by the init_key value."
+        )
 
     @property
     def init_keys(self):
@@ -5135,14 +5142,16 @@ class InitTracker(Transform):
                 if type(done_key) != type(init_key):
                     continue
                 if isinstance(done_key, tuple):
-                    if done_key[:-1] == init_key:
+                    if done_key[:-1] == init_key[:-1]:
                         shape = full_done_spec[done_key].shape
                         break
                 if isinstance(done_key, str):
                     shape = full_done_spec[done_key].shape
                     break
             else:
-                raise KeyError(f"Could not find root of init_key {init_key}.")
+                raise KeyError(
+                    f"Could not find root of init_key {init_key} within done_keys {self.parent.done_keys}."
+                )
             observation_spec[init_key] = DiscreteTensorSpec(
                 2,
                 dtype=torch.bool,
@@ -5266,7 +5275,9 @@ class RenameTransform(Transform):
                 else:
                     # unreachable
                     raise RuntimeError
-                output_spec["full_done_spec"][out_key] = output_spec["full_done_spec"][done_key].clone()
+                output_spec["full_done_spec"][out_key] = output_spec["full_done_spec"][
+                    done_key
+                ].clone()
                 if not self.create_copy:
                     del output_spec["full_done_spec"][done_key]
         for reward_key in self.parent.reward_keys:
@@ -5277,7 +5288,9 @@ class RenameTransform(Transform):
                 else:
                     # unreachable
                     raise RuntimeError
-                output_spec["full_reward_spec"][out_key] = output_spec["full_reward_spec"][reward_key].clone()
+                output_spec["full_reward_spec"][out_key] = output_spec[
+                    "full_reward_spec"
+                ][reward_key].clone()
                 if not self.create_copy:
                     del output_spec["full_reward_spec"][reward_key]
         for observation_key in self.parent.full_observation_spec.keys(True):
@@ -5288,7 +5301,9 @@ class RenameTransform(Transform):
                 else:
                     # unreachable
                     raise RuntimeError
-                output_spec["full_observation_spec"][out_key] = output_spec["full_observation_spec"][observation_key].clone()
+                output_spec["full_observation_spec"][out_key] = output_spec[
+                    "full_observation_spec"
+                ][observation_key].clone()
                 if not self.create_copy:
                     del output_spec["full_observation_spec"][observation_key]
         return output_spec
@@ -5302,7 +5317,9 @@ class RenameTransform(Transform):
                 else:
                     # unreachable
                     raise RuntimeError
-                input_spec["full_action_spec"][out_key] = input_spec["full_action_spec"][action_key].clone()
+                input_spec["full_action_spec"][out_key] = input_spec[
+                    "full_action_spec"
+                ][action_key].clone()
                 if not self.create_copy:
                     del input_spec["full_action_spec"][action_key]
         for state_key in self.parent.full_state_spec.keys(True):
@@ -5313,7 +5330,9 @@ class RenameTransform(Transform):
                 else:
                     # unreachable
                     raise RuntimeError
-                input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][state_key].clone()
+                input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][
+                    state_key
+                ].clone()
                 if not self.create_copy:
                     del input_spec["full_state_spec"][state_key]
         return input_spec

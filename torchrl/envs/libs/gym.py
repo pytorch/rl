@@ -29,13 +29,13 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
+from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.gym_like import (
     BaseInfoDictReader,
     default_info_dict_reader,
     GymLikeEnv,
 )
-from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.utils import _classproperty
 

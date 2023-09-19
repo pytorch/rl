@@ -18,8 +18,9 @@ from _utils_internal import (  # noqa
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,rand_reset,
+    PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rand_reset,
     retry,
 )
 from mocking_classes import (
@@ -2504,7 +2505,7 @@ class TestExcludeTransform(TransformBase):
 
     def test_exclude_done(self):
         base_env = TestExcludeTransform.EnvWithManyKeys()
-        env = TransformedEnv(base_env, ExcludeTransform("a", "done" ))
+        env = TransformedEnv(base_env, ExcludeTransform("a", "done"))
         assert "done" not in env.done_keys
         check_env_specs(env)
         env = TransformedEnv(base_env, ExcludeTransform("a"))
@@ -2519,7 +2520,6 @@ class TestExcludeTransform(TransformBase):
         env = TransformedEnv(base_env, ExcludeTransform("a"))
         assert "reward" in env.reward_keys
         check_env_specs(env)
-
 
     @pytest.mark.parametrize("nest_done", [True, False])
     @pytest.mark.parametrize("nest_reward", [True, False])
@@ -2728,9 +2728,11 @@ class TestSelectTransform(TransformBase):
         assert "c" in env.reset().keys()
 
     @pytest.mark.parametrize("keep_done", [True, False])
-    def test_select_done(self,keep_done):
+    def test_select_done(self, keep_done):
         base_env = TestExcludeTransform.EnvWithManyKeys()
-        env = TransformedEnv(base_env, SelectTransform("b", "c", "done", keep_dones=keep_done))
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", "done", keep_dones=keep_done)
+        )
         assert "done" in env.done_keys
         check_env_specs(env)
         env = TransformedEnv(base_env, SelectTransform("b", "c", keep_dones=keep_done))
@@ -2741,12 +2743,16 @@ class TestSelectTransform(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("keep_reward", [True, False])
-    def test_select_reward(self,keep_reward):
+    def test_select_reward(self, keep_reward):
         base_env = TestExcludeTransform.EnvWithManyKeys()
-        env = TransformedEnv(base_env, SelectTransform("b", "c", "reward", keep_rewards=keep_reward))
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", "reward", keep_rewards=keep_reward)
+        )
         assert "reward" in env.reward_keys
         check_env_specs(env)
-        env = TransformedEnv(base_env, SelectTransform("b", "c", keep_rewards=keep_reward))
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", keep_rewards=keep_reward)
+        )
         if keep_reward:
             assert "reward" in env.reward_keys
         else:
@@ -7824,7 +7830,7 @@ class TestRenameTransform(TransformBase):
             ["observation_orig"],
             ["stuff"],
             ["observation_orig"],
-            ["stuff"            ],
+            ["stuff"],
             create_copy=create_copy,
         )
         if compose:
@@ -7870,12 +7876,8 @@ class TestRenameTransform(TransformBase):
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
                 RenameTransform(
-                    [
-                        "observation"
-                    ],
-                    [
-                        "stuff"
-                    ],
+                    ["observation"],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7890,9 +7892,7 @@ class TestRenameTransform(TransformBase):
                     ["observation_orig"],
                     ["stuff"],
                     ["observation_orig"],
-                    [
-                        "stuff"
-                    ],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7907,12 +7907,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             SerialEnv(2, make_env),
             RenameTransform(
-                [
-                    "observation"
-                ],
-                [
-                    "stuff"
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7923,9 +7919,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff"
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7938,12 +7932,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             ParallelEnv(2, make_env),
             RenameTransform(
-                [
-                    "observation"
-                ],
-                [
-                    "stuff"
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7954,9 +7944,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff"
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -8008,12 +7996,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
             RenameTransform(
-                [
-                    "observation"
-                ],
-                [
-                    "stuff"
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -8033,9 +8017,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff"
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -8237,6 +8219,7 @@ class TestInitTracker(TransformBase):
             env,
             InitTracker(init_key=init_key),
         )
+        init_key = transformed_env.transform.init_keys[0]
         td = transformed_env.rollout(
             rollout_length, policy=policy, break_when_any_done=False
         )
@@ -8260,7 +8243,7 @@ class TestInitTracker(TransformBase):
                 device=env.device,
             )
         )
-        reset = td_reset["_reset"]
+        reset = td_reset["data", "_reset"]
         assert (td_reset[init_key] == reset).all()
 
 

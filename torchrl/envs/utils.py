@@ -730,9 +730,7 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
             raise ValueError(f"Agent {agent_name} not found in any group")
 
 
-def done_or_truncated(
-    data: TensorDictBase, full_done_spec=None, key="_reset"
-) -> bool:
+def done_or_truncated(data: TensorDictBase, full_done_spec=None, key="_reset") -> bool:
     """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
@@ -789,11 +787,15 @@ def done_or_truncated(
                     aggregate = torch.tensor(False, device=done.device)
                 aggregate = aggregate | done
             elif isinstance(item, TensorDictBase):
-                any_done = any_done | done_or_truncated(data=item, full_done_spec=None, key=key)
+                any_done = any_done | done_or_truncated(
+                    data=item, full_done_spec=None, key=key
+                )
     else:
         for done_key, item in full_done_spec.items():
             if isinstance(item, CompositeSpec):
-                any_done = any_done | done_or_truncated(data=data.get(done_key), full_done_spec=item, key=key)
+                any_done = any_done | done_or_truncated(
+                    data=data.get(done_key), full_done_spec=item, key=key
+                )
             else:
                 done = data.get(done_key, None)
                 if done is None:

@@ -34,7 +34,8 @@ from _utils_internal import (
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
-    rollout_consistency_assertion,rand_reset
+    rand_reset,
+    rollout_consistency_assertion,
 )
 from packaging import version
 from tensordict import LazyStackedTensorDict
@@ -1512,7 +1513,7 @@ class TestVmas:
         tensordict = env.reset(
             TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
         )
-        reset = tensordict['_reset']
+        reset = tensordict["_reset"]
         assert not tensordict["done"][reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done

@@ -8,7 +8,7 @@ import importlib.util
 
 import itertools
 import warnings
-from typing import Any, Dict, Union, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
