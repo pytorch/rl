@@ -793,7 +793,7 @@ def done_or_truncated(
     else:
         for done_key, item in full_done_spec.items():
             if isinstance(item, CompositeSpec):
-                any_done = any_done | done_or_truncated(data=data.get(key), full_done_spec=item, key=key)
+                any_done = any_done | done_or_truncated(data=data.get(done_key), full_done_spec=item, key=key)
             else:
                 done = data.get(done_key, None)
                 if done is None:
