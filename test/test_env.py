@@ -226,20 +226,10 @@ def test_rollout_predictability(device):
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        PENDULUM_VERSIONED,
-    ],
-)
-@pytest.mark.parametrize(
-    "frame_skip",
-    [
-        1,
-    ],
-)
+@pytest.mark.parametrize("env_name",[PENDULUM_VERSIONED])
+@pytest.mark.parametrize("frame_skip",[1])
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
-@pytest.mark.parametrize("parallel", [True, False])
+@pytest.mark.parametrize("parallel", [False, True])
 def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     envs = []
     for horizon in [20, 30, 40]:
@@ -254,7 +244,6 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     else:
         env = SerialEnv(3, envs)
     env.set_seed(100)
-    # out = env._single_rollout(100, break_when_any_done=False)
     out = env.rollout(100, break_when_any_done=False)
     assert out.names[-1] == "time"
     assert out.shape == torch.Size([3, 100])

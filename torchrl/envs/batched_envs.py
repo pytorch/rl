@@ -586,6 +586,7 @@ class SerialEnv(_BatchedEnv):
                         needs_resetting[i] += _reset[i].any()
                 else:
                     missing_reset = True
+                    # why do we break here?
                     break
 
         if tensordict is None or missing_reset:
@@ -829,6 +830,7 @@ class ParallelEnv(_BatchedEnv):
                         needs_resetting[i] += _reset[i].any()
                 else:
                     missing_reset = True
+                    # why do we break here?
                     break
 
         if tensordict is None or missing_reset:

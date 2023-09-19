@@ -4355,8 +4355,6 @@ class StepCounter(Transform):
         )
         self._done_keys = done_keys
         self.done_key = done_keys[0] if done_keys and len(done_keys) == 1 else None
-        self._reset_keys = None
-        self._done_keys_sorted = None
         super().__init__([])
 
     @property
@@ -4403,47 +4401,11 @@ class StepCounter(Transform):
 
     @property
     def reset_keys(self):
-        reset_keys = self._reset_keys
-        if reset_keys is None:
-            # make the default reset keys
-            reset_keys = []
-            for done_key in self.done_keys:
-                if isinstance(done_key, str):
-                    key = "_reset"
-                else:
-                    key = (*done_key[:-1], "_reset")
-                if key not in reset_keys:
-                    reset_keys.append(key)
-                reset_keys = self._reset_keys = reset_keys
-        return reset_keys
+        return self.parent.reset_keys
 
     @property
-    def done_keys_sorted(self):
-        """A list of done keys, grouped as the reset keys.
-
-        This is a list of lists. The outer list has the length of reset keys, the
-        inner lists constain the done keys (eg, done and truncated) that can
-        be read to determine a reset when it is absent.
-
-        """
-        done_keys_sorted = self._done_keys_sorted
-        if done_keys_sorted is not None:
-            return done_keys_sorted
-        # done keys, sorted as reset keys
-        reset_keys = self.reset_keys
-        done_keys = [[] for _ in range(len(reset_keys))]
-        reset_keys = iter(reset_keys)
-        done_keys_iter = iter(done_keys)
-        curr_reset_key = next(reset_keys)
-        curr_done_key = next(done_keys_iter)
-
-        for done_key in self.done_keys:
-            while type(done_key) != type(curr_reset_key) or (isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]): # if they are string, they are at the same level
-                curr_reset_key = next(curr_reset_key)
-                curr_done_key = next(done_keys_iter)
-            curr_done_key.append(done_key)
-        self._done_keys_sorted = done_keys
-        return done_keys
+    def done_keys_groups(self):
+        return self.parent.done_keys_groups
 
     @property
     def full_done_spec(self):
@@ -4452,14 +4414,15 @@ class StepCounter(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # get reset signal
         for step_count_key, truncated_key, reset_key, done_list_sorted in zip(
-            self.step_count_keys, self.truncated_keys, self.reset_keys, self.done_keys_sorted
+            self.step_count_keys, self.truncated_keys, self.reset_keys, self.done_keys_groups
         ):
             step_count = tensordict.get(step_count_key, default=None)
-            reset = tensordict.get(reset_key, None)
+            reset = tensordict.get(reset_key, default=None)
+            print('reset within transform', reset)
             if reset is None:
                 # get done status, just to inform the reset shape, dtype and device
                 for entry in done_list_sorted:
-                    done = tensordict.get(entry, None)
+                    done = tensordict.get(entry, default=None)
                     if done is not None:
                         break
                 else:
@@ -4470,13 +4433,13 @@ class StepCounter(Transform):
             if step_count is None:
                 step_count = torch.zeros_like(reset, dtype=torch.int64)
 
+            print('final reset', reset)
             # zero the step count if reset is needed
             step_count = torch.where(~reset, step_count, 0)
             tensordict.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
                 tensordict.set(truncated_key, truncated)
-
         return tensordict
 
     def _step(

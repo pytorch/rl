@@ -778,9 +778,9 @@ def done_or_truncated(
     any_done = False
     aggregate = None
     if full_done_spec is None:
-        for key, item in data.items():
-            if key in ("done", "truncated"):
-                done = data.get(key, None)
+        for done_key, item in data.items():
+            if done_key in ("done", "truncated"):
+                done = data.get(done_key, None)
                 if done is None:
                     done = torch.zeros(
                         (*data.shape, 1), dtype=torch.bool, device=data.device
@@ -791,11 +791,11 @@ def done_or_truncated(
             elif isinstance(item, TensorDictBase):
                 any_done = any_done | done_or_truncated(data=item, full_done_spec=None, key=key)
     else:
-        for key, item in full_done_spec.items():
+        for done_key, item in full_done_spec.items():
             if isinstance(item, CompositeSpec):
                 any_done = any_done | done_or_truncated(data=data.get(key), full_done_spec=item, key=key)
             else:
-                done = data.get(key, None)
+                done = data.get(done_key, None)
                 if done is None:
                     done = torch.zeros(
                         (*data.shape, 1), dtype=torch.bool, device=data.device
@@ -805,7 +805,6 @@ def done_or_truncated(
                 aggregate = aggregate | done
     if aggregate is not None:
         if key is not None:
-            # we use setdefault to keep previous values of ``name``.
-            data.setdefault(key, aggregate)
+            data.set(key, aggregate)
         any_done = any_done | aggregate.any()
     return any_done

@@ -1290,9 +1290,19 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     )
 
         if not self._allow_done_after_reset:
-            for done_key in self.done_keys:
-                if tensordict_reset.get(done_key).any():
-                    raise DONE_AFTER_RESET_ERROR
+            # we iterate over (reset_key, (done_key, truncated_key)) and check that all
+            # values where reset was true now have a done set to False.
+            # If no reset was present, all done and truncated must be False
+            for reset_key, done_key_group in zip(self.reset_keys, self.done_keys_groups):
+                reset_value = tensordict.get(reset_key, None) if tensordict is not None else None
+                if reset_value is not None:
+                    for done_key in done_key_group:
+                        if tensordict_reset.get(done_key)[reset_value].any():
+                            raise DONE_AFTER_RESET_ERROR
+                else:
+                    for done_key in done_key_group:
+                        if tensordict_reset.get(done_key).any():
+                            raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1562,7 +1572,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # done and truncated are in done_keys
             # To read the done status, we assess whether any of the done entries
             # at a given level is True. This is written in the _reset key.
-            any_done = done_or_truncated(tensordict.get("next"), full_done_spec=self.output_spec['full_done_spec'], key="_reset" if not break_when_any_done else None)
+            any_done = done_or_truncated(
+                tensordict.get("next"),
+                full_done_spec=self.output_spec['full_done_spec'],
+                key="_reset" if not break_when_any_done else None
+            )
 
             if (break_when_any_done and any_done) or i == max_steps - 1:
                 break
@@ -1620,6 +1634,34 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             reset_keys.append(combine(prefix_key, "_reset"))
         self.__dict__['_reset_keys'] = reset_keys
         return reset_keys
+
+    @property
+    def done_keys_groups(self):
+        """A list of done keys, grouped as the reset keys.
+
+        This is a list of lists. The outer list has the length of reset keys, the
+        inner lists contain the done keys (eg, done and truncated) that can
+        be read to determine a reset when it is absent.
+
+        """
+        done_keys_sorted = self.__dict__.get("_done_keys_groups", None)
+        if done_keys_sorted is not None:
+            return done_keys_sorted
+        # done keys, sorted as reset keys
+        reset_keys = self.reset_keys
+        done_keys = [[] for _ in range(len(reset_keys))]
+        reset_keys_iter = iter(reset_keys)
+        done_keys_iter = iter(done_keys)
+        curr_reset_key = next(reset_keys_iter)
+        curr_done_key = next(done_keys_iter)
+
+        for done_key in self.done_keys:
+            while type(done_key) != type(curr_reset_key) or (isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]): # if they are string, they are at the same level
+                curr_reset_key = next(reset_keys_iter)
+                curr_done_key = next(done_keys_iter)
+            curr_done_key.append(done_key)
+        self.__dict__["_done_keys_groups"] = done_keys
+        return done_keys
 
     def _select_observation_keys(self, tensordict: TensorDictBase) -> Iterator[str]:
         for key in tensordict.keys():
