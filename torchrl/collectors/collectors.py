@@ -647,9 +647,9 @@ class SyncDataCollector(DataCollectorBase):
             # This is the safest thing to do if the spec has None fields or if there is
             # no spec at all.
             # See #505 for additional context.
+            self._tensordict_out.update(self._tensordict)
             with torch.no_grad():
-                policy_out = self.policy(self._tensordict.to(self.device).clone())
-            self._tensordict_out.update(policy_out)
+                self._tensordict_out = self.policy(self._tensordict_out.to(self.device))
 
         self._tensordict_out = (
             self._tensordict_out.unsqueeze(-1)
