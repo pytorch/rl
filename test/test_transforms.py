@@ -8236,14 +8236,17 @@ class TestInitTracker(TransformBase):
             assert torch.all(is_init[max_steps + 1] == 1)
             assert torch.all(is_init[max_steps + 2 :] == 0)
 
-        td_reset = transformed_env.reset(
-            TensorDict(
-                rand_reset(transformed_env),
-                batch_size=env.batch_size,
-                device=env.device,
-            )
+        td_reset = TensorDict(
+            rand_reset(transformed_env),
+            batch_size=env.batch_size,
+            device=env.device,
         )
-        reset = td_reset["data", "_reset"]
+        if nested_done:
+            reset = td_reset["data", "_reset"]
+        else:
+            reset = td_reset["_reset"]
+
+        td_reset = transformed_env.reset(td_reset)
         assert (td_reset[init_key] == reset).all()
 
 
