@@ -364,15 +364,6 @@ class SMACv2Wrapper(_EnvWrapper):
         action = tensordict.get(("agents", "action"))
         action_np = self.action_spec.to_numpy(action)
 
-        action_mask = tensordict.get(("agents", "action_mask"))
-        mask = torch.tensor(
-            self.get_avail_actions(), dtype=torch.bool, device=self.device
-        )
-        if (action_mask != mask).any():
-            breakpoint()
-        if not action_mask.gather(-1, action.unsqueeze(-1)).all():
-            breakpoint()
-
         # Actions are validated by the environment.
         try:
             reward, done, info = self._env.step(action_np)
