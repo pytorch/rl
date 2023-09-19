@@ -163,7 +163,7 @@ class GymLikeEnv(_EnvWrapper):
             do_break = gym_done
 
         return (
-            gym_done,
+            done,
             truncation,
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
