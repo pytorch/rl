@@ -69,8 +69,8 @@ def vtrace_correction(
         gamma (scalar): exponential mean discount.
         log_pi (Tensor): collection actor log probability of taking actions in the environment.
         log_mu (Tensor): current actor log probability of taking actions in the environment.
-        state_value (Tensor): value function result with old_state input.
-        next_state_value (Tensor): value function result with new_state input.
+        state_value (Tensor): value function result with state input.
+        next_state_value (Tensor): value function result with next_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
         rho_thresh (Union[float, Tensor]): clipping parameter for importance weights.
@@ -89,7 +89,8 @@ def vtrace_correction(
     device = state_value.device
 
     deltas, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
-    clipped_c = torch.min(torch.tensor(c_thresh).to(device), clipped_rho)
+    c_thresh = torch.tensor(c_thresh, device=device)
+    clipped_c = torch.min(c_thresh, clipped_rho)
 
     ############################################################
     # MAKE THIS PART WORK; THEN WE CAN TRY TO MAKE IT FASTER
