@@ -147,7 +147,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         if i % cfg.loss.batch_size != 0 or i == 0:
             continue
 
-        for batch in enumerate(data_buffer):
+        for batch in data_buffer:
 
             batch = batch.reshape(-1)
 
