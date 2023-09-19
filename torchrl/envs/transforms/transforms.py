@@ -4066,12 +4066,30 @@ class RewardSum(Transform):
     """Tracks episode cumulative rewards.
 
     This transform accepts a list of tensordict reward keys (i.e. ´in_keys´) and tracks their cumulative
-    value along each episode. When called, the transform creates a new tensordict key for each in_key named
-    ´episode_{in_key}´ where the cumulative values are written. All ´in_keys´ should be part of the env
-    reward and be present in the env reward_spec.
+    value along the time dimension for each episode.
 
-    If no in_keys are specified, this transform assumes ´reward´ to be the input key. However, multiple rewards
-    (e.g. reward1 and reward2) can also be specified.
+    When called, the transform writes a new tensordict entry for each ``in_key`` named
+    ``episode_{in_key}`` where the cumulative values are written.
+
+    Args:
+        in_keys (list of NestedKeys, optional): Input reward keys.
+            All ´in_keys´ should be part of the environment reward_spec.
+            If no ``in_keys`` are specified, this transform assumes ``"reward"`` to be the input key.
+            However, multiple rewards (e.g. ``"reward1"`` and ``"reward2""``) can also be specified.
+        out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.
+
+    Examples:
+        >>> from torchrl.envs.transforms import RewardSum, TransformedEnv
+        >>> from torchrl.envs.libs.gym import GymEnv
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), RewardSum())
+        >>> td = env.reset()
+        >>> print(td["episode_reward"])
+        tensor([0.])
+        >>> td = env.rollout(3)
+        >>> print(td["next", "episode_reward"])
+        tensor([[-0.5926],
+                [-1.4578],
+                [-2.7885]])
     """
 
     def __init__(
@@ -4083,7 +4101,10 @@ class RewardSum(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         if out_keys is None:
-            out_keys = [_replace_last(in_key, "episode_reward") for in_key in in_keys]
+            out_keys = [
+                _replace_last(in_key, f"episode_{_unravel_key_to_tuple(in_key)[-1]}")
+                for in_key in in_keys
+            ]
         elif out_keys is None:
             raise RuntimeError(
                 "the out_keys must be specified for non-conventional in-keys in RewardSum."
