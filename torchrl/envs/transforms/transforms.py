@@ -4124,19 +4124,21 @@ class RewardSum(Transform):
 
             if _reset is None or _reset.any():
                 if out_key in tensordict.keys(True, True):
-                    value = tensordict[out_key]
+                    value = tensordict.get(out_key)
                     if _reset is None:
-                        tensordict[out_key] = torch.zeros_like(value)
+                        tensordict.set(out_key, torch.zeros_like(value))
                     else:
-                        tensordict[out_key] = value.masked_fill(
-                            expand_as_right(_reset, value), 0.0
+                        tensordict.set(
+                            out_key,
+                            value.masked_fill(expand_as_right(_reset, value), 0.0),
                         )
                 else:
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
-                    tensordict[out_key] = self.parent.output_spec["full_reward_spec"][
-                        in_key
-                    ].zero()
+                    tensordict.set(
+                        out_key,
+                        self.parent.output_spec["full_reward_spec"][in_key].zero(),
+                    )
 
         return tensordict
 
