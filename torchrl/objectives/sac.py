@@ -576,7 +576,7 @@ class SACLoss(LossModule):
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
             td_q,
-            self.qvalue_network_params,  # _cached_detached_qvalue_params #  should we clone?
+            self._cached_detached_qvalue_params,  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -698,14 +698,11 @@ class SACLoss(LossModule):
             -1
         )
         td_error = abs(pred_val - target_value)
-        loss_qval = (
-            distance_loss(
-                pred_val,
-                target_value.expand_as(pred_val),
-                loss_function=self.loss_function,
-            ).sum(0)
-            * 0.5
-        )
+        loss_qval = distance_loss(
+            pred_val,
+            target_value.expand_as(pred_val),
+            loss_function=self.loss_function,
+        ).mean(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
