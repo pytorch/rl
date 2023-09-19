@@ -105,8 +105,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create logger
-    exp_name = generate_exp_name("IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.backend, logger_name="impala", experiment_name=exp_name)
+    logger = None
+    if cfg.logger.backend:
+        exp_name = generate_exp_name("IMPALA", f"{cfg.logger.exp_name}_{cfg.env.env_name}")
+        logger = get_logger(cfg.logger.backend, logger_name="impala", experiment_name=exp_name)
 
     # Create test environment
     test_env = make_parallel_env(cfg.env.env_name, device, is_test=True)
@@ -122,16 +124,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     for data in collector:
 
+        log_info = None
         frames_in_batch = data.numel()
         collected_frames += frames_in_batch * frame_skip
         pbar.update(data.numel())
 
-        # Train loging
+        # Get train reward
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            logger.log_scalar(
-                "reward_train", episode_rewards.mean().item(), collected_frames
-            )
+            log_info.update({"reward_train": episode_rewards.mean().item()})
 
         # Apply episodic end of life
         data["done"].copy_(data["end_of_life"])
@@ -152,10 +153,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1 - (num_network_updates / total_network_updates)
             if cfg.optim.anneal_lr:
-                for g in optim_actor.param_groups:
-                    g["lr"] = cfg.optim.lr * alpha
-                for g in optim_critic.param_groups:
-                    g["lr"] = cfg.optim.lr * alpha
+                for group in optim_actor.param_groups:
+                    group["lr"] = cfg.optim.lr * alpha
+                for group in optim_critic.param_groups:
+                    group["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
 
             # Get a data batch

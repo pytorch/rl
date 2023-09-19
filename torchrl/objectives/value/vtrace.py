@@ -47,7 +47,7 @@ def _dv_val(
     return deltas, clipped_rho
 
 
-# @_transpose_time # TODO: is this needed?
+@_transpose_time
 def vtrace_correction(
         gamma: float,
         log_pi: torch.Tensor,
@@ -198,6 +198,7 @@ class VTrace(ValueEstimatorBase):
         self.actor_network = actor_network
         self._log_prob_key = log_prob_key
 
+        import ipdb; ipdb.set_trace()
         if not isinstance(gamma, torch.Tensor) and gamma.shape != ():
             raise NotImplementedError("Per-value gamma is not supported yet")
 
@@ -315,6 +316,7 @@ class VTrace(ValueEstimatorBase):
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))
+        import ipdb; ipdb.set_trace()
         adv, value_target = vtrace_correction(
             gamma,
             log_pi,

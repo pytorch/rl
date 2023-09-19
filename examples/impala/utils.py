@@ -5,7 +5,7 @@
 
 import random
 
-import gym
+import gymnasium as gym
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -26,6 +26,7 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    NoopResetEnv,
 )
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
@@ -43,47 +44,22 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-class NoopResetEnv(gym.Wrapper):
-    def __init__(self, env, noop_max=30):
-        """Sample initial states by taking random number of no-ops on reset."""
-        gym.Wrapper.__init__(self, env)
-        self.noop_max = noop_max
-        self.override_num_noops = None
-        self.noop_action = 0  # No-op is assumed to be action 0.
-        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
-
-    def reset(self, **kwargs):
-        """Do no-op action for a number of steps in [1, noop_max]."""
-        self.env.reset(**kwargs)
-        if self.override_num_noops is not None:
-            noops = self.override_num_noops
-        else:
-            noops = random.randint(1, self.noop_max + 1)
-        assert noops > 0
-        obs = None
-        for _ in range(noops):
-            obs, _, done, *other = self.env.step(self.noop_action)
-            if done:
-                obs = self.env.reset(**kwargs)
-        return obs
-
-
 class EpisodicLifeEnv(gym.Wrapper):
     def __init__(self, env):
         """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. since it helps value estimation.
+        Done by DeepMind for the DQN and co. It helps value estimation.
         """
         gym.Wrapper.__init__(self, env)
         self.lives = 0
 
     def step(self, action):
-        obs, rew, done, info = self.env.step(action)
+        obs, rew, done, truncate, info = self.env.step(action)
         lives = self.env.unwrapped.ale.lives()
         info["end_of_life"] = False
         if (lives < self.lives) or done:
             info["end_of_life"] = True
         self.lives = lives
-        return obs, rew, done, info
+        return obs, rew, done, truncate, info
 
     def reset(self, **kwargs):
         reset_data = self.env.reset(**kwargs)
@@ -96,13 +72,15 @@ def make_base_env(
 ):
     env = gym.make(env_name)
     if not is_test:
-        env = NoopResetEnv(env, noop_max=30)
         env = EpisodicLifeEnv(env)
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
-    reader = default_info_dict_reader(["end_of_life"])
-    env.set_info_dict_reader(reader)
+    env = TransformedEnv(env)
+    env.append_transform(NoopResetEnv(noops=30, random=True))
+    if not is_test:
+        reader = default_info_dict_reader(["end_of_life"])
+        env.set_info_dict_reader(reader)
     return env
 
 
