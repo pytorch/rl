@@ -570,9 +570,9 @@ class SyncDataCollector(DataCollectorBase):
             for key in self.env.output_spec.keys(True, True):
                 if isinstance(key, str):
                     key = (key,)
-                if "truncated" in key:
+                if "step_count" in key:
                     raise ValueError(
-                        "A 'truncated' key is already present in the environment "
+                        "A 'step_count' key is already present in the environment "
                         "and the 'max_frames_per_traj' argument may conflict with "
                         "a 'StepCounter' that has already been set. "
                         "Possible solutions: Set max_frames_per_traj to 0 or "
