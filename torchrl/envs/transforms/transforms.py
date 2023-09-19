@@ -3486,7 +3486,7 @@ class NoopResetEnv(Transform):
             raise RuntimeError(
                 "NoopResetEnv.parent not found. Make sure that the parent is set."
             )
-        done_key = parent.done_key
+        done_keys = parent.done_keys
         reward_key = parent.reward_key
         if parent.batch_size.numel() > 1:
             raise ValueError(
@@ -3511,9 +3511,12 @@ class NoopResetEnv(Transform):
                 i += 1
                 tensordict = parent.rand_step(tensordict)
                 tensordict = step_mdp(tensordict, exclude_done=False)
-                if tensordict.get(done_key) or tensordict.get(
-                    "truncated", torch.tensor(False)
-                ):
+                reset = False
+                for done_key in done_keys:
+                    if tensordict.get(done_key):
+                        reset = True
+                        break
+                if reset:
                     tensordict = parent.reset(td_reset.clone(False))
                     break
             else:

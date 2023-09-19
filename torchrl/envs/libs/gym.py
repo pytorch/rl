@@ -772,7 +772,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", None, "0.26")
     def _reset_output_transform(self, reset_data):  # noqa: F811
-        return reset_data, {}
+        return reset_data, None
 
     @implement_for("gym", "0.26", None)
     def _reset_output_transform(self, reset_data):  # noqa: F811

@@ -2067,6 +2067,7 @@ class TestPettingZoo:
 class TestRoboHive:
     @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     @pytest.mark.parametrize("from_pixels", [True, False])
+    @set_gym_backend("gym")
     def test_robohive(self, envname, from_pixels):
         if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
             print("not testing envs with prebuilt rendering")
