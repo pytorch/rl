@@ -20,7 +20,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import MultiaSyncDataCollector
+    from torchrl.collectors import MultiaSyncDataCollector, SyncDataCollector
     from torchrl.collectors.distributed import RPCDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
@@ -65,6 +65,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
         storing_device=device,
         max_frames_per_traj=-1,
     )
+    # collector = SyncDataCollector(
+    #     create_env_fn=make_parallel_env(cfg.env.env_name, device),
+    #     policy=actor,
+    #     frames_per_batch=frames_per_batch,
+    #     total_frames=total_frames,
+    #     device=device,
+    #     storing_device=device,
+    #     max_frames_per_traj=-1,
+    # )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
@@ -145,6 +154,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data_buffer.extend(data)
 
         if i % cfg.loss.batch_size != 0 or i == 0:
+            if logger:
+                for key, value in log_info.items():
+                    logger.log_scalar(key, value, collected_frames)
             continue
 
         for batch in data_buffer:
