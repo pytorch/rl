@@ -632,10 +632,10 @@ class TestCatFrames(TransformBase):
             nested_dim,
             1,
         )
-        tranformed_env = TransformedEnv(
+        transformed_env = TransformedEnv(
             env, CatFrames(dim=-1, N=cat_N, in_keys=[("data", "states")])
         )
-        td = tranformed_env.rollout(rollout_length, policy=policy)
+        td = transformed_env.rollout(rollout_length, policy=policy)
         assert td[("data", "states")].shape == (
             *batch_size,
             rollout_length,
@@ -7365,7 +7365,7 @@ class TestTransforms:
             dim=-3,
         )
         t2 = FiniteTensorDictCheck()
-        t3 = StepCounter()
+        t3 = ExcludeTransform()
         compose = Compose(t1, t2, t3)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(

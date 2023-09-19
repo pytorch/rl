@@ -177,7 +177,7 @@ class Transform(nn.Module):
         self.__dict__["_parent"] = None
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Resets a tranform if it is stateful."""
+        """Resets a transform if it is stateful."""
         return tensordict
 
     def init(self, tensordict) -> None:
@@ -4832,11 +4832,11 @@ class TimeMaxPool(Transform):
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if T < 1:
             raise ValueError(
-                "TimeMaxPoolTranform T parameter should have a value greater or equal to one."
+                "TimeMaxPoolTransform T parameter should have a value greater or equal to one."
             )
         if len(self.in_keys) != len(self.out_keys):
             raise ValueError(
-                "TimeMaxPoolTranform in_keys and out_keys don't have the same number of elements"
+                "TimeMaxPoolTransform in_keys and out_keys don't have the same number of elements"
             )
         self.buffer_size = T
         for in_key in self.in_keys:
