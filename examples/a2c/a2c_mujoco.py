@@ -157,7 +157,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             log_info.update({f"train/{key}": value.item()})
-        alpha = 1 - (num_network_updates / total_network_updates)
         log_info.update(
             {
                 "train/lr": alpha * cfg.optim.lr,
