@@ -41,7 +41,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, step_mdp
+from torchrl.envs.utils import _replace_last, _sort_keys, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -4083,8 +4083,8 @@ class RewardSum(Transform):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
         if in_keys is None:
             in_keys = ["reward"]
-        if out_keys is None and in_keys == ["reward"]:
-            out_keys = ["episode_reward"]
+        if out_keys is None:
+            out_keys = [_replace_last(in_key, "episode_reward") for in_key in in_keys]
         elif out_keys is None:
             raise RuntimeError(
                 "the out_keys must be specified for non-conventional in-keys in RewardSum."
@@ -4094,41 +4094,30 @@ class RewardSum(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
-        # Non-batched environments
-        _reset = tensordict.get("_reset", None)
-        if _reset is None:
-            _reset = torch.ones(
-                self.parent.done_spec.shape if self.parent else tensordict.batch_size,
-                dtype=torch.bool,
-                device=tensordict.device,
-            )
+        _reset = tensordict.get("_reset", None)  # Try to get reset from root
 
-        if _reset.any():
-            _reset = _reset.sum(
-                tuple(range(tensordict.batch_dims, _reset.ndim)), dtype=torch.bool
-            )
-            reward_key = self.parent.reward_key if self.parent else "reward"
-            for in_key, out_key in zip(self.in_keys, self.out_keys):
+        for in_key, out_key in zip(self.in_keys, self.out_keys):
+            in_key = _unravel_key_to_tuple(in_key)
+            # If the root reset is None, try to get it from the same td as the reward
+            if len(in_key) > 1 and _reset is None:
+                _reset = tensordict.get(_replace_last(in_key, "_reset"), None)
+
+            if _reset is None or _reset.any():
                 if out_key in tensordict.keys(True, True):
                     value = tensordict[out_key]
-                    tensordict[out_key] = value.masked_fill(
-                        expand_as_right(_reset, value), 0.0
-                    )
-                elif unravel_key(in_key) == unravel_key(reward_key):
+                    if _reset is None:
+                        tensordict[out_key] = torch.zeros_like(value)
+                    else:
+                        tensordict[out_key] = value.masked_fill(
+                            expand_as_right(_reset, value), 0.0
+                        )
+                else:
                     # Since the episode reward is not in the tensordict, we need to allocate it
                     # with zeros entirely (regardless of the _reset mask)
-                    tensordict[out_key] = self.parent.reward_spec.zero()
-                else:
-                    try:
-                        tensordict[out_key] = self.parent.observation_spec[
-                            in_key
-                        ].zero()
-                    except KeyError as err:
-                        raise KeyError(
-                            f"The key {in_key} was not found in the parent "
-                            f"observation_spec with keys "
-                            f"{list(self.parent.observation_spec.keys(True))}. "
-                        ) from err
+                    tensordict[out_key] = self.parent.output_spec["full_reward_spec"][
+                        in_key
+                    ].zero()
+
         return tensordict
 
     def _step(

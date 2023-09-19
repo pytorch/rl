@@ -31,6 +31,7 @@ from mocking_classes import (
     IncrementingEnv,
     MockBatchedLockedEnv,
     MockBatchedUnLockedEnv,
+    MultiKeyCountingEnv,
     NestedCountingEnv,
 )
 from tensordict import unravel_key
@@ -4410,6 +4411,16 @@ class TestRewardSum(TransformBase):
         check_env_specs(env)
         r = env.rollout(4)
         assert r["next", "episode_reward"].unique().numel() > 1
+
+    def test_trans_multi_key(self, n_workers=2, batch_size=(3, 2)):
+        torch.manual_seed(0)
+        env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
+        env = TransformedEnv(
+            SerialEnv(n_workers, env_fun),
+            Compose(RewardSum(in_keys=env_fun().reward_keys)),
+        )
+
+        check_env_specs(env)
 
     @pytest.mark.parametrize("in_key", ["reward", ("some", "nested")])
     def test_transform_no_env(self, in_key):
