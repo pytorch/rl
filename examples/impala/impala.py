@@ -36,7 +36,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frame_skip = 4
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
-    mini_batch_size = cfg.loss.mini_batch_size // frame_skip
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils.py)
@@ -70,9 +69,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(frames_per_batch),
+        storage=LazyMemmapStorage(cfg.loss.batch_size),
         sampler=sampler,
-        batch_size=mini_batch_size,
+        batch_size=cfg.loss.batch_size,
     )
 
     # Create loss and adv modules
@@ -91,17 +90,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizer
-    optim_actor = torch.optim.Adam(
-        actor.parameters(),
+    optim = torch.optim.RMSprop(
+        loss_module.parameters(),
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
+        momentum=cfg.optim.momentum,
         eps=cfg.optim.eps,
-    )
-    optim_critic = torch.optim.Adam(
-        critic.parameters(),
-        lr=cfg.optim.lr,
-        weight_decay=cfg.optim.weight_decay,
-        eps=cfg.optim.eps,
+        alpha=cfg.optim.alpha,
     )
 
     # Create logger
@@ -119,11 +114,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (total_frames // frames_per_batch) * num_mini_batches
+    total_network_updates = (total_frames // frames_per_batch)
 
     sampling_start = time.time()
-    for data in collector:
+
+    for i, data in enumerate(collector):
 
         log_info = {}
         sampling_time = time.time() - sampling_start
@@ -140,25 +135,26 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data["done"].copy_(data["end_of_life"])
         data["next", "done"].copy_(data["next", "end_of_life"])
 
-        losses = TensorDict({}, batch_size=[num_mini_batches])
         training_start = time.time()
 
         # Compute VTrace
         with torch.no_grad():
-            data = vtrace_module(data)
-        data_reshape = data.reshape(-1)
+            data = vtrace_module(data)  # TODO: parallelize this
 
         # Update the data buffer
-        data_buffer.extend(data_reshape)
+        data_buffer.extend(data)
 
-        for i, batch in enumerate(data_buffer):
+        if i % cfg.loss.batch_size != 0 or i == 0:
+            continue
+
+        for batch in enumerate(data_buffer):
+
+            batch = batch.reshape(-1)
 
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1 - (num_network_updates / total_network_updates)
             if cfg.optim.anneal_lr:
-                for group in optim_actor.param_groups:
-                    group["lr"] = cfg.optim.lr * alpha
-                for group in optim_critic.param_groups:
+                for group in optim.param_groups:
                     group["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
 
@@ -167,27 +163,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             # Forward pass A2C loss
             loss = loss_module(batch)
-            losses[i] = loss.select(
+            losses = loss.select(
                 "loss_critic", "loss_entropy", "loss_objective"
             ).detach()
-            loss_actor = loss["loss_objective"] + loss["loss_entropy"]
-            loss_critic = loss["loss_critic"]
+            loss_sum = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
 
             # Backward pass
-            loss_actor.backward()
-            loss_critic.backward()
+            optim.zero_grad()
+            loss_sum.backward()
             torch.nn.utils.clip_grad_norm_(
                 list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
             )
 
             # Update the networks
-            optim_actor.step()
-            optim_critic.step()
-            optim_actor.zero_grad()
-            optim_critic.zero_grad()
+            optim.step()
 
         training_time = time.time() - training_start
-        losses = losses.apply(lambda x: x.float().mean(), batch_size=[])
         for key, value in losses.items():
             log_info.update({f"train/{key}": value.item()})
         log_info.update(

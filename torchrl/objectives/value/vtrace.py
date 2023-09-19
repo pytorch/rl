@@ -37,13 +37,13 @@ def _dv_val(
     rewards: torch.Tensor,
     vals: torch.Tensor,
     next_vals: torch.Tensor,
-    gamma: Union[float, torch.Tensor],
+    discount: Union[float, torch.Tensor],
     rho_thresh: Union[float, torch.Tensor],
     log_pi: torch.Tensor,
     log_mu: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     clipped_rho = _c_val(log_pi, log_mu, rho_thresh)
-    deltas = clipped_rho * (rewards + gamma * next_vals - vals)
+    deltas = clipped_rho * (rewards + discount * next_vals - vals)
     return deltas, clipped_rho
 
 
@@ -88,16 +88,14 @@ def vtrace_correction(
     dtype = next_state_value.dtype
     device = state_value.device
 
-    deltas, clipped_rho = _dv_val(reward, state_value, next_state_value, gamma, rho_thresh, log_pi, log_mu)
-    c_thresh = torch.tensor(c_thresh, device=device)
-    clipped_c = torch.min(c_thresh, clipped_rho)
-
-    ############################################################
-    # MAKE THIS PART WORK; THEN WE CAN TRY TO MAKE IT FASTER
-
     not_done = (~done).int()
     *batch_size, time_steps, lastdim = not_done.shape
     discounts = gamma * not_done
+
+    deltas, clipped_rho = _dv_val(reward, state_value, next_state_value, discounts, rho_thresh, log_pi, log_mu)
+    c_thresh = c_thresh.to(device)
+    clipped_c = torch.min(c_thresh, clipped_rho)
+
     vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
     for i in reversed(range(time_steps)):
         discount_t, c_t, delta_t = discounts[..., i, :], clipped_c[..., i, :], deltas[..., i, :]
@@ -106,9 +104,7 @@ def vtrace_correction(
     vs_minus_v_xs = torch.flip(vs_minus_v_xs, dims=[time_dim])
     vs = vs_minus_v_xs + state_value
     vs_t_plus_1 = torch.cat([vs[..., 1:, :], next_state_value[..., -1:, :]], dim=time_dim)
-    advantages = clipped_rho * (reward + gamma * vs_t_plus_1 - state_value)
-
-    ############################################################
+    advantages = clipped_rho * (reward + discounts * vs_t_plus_1 - state_value)
 
     return advantages, vs
 
@@ -172,7 +168,7 @@ class VTrace(ValueEstimatorBase):
             average_adv: bool = False,
             differentiable: bool = False,
             skip_existing: Optional[bool] = None,
-            log_prob_key: NestedKey = "sample_log_prob",    # TODO: should be added to _AcceptedKeys?
+            log_prob_key: NestedKey = "sample_log_prob",    # Consider adding it to _AcceptedKeys?
             advantage_key: NestedKey = None,
             value_target_key: NestedKey = None,
             value_key: NestedKey = None,
@@ -339,7 +335,7 @@ class VTrace(ValueEstimatorBase):
 
         if self.average_adv:
             loc = adv.mean()
-            scale = adv.std().clamp_min(1e-8)
+            scale = adv.std().clamp_min(1e-6)
             adv = adv - loc
             adv = adv / scale
 
