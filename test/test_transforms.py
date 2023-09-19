@@ -38,6 +38,7 @@ from mocking_classes import (
 from tensordict import unravel_key
 from tensordict.nn import TensorDictSequential
 from tensordict.tensordict import TensorDict, TensorDictBase
+from tensordict.utils import _unravel_key_to_tuple
 from torch import multiprocessing as mp, nn, Tensor
 from torchrl._utils import prod
 from torchrl.data import (
@@ -4427,10 +4428,11 @@ class TestRewardSum(TransformBase):
         check_env_specs(env)
         td = env.rollout(max_steps, policy=policy)
         for reward_key in env.reward_keys:
+            reward_key = _unravel_key_to_tuple(reward_key)
             assert (
-                td.get(("next", _replace_last(reward_key, "episode_reward")))[
-                    (0,) * (len(batch_size) + 1)
-                ][-1]
+                td.get(
+                    ("next", _replace_last(reward_key, f"episode_{reward_key[-1]}"))
+                )[(0,) * (len(batch_size) + 1)][-1]
                 == max_steps
             ).all()
 
