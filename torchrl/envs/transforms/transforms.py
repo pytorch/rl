@@ -5086,16 +5086,6 @@ class RenameTransform(Transform):
     def __init__(
         self, in_keys, out_keys, in_keys_inv=None, out_keys_inv=None, create_copy=False
     ):
-        if "done" in in_keys and not create_copy:
-            raise ValueError(
-                "Renaming 'done' is not allowed. Set `create_copy` to `True` "
-                "to create a copy of the done state."
-            )
-        if "reward" in in_keys and not create_copy:
-            raise ValueError(
-                "Renaming 'reward' is not allowed. Set `create_copy` to `True` "
-                "to create a copy of the reward entry."
-            )
         if in_keys_inv is None:
             in_keys_inv = []
         if out_keys_inv is None:
@@ -5143,52 +5133,64 @@ class RenameTransform(Transform):
         return tensordict
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
-        # we need to check whether there are special keys
-        output_spec = output_spec.clone()
-        if "done" in self.in_keys:
-            for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == "done":
-                    break
-            else:
-                raise RuntimeError("Expected one key to be 'done'")
-            output_spec["full_observation_spec"][out_key] = output_spec[
-                "full_done_spec"
-            ].clone()
-        if "reward" in self.in_keys:
-            for i, out_key in enumerate(self.out_keys):  # noqa: B007
-                if self.in_keys[i] == "reward":
-                    break
-            else:
-                raise RuntimeError("Expected one key to be 'reward'")
-            output_spec["full_observation_spec"][out_key] = output_spec[
-                "full_reward_spec"
-            ].clone()
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in ("reward", "done"):
-                continue
-            if out_key in ("done", "reward"):
-                output_spec[out_key] = output_spec["full_observation_spec"][
-                    in_key
-                ].clone()
-            else:
-                output_spec["full_observation_spec"][out_key] = output_spec[
-                    "full_observation_spec"
-                ][in_key].clone()
-            if not self.create_copy:
-                del output_spec["full_observation_spec"][in_key]
+        for done_key in self.parent.done_keys:
+            if done_key in self.in_keys:
+                for i, out_key in enumerate(self.out_keys):  # noqa: B007
+                    if self.in_keys[i] == done_key:
+                        break
+                else:
+                    # unreachable
+                    raise RuntimeError
+                output_spec["full_done_spec"][out_key] = output_spec["full_done_spec"][done_key].clone()
+                if not self.create_copy:
+                    del output_spec["full_done_spec"][done_key]
+        for reward_key in self.parent.reward_keys:
+            if reward_key in self.in_keys:
+                for i, out_key in enumerate(self.out_keys):  # noqa: B007
+                    if self.in_keys[i] == reward_key:
+                        break
+                else:
+                    # unreachable
+                    raise RuntimeError
+                output_spec["full_reward_spec"][out_key] = output_spec["full_reward_spec"][reward_key].clone()
+                if not self.create_copy:
+                    del output_spec["full_reward_spec"][reward_key]
+        for observation_key in self.parent.full_observation_spec.keys(True):
+            if observation_key in self.in_keys:
+                for i, out_key in enumerate(self.out_keys):  # noqa: B007
+                    if self.in_keys[i] == observation_key:
+                        break
+                else:
+                    # unreachable
+                    raise RuntimeError
+                output_spec["full_observation_spec"][out_key] = output_spec["full_observation_spec"][observation_key].clone()
+                if not self.create_copy:
+                    del output_spec["full_observation_spec"][observation_key]
         return output_spec
 
     def transform_input_spec(self, input_spec: CompositeSpec) -> CompositeSpec:
-        # we need to check whether there are special keys
-        input_spec = input_spec.clone()
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-            in_key = (in_key,) if not isinstance(in_key, tuple) else in_key
-            out_key = (out_key,) if not isinstance(out_key, tuple) else out_key
-            input_spec[("full_state_spec", *out_key)] = input_spec[
-                ("full_state_spec", *in_key)
-            ].clone()
-            if not self.create_copy:
-                del input_spec[("full_state_spec", *in_key)]
+        for action_key in self.parent.action_keys:
+            if action_key in self.in_keys:
+                for i, out_key in enumerate(self.out_keys):  # noqa: B007
+                    if self.in_keys[i] == action_key:
+                        break
+                else:
+                    # unreachable
+                    raise RuntimeError
+                input_spec["full_action_spec"][out_key] = input_spec["full_action_spec"][action_key].clone()
+                if not self.create_copy:
+                    del input_spec["full_action_spec"][action_key]
+        for state_key in self.parent.full_state_spec.keys(True):
+            if state_key in self.in_keys:
+                for i, out_key in enumerate(self.out_keys):  # noqa: B007
+                    if self.in_keys[i] == state_key:
+                        break
+                else:
+                    # unreachable
+                    raise RuntimeError
+                input_spec["full_state_spec"][out_key] = input_spec["full_state_spec"][state_key].clone()
+                if not self.create_copy:
+                    del input_spec["full_state_spec"][state_key]
         return input_spec
 
 

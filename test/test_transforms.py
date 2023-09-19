@@ -18,7 +18,7 @@ from _utils_internal import (  # noqa
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
-    PENDULUM_VERSIONED,
+    PENDULUM_VERSIONED,rand_reset,
     PONG_VERSIONED,
     retry,
 )
@@ -8190,15 +8190,15 @@ class TestInitTracker(TransformBase):
             assert torch.all(is_init[max_steps + 1] == 1)
             assert torch.all(is_init[max_steps + 2 :] == 0)
 
-        _reset = env.done_spec.rand()
         td_reset = transformed_env.reset(
             TensorDict(
-                {"_reset": _reset},
+                rand_reset(transformed_env),
                 batch_size=env.batch_size,
                 device=env.device,
             )
         )
-        assert (td_reset[init_key] == _reset).all()
+        reset = td_reset["_reset"]
+        assert (td_reset[init_key] == reset).all()
 
 
 class TestKLRewardTransform(TransformBase):

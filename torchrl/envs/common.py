@@ -23,7 +23,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.data.utils import _check_only_one_entry, DEVICE_TYPING
+from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
     DONE_AFTER_RESET_ERROR,
@@ -638,6 +638,32 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.input_spec.lock_()
 
+    @property
+    def full_action_spec(self):
+        """The full action spec.
+
+        ``full_action_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
+        that contains all the action entries.
+
+        Examples:
+            >>> from torchrl.envs import BraxEnv
+            >>> for envname in BraxEnv.available_envs:
+            ...     break
+            >>> env = BraxEnv(envname)
+            >>> env.full_action_spec
+        CompositeSpec(
+            action: BoundedTensorSpec(
+                shape=torch.Size([8]),
+                space=ContinuousBox(
+                    low=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float32, contiguous=True)),
+                device=cpu,
+                dtype=torch.float32,
+                domain=continuous), device=cpu, shape=torch.Size([]))
+
+        """
+        return self.input_spec['full_action_spec']
+
     # Reward spec
     def _get_reward_keys(self):
         keys = self.output_spec["full_reward_spec"].keys(True, True)
@@ -818,6 +844,32 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.output_spec.lock_()
 
+    @property
+    def full_reward_spec(self):
+        """The full reward spec.
+
+        ``full_reward_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
+        that contains all the reward entries.
+
+        Examples:
+            >>> import gymnasium
+            >>> from torchrl.envs import GymWrapper, TransformedEnv, RenameTransform
+            >>> base_env = GymWrapper(gymnasium.make("Pendulum-v1"))
+            >>> env = TransformedEnv(base_env, RenameTransform("reward", ("nested", "reward")))
+            >>> env.full_reward_spec
+            CompositeSpec(
+                nested: CompositeSpec(
+                    reward: UnboundedContinuousTensorSpec(
+                        shape=torch.Size([1]),
+                        space=ContinuousBox(
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        device=cpu,
+                        dtype=torch.float32,
+                        domain=continuous), device=None, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        """
+        return self.output_spec['full_reward_spec']
     # done spec
     def _get_done_keys(self):
         if "full_done_spec" not in self.output_spec.keys():
@@ -860,6 +912,37 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 "done_key requested but more than one key present in the environment"
             )
         return self.done_keys[0]
+
+    @property
+    def full_done_spec(self):
+        """The full done spec.
+
+        ``full_done_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
+        that contains all the done entries.
+        It can be used to generate fake data with a structure that mimics the
+        one obtained at runtime.
+
+        Examples:
+            >>> import gymnasium
+            >>> from torchrl.envs import GymWrapper
+            >>> env = GymWrapper(gymnasium.make("Pendulum-v1"))
+            >>> env.full_done_spec
+            CompositeSpec(
+                done: DiscreteTensorSpec(
+                    shape=torch.Size([1]),
+                    space=DiscreteBox(n=2),
+                    device=cpu,
+                    dtype=torch.bool,
+                    domain=discrete),
+                truncated: DiscreteTensorSpec(
+                    shape=torch.Size([1]),
+                    space=DiscreteBox(n=2),
+                    device=cpu,
+                    dtype=torch.bool,
+                    domain=discrete), device=cpu, shape=torch.Size([]))
+
+        """
+        return self.output_spec['full_done_spec']
 
     # Done spec: done specs belong to output_spec
     @property
@@ -982,13 +1065,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         "An empty CompositeSpec was passed for the done spec. "
                         "This is currently not permitted."
                     )
-                _check_only_one_entry(
-                    value,
-                    error=RuntimeError(
-                        "done_spec has more than one leaf entry for a CompositeSpec. "
-                        "Only one leaf entry per composite spec is currently allowed"
-                    ),
-                )
             else:
                 value = CompositeSpec(
                     done=value.to(device), shape=self.batch_size, device=device
@@ -1063,6 +1139,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         finally:
             self.output_spec.lock_()
 
+    full_observation_spec = observation_spec
+
     # state spec: state specs belong to input_spec
     @property
     def state_spec(self) -> CompositeSpec:
@@ -1079,12 +1157,22 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         a generic data container for environment inputs that are not action data.
 
         Examples:
-            >>> from torchrl.envs.libs.gym import GymEnv
-            >>> env = GymEnv("Pendulum-v1")
-            >>> # Gym has not state input so this is empty
+            >>> from torchrl.envs import BraxEnv
+            >>> for envname in BraxEnv.available_envs:
+            ...     break
+            >>> env = BraxEnv(envname)
             >>> env.state_spec
             CompositeSpec(
-            , device=cpu, shape=torch.Size([]))
+                state: CompositeSpec(
+                    pipeline_state: CompositeSpec(
+                        q: UnboundedContinuousTensorSpec(
+                            shape=torch.Size([15]),
+                            space=None,
+                            device=cpu,
+                            dtype=torch.float32,
+                            domain=continuous),
+                [...], device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
 
         """
         state_spec = self.input_spec["full_state_spec"]
@@ -1118,6 +1206,33 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 self.input_spec["full_state_spec"] = value.to(device)
         finally:
             self.input_spec.lock_()
+
+    @property
+    def full_state_spec(self):
+        """The full state spec.
+
+        ``full_state_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
+        that contains all the state entries (ie, the input data that is not action).
+
+        Examples:
+            >>> from torchrl.envs import BraxEnv
+            >>> for envname in BraxEnv.available_envs:
+            ...     break
+            >>> env = BraxEnv(envname)
+            >>> env.full_state_spec
+            CompositeSpec(
+                state: CompositeSpec(
+                    pipeline_state: CompositeSpec(
+                        q: UnboundedContinuousTensorSpec(
+                            shape=torch.Size([15]),
+                            space=None,
+                            device=cpu,
+                            dtype=torch.float32,
+                            domain=continuous),
+                [...], device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
+
+        """
+        return self.state_spec
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -1297,6 +1412,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 reset_value = tensordict.get(reset_key, None) if tensordict is not None else None
                 if reset_value is not None:
                     for done_key in done_key_group:
+                        print(reset_key, reset_value)
                         if tensordict_reset.get(done_key)[reset_value].any():
                             raise DONE_AFTER_RESET_ERROR
                 else:

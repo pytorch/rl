@@ -20,7 +20,7 @@ from _utils_internal import (
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED,
+    PONG_VERSIONED,rand_reset
 )
 from mocking_classes import (
     ActionObsMergeLinear,
@@ -471,10 +471,7 @@ class TestParallel:
         )
         td = TensorDict(
             source={"action": env0.action_spec.rand((N,))},
-            batch_size=[
-                N,
-            ],
-        )
+            batch_size=[N])
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -489,10 +486,8 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.rand()},
-            batch_size=[
-                N,
-            ],
+            source=rand_reset(env_parallel),
+            batch_size=[N]
         )
         env_parallel.reset(tensordict=td_reset)
 
@@ -547,9 +542,7 @@ class TestParallel:
 
         td = TensorDict(
             source={"action": env0.action_spec.rand((N,))},
-            batch_size=[
-                N,
-            ],
+            batch_size=[N]
         )
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
@@ -565,10 +558,8 @@ class TestParallel:
             _ = env_parallel.step(td)
 
         td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.rand()},
-            batch_size=[
-                N,
-            ],
+            source=rand_reset(env_parallel),
+            batch_size=[N]
         )
         env_parallel.reset(tensordict=td_reset)
 
@@ -932,20 +923,17 @@ class TestParallel:
         assert (td["next", "done"] == 1).all()
         assert (td["next"]["observation"] == max_steps + 1).all()
 
-        _reset = env.done_spec.rand()
-        while not _reset.any():
-            _reset = env.done_spec.rand()
-
         env._allow_done_after_reset = True
         td_reset = env.reset(
-            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+            TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
         )
         env.close()
+        reset = td_reset['_reset']
 
-        assert (td_reset["done"][_reset] == 0).all()
-        assert (td_reset["observation"][_reset] == 0).all()
-        assert (td_reset["done"][~_reset] == 1).all()
-        assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+        assert (td_reset["done"][reset] == 0).all()
+        assert (td_reset["observation"][reset] == 0).all()
+        assert (td_reset["done"][~reset] == 1).all()
+        assert (td_reset["observation"][~reset] == max_steps + 1).all()
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
@@ -1030,18 +1018,16 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     assert (td["next", "done"] == 1).all()
     assert (td["next", "observation"] == max_steps + 1).all()
 
-    _reset = env.done_spec.rand()
-    while not _reset.any():
-        _reset = env.done_spec.rand()
     env._allow_done_after_reset = True
     td_reset = env.reset(
-        TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
     )
+    reset = td_reset['_reset']
 
-    assert (td_reset["done"][_reset] == 0).all()
-    assert (td_reset["observation"][_reset] == 0).all()
-    assert (td_reset["done"][~_reset] == 1).all()
-    assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+    assert (td_reset["done"][reset] == 0).all()
+    assert (td_reset["observation"][reset] == 0).all()
+    assert (td_reset["done"][~reset] == 1).all()
+    assert (td_reset["observation"][~reset] == max_steps + 1).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")

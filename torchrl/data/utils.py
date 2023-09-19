@@ -222,23 +222,6 @@ def contains_lazy_spec(spec: TensorSpec) -> bool:
     return False
 
 
-def _check_only_one_entry(
-    spec: CompositeSpec,
-    error: RuntimeError,
-    recursive: bool = True,
-):
-    found_entry = False
-    for key, value in spec.items():
-        if isinstance(value, CompositeSpec):
-            _check_only_one_entry(value, error, recursive)
-        else:
-            if key == "done":
-                if found_entry:
-                    raise error
-                else:
-                    found_entry = True
-
-
 class CloudpickleWrapper(object):
     """A wrapper for functions that allow for serialization in multiprocessed settings."""
 

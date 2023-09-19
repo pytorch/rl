@@ -426,8 +426,20 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     libname = "gym"
 
     @staticmethod
-    def get_library_name(env):
-        # try gym
+    def get_library_name(env) -> str:
+        """Given a gym environment, returns the backend name (either gym or gymnasium).
+
+        This can be used to set the appropriate backend when needed:
+
+        Examples:
+            >>> env = gymnasium.make("Pendulum-v1")
+            >>> with set_gym_backend(env):
+            ...    env = GymWrapper(env)
+
+        :class:`~GymWrapper` and similar use this method to set their method
+        to the right backend during instantiation.
+
+        """
         try:
             import gym
 
@@ -473,9 +485,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # with set_gym_backend + allowing for parallel execution (which would
         # be troublesome when both an old version of gym and recent gymnasium
         # are present within the same virtual env).
+        #
         # These calls seemingly do nothing but they actually get rid of the @implement_for decorator.
         # We execute them within the set_gym_backend context manager to make sure we get
         # the right implementation.
+        #
+        # This method is executed by the metaclass of GymWrapper.
         with set_gym_backend(self.get_library_name(self._env)):
             self._reset_output_transform = self._reset_output_transform
             self._output_transform = self._output_transform
