@@ -1708,7 +1708,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
             if not break_when_any_done and any_done:
                 self.reset(tensordict)
-                tensordict.exclude(*self.reset_keys, inplace=True)
+            tensordict.exclude(*self.reset_keys, inplace=True)
 
             if callback is not None:
                 callback(self, tensordict)
