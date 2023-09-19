@@ -4418,7 +4418,6 @@ class StepCounter(Transform):
         ):
             step_count = tensordict.get(step_count_key, default=None)
             reset = tensordict.get(reset_key, default=None)
-            print('reset within transform', reset)
             if reset is None:
                 # get done status, just to inform the reset shape, dtype and device
                 for entry in done_list_sorted:
@@ -4433,7 +4432,6 @@ class StepCounter(Transform):
             if step_count is None:
                 step_count = torch.zeros_like(reset, dtype=torch.int64)
 
-            print('final reset', reset)
             # zero the step count if reset is needed
             step_count = torch.where(~reset, step_count, 0)
             tensordict.set(step_count_key, step_count)
