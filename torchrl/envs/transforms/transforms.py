@@ -37,7 +37,7 @@ from torchrl.data.tensor_specs import (
     TensorSpec,
     UnboundedContinuousTensorSpec,
 )
-from torchrl.envs.common import EnvBase, make_tensordict
+from torchrl.envs.common import EnvBase, make_tensordict, _EnvPostInit
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
 from torchrl.envs.utils import _sort_keys, done_or_truncated, step_mdp
@@ -463,8 +463,14 @@ class Transform(nn.Module):
         self.empty_cache()
         return super().to(*args, **kwargs)
 
+class _TEnvPostInit(_EnvPostInit):
+    def __call__(self, *args, **kwargs):
+        instance: EnvBase = super().__call__(*args, **kwargs)
+        # we skip the materialization of the specs, because this can't be done with lazy
+        # transforms such as ObservationNorm.
+        return instance
 
-class TransformedEnv(EnvBase):
+class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
     """A transformed_in environment.
 
     Args:
@@ -612,6 +618,12 @@ but got an object of type {type(transform)}."""
         """Observation spec of the transformed environment."""
         if self.__dict__.get("_output_spec", None) is None or not self.cache_specs:
             output_spec = self.base_env.output_spec.clone()
+
+            # remove cached key values
+            self.__dict__['_done_keys'] = None
+            self.__dict__['_reward_keys'] = None
+            self.__dict__['_reset_keys'] = None
+
             output_spec.unlock_()
             output_spec = self.transform.transform_output_spec(output_spec)
             output_spec.lock_()
@@ -4252,10 +4264,11 @@ class StepCounter(Transform):
             entry to ``True``.
         truncated_keys (list of NestedKey, optional): the keys where the truncated entries
             should be written. Defaults to ``["truncated"]``, which is recognised by
-            data collectors as a reset signal. Must match the length of ``step_count_keys`` and ``done_keys``,
+            data collectors as a reset signal.
+            Must match the length of ``step_count_keys`` and ``done_keys``,
             if provided.
             If the transform is nested within a transformed environment, the
-            truncated entry will be part of the ``done_spec``.
+            truncated entry will be integrated in the ``done_spec``.
         step_count_keys (list of NestedKeys, optional): the key names of the step
             count. Must match the length of ``truncated_keys`` and ``done_keys``,
             if provided. If not, it will default to the ``"step_count"`` key name.
@@ -4271,7 +4284,8 @@ class StepCounter(Transform):
         >>> import gymnasium
         >>> from torchrl.envs import GymWrapper
         >>> base_env = GymWrapper(gymnasium.make("Pendulum-v1"))
-        >>> env = TransformedEnv(base_env, StepCounter(max_steps=5))
+        >>> env = TransformedEnv(base_env,
+        ...     StepCounter(max_steps=5))
         >>> rollout = env.rollout(100)
         >>> print(rollout)
         TensorDict(
@@ -4377,7 +4391,7 @@ class StepCounter(Transform):
     def done_keys(self):
         done_keys = self._done_keys
         if done_keys is None:
-            if self.parent:
+            if self.parent is not None:
                 self._done_keys = done_keys = self.parent.done_keys
             else:
                 self._done_keys = done_keys = ["done"]
@@ -4401,11 +4415,16 @@ class StepCounter(Transform):
 
     @property
     def reset_keys(self):
-        return self.parent.reset_keys
+        if self.parent is not None:
+            return self.parent.reset_keys
+        # fallback on default "_reset"
+        return ["_reset"]
 
     @property
     def done_keys_groups(self):
-        return self.parent.done_keys_groups
+        if self.parent is not None:
+            return self.parent.done_keys_groups
+        return [["done", "truncated"]]
 
     @property
     def full_done_spec(self):
@@ -4561,11 +4580,36 @@ class StepCounter(Transform):
 
 
 class ExcludeTransform(Transform):
-    """Excludes keys from the input tensordict.
+    """Excludes keys from the data.
 
     Args:
         *excluded_keys (iterable of NestedKey): The name of the keys to exclude. If the key is
             not present, it is simply ignored.
+
+    Examples:
+        >>> import gymnasium
+        >>> from torchrl.envs import GymWrapper
+        >>> env = TransformedEnv(
+        ...     GymWrapper(gymnasium.make("Pendulum-v1")),
+        ...     ExcludeTransform("truncated")
+        ... )
+        >>> env.rollout(3)
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=cpu,
+            is_shared=False)
 
     """
 
@@ -4578,8 +4622,6 @@ class ExcludeTransform(Transform):
                 "excluded keys must be a list or tuple of strings or tuples of strings."
             )
         self.excluded_keys = excluded_keys
-        if "reward" in excluded_keys:
-            raise RuntimeError("'reward' cannot be excluded from the keys.")
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.exclude(*self.excluded_keys)
@@ -4589,17 +4631,25 @@ class ExcludeTransform(Transform):
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.exclude(*self.excluded_keys)
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if any(key in observation_spec.keys(True, True) for key in self.excluded_keys):
-            return CompositeSpec(
-                {
-                    key: value
-                    for key, value in observation_spec.items()
-                    if unravel_key(key) not in self.excluded_keys
-                },
-                shape=observation_spec.shape,
-            )
-        return observation_spec
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        full_done_spec = output_spec["full_done_spec"]
+        full_reward_spec = output_spec["full_reward_spec"]
+        full_observation_spec = output_spec["full_observation_spec"]
+        for key in self.excluded_keys:
+            # done_spec
+            if unravel_key(key) in list(full_done_spec.keys(True, True)):
+                del full_done_spec[key]
+                continue
+            # reward_spec
+            if unravel_key(key) in list(full_reward_spec.keys(True, True)):
+                del full_reward_spec[key]
+                continue
+            # observation_spec
+            if unravel_key(key) in list(full_observation_spec.keys(True, True)):
+                del full_observation_spec[key]
+                continue
+            raise KeyError(f"Key {key} not found in the environment outputs.")
+        return output_spec
 
 
 class SelectTransform(Transform):
@@ -4613,9 +4663,39 @@ class SelectTransform(Transform):
         *selected_keys (iterable of NestedKey): The name of the keys to select. If the key is
             not present, it is simply ignored.
 
+    Keyword Args:
+        keep_rewards (bool, optional): if ``False``, the reward keys must be provided
+            if they should be kept. Defaults to ``True``.
+        keep_dones (bool, optional): if ``False``, the done keys must be provided
+            if they should be kept. Defaults to ``True``.
+
+        >>> import gymnasium
+        >>> from torchrl.envs import GymWrapper
+        >>> env = TransformedEnv(
+        ...     GymWrapper(gymnasium.make("Pendulum-v1")),
+        ...     SelectTransform("observation", "reward", "done", keep_dones=False), # we leave done behind
+        ... )
+        >>> env.rollout(3)  # the truncated key is now absent
+        TensorDict(
+            fields={
+                action: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        done: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False),
+                        reward: Tensor(shape=torch.Size([3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3]),
+                    device=cpu,
+                    is_shared=False),
+                observation: Tensor(shape=torch.Size([3, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=cpu,
+            is_shared=False)
+
     """
 
-    def __init__(self, *selected_keys):
+    def __init__(self, *selected_keys, keep_rewards=True, keep_dones=True):
         super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
         try:
             selected_keys = unravel_key_list(selected_keys)
@@ -4624,40 +4704,64 @@ class SelectTransform(Transform):
                 "selected keys must be a list or tuple of strings or tuples of strings."
             )
         self.selected_keys = selected_keys
+        self.keep_done_keys = keep_dones
+        self.keep_reward_keys = keep_rewards
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.parent:
+        if self.parent is not None:
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
-        reward_key = self.parent.reward_key if self.parent else "reward"
-        done_key = self.parent.done_key if self.parent else "done"
+        if self.keep_reward_keys:
+            reward_keys = self.parent.reward_keys if self.parent else ["reward"]
+        else:
+            reward_keys = []
+        if self.keep_done_keys:
+            done_keys = self.parent.done_keys if self.parent else ["done"]
+        else:
+            done_keys = []
         return tensordict.select(
-            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
+            *self.selected_keys, *reward_keys, *done_keys, *input_keys, strict=False
         )
 
     forward = _call
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self.parent:
+        if self.parent is not None:
             input_keys = self.parent.input_spec.keys(True, True)
         else:
             input_keys = []
-        reward_key = self.parent.reward_key if self.parent else "reward"
-        done_key = self.parent.done_key if self.parent else "done"
+        if self.keep_reward_keys:
+            reward_keys = self.parent.reward_keys if self.parent else ["reward"]
+        else:
+            reward_keys = []
+        if self.keep_done_keys:
+            done_keys = self.parent.done_keys if self.parent else ["done"]
+        else:
+            done_keys = []
         return tensordict.select(
-            *self.selected_keys, reward_key, done_key, *input_keys, strict=False
+            *self.selected_keys, *reward_keys, *done_keys, *input_keys, strict=False
         )
 
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        return CompositeSpec(
-            {
-                key: value
-                for key, value in observation_spec.items()
-                if unravel_key(key) in self.selected_keys
-            },
-            shape=observation_spec.shape,
-        )
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        full_done_spec = output_spec["full_done_spec"]
+        full_reward_spec = output_spec["full_reward_spec"]
+        full_observation_spec = output_spec["full_observation_spec"]
+        if not self.keep_done_keys:
+            for key in list(full_done_spec.keys(True, True)):
+                if unravel_key(key) not in self.selected_keys:
+                    del full_done_spec[key]
+
+        for key in list(full_observation_spec.keys(True, True)):
+            if unravel_key(key) not in self.selected_keys:
+                del full_observation_spec[key]
+
+        if not self.keep_reward_keys:
+            for key in list(full_reward_spec.keys(True, True)):
+                if unravel_key(key) not in self.selected_keys:
+                    del full_reward_spec[key]
+
+        return output_spec
 
 
 class TimeMaxPool(Transform):

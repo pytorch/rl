@@ -2502,6 +2502,25 @@ class TestExcludeTransform(TransformBase):
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
 
+    def test_exclude_done(self):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a", "done" ))
+        assert "done" not in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    def test_exclude_reward(self):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a", "reward"))
+        assert "reward" not in env.reward_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        assert "reward" in env.reward_keys
+        check_env_specs(env)
+
+
     @pytest.mark.parametrize("nest_done", [True, False])
     @pytest.mark.parametrize("nest_reward", [True, False])
     def test_nested(self, nest_reward, nest_done):
@@ -2707,6 +2726,32 @@ class TestSelectTransform(TransformBase):
         assert "a" not in env.reset().keys()
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
+
+    @pytest.mark.parametrize("keep_done", [True, False])
+    def test_select_done(self,keep_done):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c", "done", keep_dones=keep_done))
+        assert "done" in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, SelectTransform("b", "c", keep_dones=keep_done))
+        if keep_done:
+            assert "done" in env.done_keys
+        else:
+            assert "done" not in env.done_keys
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("keep_reward", [True, False])
+    def test_select_reward(self,keep_reward):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, SelectTransform("b", "c", "reward", keep_rewards=keep_reward))
+        assert "reward" in env.reward_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, SelectTransform("b", "c", keep_rewards=keep_reward))
+        if keep_reward:
+            assert "reward" in env.reward_keys
+        else:
+            assert "reward" not in env.reward_keys
+        check_env_specs(env)
 
     @pytest.mark.parametrize("nest_done", [True, False])
     @pytest.mark.parametrize("nest_reward", [True, False])
@@ -7779,9 +7824,7 @@ class TestRenameTransform(TransformBase):
             ["observation_orig"],
             ["stuff"],
             ["observation_orig"],
-            [
-                "stuff",
-            ],
+            ["stuff"            ],
             create_copy=create_copy,
         )
         if compose:
@@ -7814,9 +7857,7 @@ class TestRenameTransform(TransformBase):
                     ["observation_orig"],
                     ["stuff"],
                     ["observation_orig"],
-                    [
-                        "stuff",
-                    ],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7830,10 +7871,10 @@ class TestRenameTransform(TransformBase):
                 ContinuousActionVecMockEnv(),
                 RenameTransform(
                     [
-                        "observation",
+                        "observation"
                     ],
                     [
-                        "stuff",
+                        "stuff"
                     ],
                     create_copy=create_copy,
                 ),
@@ -7850,7 +7891,7 @@ class TestRenameTransform(TransformBase):
                     ["stuff"],
                     ["observation_orig"],
                     [
-                        "stuff",
+                        "stuff"
                     ],
                     create_copy=create_copy,
                 ),
@@ -7867,10 +7908,10 @@ class TestRenameTransform(TransformBase):
             SerialEnv(2, make_env),
             RenameTransform(
                 [
-                    "observation",
+                    "observation"
                 ],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -7883,7 +7924,7 @@ class TestRenameTransform(TransformBase):
                 ["stuff"],
                 ["observation_orig"],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -7898,10 +7939,10 @@ class TestRenameTransform(TransformBase):
             ParallelEnv(2, make_env),
             RenameTransform(
                 [
-                    "observation",
+                    "observation"
                 ],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -7914,7 +7955,7 @@ class TestRenameTransform(TransformBase):
                 ["stuff"],
                 ["observation_orig"],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -7968,10 +8009,10 @@ class TestRenameTransform(TransformBase):
             ContinuousActionVecMockEnv(),
             RenameTransform(
                 [
-                    "observation",
+                    "observation"
                 ],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -7993,7 +8034,7 @@ class TestRenameTransform(TransformBase):
                 ["stuff"],
                 ["observation_orig"],
                 [
-                    "stuff",
+                    "stuff"
                 ],
                 create_copy=create_copy,
             ),
@@ -8007,6 +8048,28 @@ class TestRenameTransform(TransformBase):
             assert ("next", "observation_orig") not in r.keys(True)
         assert "stuff" in r.keys()
         assert ("next", "stuff") in r.keys(True)
+
+    def test_rename_done_reward(self, create_copy):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["done"],
+                [("nested", "other_done")],
+                create_copy=create_copy,
+            ),
+        )
+        assert ("nested", "other_done") in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["reward"],
+                [("nested", "reward")],
+                create_copy=create_copy,
+            ),
+        )
+        assert ("nested", "reward") in env.reward_keys
+        check_env_specs(env)
 
     def test_transform_model(self, create_copy):
         t = RenameTransform(["a"], ["b"], create_copy=create_copy)

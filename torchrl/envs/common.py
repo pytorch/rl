@@ -129,7 +129,18 @@ class EnvMetaData:
         )
 
 
-class EnvBase(nn.Module, metaclass=abc.ABCMeta):
+class _EnvPostInit(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        instance: EnvBase = super().__call__(*args, **kwargs)
+        # we access lazy attributed to make sure they're built properly.
+        # This isn't done in `__init__` because we don't know if supre().__init__
+        # will be called before or after the specs, batch size etc are set.
+        _ = instance.done_spec
+        _ = instance.reward_spec
+        _ = instance.state_spec
+        return instance
+
+class EnvBase(nn.Module, metaclass=_EnvPostInit):
     """Abstract environment parent class.
 
     Methods:
@@ -679,10 +690,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         By default, there will only be one key named "reward".
         """
-        out = self._reward_keys
-        if out is None:
-            out = self._get_reward_keys()
-        return out
+        result = self.__dict__.get("_reward_keys", None)
+        if result is not None:
+            return result
+        # caching this is risky, because the full_reward_spec can be modified by
+        # transforms without acknowledging the output_spec or the env.
+        # TransformedEnv will erase this value when computing a new output_spec though
+        # so we should be fine.
+        result = list(self.full_reward_spec.keys(True, True))
+        self.__dict__['_reward_keys'] = result
+        return result
 
     @property
     def reward_key(self):
@@ -784,22 +801,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             )
             reward_spec = self.output_spec["full_reward_spec"]
 
-        if len(self.reward_keys) > 1:
-            out = reward_spec
+        reward_keys = self.reward_keys
+        if len(reward_keys) > 1 or not len(reward_keys):
+            return reward_spec
         else:
-            try:
-                out = reward_spec[self.reward_key]
-            except KeyError:
-                # the key may have changed
-                raise KeyError(
-                    "The reward_key attribute seems to have changed. "
-                    "This occurs when a reward_spec is updated without "
-                    "calling `env.reward_spec = new_spec`. "
-                    "Make sure you rely on this  type of command "
-                    "to set the reward and other specs."
-                )
-
-        return out
+            return reward_spec[self.reward_keys[0]]
 
     @reward_spec.setter
     def reward_spec(self, value: TensorSpec) -> None:
@@ -894,10 +900,16 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
         By default, there will only be one key named "done".
         """
-        out = self._done_keys
-        if out is None:
-            out = self._get_done_keys()
-        return out
+        result = self.__dict__.get("_done_keys", None)
+        if result is not None:
+            return result
+        # caching this is risky, because the full_done_spec can be modified by
+        # transforms without acknowledging the output_spec or the env.
+        # TransformedEnv will erase this value when computing a new output_spec though
+        # so we should be fine.
+        result = list(self.full_done_spec.keys(True, True))
+        self.__dict__['_done_keys'] = result
+        return result
 
     @property
     def done_key(self):
@@ -1022,22 +1034,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
             )
             done_spec = self.output_spec["full_done_spec"]
-        if len(self.done_keys) > 1:
-            out = done_spec
+        done_keys = self.done_keys
+        if len(done_keys) > 1 or not len(done_keys):
+            return done_spec
         else:
-            try:
-                out = done_spec[self.done_key]
-            except KeyError:
-                # the key may have changed
-                raise KeyError(
-                    "The done_key attribute seems to have changed. "
-                    "This occurs when a done_spec is updated without "
-                    "calling `env.done_spec = new_spec`. "
-                    "Make sure you rely on this  type of command "
-                    "to set the done and other specs."
-                )
-
-        return out
+            return done_spec[self.done_keys[0]]
 
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
@@ -1768,8 +1769,11 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         done_keys = [[] for _ in range(len(reset_keys))]
         reset_keys_iter = iter(reset_keys)
         done_keys_iter = iter(done_keys)
-        curr_reset_key = next(reset_keys_iter)
-        curr_done_key = next(done_keys_iter)
+        try:
+            curr_reset_key = next(reset_keys_iter)
+            curr_done_key = next(done_keys_iter)
+        except StopIteration:
+            return done_keys
 
         for done_key in self.done_keys:
             while type(done_key) != type(curr_reset_key) or (isinstance(done_key, tuple) and done_key[:-1] != curr_reset_key[:-1]): # if they are string, they are at the same level

@@ -35,6 +35,7 @@ from torchrl.envs.gym_like import (
     default_info_dict_reader,
     GymLikeEnv,
 )
+from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.utils import _classproperty
 
@@ -385,7 +386,7 @@ def _is_from_pixels(env):
     return False
 
 
-class _AsyncMeta(abc.ABCMeta):
+class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
         if instance._is_batched:
