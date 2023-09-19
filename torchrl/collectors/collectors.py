@@ -611,13 +611,6 @@ class SyncDataCollector(DataCollectorBase):
         )
         self.return_same_td = return_same_td
 
-        self._tensordict = env.reset()
-        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
-        self._tensordict.set(
-            ("collector", "traj_ids"),
-            traj_ids,
-        )
-
         # If the policy has a valid spec, we use it
         if (
             hasattr(self.policy, "spec")
@@ -673,6 +666,13 @@ class SyncDataCollector(DataCollectorBase):
             ),
         )
         self._tensordict_out.refine_names(..., "time")
+
+        self._tensordict = env.reset()
+        traj_ids = torch.arange(self.n_env, device=env.device).view(self.env.batch_size)
+        self._tensordict.set(
+            ("collector", "traj_ids"),
+            traj_ids,
+        )
 
         if split_trajs is None:
             split_trajs = False
