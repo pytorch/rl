@@ -74,7 +74,7 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
-from torchrl.envs.libs.robohive import RoboHiveEnv
+from torchrl.envs.libs.robohive import RoboHiveEnv, _has_robohive
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
@@ -1977,9 +1977,18 @@ class TestPettingZoo:
             break
 
 
+@pytest.mark.skipif(not _has_robohive, reason="SMACv2 not found")
 class TestRoboHive:
-    @pytest.mark.parametrize("envname", RoboHiveEnv.env_list)
+    # unfortunately we must import robohive to get the available envs
+    # and this import will occur whenever pytest is run on this file.
+    # The other option would be not to use parametrize but that also
+    # means less informative error trace stacks.
+    # In the CI, robohive should not coexist with other libs so that's fine.
+    # Locally these imports can be annoying, especially given the amount of
+    # stuff printed by robohive.
+    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     @pytest.mark.parametrize("from_pixels", [True, False])
+    @set_gym_backend("gym")
     def test_robohive(self, envname, from_pixels):
         if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
             print("not testing envs with prebuilt rendering")

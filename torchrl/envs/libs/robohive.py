@@ -78,9 +78,15 @@ class RoboHiveEnv(GymEnv):
         else:
             return None
 
+    @_classproperty
+    def available_envs(cls):
+        if not _has_robohive:
+            return
+        RoboHiveEnv.register_envs()
+        yield from cls.env_list
+
     @classmethod
     def register_envs(cls):
-
         if not _has_robohive:
             raise ImportError(
                 "Cannot load robohive from the current virtual environment."
@@ -333,7 +339,3 @@ class RoboHiveEnv(GymEnv):
         env = gym.make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams
-
-
-if _has_robohive:
-    RoboHiveEnv.register_envs()
