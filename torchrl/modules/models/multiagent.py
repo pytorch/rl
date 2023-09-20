@@ -259,11 +259,11 @@ class MultiAgentConvNet(nn.Module):
 
     Examples:
         >>> import torch
-        ... from torchrl.modules import MultiAgentConvNet
-        ... batch = (3,2)
-        ... n_agents = 7
-        ... channels, x, y = 3, 100, 100
-        ... obs = torch.randn(*batch, n_agents, channels, x, y)
+        >>> from torchrl.modules import MultiAgentConvNet
+        >>> batch = (3,2)
+        >>> n_agents = 7
+        >>> channels, x, y = 3, 100, 100
+        >>> obs = torch.randn(*batch, n_agents, channels, x, y)
         >>> # First lets consider a centralised network with shared parameters.
         >>> cnn = MultiAgentConvNet(
         ...     n_agents,
