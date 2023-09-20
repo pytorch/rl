@@ -233,7 +233,7 @@ class MultiAgentMLP(nn.Module):
 class MultiAgentConvNet(nn.Module):
     """Multi-agent CNN.
 
-    This is a CNN that can operate in multi-agent contexts.
+    In MARL settings, agents may or may not share the same policy for their actions: we say that the parameters can be shared or not. Similarly, a network may take the entire observation space (across agents) or on a per-agent basis to compute its output, which we refer to as "centralized" and "non-centralized", respectively.
 
     It expects inputs with shape ``(*B, n_agents, channels, x, y)``.
 
