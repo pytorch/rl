@@ -9,7 +9,12 @@ import sys
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    generate_seeds,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -1561,100 +1566,6 @@ class TestHetEnvsCollector:
 
 
 class TestMultiKeyEnvsCollector:
-    @staticmethod
-    def check_rollout_consistency(td: TensorDict, max_steps: int):
-        index_batch_size = (0,) * (len(td.batch_size) - 1)
-
-        # Check done and reset for root
-        observation_is_max = td["next", "observation"][..., 0, 0, 0] == max_steps + 1
-        next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
-        assert (td["next", "done"][observation_is_max]).all()
-        assert (~td["next", "done"][~observation_is_max]).all()
-        # Obs after done is 0
-        assert (td["observation"][index_batch_size][1:][next_is_done] == 0).all()
-        # Obs after not done is previous obs
-        assert (
-            td["observation"][index_batch_size][1:][~next_is_done]
-            == td["next", "observation"][index_batch_size][:-1][~next_is_done]
-        ).all()
-        # Check observation and reward update with count action for root
-        action_is_count = td["action"].long().argmax(-1).to(torch.bool)
-        assert (
-            td["next", "observation"][action_is_count]
-            == td["observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "reward"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for root
-        assert (
-            td["next", "observation"][~action_is_count]
-            == td["observation"][~action_is_count]
-        ).all()
-        assert (td["next", "reward"][~action_is_count] == 0).all()
-
-        # Check done and reset for nested_1
-        observation_is_max = (
-            td["next", "nested_1", "observation"][..., 0] == max_steps + 1
-        )
-        next_is_done = td["next", "nested_1", "done"][index_batch_size][:-1].squeeze(-1)
-        assert (td["next", "nested_1", "done"][observation_is_max]).all()
-        assert (~td["next", "nested_1", "done"][~observation_is_max]).all()
-        # Obs after done is 0
-        assert (
-            td["nested_1", "observation"][index_batch_size][1:][next_is_done] == 0
-        ).all()
-        # Obs after not done is previous obs
-        assert (
-            td["nested_1", "observation"][index_batch_size][1:][~next_is_done]
-            == td["next", "nested_1", "observation"][index_batch_size][:-1][
-                ~next_is_done
-            ]
-        ).all()
-        # Check observation and reward update with count action for nested_1
-        action_is_count = td["nested_1"]["action"].to(torch.bool)
-        assert (
-            td["next", "nested_1", "observation"][action_is_count]
-            == td["nested_1", "observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for nested_1
-        assert (
-            td["next", "nested_1", "observation"][~action_is_count]
-            == td["nested_1", "observation"][~action_is_count]
-        ).all()
-        assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
-
-        # Check done and reset for nested_2
-        observation_is_max = (
-            td["next", "nested_2", "observation"][..., 0] == max_steps + 1
-        )
-        next_is_done = td["next", "nested_2", "done"][index_batch_size][:-1].squeeze(-1)
-        assert (td["next", "nested_2", "done"][observation_is_max]).all()
-        assert (~td["next", "nested_2", "done"][~observation_is_max]).all()
-        # Obs after done is 0
-        assert (
-            td["nested_2", "observation"][index_batch_size][1:][next_is_done] == 0
-        ).all()
-        # Obs after not done is previous obs
-        assert (
-            td["nested_2", "observation"][index_batch_size][1:][~next_is_done]
-            == td["next", "nested_2", "observation"][index_batch_size][:-1][
-                ~next_is_done
-            ]
-        ).all()
-        # Check observation and reward update with count action for nested_2
-        action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
-        assert (
-            td["next", "nested_2", "observation"][action_is_count]
-            == td["nested_2", "observation"][action_is_count] + 1
-        ).all()
-        assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
-        # Check observation and reward do not update with no-count action for nested_2
-        assert (
-            td["next", "nested_2", "observation"][~action_is_count]
-            == td["nested_2", "observation"][~action_is_count]
-        ).all()
-        assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
-
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("frames_per_batch", [4, 8, 16])
     @pytest.mark.parametrize("max_steps", [2, 3])
@@ -1675,7 +1586,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        TestMultiKeyEnvsCollector.check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
