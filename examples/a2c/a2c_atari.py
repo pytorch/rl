@@ -141,15 +141,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         for k, batch in enumerate(data_buffer):
 
+            batch = batch.to(device)
+
             # Linearly decrease the learning rate and clip epsilon
             alpha = 1 - (num_network_updates / total_network_updates)
             if cfg.optim.anneal_lr:
                 for group in optim.param_groups:
                     group["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
-
-            # Get a data batch
-            batch = batch.to(device)
 
             # Forward pass A2C loss
             loss = loss_module(batch)
