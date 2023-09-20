@@ -74,7 +74,7 @@ from torchrl.envs.libs.habitat import _has_habitat, HabitatEnv
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
-from torchrl.envs.libs.robohive import RoboHiveEnv, _has_robohive
+from torchrl.envs.libs.robohive import _has_robohive, RoboHiveEnv
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.libs.vmas import _has_vmas, VmasEnv, VmasWrapper
 from torchrl.envs.utils import check_env_specs, ExplorationType, MarlGroupMapType
