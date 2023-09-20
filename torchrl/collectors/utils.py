@@ -126,12 +126,18 @@ def _bring_reset_to_root(data: TensorDictBase) -> torch.Tensor:
     reset = False
 
     def skim_through(td, reset=reset):
-        for key, value in td.items():
+        for key in td.keys():
             if key == "_reset":
+                value = td.get(key)
                 if value.ndim > n:
-                    value = value.flatten(n, value.ndim)
+                    value = value.flatten(n, value.ndim-1)
                 reset = reset | value.any(-1)
-            elif is_tensor_collection(value):
+            # we need to check the entry class without getting the value,
+            # because some lazy tensordicts may prevent calls to items().
+            # This introduces some slight overhead as when we encounter a
+            # tensordict item, we'll need to get it twice.
+            elif is_tensor_collection(td.entry_class(key)):
+                value = td.get(key)
                 reset = skim_through(value, reset=reset)
         return reset
 
