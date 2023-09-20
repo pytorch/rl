@@ -17,7 +17,7 @@ import pytest
 import torch
 import torch.cuda
 
-from tensordict import tensorclass
+from tensordict import tensorclass, TensorDict
 from torchrl._utils import implement_for, seed_generator
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
@@ -347,3 +347,89 @@ def rollout_consistency_assertion(
     assert (
         (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
     ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
+
+
+def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
+    index_batch_size = (0,) * (len(td.batch_size) - 1)
+
+    # Check done and reset for root
+    observation_is_max = td["next", "observation"][..., 0, 0, 0] == max_steps + 1
+    next_is_done = td["next", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "done"][observation_is_max]).all()
+    assert (~td["next", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (td["observation"][index_batch_size][1:][next_is_done] == 0).all()
+    # Obs after not done is previous obs
+    assert (
+        td["observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for root
+    action_is_count = td["action"].long().argmax(-1).to(torch.bool)
+    assert (
+        td["next", "observation"][action_is_count]
+        == td["observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "reward"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for root
+    assert (
+        td["next", "observation"][~action_is_count]
+        == td["observation"][~action_is_count]
+    ).all()
+    assert (td["next", "reward"][~action_is_count] == 0).all()
+
+    # Check done and reset for nested_1
+    observation_is_max = td["next", "nested_1", "observation"][..., 0] == max_steps + 1
+    next_is_done = td["next", "nested_1", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "nested_1", "done"][observation_is_max]).all()
+    assert (~td["next", "nested_1", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (
+        td["nested_1", "observation"][index_batch_size][1:][next_is_done] == 0
+    ).all()
+    # Obs after not done is previous obs
+    assert (
+        td["nested_1", "observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "nested_1", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for nested_1
+    action_is_count = td["nested_1"]["action"].to(torch.bool)
+    assert (
+        td["next", "nested_1", "observation"][action_is_count]
+        == td["nested_1", "observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "nested_1", "gift"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for nested_1
+    assert (
+        td["next", "nested_1", "observation"][~action_is_count]
+        == td["nested_1", "observation"][~action_is_count]
+    ).all()
+    assert (td["next", "nested_1", "gift"][~action_is_count] == 0).all()
+
+    # Check done and reset for nested_2
+    observation_is_max = td["next", "nested_2", "observation"][..., 0] == max_steps + 1
+    next_is_done = td["next", "nested_2", "done"][index_batch_size][:-1].squeeze(-1)
+    assert (td["next", "nested_2", "done"][observation_is_max]).all()
+    assert (~td["next", "nested_2", "done"][~observation_is_max]).all()
+    # Obs after done is 0
+    assert (
+        td["nested_2", "observation"][index_batch_size][1:][next_is_done] == 0
+    ).all()
+    # Obs after not done is previous obs
+    assert (
+        td["nested_2", "observation"][index_batch_size][1:][~next_is_done]
+        == td["next", "nested_2", "observation"][index_batch_size][:-1][~next_is_done]
+    ).all()
+    # Check observation and reward update with count action for nested_2
+    action_is_count = td["nested_2"]["azione"].squeeze(-1).to(torch.bool)
+    assert (
+        td["next", "nested_2", "observation"][action_is_count]
+        == td["nested_2", "observation"][action_is_count] + 1
+    ).all()
+    assert (td["next", "nested_2", "reward"][action_is_count] == 1).all()
+    # Check observation and reward do not update with no-count action for nested_2
+    assert (
+        td["next", "nested_2", "observation"][~action_is_count]
+        == td["nested_2", "observation"][~action_is_count]
+    ).all()
+    assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()

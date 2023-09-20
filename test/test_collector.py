@@ -9,7 +9,12 @@ import sys
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    generate_seeds,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -29,7 +34,6 @@ from mocking_classes import (
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
-from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -1602,7 +1606,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10

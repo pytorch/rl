@@ -377,10 +377,10 @@ class SMACv2Wrapper(_EnvWrapper):
         obs = self.get_obs()
         state = self.get_state()
         info = self.observation_spec["info"].encode(info)
-        if "episode_limit" not in info.keys():
-            info["episode_limit"] = self.observation_spec["info"][
-                "episode_limit"
-            ].zero()
+        actual_keys = info.keys()
+        for expected_key, spec in self.observation_spec["info"].items():
+            if expected_key not in actual_keys:
+                info[expected_key] = spec.zero()
 
         reward = torch.tensor(
             reward, device=self.device, dtype=torch.float32
