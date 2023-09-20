@@ -20,7 +20,7 @@ from tensordict import TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process, VERBOSE
+from torchrl._utils import _check_for_faulty_process, VERBOSE, ProcessNoWarn
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -715,7 +715,7 @@ class ParallelEnv(_BatchedEnv):
                 if not isinstance(env_fun, EnvCreator):
                     env_fun = CloudpickleWrapper(env_fun)
 
-                process = ctx.Process(
+                process = ProcessNoWarn(
                     target=_run_worker_pipe_shared_mem,
                     args=(
                         parent_pipe,

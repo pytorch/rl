@@ -33,7 +33,7 @@ from torchrl._utils import (
     accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
-    VERBOSE,
+    VERBOSE, ProcessNoWarn,
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
@@ -1335,7 +1335,7 @@ class _MultiDataCollector(DataCollectorBase):
                 "idx": i,
                 "interruptor": self.interruptor,
             }
-            proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
+            proc = ProcessNoWarn(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
             try:
                 proc.start()

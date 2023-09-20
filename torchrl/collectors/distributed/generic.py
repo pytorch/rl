@@ -16,7 +16,7 @@ import torch.cuda
 from tensordict import TensorDict
 from torch import multiprocessing as mp, nn
 
-from torchrl._utils import VERBOSE
+from torchrl._utils import VERBOSE, ProcessNoWarn
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,
@@ -611,7 +611,7 @@ class DistributedDataCollector(DataCollectorBase):
         if not isinstance(env_make, (EnvBase, EnvCreator)):
             env_make = CloudpickleWrapper(env_make)
         TCP_PORT = self.tcp_port
-        job = mp.Process(
+        job = ProcessNoWarn(
             target=_distributed_init_collection_node,
             args=(
                 i + 1,

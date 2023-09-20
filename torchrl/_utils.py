@@ -23,7 +23,7 @@ from typing import Any, Callable, cast, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
-
+from torch import multiprocessing as mp
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
 RL_WARNINGS = strtobool(os.environ.get("RL_WARNINGS", "1"))
@@ -529,3 +529,11 @@ class _DecoratorContextManager:
 def get_trace():
     """A simple debugging util to spot where a function is being called."""
     traceback.print_stack()
+
+class ProcessNoWarn(mp.Process):
+   def run(self, *args, **kwargs):
+      import warnings
+      with warnings.catch_warnings():
+         warnings.simplefilter("ignore")
+         return mp.Process.run(self, *args, **kwargs)
+
