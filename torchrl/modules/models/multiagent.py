@@ -270,7 +270,7 @@ class MultiAgentConvNet(nn.Module):
         ...     centralised = True,
         ...     share_params = True
         ... )
-        ... print(cnn)
+        >>> print(cnn)
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0): ConvNet(
