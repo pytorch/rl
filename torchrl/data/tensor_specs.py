@@ -1230,7 +1230,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def squeeze(self, dim=None):
         if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
             raise ValueError(
-                "Final dimension of OneHotDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
 
         shape = _squeezed_shape(self.shape, dim)
@@ -1251,7 +1251,7 @@ class OneHotDiscreteTensorSpec(TensorSpec):
     def unsqueeze(self, dim: int):
         if dim in (len(self.shape), -1):
             raise ValueError(
-                "Final dimension of OneHotDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
 
         shape = _unsqueezed_shape(self.shape, dim)
@@ -1266,6 +1266,31 @@ class OneHotDiscreteTensorSpec(TensorSpec):
             use_register=self.use_register,
             mask=mask,
         )
+
+    def unbind(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                f"Final dimension of {type(self)} must remain unchanged"
+            )
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        mask = self.mask
+        if mask is not None:
+            mask = mask.unbind(dim)
+        else:
+            mask = (None,) * self.shape[dim]
+        return tuple(self.__class__(
+            n=shape[-1],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            use_register=self.use_register,
+            mask=mask[i],
+        ) for i in range(self.shape[dim]))
 
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
@@ -1590,6 +1615,27 @@ class BoundedTensorSpec(TensorSpec):
             dtype=self.dtype,
         )
 
+    def unbind(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                f"Final dimension of {type(self)} must remain unchanged"
+            )
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        low = self.space.low.unbind(dim)
+        high = self.space.high.unbind(dim)
+        return tuple(self.__class__(
+            low=low[i],
+            high=high[i],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        ) for i in range(self.shape[dim]))
+
     def rand(self, shape=None) -> torch.Tensor:
         if shape is None:
             shape = torch.Size([])
@@ -1784,6 +1830,18 @@ class UnboundedContinuousTensorSpec(TensorSpec):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+    def unbind(self, dim: int):
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        return tuple(self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        ) for i in range(self.shape[dim]))
 
 
 @dataclass(repr=False)
@@ -1876,6 +1934,18 @@ class UnboundedDiscreteTensorSpec(TensorSpec):
         """Indexes the current TensorSpec based on the provided index."""
         indexed_shape = torch.Size(_shape_indexing(self.shape, idx))
         return self.__class__(shape=indexed_shape, device=self.device, dtype=self.dtype)
+    def unbind(self, dim: int):
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        return tuple(self.__class__(
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+        ) for i in range(self.shape[dim]))
 
 
 @dataclass(repr=False)
@@ -2169,7 +2239,7 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def squeeze(self, dim=None):
         if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
             raise ValueError(
-                "Final dimension of MultiOneHotDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
 
         shape = _squeezed_shape(self.shape, dim)
@@ -2187,13 +2257,33 @@ class MultiOneHotDiscreteTensorSpec(OneHotDiscreteTensorSpec):
     def unsqueeze(self, dim: int):
         if dim in (len(self.shape), -1):
             raise ValueError(
-                "Final dimension of MultiOneHotDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
         shape = _unsqueezed_shape(self.shape, dim)
         mask = self.mask.reshape(shape) if self.mask is not None else None
         return self.__class__(
             nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype, mask=mask
         )
+    def unbind(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                f"Final dimension of {type(self)} must remain unchanged"
+            )
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        mask = self.mask
+        if mask is None:
+            mask = (None,)*self.shape[dim]
+        else:
+            mask = mask.unbind(dim)
+
+        return tuple(self.__class__(
+            nvec=self.nvec, shape=shape, device=self.device, dtype=self.dtype, mask=mask[i]
+        ) for i in range(self.shape[dim]))
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index.
@@ -2418,6 +2508,25 @@ class DiscreteTensorSpec(TensorSpec):
             dtype=self.dtype,
             mask=mask,
         )
+    def unbind(self, dim: int):
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        mask = self.mask
+        if mask is None:
+            mask = (None,)*self.shape[dim]
+        else:
+            mask = mask.unbind(dim)
+        return tuple(self.__class__(
+            n=self.space.n,
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask[i]
+        ) for i in range(self.shape[dim]))
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
@@ -2489,7 +2598,7 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
                 f"shape of the {self.__class__.__name__} spec in expand()."
             )
         return self.__class__(
-            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
     def squeeze(self, dim=None):
@@ -2497,14 +2606,29 @@ class BinaryDiscreteTensorSpec(DiscreteTensorSpec):
         if shape is None:
             return self
         return self.__class__(
-            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
 
     def unsqueeze(self, dim: int):
         shape = _unsqueezed_shape(self.shape, dim)
         return self.__class__(
-            n=shape[-1], shape=shape, device=self.device, dtype=self.dtype
+            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
         )
+    def unbind(self, dim: int):
+        if dim in (len(self.shape)-1, -1):
+            raise ValueError(
+                f"Final dimension of {type(self)} must remain unchanged"
+            )
+
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        return tuple(self.__class__(
+            n=self.shape[-1], shape=shape, device=self.device, dtype=self.dtype
+        ) for i in range(self.shape[dim]))
 
     def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> CompositeSpec:
         if isinstance(dest, torch.dtype):
@@ -2821,9 +2945,8 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def squeeze(self, dim: int | None = None):
         if self.shape[-1] == 1 and dim in (len(self.shape), -1, None):
             raise ValueError(
-                "Final dimension of MultiDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
-
         shape = _squeezed_shape(self.shape, dim)
         if shape is None:
             return self
@@ -2842,7 +2965,7 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
     def unsqueeze(self, dim: int):
         if dim in (len(self.shape), -1):
             raise ValueError(
-                "Final dimension of MultiDiscreteTensorSpec must remain unchanged"
+                f"Final dimension of {type(self)} must remain unchanged"
             )
         shape = _unsqueezed_shape(self.shape, dim)
         nvec = self.nvec.unsqueeze(dim)
@@ -2856,6 +2979,30 @@ class MultiDiscreteTensorSpec(DiscreteTensorSpec):
             dtype=self.dtype,
             mask=mask,
         )
+    def unbind(self, dim: int):
+        if dim in (len(self.shape), -1):
+            raise ValueError(
+                f"Final dimension of {type(self)} must remain unchanged"
+            )
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = tuple(s for i, s in enumerate(self.shape) if i != dim)
+        mask = self.mask
+        nvec = self.nvec.unbind(dim)
+        if mask is not None:
+            mask = mask.unbind(dim)
+        else:
+            mask = (None,)*self.shape[dim]
+        return tuple(self.__class__(
+            nvec=nvec[i],
+            shape=shape,
+            device=self.device,
+            dtype=self.dtype,
+            mask=mask[i],
+        ) for i in range(self.shape[dim]))
 
     def __getitem__(self, idx: SHAPE_INDEX_TYPING):
         """Indexes the current TensorSpec based on the provided index."""
@@ -3507,7 +3654,19 @@ class CompositeSpec(TensorSpec):
             shape=shape,
             device=device,
         )
-
+    def unbind(self, dim: int):
+        orig_dim = dim
+        if dim < 0:
+            dim = len(self.shape) + dim
+        if dim < 0:
+            raise ValueError(f"Cannot unbind along dim {orig_dim} with shape {self.shape}.")
+        shape = (s for i, s in enumerate(self.shape) if i != dim)
+        unbound_vals = {key: val.unbind(dim) for key, val in self.items()}
+        return tuple(
+            self.__class__(
+                {key: val[i] for key, val in unbound_vals.items()}, shape=shape, device=self.device,
+            ) for i in range(self.shape[dim])
+        )
     def lock_(self, recurse=False):
         """Locks the CompositeSpec and prevents modification of its content.
 
