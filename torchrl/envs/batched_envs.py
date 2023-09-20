@@ -25,8 +25,12 @@ from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TY
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _set_single_key, _sort_keys, clear_mpi_env_vars, \
-    _bring_reset_to_root
+from torchrl.envs.utils import (
+    _bring_reset_to_root,
+    _set_single_key,
+    _sort_keys,
+    clear_mpi_env_vars,
+)
 
 # legacy
 from .libs.envpool import MultiThreadedEnv, MultiThreadedEnvWrapper  # noqa: F401
@@ -580,7 +584,9 @@ class SerialEnv(_BatchedEnv):
         if tensordict is not None:
             needs_resetting = _bring_reset_to_root(tensordict)
         else:
-            needs_resetting = torch.ones((self.num_workers,), device=self.device, dtype=torch.bool)
+            needs_resetting = torch.ones(
+                (self.num_workers,), device=self.device, dtype=torch.bool
+            )
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -811,8 +817,14 @@ class ParallelEnv(_BatchedEnv):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         if tensordict is not None:
             needs_resetting = _bring_reset_to_root(tensordict)
+            if needs_resetting.ndim > 2:
+                needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim-1)
+            if needs_resetting.ndim > 1:
+                needs_resetting = needs_resetting.any(-1)
         else:
-            needs_resetting = torch.ones((self.num_workers,), device=self.device, dtype=torch.bool)
+            needs_resetting = torch.ones(
+                (self.num_workers,), device=self.device, dtype=torch.bool
+            )
 
         workers = []
 

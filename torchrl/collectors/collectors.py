@@ -30,8 +30,8 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
     _check_for_faulty_process,
-    accept_remote_rref_udf_invocation,
     _ProcessNoWarn,
+    accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
     VERBOSE,
@@ -42,11 +42,12 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
+    _bring_reset_to_root,
     _convert_exploration_type,
     done_or_truncated,
     ExplorationType,
     set_exploration_type,
-    step_mdp, _bring_reset_to_root,
+    step_mdp,
 )
 
 _TIMEOUT = 1.0
@@ -888,10 +889,10 @@ class SyncDataCollector(DataCollectorBase):
                             out=self._tensordict_out,
                         )
                 except KeyError:
-                    print('\n\n err during stack')
-                    print('tensordict list', tensordicts)
-                    print('dest', self._tensordict_out)
-                    print('env', self.env)
+                    print("\n\n err during stack")
+                    print("tensordict list", tensordicts)
+                    print("dest", self._tensordict_out)
+                    print("env", self.env)
                     raise
         return self._tensordict_out
 

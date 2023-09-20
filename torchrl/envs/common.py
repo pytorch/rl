@@ -1415,20 +1415,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 self.reset_keys, self.done_keys_groups
             ):
                 reset_value = (
-                    tensordict.get(reset_key, default=None) if tensordict is not None else None
+                    tensordict.get(reset_key, default=None)
+                    if tensordict is not None
+                    else None
                 )
                 if reset_value is not None:
                     for done_key in done_key_group:
                         if tensordict_reset.get(done_key)[reset_value].any():
                             raise RuntimeError(
-    f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
-)
+                                f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
+                            )
                 else:
                     for done_key in done_key_group:
                         if tensordict_reset.get(done_key).any():
                             raise RuntimeError(
-    f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
-)
+                                f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
+                            )
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1696,16 +1698,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict = self.step(tensordict)
             tensordicts.append(tensordict.clone(False))
 
-            # done and truncated are in done_keys
-            # To read the done status, we assess whether any of the done entries
-            # at a given level is True. This is written in the _reset key.
-            any_done = done_or_truncated(
-                tensordict.get("next"),
-                full_done_spec=self.output_spec["full_done_spec"],
-                key="_reset" if not break_when_any_done else None,
-            )
-
-            if (break_when_any_done and any_done) or i == max_steps - 1:
+            if i == max_steps - 1:
                 break
             tensordict = step_mdp(
                 tensordict,
@@ -1716,7 +1709,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 action_keys=self.action_keys,
                 done_keys=self.done_keys,
             )
-
+            # done and truncated are in done_keys
+            # We read if any key is done.
+            any_done = done_or_truncated(
+                tensordict,
+                full_done_spec=self.output_spec["full_done_spec"],
+                key=None if break_when_any_done else "_reset",
+            )
+            if break_when_any_done and any_done:
+                break
             if not break_when_any_done and any_done:
                 self.reset(tensordict)
 

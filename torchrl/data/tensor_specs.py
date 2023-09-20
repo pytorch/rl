@@ -779,6 +779,7 @@ class TensorSpec:
     def unbind(self, dim: int):
         raise NotImplementedError
 
+
 T = TypeVar("T")
 
 

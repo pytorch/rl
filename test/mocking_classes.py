@@ -798,9 +798,6 @@ class ContinuousActionConvMockEnv(ContinuousActionVecMockEnv):
 
     def _get_in_obs(self, obs):
         obs = obs.diagonal(0, -1, -2)
-        # if any(dim == 1 for dim in obs.shape):
-        #     print("squeezing obs", obs.shape)
-        #     obs = obs.squeeze()
         return obs
 
 
@@ -1452,8 +1449,8 @@ class HeteroCountingEnv(EnvBase):
         tensordict: TensorDictBase = None,
         **kwargs,
     ) -> TensorDictBase:
-        if tensordict is not None and "_reset" in tensordict.keys():
-            _reset = tensordict.get("_reset").squeeze(-1).any(-1)
+        if tensordict is not None and self.reset_keys[0] in tensordict.keys():
+            _reset = tensordict.get(self.reset_keys[0]).squeeze(-1).any(-1)
             self.count[_reset] = self.start_val
         else:
             self.count[:] = self.start_val

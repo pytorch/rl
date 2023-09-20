@@ -671,7 +671,9 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
-            tensordict = tensordict.select(*self.reset_keys, *self.state_spec.keys(True, True), strict=False)
+            tensordict = tensordict.select(
+                *self.reset_keys, *self.state_spec.keys(True, True), strict=False
+            )
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
         if tensordict is not None:
             # the transform may need to read previous info during reset.
@@ -5158,7 +5160,7 @@ class InitTracker(Transform):
                     shape = full_done_spec[done_key].shape
                     break
             else:
-                print('here!')
+                print("here!")
                 raise KeyError(
                     f"Could not find root of init_key {init_key} within done_keys {self.parent.done_keys}."
                 )
@@ -5275,7 +5277,9 @@ class RenameTransform(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # no in-place modif
         if self.create_copy:
-            out = tensordict.select(*self.out_keys_inv, strict=not self._missing_tolerance)
+            out = tensordict.select(
+                *self.out_keys_inv, strict=not self._missing_tolerance
+            )
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
                 try:
                     out.rename_key_(out_key, in_key)
