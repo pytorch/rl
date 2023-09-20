@@ -14,7 +14,7 @@ from typing import OrderedDict
 import torch.cuda
 from tensordict import TensorDict
 from torch import nn
-from torchrl._utils import ProcessNoWarn, VERBOSE
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -397,7 +397,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         env_make = self.env_constructors[i]
         if not isinstance(env_make, (EnvBase, EnvCreator)):
             env_make = CloudpickleWrapper(env_make)
-        job = ProcessNoWarn(
+        job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
             args=(
                 i + 1,

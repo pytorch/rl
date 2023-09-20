@@ -35,7 +35,7 @@ from tensordict import TensorDict
 from torch import nn
 
 from torch.distributed import rpc
-from torchrl._utils import ProcessNoWarn, VERBOSE
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -447,7 +447,7 @@ class RPCDataCollector(DataCollectorBase):
                 print("job id", job.job_id)  # ID of your job
             return job
         elif self.launcher == "mp":
-            job = ProcessNoWarn(
+            job = _ProcessNoWarn(
                 target=_rpc_init_collection_node,
                 args=(
                     i + 1,

@@ -533,13 +533,19 @@ def get_trace():
     traceback.print_stack()
 
 
-class ProcessNoWarn(mp.Process):
-    def run(self, *args, **kwargs):
+class _ProcessNoWarn(mp.Process):
+    """A private Process class that shuts down warnings on the subprocess."""
+    @wraps(mp.Process.__init__)
+    def __init__(self, *args, **kwargs):
         import torchrl
 
         if torchrl.filter_warnings_subprocess:
-            import warnings
+            self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        super().__init__(*args, **kwargs)
 
+    def run(self, *args, **kwargs):
+        if self.filter_warnings_subprocess:
+            import warnings
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
             return mp.Process.run(self, *args, **kwargs)

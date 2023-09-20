@@ -31,7 +31,7 @@ from torch.utils.data import IterableDataset
 from torchrl._utils import (
     _check_for_faulty_process,
     accept_remote_rref_udf_invocation,
-    ProcessNoWarn,
+    _ProcessNoWarn,
     prod,
     RL_WARNINGS,
     VERBOSE,
@@ -1336,7 +1336,7 @@ class _MultiDataCollector(DataCollectorBase):
                 "idx": i,
                 "interruptor": self.interruptor,
             }
-            proc = ProcessNoWarn(target=_main_async_collector, kwargs=kwargs)
+            proc = _ProcessNoWarn(target=_main_async_collector, kwargs=kwargs)
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
             try:
                 proc.start()
