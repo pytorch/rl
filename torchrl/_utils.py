@@ -24,6 +24,8 @@ from typing import Any, Callable, cast, Dict, TypeVar, Union
 import numpy as np
 import torch
 from packaging.version import parse
+from torch import multiprocessing as mp
+
 
 VERBOSE = strtobool(os.environ.get("VERBOSE", "0"))
 _os_is_windows = sys.platform == "win32"
@@ -563,3 +565,22 @@ class _DecoratorContextManager:
 def get_trace():
     """A simple debugging util to spot where a function is being called."""
     traceback.print_stack()
+
+
+class _ProcessNoWarn(mp.Process):
+    """A private Process class that shuts down warnings on the subprocess."""
+    @wraps(mp.Process.__init__)
+    def __init__(self, *args, **kwargs):
+        import torchrl
+
+        if torchrl.filter_warnings_subprocess:
+            self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        super().__init__(*args, **kwargs)
+
+    def run(self, *args, **kwargs):
+        if self.filter_warnings_subprocess:
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+            return mp.Process.run(self, *args, **kwargs)
+        return mp.Process.run(self, *args, **kwargs)

@@ -348,7 +348,6 @@ def rollout_consistency_assertion(
         (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1) > 1e-1
     ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
 
-
 def rand_reset(env):
     """Generates a tensordict with reset keys that mimic the done spec.
 
@@ -369,7 +368,7 @@ def rand_reset(env):
     return result
 
 
-def check_rollout_consistency(td: TensorDict, max_steps: int):
+def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
     index_batch_size = (0,) * (len(td.batch_size) - 1)
 
     # Check done and reset for root

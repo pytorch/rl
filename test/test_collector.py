@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import (
-    check_rollout_consistency,
+    check_rollout_consistency_multikey_env,
     generate_seeds,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -1600,7 +1600,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10

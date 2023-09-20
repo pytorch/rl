@@ -17,7 +17,7 @@ import yaml
 from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
-    check_rollout_consistency,
+    check_rollout_consistency_multikey_env,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
@@ -1990,7 +1990,7 @@ class TestMultiKeyEnvs:
         policy = MultiKeyCountingEnvPolicy(full_action_spec=env.action_spec)
         td = env.rollout(rollout_steps, policy=policy)
         torch.manual_seed(seed)
-        check_rollout_consistency(td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(td, max_steps=max_steps)
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 1)])
     @pytest.mark.parametrize("rollout_steps", [5])
@@ -2017,7 +2017,7 @@ class TestMultiKeyEnvs:
             rollout_steps,
             policy=policy,
         )
-        check_rollout_consistency(td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(td, max_steps=max_steps)
 
 
 @pytest.mark.parametrize(
