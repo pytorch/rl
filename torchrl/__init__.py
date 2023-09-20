@@ -41,3 +41,7 @@ import torchrl.envs
 import torchrl.modules
 import torchrl.objectives
 import torchrl.trainers
+
+# Filter warnings in subprocesses: True by default given the multiple optional
+# deps of the library. This can be turned on via `torchrl.filter_warnings_subprocess = False`.
+filter_warnings_subprocess = True
