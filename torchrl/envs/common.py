@@ -1431,6 +1431,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict.update(tensordict_reset)
         else:
             tensordict = tensordict_reset
+        tensordict.exclude(*self.reset_keys, inplace=True)
         return tensordict
 
     def numel(self) -> int:
@@ -1715,7 +1716,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
             if not break_when_any_done and any_done:
                 self.reset(tensordict)
-            tensordict.exclude(*self.reset_keys, inplace=True)
 
             if callback is not None:
                 callback(self, tensordict)

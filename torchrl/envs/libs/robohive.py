@@ -82,6 +82,7 @@ class RoboHiveEnv(GymEnv):
     def available_envs(cls):
         if not _has_robohive:
             return
+        RoboHiveEnv.register_envs()
         yield from cls.env_list
 
     @classmethod
@@ -338,7 +339,3 @@ class RoboHiveEnv(GymEnv):
         env = gym.make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams
-
-
-if _has_robohive:
-    RoboHiveEnv.register_envs()

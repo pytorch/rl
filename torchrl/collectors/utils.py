@@ -6,7 +6,7 @@
 from typing import Callable
 
 import torch
-from tensordict.tensordict import pad, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, pad, TensorDictBase
 
 
 def _stack_output(fun) -> Callable:
@@ -114,3 +114,27 @@ def split_trajectories(
     ).contiguous()
     # td = td.unflatten_keys(sep)
     return td
+
+
+def _bring_reset_to_root(data: TensorDictBase) -> torch.Tensor:
+    # goes through the tensordict and brings the _reset information to
+    # a boolean tensor of the shape of the tensordict
+
+    batch_size = data.batch_size
+    n = len(batch_size) + 1
+
+    reset = False
+
+    def skim_through(td, reset=reset):
+        for key, value in td.items():
+            if key == "_reset":
+                if value.ndim > n:
+                    value = value.flatten(n, value.ndim)
+                reset = reset | value.any(-1)
+            elif is_tensor_collection(value):
+                reset = skim_through(value, reset=reset)
+        return reset
+
+    reset = skim_through(data)
+    assert reset.shape == data.batch_size
+    return reset
