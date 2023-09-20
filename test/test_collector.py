@@ -44,7 +44,7 @@ from torchrl.collectors.collectors import (
     MultiSyncDataCollector,
     RandomPolicy,
 )
-from torchrl.collectors.utils import split_trajectories
+from torchrl.collectors.utils import split_trajectories, _bring_reset_to_root
 from torchrl.data import CompositeSpec, UnboundedContinuousTensorSpec
 from torchrl.envs import (
     EnvBase,
@@ -1751,6 +1751,52 @@ class TestUpdateParams:
         finally:
             col.shutdown()
 
+def test_bring_reset_to_root():
+    # simple
+    td = TensorDict(
+        {"_reset": torch.zeros((1,), dtype=torch.bool)}, []
+    )
+    assert _bring_reset_to_root(td).shape == ()
+    # td with batch size
+    td = TensorDict(
+        {"_reset": torch.zeros((1,), dtype=torch.bool)}, [1]
+    )
+    assert _bring_reset_to_root(td).shape == (1,)
+    td = TensorDict(
+        {"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1]
+    )
+    assert _bring_reset_to_root(td).shape == (1,)
+    # nested td
+    td = TensorDict(
+        {"_reset": torch.zeros((1,), dtype=torch.bool),
+         "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)}}, [1]
+    )
+    assert _bring_reset_to_root(td).shape == (1,)
+    # nested td with greater number of dims
+    td = TensorDict(
+        {"_reset": torch.zeros((1,2,), dtype=torch.bool),
+         "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)}}, [1, 2]
+    )
+    # test reduction
+    assert _bring_reset_to_root(td).shape == (1,2)
+    td = TensorDict(
+        {"_reset": torch.zeros((1,2,), dtype=torch.bool),
+         "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)}}, [1, 2]
+    )
+    assert _bring_reset_to_root(td).all()
+    # with a stack
+    td0 = TensorDict(
+        {"_reset": torch.zeros((1,2,), dtype=torch.bool),
+         "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+         "b": {"c": torch.randn(1, 2)}}, [1, 2]
+    )
+    td1 = TensorDict(
+        {"_reset": torch.zeros((1,2,), dtype=torch.bool),
+         "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+         "b": {"c": torch.randn(1, 2, 5)}}, [1, 2]
+    )
+    td = torch.stack([td0, td1], 0)
+    assert _bring_reset_to_root(td).all()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

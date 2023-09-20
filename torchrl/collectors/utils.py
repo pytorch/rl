@@ -121,7 +121,7 @@ def _bring_reset_to_root(data: TensorDictBase) -> torch.Tensor:
     # a boolean tensor of the shape of the tensordict
 
     batch_size = data.batch_size
-    n = len(batch_size) + 1
+    n = len(batch_size)
 
     reset = False
 
@@ -131,7 +131,8 @@ def _bring_reset_to_root(data: TensorDictBase) -> torch.Tensor:
                 value = td.get(key)
                 if value.ndim > n:
                     value = value.flatten(n, value.ndim-1)
-                reset = reset | value.any(-1)
+                    value = value.any(-1)
+                reset = reset | value
             # we need to check the entry class without getting the value,
             # because some lazy tensordicts may prevent calls to items().
             # This introduces some slight overhead as when we encounter a
@@ -142,5 +143,4 @@ def _bring_reset_to_root(data: TensorDictBase) -> torch.Tensor:
         return reset
 
     reset = skim_through(data)
-    assert reset.shape == data.batch_size
     return reset
