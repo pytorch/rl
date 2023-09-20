@@ -211,11 +211,10 @@ def make_ppo_models(env_name):
 
     actor = actor_critic.get_policy_operator()
     critic = actor_critic.get_value_operator()
-    critic_head = actor_critic.get_value_head()
 
     del proof_environment
 
-    return actor, critic, critic_head
+    return actor, critic
 
 
 # ====================================================================

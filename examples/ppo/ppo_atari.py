@@ -39,12 +39,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     test_interval = cfg.logger.test_interval // frame_skip
 
     # Create models (check utils_atari.py)
-    actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
-    actor, critic, critic_head = (
-        actor.to(device),
-        critic.to(device),
-        critic_head.to(device),
-    )
+    actor, critic = make_ppo_models(cfg.env.env_name)
+    actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
     collector = SyncDataCollector(
@@ -152,8 +148,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for k, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
+                alpha = 1.0
                 if cfg.optim.anneal_lr:
+                    alpha = 1 - (num_network_updates / total_network_updates)
                     for group in optim.param_groups:
                         group["lr"] = cfg.optim.lr * alpha
                 if cfg.loss.anneal_clip_epsilon:

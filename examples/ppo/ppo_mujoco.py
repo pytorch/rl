@@ -135,6 +135,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for k, batch in enumerate(data_buffer):
 
                 # Linearly decrease the learning rate and clip epsilon
+                alpha = 1.0
                 if cfg.optim.anneal_lr:
                     alpha = 1 - (num_network_updates / total_network_updates)
                     for group in actor_optim.param_groups:
