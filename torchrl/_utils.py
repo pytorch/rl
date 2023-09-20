@@ -251,6 +251,7 @@ class implement_for:
     # Stores pointers to fitting implementations: dict[func_name] = func_pointer
     _implementations = {}
     _setters = []
+    _cache_modules = {}
 
     def __init__(
         self,
@@ -316,7 +317,12 @@ class implement_for:
     def import_module(cls, module_name: Union[Callable, str]) -> str:
         """Imports module and returns its version."""
         if not callable(module_name):
-            module = import_module(module_name)
+            module = cls._cache_modules.get(module_name, None)
+            if module is None:
+                if module_name in sys.modules:
+                    sys.modules[module_name] = module = import_module(module_name)
+                else:
+                    cls._cache_modules[module_name] = module = import_module(module_name)
         else:
             module = module_name()
         return module.__version__
@@ -574,8 +580,7 @@ class _ProcessNoWarn(mp.Process):
     def __init__(self, *args, **kwargs):
         import torchrl
 
-        if torchrl.filter_warnings_subprocess:
-            self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
         super().__init__(*args, **kwargs)
 
     def run(self, *args, **kwargs):
@@ -584,5 +589,5 @@ class _ProcessNoWarn(mp.Process):
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-            return mp.Process.run(self, *args, **kwargs)
+                return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
