@@ -57,7 +57,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
 from torchrl.envs.utils import _replace_last, _bring_reset_to_root, \
-    PARTIAL_MISSING_ERR
+    PARTIAL_MISSING_ERR, check_env_specs
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
@@ -1534,6 +1534,7 @@ class TestHetEnvsCollector:
         env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
+        check_env_specs(env_fn(), return_contiguous=False)
         policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
 
         ccollector = MultiaSyncDataCollector(

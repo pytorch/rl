@@ -5158,6 +5158,7 @@ class InitTracker(Transform):
                     shape = full_done_spec[done_key].shape
                     break
             else:
+                print('here!')
                 raise KeyError(
                     f"Could not find root of init_key {init_key} within done_keys {self.parent.done_keys}."
                 )

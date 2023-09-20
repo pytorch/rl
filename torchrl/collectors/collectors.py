@@ -886,6 +886,12 @@ class SyncDataCollector(DataCollectorBase):
                             self._tensordict_out.ndim - 1,
                             out=self._tensordict_out,
                         )
+                except KeyError:
+                    print('\n\n err during stack')
+                    print('tensordict list', tensordicts)
+                    print('dest', self._tensordict_out)
+                    print('env', self.env)
+                    raise
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
