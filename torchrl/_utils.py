@@ -322,7 +322,9 @@ class implement_for:
                 if module_name in sys.modules:
                     sys.modules[module_name] = module = import_module(module_name)
                 else:
-                    cls._cache_modules[module_name] = module = import_module(module_name)
+                    cls._cache_modules[module_name] = module = import_module(
+                        module_name
+                    )
         else:
             module = module_name()
         return module.__version__
