@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, VERBOSE
@@ -617,6 +617,7 @@ class SerialEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
+                key = unravel_keys(key)
                 if key not in self.reset_keys:
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
@@ -808,7 +809,6 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
         if tensordict is not None:
             needs_resetting = _bring_reset_to_root(tensordict)
         else:
@@ -860,9 +860,8 @@ class ParallelEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
+                key = unravel_keys(key)
                 if key not in self.reset_keys:
-                    if "key" == "done":
-                        print(key, self.shared_tensordict_parent[key])
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:

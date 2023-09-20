@@ -236,7 +236,7 @@ def step_mdp(
         return out
 
 
-def _set_single_key(source, dest, key, clone=False):
+def _set_single_key(source: TensorDictBase, dest: TensorDictBase, key: str | tuple, clone: bool=False):
     # key should be already unraveled
     if isinstance(key, str):
         key = (key,)
