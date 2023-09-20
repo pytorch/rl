@@ -323,9 +323,7 @@ class MultiAgentConvNet(nn.Module):
         ...     centralised = False,
         ...     share_params = False
         ... )
-        ... print(cnn)
-        ... print(result.shape)
-        ... print(all(result[0,0,0] == result[0,0,1]))
+        >>> print(cnn)
         MultiAgentConvNet(
             (agent_networks): ModuleList(
                 (0-6): 7 x ConvNet(
@@ -339,7 +337,9 @@ class MultiAgentConvNet(nn.Module):
                 )
             )
         )
+        >>> print(result.shape)
         torch.Size([3, 2, 7, 2592])
+        >>> print(all(result[0,0,0] == result[0,0,1]))
         False
 
         >>> # Or where inputs are shared but not parameters.
