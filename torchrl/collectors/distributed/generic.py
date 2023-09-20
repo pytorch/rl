@@ -14,9 +14,9 @@ from typing import OrderedDict
 
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
+from torch import nn
 
-from torchrl._utils import VERBOSE, ProcessNoWarn
+from torchrl._utils import ProcessNoWarn, VERBOSE
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
     DataCollectorBase,

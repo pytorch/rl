@@ -136,6 +136,12 @@ environments in parallel.
 As this class inherits from :class:`SerialEnv`, it enjoys the exact same API as other environment.
 Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
+
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
