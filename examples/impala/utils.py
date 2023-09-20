@@ -37,6 +37,7 @@ from torchrl.modules import (
     ProbabilisticActor,
     TanhNormal,
     ValueOperator,
+    LSTMModule,
 )
 
 # ====================================================================

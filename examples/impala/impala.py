@@ -64,6 +64,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
+        update_at_each_batch=True,
     )
     # collector = SyncDataCollector(
     #     create_env_fn=make_parallel_env(cfg.env.env_name, device),
@@ -88,7 +89,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         gamma=cfg.loss.gamma,
         value_network=critic,
         actor_network=actor,
-        average_adv=True,
+        average_adv=False,
     )
     loss_module = A2CLoss(
         actor=actor,
@@ -123,7 +124,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    total_network_updates = (total_frames // frames_per_batch)
+    total_network_updates = (total_frames // (frames_per_batch * cfg.loss.batch_size))
 
     sampling_start = time.time()
 
@@ -138,7 +139,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get train reward
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
         if len(episode_rewards) > 0:
-            log_info.update({"train/reward": episode_rewards.mean().item()})
+            episode_length = data["next", "step_count"][data["next", "done"]]
+            log_info.update(
+                {
+                    "train/reward": episode_rewards.mean().item(),
+                    "train/episode_length": episode_length.sum().item()
+                                            / len(episode_length),
+                }
+            )
 
         # Apply episodic end of life
         data["done"].copy_(data["end_of_life"])
@@ -148,19 +156,22 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Compute VTrace
         with torch.no_grad():
-            data = vtrace_module(data)  # TODO: parallelize this
+            # TODO: parallelize this by running it on batch, now returns some vmap error
+            data = vtrace_module(data)
 
         # Update the data buffer
         data_buffer.extend(data)
 
+        # Accumulate data
         if i % cfg.loss.batch_size != 0 or i == 0:
             if logger:
                 for key, value in log_info.items():
                     logger.log_scalar(key, value, collected_frames)
             continue
 
-        for batch in data_buffer:
+        for batch in data_buffer:  # Only one batch in the buffer from accumulated data
 
+            batch = batch.to(device)
             batch = batch.reshape(-1)
 
             # Linearly decrease the learning rate and clip epsilon
@@ -169,9 +180,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 for group in optim.param_groups:
                     group["lr"] = cfg.optim.lr * alpha
             num_network_updates += 1
-
-            # Get a data batch
-            batch = batch.to(device)
 
             # Forward pass A2C loss
             loss = loss_module(batch)
@@ -224,9 +232,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
             for key, value in log_info.items():
                 logger.log_scalar(key, value, collected_frames)
 
-        collector.update_policy_weights_()
         sampling_start = time.time()
 
+    collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Training took {execution_time:.2f} seconds to finish")
