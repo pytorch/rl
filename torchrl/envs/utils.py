@@ -14,7 +14,7 @@ from typing import Dict, List, Union
 
 import torch
 
-from tensordict import is_tensor_collection, unravel_key
+from tensordict import is_tensor_collection, unravel_key, TensorDictBase
 from tensordict.nn.probabilistic import (  # noqa
     # Note: the `set_interaction_mode` and their associated arg `default_interaction_mode` are being deprecated!
     #       Please use the `set_/interaction_type` ones above with the InteractionType enum instead.
@@ -44,9 +44,6 @@ __all__ = [
 from torchrl.data import CompositeSpec
 from torchrl.data.utils import check_no_exclusive_keys
 
-DONE_AFTER_RESET_ERROR = RuntimeError(
-    "Env was done after reset on specified '_reset' dimensions. This is not allowed."
-)
 ACTION_MASK_ERROR = RuntimeError(
     "An out-of-bounds actions has been provided to an env with an 'action_mask' output."
     " If you are using a custom policy, make sure to take the action mask into account when computing the output."
@@ -810,3 +807,53 @@ def done_or_truncated(data: TensorDictBase, full_done_spec=None, key="_reset") -
             data.set(key, aggregate)
         any_done = any_done | aggregate.any()
     return any_done
+
+PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
+def _bring_reset_to_root(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
+    # goes through the tensordict and brings the _reset information to
+    # a boolean tensor of the shape of the tensordict.
+    batch_size = data.batch_size
+    n = len(batch_size)
+
+    if reset_keys is not None:
+        reset = False
+        has_missing = None
+        for key in reset_keys:
+            local_reset = data.get(key, None)
+            if local_reset is None:
+                if has_missing is False:
+                    raise ValueError(PARTIAL_MISSING_ERR)
+                has_missing = True
+                continue
+            elif has_missing:
+                raise ValueError(PARTIAL_MISSING_ERR)
+            has_missing = False
+            if local_reset.ndim > n:
+                local_reset = local_reset.flatten(n, local_reset.ndim - 1)
+                local_reset = local_reset.any(-1)
+            reset = reset | local_reset
+        if has_missing:
+            return torch.ones(batch_size, dtype=torch.bool, device=data.device)
+        return reset
+
+    reset = False
+
+    def skim_through(td, reset=reset):
+        for key in td.keys():
+            if key == "_reset":
+                local_reset = td.get(key)
+                if local_reset.ndim > n:
+                    local_reset = local_reset.flatten(n, local_reset.ndim-1)
+                    local_reset = local_reset.any(-1)
+                reset = reset | local_reset
+            # we need to check the entry class without getting the value,
+            # because some lazy tensordicts may prevent calls to items().
+            # This introduces some slight overhead as when we encounter a
+            # tensordict item, we'll need to get it twice.
+            elif is_tensor_collection(td.entry_class(key)):
+                value = td.get(key)
+                reset = skim_through(value, reset=reset)
+        return reset
+
+    reset = skim_through(data)
+    return reset

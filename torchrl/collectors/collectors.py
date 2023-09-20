@@ -35,7 +35,7 @@ from torchrl._utils import (
     RL_WARNINGS,
     VERBOSE,
 )
-from torchrl.collectors.utils import _bring_reset_to_root, split_trajectories
+from torchrl.collectors.utils import split_trajectories
 from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
@@ -45,7 +45,7 @@ from torchrl.envs.utils import (
     done_or_truncated,
     ExplorationType,
     set_exploration_type,
-    step_mdp,
+    step_mdp, _bring_reset_to_root,
 )
 
 _TIMEOUT = 1.0

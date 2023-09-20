@@ -26,7 +26,6 @@ from torchrl.data.tensor_specs import (
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
     _replace_last,
-    DONE_AFTER_RESET_ERROR,
     done_or_truncated,
     get_available_libraries,
     step_mdp,
@@ -1416,16 +1415,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 self.reset_keys, self.done_keys_groups
             ):
                 reset_value = (
-                    tensordict.get(reset_key, None) if tensordict is not None else None
+                    tensordict.get(reset_key, default=None) if tensordict is not None else None
                 )
                 if reset_value is not None:
                     for done_key in done_key_group:
                         if tensordict_reset.get(done_key)[reset_value].any():
-                            raise DONE_AFTER_RESET_ERROR
+                            raise RuntimeError(
+    f"Env done entry '{done_key}' was (partially) True after reset on specified '_reset' dimensions. This is not allowed."
+)
                 else:
                     for done_key in done_key_group:
                         if tensordict_reset.get(done_key).any():
-                            raise DONE_AFTER_RESET_ERROR
+                            raise RuntimeError(
+    f"Env done entry '{done_key}' was (partially) True after a call to reset(). This is not allowed."
+)
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)

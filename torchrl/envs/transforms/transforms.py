@@ -669,9 +669,15 @@ but got an object of type {type(transform)}."""
 
     def _reset(self, tensordict: Optional[TensorDictBase] = None, **kwargs):
         if tensordict is not None:
-            tensordict = tensordict.clone(recurse=False)
+            # We must avoid modifying the original tensordict so a shallow copy is necessary.
+            # We just select the input data and reset signal, which is all we need.
+            tensordict = tensordict.select(*self.reset_keys, *self.state_spec.keys(True, True), strict=False)
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
         if tensordict is not None:
+            # the transform may need to read previous info during reset.
+            # For instance, we may need to pass the step_count for partial resets.
+            # We update the copy of tensordict with the new data, instead of
+            # the contrary because newer data prevails.
             out_tensordict = tensordict.update(out_tensordict)
         out_tensordict = self.transform.reset(out_tensordict)
 
@@ -5246,13 +5252,21 @@ class RenameTransform(Transform):
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         if self.create_copy:
-            out = tensordict.select(*self.in_keys)
+            out = tensordict.select(*self.in_keys, strict=not self._missing_tolerance)
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                out.rename_key_(in_key, out_key)
+                try:
+                    tensordict.rename_key_(in_key, out_key)
+                except KeyError:
+                    if not self._missing_tolerance:
+                        raise
             tensordict = tensordict.update(out)
         else:
             for in_key, out_key in zip(self.in_keys, self.out_keys):
-                tensordict.rename_key_(in_key, out_key)
+                try:
+                    tensordict.rename_key_(in_key, out_key)
+                except KeyError:
+                    if not self._missing_tolerance:
+                        raise
         return tensordict
 
     forward = _call
@@ -5260,13 +5274,22 @@ class RenameTransform(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # no in-place modif
         if self.create_copy:
-            out = tensordict.select(*self.out_keys_inv)
+            out = tensordict.select(*self.out_keys_inv, strict=not self._missing_tolerance)
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                out.rename_key_(out_key, in_key)
+                try:
+                    out.rename_key_(out_key, in_key)
+                except KeyError:
+                    if not self._missing_tolerance:
+                        raise
+
             tensordict = tensordict.update(out)
         else:
             for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
-                tensordict.rename_key_(out_key, in_key)
+                try:
+                    tensordict.rename_key_(out_key, in_key)
+                except KeyError:
+                    if not self._missing_tolerance:
+                        raise
         return tensordict
 
     def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
