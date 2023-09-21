@@ -1781,25 +1781,19 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
             },
-            [1, 2]
+            [1, 2],
         )
         # test reduction
         assert _bring_reset_to_root(td).shape == (1, 2)
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1811,10 +1805,7 @@ class TestBringReset:
         td0 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1825,10 +1816,7 @@ class TestBringReset:
         td1 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1863,10 +1851,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
@@ -1880,10 +1865,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1895,10 +1877,7 @@ class TestBringReset:
         td0 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1909,10 +1888,7 @@ class TestBringReset:
         td1 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
