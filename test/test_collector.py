@@ -1772,6 +1772,7 @@ def test_collector_reloading(collector_class):
     collector_frames = collector._frames
     collector_iter = collector._iter
     collector_state_dict = collector.state_dict()
+    collector.shutdown()
 
     collector = collector_class(**collector_kwargs)
     collector.load_state_dict(collector_state_dict)
@@ -1779,6 +1780,7 @@ def test_collector_reloading(collector_class):
     assert collector._iter == collector_iter
     for _ in enumerate(collector):
         raise AssertionError
+    collector.shutdown()
 
 
 if __name__ == "__main__":
