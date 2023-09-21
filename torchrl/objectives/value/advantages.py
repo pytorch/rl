@@ -192,6 +192,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         reward: NestedKey = "reward"
         done: NestedKey = "done"
         steps_to_next_obs: NestedKey = "steps_to_next_obs"
+        sample_log_prob: NestedKey = "sample_log_prob"
 
     default_keys = _AcceptedKeys()
     value_network: Union[TensorDictModule, Callable]
@@ -333,7 +334,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise ValueError("tensordict keys cannot be None")
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
-                    f"{key} it not an accepted tensordict key for advantages"
+                    f"{key} it not an acceptedaccepted tensordict key for advantages"
                 )
             if (
                 key == "value"
@@ -1273,7 +1274,9 @@ class VTrace(ValueEstimatorBase):
     Args:
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve the value estimates.
-        actor_network (TensorDictModule, optional): actor operator used to retrieve the log prob.
+        actor_network (TensorDictModule): actor operator used to retrieve the log prob.
+        rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
+        c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
         average_adv (bool): if ``True``, the resulting advantage values will be standardized.
             Default is ``False``.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -1316,14 +1319,13 @@ class VTrace(ValueEstimatorBase):
         self,
         *,
         gamma: Union[float, torch.Tensor],
+        actor_network: TensorDictModule,
+        value_network: TensorDictModule,
         rho_thresh: Union[float, torch.Tensor] = 1.0,
         c_thresh: Union[float, torch.Tensor] = 1.0,
-        actor_network: TensorDictModule = None,
-        value_network: TensorDictModule,
         average_adv: bool = False,
         differentiable: bool = False,
         skip_existing: Optional[bool] = None,
-        log_prob_key: NestedKey = "sample_log_prob",  # Consider adding it to _AcceptedKeys?
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
@@ -1355,16 +1357,11 @@ class VTrace(ValueEstimatorBase):
         self.register_buffer("c_thresh", c_thresh)
         self.average_adv = average_adv
         self.actor_network = actor_network
-        self._log_prob_key = log_prob_key
 
         if isinstance(gamma, torch.Tensor) and gamma.shape != ():
             raise NotImplementedError(
                 "Per-value gamma is not supported yet. Gamma must be a scalar."
             )
-
-    @property
-    def log_prob_key(self):
-        return self._log_prob_key
 
     @_self_set_skip_existing
     @_self_set_grad_enabled
@@ -1464,15 +1461,15 @@ class VTrace(ValueEstimatorBase):
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
         # Make sure we have the log prob computed at collection time
-        if self.log_prob_key not in tensordict.keys():
-            raise ValueError(f"Expected {self.log_prob_key} to be in tensordict")
-        log_mu = tensordict.get(self.log_prob_key).view_as(value)
+        if self.tensor_keys.sample_log_prob not in tensordict.keys():
+            raise ValueError(f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict")
+        log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):
             log_pi = (
                 self.actor_network(tensordict.select(self.actor_network.in_keys))
-                .get(self.log_prob_key)
+                .get(self.tensor_keys.sample_log_prob)
                 .view_as(value)
             )
 

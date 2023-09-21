@@ -20,7 +20,7 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
 
 
 class A2CLoss(LossModule):
@@ -380,6 +380,8 @@ class A2CLoss(LossModule):
             self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+        elif value_type == ValueEstimators.VTrace:
+            self._value_estimator = VTrace(value_network=self.critic, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 

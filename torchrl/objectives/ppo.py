@@ -22,7 +22,7 @@ from torchrl.objectives.utils import (
 )
 
 from .common import LossModule
-from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator
+from .value import GAE, TD0Estimator, TD1Estimator, TDLambdaEstimator, VTrace
 
 
 class PPOLoss(LossModule):
@@ -462,6 +462,8 @@ class PPOLoss(LossModule):
             self._value_estimator = GAE(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
+        elif value_type == ValueEstimators.VTrace:
+            self._value_estimator = VTrace(value_network=self.critic, **hp)
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 

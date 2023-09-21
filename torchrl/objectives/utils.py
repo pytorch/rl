@@ -39,6 +39,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    VTrace = "V-trace"
 
 
 def default_value_kwargs(value_type: ValueEstimators):

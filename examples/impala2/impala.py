@@ -19,7 +19,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import MultiaSyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -46,14 +46,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create collector
-    collector = SyncDataCollector(
-        create_env_fn=make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device),
+    collector = MultiaSyncDataCollector(
+        create_env_fn=[make_parallel_env(cfg.env.env_name, 8, device)] * 4,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
         device=device,
         storing_device=device,
         max_frames_per_traj=-1,
+        update_at_each_batch=True,
     )
 
     # Create data buffer

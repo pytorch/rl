@@ -1079,8 +1079,8 @@ def vtrace_advantage_estimate(
         next_state_value (Tensor): value function result with next_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of episode.
-        rho_thresh (Union[float, Tensor]): clipping parameter for importance weights.
-        c_thresh (Union[float, Tensor]): clipping parameter for importance weights.
+        rho_thresh (Union[float, Tensor]): rho clipping parameter for importance weights.
+        c_thresh (Union[float, Tensor]): c clipping parameter for importance weights.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape

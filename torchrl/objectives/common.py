@@ -447,6 +447,10 @@ class LossModule(TensorDictModuleBase):
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."
             )
+        elif value_type == ValueEstimators.VTrace:
+            raise NotImplementedError(
+                f"Value type {value_type} it not implemented for loss {type(self)}."
+            )
         elif value_type == ValueEstimators.TDLambda:
             raise NotImplementedError(
                 f"Value type {value_type} it not implemented for loss {type(self)}."

@@ -97,7 +97,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    # env.append_transform(VecNorm(in_keys=["pixels"]))
+    env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
