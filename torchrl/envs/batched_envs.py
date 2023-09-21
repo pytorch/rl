@@ -821,6 +821,8 @@ class ParallelEnv(_BatchedEnv):
                 needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
+            elif not needs_resetting.ndim:
+                needs_resetting = needs_resetting.view(1)
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
