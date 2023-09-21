@@ -1215,14 +1215,7 @@ class TestSpec:
 
 
 class TestExpand:
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (4,),
-            (5, 4)
-        ]
-    )
+    @pytest.mark.parametrize("shape1", [None, (4,), (5, 4)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_binary(self, shape1, shape2):
         spec = BinaryDiscreteTensorSpec(
