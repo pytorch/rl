@@ -13,8 +13,8 @@ from typing import OrderedDict
 
 import torch.cuda
 from tensordict import TensorDict
-from torch import multiprocessing as mp, nn
-from torchrl._utils import VERBOSE
+from torch import nn
+from torchrl._utils import _ProcessNoWarn, VERBOSE
 
 from torchrl.collectors import MultiaSyncDataCollector
 from torchrl.collectors.collectors import (
@@ -29,7 +29,8 @@ from torchrl.collectors.distributed.default_configs import (
 )
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs import EnvBase, EnvCreator
+from torchrl.envs.common import EnvBase
+from torchrl.envs.env_creator import EnvCreator
 from torchrl.envs.utils import _convert_exploration_type
 
 SUBMITIT_ERR = None
@@ -396,7 +397,7 @@ class DistributedSyncDataCollector(DataCollectorBase):
         env_make = self.env_constructors[i]
         if not isinstance(env_make, (EnvBase, EnvCreator)):
             env_make = CloudpickleWrapper(env_make)
-        job = mp.Process(
+        job = _ProcessNoWarn(
             target=_distributed_init_collection_node,
             args=(
                 i + 1,

@@ -102,7 +102,6 @@ class LossModule(TensorDictModuleBase):
 
     def __new__(cls, *args, **kwargs):
         cls.forward = set_exploration_type(ExplorationType.MODE)(cls.forward)
-        cls._tensor_keys = cls._AcceptedKeys()
         self = super().__new__(cls)
         return self
 
@@ -113,6 +112,7 @@ class LossModule(TensorDictModuleBase):
         self._value_estimator = None
         self._has_update_associated = {}
         self.value_type = self.default_value_estimator
+        self._tensor_keys = self._AcceptedKeys()
         self.register_forward_pre_hook(_updater_check_forward_prehook)
         # self.register_forward_pre_hook(_parameters_to_tensordict)
 

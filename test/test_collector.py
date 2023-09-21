@@ -9,7 +9,12 @@ import sys
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    generate_seeds,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -29,7 +34,6 @@ from mocking_classes import (
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
-from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -773,6 +777,11 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     assert_allclose_td(data10, data20)
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 11),
+    reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+    "See https://github.com/python/cpython/pull/108568 for info and fix.",
+)
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize("static_seed", [True, False])
 def test_collector_vecnorm_envcreator(static_seed):
@@ -1577,7 +1586,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
