@@ -24,7 +24,7 @@ from torchrl.envs import (
     RewardSum,
     TransformedEnv,
 )
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.objectives import CQLLoss, SoftUpdate
@@ -38,7 +38,10 @@ from torchrl.trainers.helpers.models import ACTIVATIONS
 
 
 def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
+    with set_gym_backend("gym"):
+        return GymEnv(
+            task, device=device, frame_skip=frame_skip, from_pixels=from_pixels
+        )
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
