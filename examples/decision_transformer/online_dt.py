@@ -80,9 +80,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     start_time = time.time()
     for i in range(pretrain_gradient_steps):
         pbar.update(i)
-        # sample data
+        # Sample data
         data = offline_buffer.sample()
-        # compute loss
+        # Compute loss
         loss_vals = loss_module(data.to(model_device))
         transformer_loss = loss_vals["loss_log_likelihood"] + loss_vals["loss_entropy"]
         temperature_loss = loss_vals["loss_alpha"]
@@ -98,14 +98,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         scheduler.step()
 
-        # log metrics
+        # Log metrics
         to_log = {
             "loss_log_likelihood": loss_vals["loss_log_likelihood"].item(),
             "loss_entropy": loss_vals["loss_entropy"].item(),
             "loss_alpha": loss_vals["loss_alpha"].item(),
         }
 
-        # evaluation
+        # Evaluation
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             inference_policy.eval()
             if i % pretrain_log_interval == 0:
