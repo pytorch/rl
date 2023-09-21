@@ -880,9 +880,9 @@ class ParallelEnv(_BatchedEnv):
             iter_remaining = list(remaining)
             for i in iter_remaining:
                 event = self._events[i]
-                if event.is_set():
-                    event.clear()
-                    remaining.remove(i)
+                event.wait()
+                event.clear()
+                remaining.remove(i)
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
