@@ -21,10 +21,10 @@ class CSVExperiment:
         self.videos_counter = defaultdict(lambda: 0)
         self.text_counter = defaultdict(lambda: 0)
         self.log_dir = log_dir
-        os.makedirs(self.log_dir)
-        os.makedirs(os.path.join(self.log_dir, "scalars"))
-        os.makedirs(os.path.join(self.log_dir, "videos"))
-        os.makedirs(os.path.join(self.log_dir, "texts"))
+        os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "scalars"), exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "videos"), exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "texts"), exist_ok=True)
 
         self.files = {}
 

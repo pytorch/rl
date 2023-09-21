@@ -48,18 +48,21 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/decision_trans
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
 
-python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  env.num_envs=1 \
-  env.device=cuda:0 \
-  collector.total_frames=48 \
-  collector.frames_per_batch=16 \
-  collector.collector_device=cuda:0 \
-  optim.device=cuda:0 \
+python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_mujoco.py \
+  env.env_name=HalfCheetah-v4 \
+  collector.total_frames=40 \
+  collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
   loss.ppo_epochs=1 \
   logger.backend= \
-  logger.log_interval=4 \
-  optim.lr_scheduler=False
+  logger.test_interval=40
+python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_atari.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=20 \
+  loss.ppo_epochs=1 \
+  logger.backend= \
+  logger.test_interval=40
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -208,18 +211,6 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   record_video=True \
   record_frames=4 \
   buffer_size=120
-python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo.py \
-  env.num_envs=1 \
-  env.device=cuda:0 \
-  collector.total_frames=48 \
-  collector.frames_per_batch=16 \
-  collector.collector_device=cuda:0 \
-  optim.device=cuda:0 \
-  loss.mini_batch_size=10 \
-  loss.ppo_epochs=1 \
-  logger.backend= \
-  logger.log_interval=4 \
-  optim.lr_scheduler=False
 python .github/unittest/helpers/coverage_run_parallel.py examples/redq/redq.py \
   total_frames=48 \
   init_random_frames=10 \

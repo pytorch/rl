@@ -1781,10 +1781,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
@@ -1796,10 +1793,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1811,10 +1805,7 @@ class TestBringReset:
         td0 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1825,10 +1816,7 @@ class TestBringReset:
         td1 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1863,10 +1851,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
@@ -1880,10 +1865,7 @@ class TestBringReset:
         td = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1895,10 +1877,7 @@ class TestBringReset:
         td0 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1909,10 +1888,7 @@ class TestBringReset:
         td1 = TensorDict(
             {
                 "_reset": torch.zeros(
-                    (
-                        1,
-                        2,
-                    ),
+                    (1, 2),
                     dtype=torch.bool,
                 ),
                 "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
@@ -1935,6 +1911,49 @@ class TestBringReset:
                 TensorDict({"_reset": False}, []),
                 reset_keys=[("another", "_reset"), "_reset"],
             )
+
+
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
+)
+def test_collector_reloading(collector_class):
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
+    dummy_env = make_env()
+    obs_spec = dummy_env.observation_spec["observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        "create_env_fn": make_env,
+        "policy": policy_explore,
+        "frames_per_batch": 30,
+        "total_frames": 90,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    for i, _ in enumerate(collector):
+        if i == 3:
+            break
+    collector_frames = collector._frames
+    collector_iter = collector._iter
+    collector_state_dict = collector.state_dict()
+    collector.shutdown()
+
+    collector = collector_class(**collector_kwargs)
+    collector.load_state_dict(collector_state_dict)
+    assert collector._frames == collector_frames
+    assert collector._iter == collector_iter
+    for _ in enumerate(collector):
+        raise AssertionError
+    collector.shutdown()
 
 
 if __name__ == "__main__":
