@@ -695,6 +695,8 @@ class SyncDataCollector(DataCollectorBase):
         self.split_trajs = split_trajs
         self._exclude_private_keys = True
         self.interruptor = interruptor
+        self._frames = 0
+        self._iter = -1
 
     # for RPC
     def next(self):
@@ -745,11 +747,9 @@ class SyncDataCollector(DataCollectorBase):
             stream = None
         with torch.cuda.stream(stream):
             total_frames = self.total_frames
-            i = -1
-            self._frames = 0
-            while True:
-                i += 1
-                self._iter = i
+
+            while self._frames < self.total_frames:
+                self._iter += 1
                 tensordict_out = self.rollout()
                 self._frames += tensordict_out.numel()
                 if self._frames >= total_frames:
@@ -787,9 +787,6 @@ class SyncDataCollector(DataCollectorBase):
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
-
-                if self._frames >= self.total_frames:
-                    break
 
     def _step_and_maybe_reset(self) -> None:
 
@@ -985,6 +982,8 @@ class SyncDataCollector(DataCollectorBase):
         else:
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
+        state_dict.update({"frames": self._frames, "iter": self._iter})
+
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
@@ -1000,6 +999,8 @@ class SyncDataCollector(DataCollectorBase):
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
             self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+        self._frames = state_dict["frames"]
+        self._iter = state_dict["iter"]
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.env}", 4 * " ")
@@ -1298,6 +1299,8 @@ class _MultiDataCollector(DataCollectorBase):
             self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
+        self._frames = 0
+        self._iter = -1
 
     @property
     def frames_per_batch_worker(self):
@@ -1490,6 +1493,7 @@ also that the state dict is synchronised across processes if needed."""
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
             state_dict[f"worker{idx}"] = _state_dict
+        state_dict.update({"frames": self._frames, "iter": self._iter})
 
         return state_dict
 
@@ -1507,6 +1511,8 @@ also that the state dict is synchronised across processes if needed."""
             _, msg = self.pipes[idx].recv()
             if msg != "loaded":
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
+        self._frames = state_dict["frames"]
+        self._iter = state_dict["iter"]
 
 
 @accept_remote_rref_udf_invocation
@@ -1658,27 +1664,26 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return self.num_workers
 
     def iterator(self) -> Iterator[TensorDictBase]:
-        i = -1
-        frames = 0
+
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         self.out_buffer = None
 
-        while not all(dones) and frames < self.total_frames:
+        while not all(dones) and self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                if frames < self.init_random_frames:
+                if self._frames < self.init_random_frames:
                     msg = "continue_random"
                 else:
                     msg = "continue"
                 self.pipes[idx].send((None, msg))
 
-            i += 1
+            self._iter += 1
             max_traj_idx = None
 
             if self.interruptor is not None and self.preemptive_threshold < 1.0:
@@ -1733,10 +1738,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
-                frames += out.get(("collector", "mask")).sum().item()
+                self._frames += out.get(("collector", "mask")).sum().item()
             else:
                 out = self.out_buffer.clone()
-                frames += prod(out.shape)
+                self._frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -1913,13 +1918,11 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 self.pipes[i].send((None, "continue"))
         self.running = True
-        i = -1
-        self._frames = 0
 
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
-            i += 1
+            self._iter += 1
             idx, j, out = self._get_from_queue()
 
             worker_frames = out.numel()

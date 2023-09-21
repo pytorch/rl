@@ -811,14 +811,10 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        completed = set()
-        while len(completed) < self.num_workers:
-            for i, event in enumerate(self._events):
-                if i in completed:
-                    continue
-                if event.is_set():
-                    completed.add(i)
-                    event.clear()
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -881,15 +877,10 @@ class ParallelEnv(_BatchedEnv):
             channel.send(out)
             workers.append(i)
 
-        completed = set()
-        while len(completed) < len(workers):
-            for i in workers:
-                event = self._events[i]
-                if i in completed:
-                    continue
-                if event.is_set():
-                    completed.add(i)
-                    event.clear()
+        for i in workers:
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
