@@ -875,15 +875,14 @@ class ParallelEnv(_BatchedEnv):
             channel.send(out)
             workers.append(i)
 
-        completed = set()
-        while len(completed) < len(workers):
-            for i in workers:
+        remaining = set(workers)
+        while len(remaining):
+            iter_remaining = iter(remaining)
+            for i in iter_remaining:
                 event = self._events[i]
-                if i in completed:
-                    continue
                 if event.is_set():
-                    completed.add(i)
                     event.clear()
+                    remaining.remove(i)
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
