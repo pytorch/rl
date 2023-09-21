@@ -27,6 +27,7 @@ from .transforms import (
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
+    PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
     RenameTransform,
