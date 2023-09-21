@@ -583,6 +583,12 @@ class SerialEnv(_BatchedEnv):
 
         if tensordict is not None:
             needs_resetting = _bring_reset_to_root(tensordict)
+            if needs_resetting.ndim > 2:
+                needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
+            if needs_resetting.ndim > 1:
+                needs_resetting = needs_resetting.any(-1)
+            elif not needs_resetting.ndim:
+                needs_resetting = needs_resetting.expand(self.batch_size)
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
@@ -822,7 +828,7 @@ class ParallelEnv(_BatchedEnv):
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
-                needs_resetting = needs_resetting.view(1)
+                needs_resetting = needs_resetting.expand(self.batch_size)
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
