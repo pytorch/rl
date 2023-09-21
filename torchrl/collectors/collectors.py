@@ -30,8 +30,8 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
     _check_for_faulty_process,
-    accept_remote_rref_udf_invocation,
     _ProcessNoWarn,
+    accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
     VERBOSE,
