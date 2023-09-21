@@ -308,6 +308,7 @@ Regular modules
 
     MLP
     ConvNet
+    Conv3dNet
     LSTMNet
     SqueezeLayer
     Squeeze2dLayer

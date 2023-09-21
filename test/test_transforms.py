@@ -6,6 +6,7 @@ import abc
 import argparse
 
 import itertools
+import sys
 from copy import copy
 from functools import partial
 
@@ -25,6 +26,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnvCountPolicy,
+    DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     IncrementingEnv,
     MockBatchedLockedEnv,
@@ -69,6 +71,7 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PermuteTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
@@ -7058,6 +7061,11 @@ class TestVecNorm:
         queue_in.close()
         del parallel_env, queue_out, queue_in
 
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 11),
+        reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+        "See https://github.com/python/cpython/pull/108568 for info and fix.",
+    )
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
@@ -8635,6 +8643,141 @@ class TestDeviceCastTransform(TransformBase):
         assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
             "cpu:0"
         )
+
+
+class TestPermuteTransform(TransformBase):
+    envclass = DiscreteActionConvMockEnv
+
+    @classmethod
+    def _get_permute(cls):
+        return PermuteTransform(
+            (-1, -2, -3), in_keys=["pixels_orig", "pixels"], in_keys_inv=["pixels_orig"]
+        )
+
+    def test_single_trans_env_check(self):
+        base_env = TestPermuteTransform.envclass()
+        env = TransformedEnv(base_env, TestPermuteTransform._get_permute())
+        check_env_specs(env)
+        assert env.observation_spec["pixels"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] == env.observation_spec["pixels_orig"]
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(
+            2,
+            lambda: TransformedEnv(
+                TestPermuteTransform.envclass(), TestPermuteTransform._get_permute()
+            ),
+        )
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(
+            2,
+            lambda: TransformedEnv(
+                TestPermuteTransform.envclass(), TestPermuteTransform._get_permute()
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, TestPermuteTransform.envclass),
+            TestPermuteTransform._get_permute(),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, TestPermuteTransform.envclass),
+            TestPermuteTransform._get_permute(),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_compose(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = Compose(
+            PermuteTransform(
+                dims=(-1, -4, -2, -3),
+                in_keys=["pixels"],
+            )
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td = trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+    def test_transform_env(self):
+        base_env = TestPermuteTransform.envclass()
+        env = TransformedEnv(base_env, TestPermuteTransform._get_permute())
+        check_env_specs(env)
+        assert env.observation_spec["pixels"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] != base_env.state_spec["pixels_orig"]
+        assert env.observation_spec["pixels"] != base_env.observation_spec["pixels"]
+
+        td = env.rollout(3)
+        assert td["pixels"].shape == torch.Size([3, 7, 7, 1])
+
+        # check error
+        with pytest.raises(ValueError, match="Only tailing dims with negative"):
+            t = PermuteTransform((-1, -10))
+
+    def test_transform_model(self):
+        batch = [2]
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        out_channels = 4
+        from tensordict.nn import TensorDictModule
+
+        model = nn.Sequential(
+            trans,
+            TensorDictModule(
+                nn.Conv3d(C, out_channels, 3, padding=1),
+                in_keys=["pixels"],
+                out_keys=["pixels"],
+            ),
+        )
+        td = model(td)
+        assert td["pixels"].shape == torch.Size((*batch, out_channels, D, H, W))
+
+    def test_transform_rb(self):
+        batch = [6]
+        D, W, H, C = 4, 5, 6, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(5), transform=trans)
+        rb.extend(td)
+        sample = rb.sample(2)
+        assert sample["pixels"].shape == torch.Size([2, C, D, H, W])
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_inverse(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys_inv=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, C, D, H, W))}, batch_size=batch)
+        td = trans.inv(td)
+        assert td["pixels"].shape == torch.Size((*batch, D, W, H, C))
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_no_env(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td = trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
 
 
 if __name__ == "__main__":

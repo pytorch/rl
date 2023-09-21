@@ -105,6 +105,11 @@ node or across multiple nodes.
   building a parallel environment or collector can result in a slower collection
   than using ``device="cuda"`` when available.
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
 
 .. currentmodule:: torchrl.collectors.distributed
 
