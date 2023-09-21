@@ -54,7 +54,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create environments
     train_env, eval_env = make_environment(
         cfg,
-        cfg.collector.env_per_collector,
         cfg.env.train_num_envs,
         cfg.env.eval_num_envs,
     )
