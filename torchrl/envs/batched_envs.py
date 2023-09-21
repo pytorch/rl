@@ -809,14 +809,15 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        completed = set()
-        while len(completed) < self.num_workers:
-            for i, event in enumerate(self._events):
-                if i in completed:
-                    continue
-                if event.is_set():
-                    completed.add(i)
-                    event.clear()
+        # we used to go with `is_set()` but wait() is faster.
+        remaining = set(range(self.num_workers))
+        while len(remaining):
+            iter_remaining = list(remaining)
+            for i in iter_remaining:
+                event = self._events[i]
+                event.wait()
+                event.clear()
+                remaining.remove(i)
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
