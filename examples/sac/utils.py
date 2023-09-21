@@ -6,7 +6,7 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
-from torchrl.envs.libs.gym import GymEnv
+from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.transforms import RewardScaling, RewardSum
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
@@ -21,7 +21,10 @@ from torchrl.objectives.sac import SACLoss
 
 
 def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
-    return GymEnv(task, device=device, frame_skip=frame_skip, from_pixels=from_pixels)
+    with set_gym_backend("gym"):
+        return GymEnv(
+            task, device=device, frame_skip=frame_skip, from_pixels=from_pixels
+        )
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
