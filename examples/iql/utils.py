@@ -1,3 +1,7 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -49,20 +53,22 @@ def apply_env_transforms(env, reward_scaling=1.0):
     return transformed_env
 
 
-def make_environment(cfg, num_envs=1):
+def make_environment(cfg, train_num_envs=1, eval_num_envs=1):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
-        num_envs,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        train_num_envs,
+        EnvCreator(lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(parallel_env, cfg.env.reward_scaling)
 
     eval_env = TransformedEnv(
         ParallelEnv(
-            num_envs,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            eval_num_envs,
+            EnvCreator(
+                lambda: env_maker(task=cfg.env.name, frame_skip=cfg.env.frame_skip)
+            ),
         ),
         train_env.transform.clone(),
     )
@@ -84,6 +90,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
+        num_worker=cfg.collector.num_worker,
     )
     collector.set_seed(cfg.env.seed)
     return collector
