@@ -6,23 +6,23 @@ env:
 collector:
   frames_per_batch: 80
   total_frames: 40_000_000
-  num_workers: 12
+  num_workers: 8
 
 # logger
 logger:
-  backend: wandb
+  backend: null
   exp_name: Atari_Espeholt18
   test_interval: 40_000_000
   num_test_episodes: 3
 
 # Optim
 optim:
-  lr: 0.0006
+  lr: 0.00048
   eps: 0.01
   alpha: 0.99
   momentum: 0.0
   weight_decay: 0.0
-  max_grad_norm: 40.0
+  max_grad_norm: 1.0
   anneal_lr: True
 
 # loss
@@ -30,6 +30,5 @@ loss:
   gamma: 0.99
   batch_size: 32
   critic_coef: 0.25
-  entropy_coef: 0.01
+  entropy_coef: 0.05
   loss_critic_type: l2
-

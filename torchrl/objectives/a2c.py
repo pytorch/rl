@@ -354,17 +354,14 @@ class A2CLoss(LossModule):
             advantage = tensordict.get(self.tensor_keys.advantage)
         log_probs, dist = self._log_probs(tensordict)
         loss = -(log_probs * advantage)
-        # td_out = TensorDict({"loss_objective": loss.mean()}, [])
-        td_out = TensorDict({"loss_objective": loss.sum()}, [])
+        td_out = TensorDict({"loss_objective": loss.mean()}, [])
         if self.entropy_bonus:
             entropy = self.get_entropy_bonus(dist)
             td_out.set("entropy", entropy.mean().detach())  # for logging
-            # td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
-            td_out.set("loss_entropy", -self.entropy_coef * entropy.sum())
+            td_out.set("loss_entropy", -self.entropy_coef * entropy.mean())
         if self.critic_coef:
             loss_critic = self.loss_critic(tensordict).mean()
-            # td_out.set("loss_critic", loss_critic.mean())
-            td_out.set("loss_critic", loss_critic.sum())
+            td_out.set("loss_critic", loss_critic.mean())
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):

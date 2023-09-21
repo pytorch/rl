@@ -24,6 +24,7 @@ __all__ = [
     "vec_td_lambda_return_estimate",
     "td_lambda_advantage_estimate",
     "vec_td_lambda_advantage_estimate",
+    "vtrace_advantage_estimate",
 ]
 
 from torchrl.objectives.value.utils import (
@@ -1050,6 +1051,72 @@ def vec_td_lambda_advantage_estimate(
         )
         - state_value
     )
+
+
+@_transpose_time
+def vtrace_advantage_estimate(
+    gamma: float,
+    log_pi: torch.Tensor,
+    log_mu: torch.Tensor,
+    state_value: torch.Tensor,
+    next_state_value: torch.Tensor,
+    reward: torch.Tensor,
+    done: torch.Tensor,
+    rho_thresh: Union[float, torch.Tensor] = 1.0,
+    c_thresh: Union[float, torch.Tensor] = 1.0,
+    time_dim: int = -2,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Computes V-Trace off-policy actor critic targets.
+
+    Refer to "IMPALA: Scalable Distributed Deep-RL with Importance Weighted  Actor-Learner Architectures"
+    https://arxiv.org/abs/1802.01561 for more context.
+
+    Args:
+        gamma (scalar): exponential mean discount.
+        log_pi (Tensor): collection actor log probability of taking actions in the environment.
+        log_mu (Tensor): current actor log probability of taking actions in the environment.
+        state_value (Tensor): value function result with state input.
+        next_state_value (Tensor): value function result with next_state input.
+        reward (Tensor): reward of taking actions in the environment.
+        done (Tensor): boolean flag for end of episode.
+        rho_thresh (Union[float, Tensor]): clipping parameter for importance weights.
+        c_thresh (Union[float, Tensor]): clipping parameter for importance weights.
+        time_dim (int): dimension where the time is unrolled. Defaults to -2.
+
+    All tensors (values, reward and done) must have shape
+    ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
+    """
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+        raise RuntimeError(SHAPE_ERR)
+
+    device = state_value.device
+
+    not_done = (~done).int()
+    *batch_size, time_steps, lastdim = not_done.shape
+    discounts = gamma * not_done
+
+    clipped_rho = (log_pi - log_mu).exp().clamp_max(rho_thresh)
+    deltas = clipped_rho * (reward + discounts * next_state_value - state_value)
+    c_thresh = c_thresh.to(device)
+    clipped_c = torch.clamp(c_thresh, max=clipped_rho)
+
+    vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
+    for i in reversed(range(time_steps)):
+        discount_t, c_t, delta_t = (
+            discounts[..., i, :],
+            clipped_c[..., i, :],
+            deltas[..., i, :],
+        )
+        vs_minus_v_xs.append(delta_t + discount_t * c_t * vs_minus_v_xs[-1])
+    vs_minus_v_xs = torch.stack(vs_minus_v_xs[1:], dim=time_dim)
+    vs_minus_v_xs = torch.flip(vs_minus_v_xs, dims=[time_dim])
+    vs = vs_minus_v_xs + state_value
+    vs_t_plus_1 = torch.cat(
+        [vs[..., 1:, :], next_state_value[..., -1:, :]], dim=time_dim
+    )
+    advantages = clipped_rho * (reward + discounts * vs_t_plus_1 - state_value)
+
+    return advantages, vs
 
 
 ########################################################################
