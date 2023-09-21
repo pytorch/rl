@@ -155,6 +155,7 @@ do
     pip install gymnasium[atari]
   fi
   pip install mo-gymnasium
+  pip install gymnasium-robotics
 
   $DIR/run_test.sh
 
