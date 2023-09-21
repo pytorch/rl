@@ -877,7 +877,7 @@ class ParallelEnv(_BatchedEnv):
 
         remaining = set(workers)
         while len(remaining):
-            iter_remaining = iter(remaining)
+            iter_remaining = list(remaining)
             for i in iter_remaining:
                 event = self._events[i]
                 if event.is_set():
