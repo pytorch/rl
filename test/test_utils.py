@@ -324,22 +324,36 @@ def test_set_gym_nested():
     import gymnasium
 
     assert torch_foo() == 1
+
     class MockGym:
         _is_batched = False
+
     with set_gym_backend(gym):
-        GymWrapper._output_transform(MockGym, (1, 2, 3, 4))  # would break with gymnasium
+        GymWrapper._output_transform(
+            MockGym, (1, 2, 3, 4)
+        )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend(gymnasium):
-            GymWrapper._output_transform(MockGym, (1, 2, 3, 4, 5))  # would break with gym
+            GymWrapper._output_transform(
+                MockGym, (1, 2, 3, 4, 5)
+            )  # would break with gym
             assert torch_foo() == 1
-        GymWrapper._output_transform(MockGym, (1, 2, 3, 4))  # would break with gymnasium
+        GymWrapper._output_transform(
+            MockGym, (1, 2, 3, 4)
+        )  # would break with gymnasium
     with set_gym_backend("gym"):
-        GymWrapper._output_transform(MockGym, (1, 2, 3, 4))  # would break with gymnasium
+        GymWrapper._output_transform(
+            MockGym, (1, 2, 3, 4)
+        )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend("gymnasium"):
-            GymWrapper._output_transform(MockGym, (1, 2, 3, 4, 5))  # would break with gym
+            GymWrapper._output_transform(
+                MockGym, (1, 2, 3, 4, 5)
+            )  # would break with gym
             assert torch_foo() == 1
-        GymWrapper._output_transform(MockGym, (1, 2, 3, 4))  # would break with gymnasium
+        GymWrapper._output_transform(
+            MockGym, (1, 2, 3, 4)
+        )  # would break with gymnasium
 
 
 if __name__ == "__main__":
