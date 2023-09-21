@@ -1135,8 +1135,8 @@ class _MultiDataCollector(DataCollectorBase):
         update_at_each_batch: bool = False,
         devices=None,
         storing_devices=None,
-        num_threads: int = 1,
-        num_sub_threads: int = None,
+        num_threads: int = None,
+        num_sub_threads: int = 1,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
