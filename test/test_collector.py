@@ -31,6 +31,7 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
+from packaging import version
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
@@ -53,9 +54,14 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
 )
-from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.libs.gym import _has_gym, gym_backend, GymEnv, set_gym_backend
 from torchrl.envs.transforms import TransformedEnv, VecNorm
-from torchrl.envs.utils import _replace_last
+from torchrl.envs.utils import (
+    _bring_reset_to_root,
+    _replace_last,
+    check_env_specs,
+    PARTIAL_MISSING_ERR,
+)
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
@@ -332,7 +338,10 @@ def test_collector_env_reset():
     torch.manual_seed(0)
 
     def make_env():
-        return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
+        # This is currently necessary as the methods in GymWrapper may have mismatching backend
+        # versions.
+        with set_gym_backend(gym_backend()):
+            return TransformedEnv(GymEnv(PONG_VERSIONED, frame_skip=4), StepCounter())
 
     env = SerialEnv(2, make_env)
     # env = SerialEnv(2, lambda: GymEnv("CartPole-v1", frame_skip=4))
@@ -1040,6 +1049,14 @@ def test_collector_output_keys(
     }
     if split_trajs:
         keys.add(("collector", "mask"))
+
+    from torchrl.envs.libs.gym import gym_backend
+
+    if "gymnasium" in str(gym_backend()) or gym_backend().__version__ >= version.parse(
+        "0.26"
+    ):
+        keys.add(("next", "truncated"))
+        keys.add("truncated")
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys
@@ -1521,6 +1538,7 @@ class TestHetEnvsCollector:
         env = HeteroCountingEnv(max_steps=3, batch_size=(batch_dim,))
         torch.manual_seed(seed)
         env_fn = lambda: TransformedEnv(env, InitTracker())
+        check_env_specs(env_fn(), return_contiguous=False)
         policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
 
         ccollector = MultiaSyncDataCollector(
@@ -1738,6 +1756,185 @@ class TestUpdateParams:
                     assert (data["action"] == 3).all()
         finally:
             col.shutdown()
+
+
+class TestBringReset:
+    def test_bring_reset_to_root(self):
+        # simple
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
+        assert _bring_reset_to_root(td).shape == ()
+        # td with batch size
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
+        assert _bring_reset_to_root(td).shape == (1,)
+        td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
+        assert _bring_reset_to_root(td).shape == (1,)
+        # nested td
+        td = TensorDict(
+            {
+                "_reset": torch.zeros((1,), dtype=torch.bool),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1],
+        )
+        assert _bring_reset_to_root(td).shape == (1,)
+        # nested td with greater number of dims
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        # test reduction
+        assert _bring_reset_to_root(td).shape == (1, 2)
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        assert _bring_reset_to_root(td).all()
+        # with a stack
+        td0 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2)},
+            },
+            [1, 2],
+        )
+        td1 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2, 5)},
+            },
+            [1, 2],
+        )
+        td = torch.stack([td0, td1], 0)
+        assert _bring_reset_to_root(td).all()
+
+    def test_bring_reset_to_root_keys(self):
+        # simple
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [])
+        assert _bring_reset_to_root(td, reset_keys=["_reset"]).shape == ()
+        # td with batch size
+        td = TensorDict({"_reset": torch.zeros((1,), dtype=torch.bool)}, [1])
+        assert _bring_reset_to_root(td, reset_keys=["_reset"]).shape == (1,)
+        td = TensorDict({"_reset": torch.zeros((1, 2), dtype=torch.bool)}, [1])
+        assert _bring_reset_to_root(td, reset_keys=["_reset"]).shape == (1,)
+        # nested td
+        td = TensorDict(
+            {
+                "_reset": torch.zeros((1,), dtype=torch.bool),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1],
+        )
+        assert _bring_reset_to_root(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (1,)
+        # nested td with greater number of dims
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        # test reduction
+        assert _bring_reset_to_root(
+            td, reset_keys=["_reset", ("a", "_reset")]
+        ).shape == (1, 2)
+        td = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+            },
+            [1, 2],
+        )
+        assert _bring_reset_to_root(td, reset_keys=["_reset", ("a", "_reset")]).all()
+        # with a stack
+        td0 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2)},
+            },
+            [1, 2],
+        )
+        td1 = TensorDict(
+            {
+                "_reset": torch.zeros(
+                    (
+                        1,
+                        2,
+                    ),
+                    dtype=torch.bool,
+                ),
+                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "b": {"c": torch.randn(1, 2, 5)},
+            },
+            [1, 2],
+        )
+        td = torch.stack([td0, td1], 0)
+        assert _bring_reset_to_root(td, reset_keys=["_reset", ("a", "_reset")]).all()
+
+    def test_bring_reset_to_root_errors(self):
+        # the order matters: if the first or another key is missing, the ValueError is raised at a different line
+        with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
+            _bring_reset_to_root(
+                TensorDict({"_reset": False}, []),
+                reset_keys=["_reset", ("another", "_reset")],
+            )
+        with pytest.raises(ValueError, match=PARTIAL_MISSING_ERR):
+            _bring_reset_to_root(
+                TensorDict({"_reset": False}, []),
+                reset_keys=[("another", "_reset"), "_reset"],
+            )
 
 
 if __name__ == "__main__":

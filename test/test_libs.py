@@ -34,6 +34,7 @@ from _utils_internal import (
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rand_reset,
     rollout_consistency_assertion,
 )
 from packaging import version
@@ -364,12 +365,16 @@ class TestGym:
 
         with set_gym_backend("gymnasium"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+            import gymnasium
+
+            assert env.get_library_name(env._env) is gymnasium
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
 
     @implement_for("gym", "0.18", "0.27.0")
     @pytest.mark.parametrize(
@@ -404,16 +409,21 @@ class TestGym:
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
-            check_env_specs(env)
-            rollout = env.rollout(100, break_when_any_done=False)
-            for obs_key in env.observation_spec.keys(True, True):
-                rollout_consistency_assertion(
-                    rollout, done_key="done", observation_key=obs_key
-                )
+            import gym
+
+            assert env.get_library_name(env._env) is gym
+        # rollouts can be executed without decorator
+        check_env_specs(env)
+        rollout = env.rollout(100, break_when_any_done=False)
+        for obs_key in env.observation_spec.keys(True, True):
+            rollout_consistency_assertion(
+                rollout, done_key="done", observation_key=obs_key
+            )
         if envname != "CartPole-v1":
             with set_gym_backend("gym"):
                 env = GymEnv(envname, num_envs=2, from_pixels=True)
-                check_env_specs(env)
+            # rollouts can be executed without decorator
+            check_env_specs(env)
 
     @implement_for("gym", None, "0.18")
     @pytest.mark.parametrize(
@@ -432,6 +442,86 @@ class TestGym:
     def test_vecenvs_env(self, envname):  # noqa: F811
         # skipping tests for older versions of gym
         ...
+
+    @implement_for("gym", None, "0.26")
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):
+        # gym has 4 outputs, no truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" not in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    @implement_for("gym", "0.26", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        # gym has 5 outputs, with truncation
+        import gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gym"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+        if wrapper:
+            # let's further test with a wrapper that exposes the env with old API
+            from gym.wrappers.compatibility import EnvCompatibility
+
+            with pytest.raises(
+                ValueError,
+                match="GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility",
+            ):
+                GymWrapper(EnvCompatibility(gym.make("CartPole-v1")))
+
+    @implement_for("gymnasium", "0.27", None)
+    @pytest.mark.parametrize("wrapper", [True, False])
+    def test_gym_output_num(self, wrapper):  # noqa: F811
+        # gym has 5 outputs, with truncation
+        import gymnasium as gym
+
+        if wrapper:
+            env = GymWrapper(gym.make(PENDULUM_VERSIONED))
+        else:
+            with set_gym_backend("gymnasium"):
+                env = GymEnv(PENDULUM_VERSIONED)
+        assert "truncated" in env.done_keys
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    def test_gym_gymnasium_parallel(self):
+        # tests that both gym and gymnasium work with wrappers without
+        # decorating with set_gym_backend during execution
+        if importlib.util.find_spec("gym") is not None:
+            import gym
+
+            old_api = version.parse(gym.__version__) < version.parse("0.26")
+            make_fun = EnvCreator(lambda: GymWrapper(gym.make(PENDULUM_VERSIONED)))
+        elif importlib.util.find_spec("gymnasium") is not None:
+            import gymnasium
+
+            old_api = False
+            make_fun = EnvCreator(
+                lambda: GymWrapper(gymnasium.make(PENDULUM_VERSIONED))
+            )
+        else:
+            raise ImportError  # unreachable under pytest.skipif
+        penv = ParallelEnv(2, make_fun)
+        rollout = penv.rollout(2)
+        if old_api:
+            assert "truncated" not in rollout.keys()
+        else:
+            assert "truncated" in rollout.keys()
+        check_env_specs(penv)
 
 
 @implement_for("gym", None, "0.26")
@@ -533,7 +623,7 @@ class TestDMControl:
         assert_allclose_td(rollout0, rollout2)
 
     def test_faketd(self, env_name, task, frame_skip, from_pixels, pixels_only):
-        if from_pixels and (not torch.has_cuda or not torch.cuda.device_count()):
+        if from_pixels and not torch.cuda.device_count():
             raise pytest.skip("no cuda device")
 
         env = DMControlEnv(
@@ -1420,17 +1510,14 @@ class TestVmas:
             .all()
         )
 
-        _reset = env.done_spec.rand()
-        while not _reset.any():
-            _reset = env.done_spec.rand()
-
         tensordict = env.reset(
-            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+            TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
         )
-        assert not tensordict["done"][_reset].all().item()
+        reset = tensordict["_reset"]
+        assert not tensordict["done"][reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
-        assert tensordict["done"].all(dim=2)[~_reset.any(dim=2)].all().item()
+        assert tensordict["done"].all(dim=2)[~reset.any(dim=2)].all().item()
 
     @pytest.mark.skipif(len(get_available_devices()) < 2, reason="not enough devices")
     @pytest.mark.parametrize("first", [0, 1])

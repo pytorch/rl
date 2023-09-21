@@ -235,14 +235,27 @@ class DMControlWrapper(GymLikeEnv):
 
     def _output_transform(
         self, timestep_tuple: Tuple["TimeStep"]  # noqa: F821
-    ) -> Tuple[np.ndarray, float, bool]:
+    ) -> Tuple[np.ndarray, float, bool, bool, dict]:
         if type(timestep_tuple) is not tuple:
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
         done = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
-        return observation, reward, done
+        truncation = termination = None
+        info = {}
+        return observation, reward, termination, truncation, done, info
+
+    def _reset_output_transform(self, reset_data):
+        (
+            observation,
+            reward,
+            termination,
+            truncation,
+            done,
+            info,
+        ) = self._output_transform(reset_data)
+        return observation, info
 
     def __repr__(self) -> str:
         return (

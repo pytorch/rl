@@ -20,6 +20,7 @@ from _utils_internal import (  # noqa
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rand_reset,
     retry,
 )
 from mocking_classes import (
@@ -631,10 +632,10 @@ class TestCatFrames(TransformBase):
             nested_dim,
             1,
         )
-        tranformed_env = TransformedEnv(
+        transformed_env = TransformedEnv(
             env, CatFrames(dim=-1, N=cat_N, in_keys=[("data", "states")])
         )
-        td = tranformed_env.rollout(rollout_length, policy=policy)
+        td = transformed_env.rollout(rollout_length, policy=policy)
         assert td[("data", "states")].shape == (
             *batch_size,
             rollout_length,
@@ -1382,6 +1383,10 @@ class TestR3M(TransformBase):
 
 
 class TestStepCounter(TransformBase):
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(max_steps=10))
+        check_env_specs(env)
+
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
@@ -1406,10 +1411,6 @@ class TestStepCounter(TransformBase):
         env = TransformedEnv(SerialEnv(2, ContinuousActionVecMockEnv), StepCounter(10))
         check_env_specs(env)
 
-    def test_single_trans_env_check(self):
-        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
-        check_env_specs(env)
-
     @pytest.mark.skipif(not _has_gym, reason="Gym not found")
     def test_transform_env(self):
         env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(10))
@@ -1417,7 +1418,7 @@ class TestStepCounter(TransformBase):
         assert td["step_count"].max() == 9
         assert td.shape[-1] == 100
 
-    @pytest.mark.parametrize("step_key", ["step_count", ("other", "key")])
+    @pytest.mark.parametrize("step_key", ["step_count", "other-key"])
     @pytest.mark.parametrize("max_steps", [None, 10])
     @pytest.mark.parametrize("nested_done", [True, False])
     def test_nested(
@@ -1429,10 +1430,13 @@ class TestStepCounter(TransformBase):
         policy = CountingEnvCountPolicy(
             action_spec=env.action_spec, action_key=env.action_key
         )
+        if nested_done:
+            step_key = (*env.done_key[:-1], step_key)
         transformed_env = TransformedEnv(
             env,
             StepCounter(
-                max_steps=max_steps, step_count_key=step_key, truncated_key=env.done_key
+                max_steps=max_steps,
+                step_count_keys=[step_key],
             ),
         )
         td = transformed_env.rollout(
@@ -1450,10 +1454,14 @@ class TestStepCounter(TransformBase):
             assert step[:max_steps].eq(torch.arange(max_steps)).all()
             assert step[max_steps:].eq(torch.arange(rollout_length - max_steps)).all()
 
+        if nested_done:
+            reset_key = (*env.done_key[:-1], "_reset")
+        else:
+            reset_key = "_reset"
         _reset = env.done_spec.rand()
         td_reset = transformed_env.reset(
             TensorDict(
-                {"_reset": _reset, step_key: last_step},
+                {reset_key: _reset, step_key: last_step},
                 batch_size=env.batch_size,
                 device=env.device,
             )
@@ -1538,7 +1546,7 @@ class TestStepCounter(TransformBase):
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
-            _reset = torch.randn(batch, device=device) < 0
+            _reset = torch.rand(batch, device=device) < 0.5
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
@@ -2495,6 +2503,24 @@ class TestExcludeTransform(TransformBase):
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
 
+    def test_exclude_done(self):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a", "done"))
+        assert "done" not in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        assert "done" in env.done_keys
+        check_env_specs(env)
+
+    def test_exclude_reward(self):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(base_env, ExcludeTransform("a", "reward"))
+        assert "reward" not in env.reward_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, ExcludeTransform("a"))
+        assert "reward" in env.reward_keys
+        check_env_specs(env)
+
     @pytest.mark.parametrize("nest_done", [True, False])
     @pytest.mark.parametrize("nest_reward", [True, False])
     def test_nested(self, nest_reward, nest_done):
@@ -2700,6 +2726,38 @@ class TestSelectTransform(TransformBase):
         assert "a" not in env.reset().keys()
         assert "b" in env.reset().keys()
         assert "c" in env.reset().keys()
+
+    @pytest.mark.parametrize("keep_done", [True, False])
+    def test_select_done(self, keep_done):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", "done", keep_dones=keep_done)
+        )
+        assert "done" in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(base_env, SelectTransform("b", "c", keep_dones=keep_done))
+        if keep_done:
+            assert "done" in env.done_keys
+        else:
+            assert "done" not in env.done_keys
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("keep_reward", [True, False])
+    def test_select_reward(self, keep_reward):
+        base_env = TestExcludeTransform.EnvWithManyKeys()
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", "reward", keep_rewards=keep_reward)
+        )
+        assert "reward" in env.reward_keys
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env, SelectTransform("b", "c", keep_rewards=keep_reward)
+        )
+        if keep_reward:
+            assert "reward" in env.reward_keys
+        else:
+            assert "reward" not in env.reward_keys
+        check_env_specs(env)
 
     @pytest.mark.parametrize("nest_done", [True, False])
     @pytest.mark.parametrize("nest_reward", [True, False])
@@ -7307,7 +7365,7 @@ class TestTransforms:
             dim=-3,
         )
         t2 = FiniteTensorDictCheck()
-        t3 = StepCounter()
+        t3 = ExcludeTransform()
         compose = Compose(t1, t2, t3)
         dont_touch = torch.randn(*batch, nchannels, 16, 16, device=device)
         td = TensorDict(
@@ -7325,10 +7383,6 @@ class TestTransforms:
                 match="CatFrames cannot process unbatched tensordict instances",
             ):
                 compose(td.clone(False))
-        with pytest.raises(
-            NotImplementedError, match="StepCounter cannot be called independently"
-        ):
-            compose[1:](td.clone(False))
         compose._call(td)
         for key in keys:
             assert td.get(key).shape[-3] == nchannels * N
@@ -7350,20 +7404,8 @@ class TestTransforms:
                 )
 
     @pytest.mark.parametrize("device", get_default_devices())
-    @pytest.mark.parametrize(
-        "keys_inv_1",
-        [
-            ["action_1"],
-            [],
-        ],
-    )
-    @pytest.mark.parametrize(
-        "keys_inv_2",
-        [
-            ["action_2"],
-            [],
-        ],
-    )
+    @pytest.mark.parametrize("keys_inv_1", [["action_1"], []])
+    @pytest.mark.parametrize("keys_inv_2", [["action_2"], []])
     def test_compose_inv(self, keys_inv_1, keys_inv_2, device):
         torch.manual_seed(0)
         keys_to_transform = set(keys_inv_1 + keys_inv_2)
@@ -7772,9 +7814,7 @@ class TestRenameTransform(TransformBase):
             ["observation_orig"],
             ["stuff"],
             ["observation_orig"],
-            [
-                "stuff",
-            ],
+            ["stuff"],
             create_copy=create_copy,
         )
         if compose:
@@ -7787,12 +7827,8 @@ class TestRenameTransform(TransformBase):
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
                 RenameTransform(
-                    [
-                        "observation",
-                    ],
-                    [
-                        "stuff",
-                    ],
+                    ["observation"],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7807,9 +7843,7 @@ class TestRenameTransform(TransformBase):
                     ["observation_orig"],
                     ["stuff"],
                     ["observation_orig"],
-                    [
-                        "stuff",
-                    ],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7822,12 +7856,8 @@ class TestRenameTransform(TransformBase):
             return TransformedEnv(
                 ContinuousActionVecMockEnv(),
                 RenameTransform(
-                    [
-                        "observation",
-                    ],
-                    [
-                        "stuff",
-                    ],
+                    ["observation"],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7842,9 +7872,7 @@ class TestRenameTransform(TransformBase):
                     ["observation_orig"],
                     ["stuff"],
                     ["observation_orig"],
-                    [
-                        "stuff",
-                    ],
+                    ["stuff"],
                     create_copy=create_copy,
                 ),
             )
@@ -7859,12 +7887,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             SerialEnv(2, make_env),
             RenameTransform(
-                [
-                    "observation",
-                ],
-                [
-                    "stuff",
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7875,9 +7899,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff",
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7890,12 +7912,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             ParallelEnv(2, make_env),
             RenameTransform(
-                [
-                    "observation",
-                ],
-                [
-                    "stuff",
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7906,9 +7924,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff",
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7960,12 +7976,8 @@ class TestRenameTransform(TransformBase):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
             RenameTransform(
-                [
-                    "observation",
-                ],
-                [
-                    "stuff",
-                ],
+                ["observation"],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -7985,9 +7997,7 @@ class TestRenameTransform(TransformBase):
                 ["observation_orig"],
                 ["stuff"],
                 ["observation_orig"],
-                [
-                    "stuff",
-                ],
+                ["stuff"],
                 create_copy=create_copy,
             ),
         )
@@ -8000,6 +8010,28 @@ class TestRenameTransform(TransformBase):
             assert ("next", "observation_orig") not in r.keys(True)
         assert "stuff" in r.keys()
         assert ("next", "stuff") in r.keys(True)
+
+    def test_rename_done_reward(self, create_copy):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["done"],
+                [("nested", "other_done")],
+                create_copy=create_copy,
+            ),
+        )
+        assert ("nested", "other_done") in env.done_keys
+        check_env_specs(env)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            RenameTransform(
+                ["reward"],
+                [("nested", "reward")],
+                create_copy=create_copy,
+            ),
+        )
+        assert ("nested", "reward") in env.reward_keys
+        check_env_specs(env)
 
     def test_transform_model(self, create_copy):
         t = RenameTransform(["a"], ["b"], create_copy=create_copy)
@@ -8096,6 +8128,8 @@ class TestInitTracker(TransformBase):
         check_env_specs(env)
 
     def test_transform_no_env(self):
+        with pytest.raises(ValueError, match="init_key can only be of type str"):
+            InitTracker(init_key=("some", "nested"))
         with pytest.raises(
             NotImplementedError, match="InitTracker cannot be executed without a parent"
         ):
@@ -8146,7 +8180,7 @@ class TestInitTracker(TransformBase):
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for InitTracker")
 
-    @pytest.mark.parametrize("init_key", ["is_init", "loool", ("other", "key")])
+    @pytest.mark.parametrize("init_key", ["is_init", "loool"])
     @pytest.mark.parametrize("nested_done", [True, False])
     @pytest.mark.parametrize("max_steps", [5])
     def test_nested(
@@ -8167,6 +8201,7 @@ class TestInitTracker(TransformBase):
             env,
             InitTracker(init_key=init_key),
         )
+        init_key = transformed_env.transform.init_keys[0]
         td = transformed_env.rollout(
             rollout_length, policy=policy, break_when_any_done=False
         )
@@ -8183,15 +8218,18 @@ class TestInitTracker(TransformBase):
             assert torch.all(is_init[max_steps + 1] == 1)
             assert torch.all(is_init[max_steps + 2 :] == 0)
 
-        _reset = env.done_spec.rand()
-        td_reset = transformed_env.reset(
-            TensorDict(
-                {"_reset": _reset},
-                batch_size=env.batch_size,
-                device=env.device,
-            )
+        td_reset = TensorDict(
+            rand_reset(transformed_env),
+            batch_size=env.batch_size,
+            device=env.device,
         )
-        assert (td_reset[init_key] == _reset).all()
+        if nested_done:
+            reset = td_reset["data", "_reset"]
+        else:
+            reset = td_reset["_reset"]
+
+        td_reset = transformed_env.reset(td_reset)
+        assert (td_reset[init_key] == reset).all()
 
 
 class TestKLRewardTransform(TransformBase):

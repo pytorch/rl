@@ -133,18 +133,40 @@ class GymLikeEnv(_EnvWrapper):
         """
         return self.action_spec.to_numpy(action, safe=False)
 
-    def read_done(self, done):
+    def read_done(
+        self,
+        gym_done: bool,
+        termination: bool | None = None,
+        truncation: bool | None = None,
+    ) -> Tuple[bool, bool, bool]:
         """Done state reader.
 
-        Reads a done state and returns a tuple containing:
-        - a done state to be set in the environment
-        - a boolean value indicating whether the frame_skip loop should be broken
+        In torchrl, a `"done"` signal means that a trajectory is terminated
+        (what is referred to as `termination` in gymnasium).
+        Truncated means the trajectory has been interrupted.
 
         Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
+            gym_done (np.ndarray, boolean or other format): done state obtained from the environment
+            termination (bool or None): termination signal. Defaults to `None`.
+            truncation (bool or None): truncation signal. Defaults to `None`.
+
+        Returns: a tuple with 3 boolean values,
+            - a done state to be set in the environment.
+            - a truncated state, possibly None if no truncation is provided.
+            - a boolean value indicating whether the frame_skip loop should be broken.
 
         """
-        return done, done.any() if not isinstance(done, bool) else done
+        if termination is not None:
+            done = termination
+            do_break = gym_done | truncation
+        else:
+            do_break = gym_done
+            done = gym_done
+        return (
+            done,
+            truncation,
+            do_break.any() if not isinstance(do_break, bool) else do_break,
+        )
 
     def read_reward(self, reward):
         """Reads the reward and maps it to the reward space.
@@ -187,26 +209,12 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, done, *info = self._output_transform(
+            obs, _reward, termination, truncation, done, info = self._output_transform(
                 self._env.step(action_np)
             )
             if isinstance(obs, list) and len(obs) == 1:
                 # Until gym 0.25.2 we had rendered frames returned in lists of length 1
                 obs = obs[0]
-            if len(info) == 2:
-                # gym 0.26
-                truncation, info = info
-                done = done | truncation
-            elif len(info) == 1:
-                info = info[0]
-            elif len(info) == 0:
-                info = None
-            else:
-                raise ValueError(
-                    "the environment output is expected to be either"
-                    "obs, reward, done, truncation, info (gym >= 0.26) or "
-                    f"obs, reward, done, info. Got info with types = ({[type(x) for x in info]})"
-                )
 
             if _reward is None:
                 _reward = self.reward_spec.zero()
@@ -217,7 +225,7 @@ class GymLikeEnv(_EnvWrapper):
                 isinstance(done, np.ndarray) and not len(done)
             ):
                 done = torch.tensor([done])
-            done, do_break = self.read_done(done)
+            done, truncation, do_break = self.read_done(done, termination, truncation)
             if do_break:
                 break
 
@@ -226,34 +234,38 @@ class GymLikeEnv(_EnvWrapper):
 
         if reward is None:
             reward = torch.tensor(np.nan).expand(self.reward_spec.shape)
+
         obs_dict[self.reward_key] = reward
-        obs_dict[self.done_key] = done
+
+        obs_dict[self.done_keys[0]] = done
+        if truncation is not None:
+            if "truncated" in self.done_keys:
+                obs_dict["truncated"] = truncation
+            else:
+                raise KeyError("Could not find truncated key")
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
         if self.info_dict_reader and info is not None:
-            for info_dict_reader in self.info_dict_reader:
-                out = info_dict_reader(info, tensordict_out)
-                if out is not None:
-                    tensordict_out = out
+            if not isinstance(info, dict):
+                warnings.warn(
+                    f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}."
+                )
+            else:
+                for info_dict_reader in self.info_dict_reader:
+                    out = info_dict_reader(info, tensordict_out)
+                    if out is not None:
+                        tensordict_out = out
         tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
     ) -> TensorDictBase:
-        reset_data = self._env.reset(**kwargs)
-        if not isinstance(reset_data, tuple):
-            reset_data = (reset_data,)
-        obs, *other = self._output_transform(reset_data)
-        info = None
-        if len(other) == 1:
-            info = other[0]
+        obs, info = self._reset_output_transform(self._env.reset(**kwargs))
 
         source = self.read_obs(obs)
 
-        # if self.done_key not in source:
-        #    source[self.done_key] = self.done_spec.zero()
         tensordict_out = TensorDict(
             source=source,
             batch_size=self.batch_size,
@@ -271,13 +283,19 @@ class GymLikeEnv(_EnvWrapper):
         tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
+    @abc.abstractmethod
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
-        """To be overwritten when step_outputs differ from Tuple[Observation: Union[np.ndarray, dict], reward: Number, done:Bool]."""
-        if not isinstance(step_outputs_tuple, tuple):
-            raise TypeError(
-                f"Expected step_outputs_tuple type to be Tuple but got {type(step_outputs_tuple)}"
-            )
-        return step_outputs_tuple
+        """A method to read the output of the env step.
+
+        Must return a tuple: (obs, reward, termination, truncation, done, info).
+        truncated and terminal can be None, in which case they are discarded.
+        If done is None, truncated and terminal mustn't be None.
+        """
+        ...
+
+    @abc.abstractmethod
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+        ...
 
     def set_info_dict_reader(self, info_dict_reader: BaseInfoDictReader) -> GymLikeEnv:
         """Sets an info_dict_reader function.

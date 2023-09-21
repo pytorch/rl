@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import importlib.util
 
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -345,6 +345,12 @@ class JumanjiWrapper(GymLikeEnv):
         tensordict_out["state"] = state_dict
 
         return tensordict_out
+
+    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+        ...
+
+    def _reset_output_transform(self, reset_outputs_tuple: Tuple) -> Tuple:
+        ...
 
 
 class JumanjiEnv(JumanjiWrapper):

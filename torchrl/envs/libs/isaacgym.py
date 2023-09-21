@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import itertools
 import warnings
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -103,18 +105,13 @@ class IsaacGymWrapper(GymWrapper):
         """
         return action
 
-    def read_done(self, done):
-        """Done state reader.
-
-        Reads a done state and returns a tuple containing:
-        - a done state to be set in the environment
-        - a boolean value indicating whether the frame_skip loop should be broken
-
-        Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
-
-        """
-        return done.bool(), done.any()
+    def read_done(
+        self,
+        gym_done: bool,
+        termination: bool | None = None,
+        truncation: bool | None = None,
+    ) -> Tuple[bool, bool, bool]:
+        return gym_done.bool(), None, gym_done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.

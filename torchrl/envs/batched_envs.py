@@ -17,7 +17,7 @@ from warnings import warn
 import torch
 
 from tensordict import TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_keys
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
 from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
@@ -25,7 +25,12 @@ from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TY
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
 
-from torchrl.envs.utils import _set_single_key, _sort_keys, clear_mpi_env_vars
+from torchrl.envs.utils import (
+    _bring_reset_to_root,
+    _set_single_key,
+    _sort_keys,
+    clear_mpi_env_vars,
+)
 
 # legacy
 from .libs.envpool import MultiThreadedEnv, MultiThreadedEnvWrapper  # noqa: F401
@@ -591,20 +596,12 @@ class SerialEnv(_BatchedEnv):
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
 
-        missing_reset = False
         if tensordict is not None:
-            needs_resetting = [False] * self.num_workers
-            for _reset_key in self.reset_keys:
-                _reset = tensordict.get(_reset_key, default=None)
-                if _reset is not None:
-                    for i in range(self.num_workers):
-                        needs_resetting[i] += _reset[i].any()
-                else:
-                    missing_reset = True
-                    break
-
-        if tensordict is None or missing_reset:
-            needs_resetting = [True] * self.num_workers
+            needs_resetting = _bring_reset_to_root(tensordict)
+        else:
+            needs_resetting = torch.ones(
+                (self.num_workers,), device=self.device, dtype=torch.bool
+            )
 
         for i, _env in enumerate(self._envs):
             if tensordict is not None:
@@ -635,14 +632,14 @@ class SerialEnv(_BatchedEnv):
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_reset_keys, strict=False)
             )
-
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if _unravel_key_to_tuple(key)[-1] != "_reset":
+                key = unravel_keys(key)
+                if key not in self.reset_keys:
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
@@ -836,21 +833,17 @@ class ParallelEnv(_BatchedEnv):
 
     @_check_start
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
-
-        missing_reset = False
         if tensordict is not None:
-            needs_resetting = [False for _ in range(self.num_workers)]
-            for _reset_key in self.reset_keys:
-                _reset = tensordict.get(_reset_key, default=None)
-                if _reset is not None:
-                    for i in range(self.num_workers):
-                        needs_resetting[i] += _reset[i].any()
-                else:
-                    missing_reset = True
-                    break
+            needs_resetting = _bring_reset_to_root(tensordict)
+            if needs_resetting.ndim > 2:
+                needs_resetting = needs_resetting.flatten(1, needs_resetting.ndim - 1)
+            if needs_resetting.ndim > 1:
+                needs_resetting = needs_resetting.any(-1)
+        else:
+            needs_resetting = torch.ones(
+                (self.num_workers,), device=self.device, dtype=torch.bool
+            )
 
-        if tensordict is None or missing_reset:
-            needs_resetting = [True] * self.num_workers
         workers = []
 
         for i, channel in enumerate(self.parent_channels):
@@ -897,7 +890,8 @@ class ParallelEnv(_BatchedEnv):
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
             for key in self._selected_reset_keys:
-                if _unravel_key_to_tuple(key)[-1] != "_reset":
+                key = unravel_keys(key)
+                if key not in self.reset_keys:
                     _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:

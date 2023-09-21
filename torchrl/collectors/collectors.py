@@ -42,8 +42,9 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
+    _bring_reset_to_root,
     _convert_exploration_type,
-    _replace_last,
+    done_or_truncated,
     ExplorationType,
     set_exploration_type,
     step_mdp,
@@ -571,9 +572,9 @@ class SyncDataCollector(DataCollectorBase):
             for key in self.env.output_spec.keys(True, True):
                 if isinstance(key, str):
                     key = (key,)
-                if "truncated" in key:
+                if "step_count" in key:
                     raise ValueError(
-                        "A 'truncated' key is already present in the environment "
+                        "A 'step_count' key is already present in the environment "
                         "and the 'max_frames_per_traj' argument may conflict with "
                         "a 'StepCounter' that has already been set. "
                         "Possible solutions: Set max_frames_per_traj to 0 or "
@@ -793,54 +794,28 @@ class SyncDataCollector(DataCollectorBase):
 
     def _step_and_maybe_reset(self) -> None:
 
-        any_done = False
-        done_map = {}
-        for done_key in self.env.done_keys:
-            done = self._tensordict.get(("next", done_key))
-            truncated = self._tensordict.get(
-                ("next", _replace_last(done_key, "truncated")),
-                None,
-            )
-            done = (done | truncated) if truncated is not None else done
-            any_sub_done = done.any().item()
-            if any_sub_done and self.reset_when_done:
-                # Add this done to the map, we will need it to reset
-                done_map.update({done_key: done.clone()})
-            any_done += any_sub_done
-
         self._tensordict = step_mdp(
             self._tensordict,
             reward_keys=self.env.reward_keys,
             done_keys=self.env.done_keys,
             action_keys=self.env.action_keys,
         )
-
         if not self.reset_when_done:
             return
+        td_reset = self._tensordict.clone(False)
+        any_done = done_or_truncated(
+            td_reset,
+            full_done_spec=self.env.output_spec["full_done_spec"],
+            key="_reset",
+        )
 
         if any_done:
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            td_reset = self._tensordict.select(*done_map.keys())
-            for done_key, done in done_map.items():
-                td_reset.set(_replace_last(done_key, "_reset"), done)
-                del td_reset[done_key]
+            traj_done_or_terminated = _bring_reset_to_root(td_reset)
             td_reset = self.env.reset(td_reset)
-            for done_key in done_map.keys():
-                del td_reset[_replace_last(done_key, "_reset")]
-
-            traj_done_or_terminated = torch.stack(
-                [
-                    done.sum(
-                        tuple(range(self._tensordict.batch_dims, done.ndim)),
-                        dtype=torch.bool,
-                    )
-                    for done in done_map.values()
-                ],
-                dim=0,
-            ).any(0)
 
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
@@ -913,6 +888,12 @@ class SyncDataCollector(DataCollectorBase):
                             self._tensordict_out.ndim - 1,
                             out=self._tensordict_out,
                         )
+                except KeyError:
+                    print("\n\n err during stack")
+                    print("tensordict list", tensordicts)
+                    print("dest", self._tensordict_out)
+                    print("env", self.env)
+                    raise
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
