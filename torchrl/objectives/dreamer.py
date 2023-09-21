@@ -286,7 +286,7 @@ class DreamerActorLoss(LossModule):
 
         if self.discount_loss:
             gamma = self.value_estimator.gamma.to(tensordict.device)
-            discount = gamma.expand(lambda_target.shape)
+            discount = gamma.expand(lambda_target.shape).clone()
             discount[..., 0, :] = 1
             discount = discount.cumprod(dim=-2)
             actor_loss = -(lambda_target * discount).sum((-2, -1)).mean()
