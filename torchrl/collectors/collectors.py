@@ -1124,7 +1124,7 @@ class _MultiDataCollector(DataCollectorBase):
         )
         self.closed = True
         if num_threads is None:
-            num_threads = len(create_env_fn) + 1 # 1 more thread for this proc
+            num_threads = len(create_env_fn) + 1  # 1 more thread for this proc
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self.create_env_fn = create_env_fn

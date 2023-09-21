@@ -5667,6 +5667,12 @@ class VecGymEnvTransform(Transform):
     reset output in a private container. The resulting data truly reflects
     the output of the step.
 
+    This class works from gym 0.13 till the most recent gymnasium version.
+
+    .. note:: Gym versions < 0.22 did not return the final observations. For these,
+        we simply fill the next observations with NaN (because it is lost) and
+        do the swap at the next step.
+
     Then, when calling `env.reset`, the saved data is written back where it belongs
     (and the `reset` is a no-op).
 
@@ -5689,33 +5695,37 @@ class VecGymEnvTransform(Transform):
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         out = super().set_container(container)
-        expected_done_keys = {"done", "truncated"}
-        for done_key in self.parent.done_keys:
-            if done_key not in expected_done_keys:
-                raise RuntimeError(
-                    f"VecGymEnvTransform only supports the following "
-                    f"done keys: {expected_done_keys}, but it got {done_key}."
-                )
+        self._done_keys = None
+        self._obs_keys = None
         return out
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # save the final info
-        done = next_tensordict.get("done")
-        truncated = next_tensordict.get("truncated", None)
-        if truncated is not None:
-            done = done | truncated
-        done = self._memo["done"] = done
-        final = next_tensordict.pop("final")
+        done = False
+        for done_key in self.done_keys:
+            done = done | next_tensordict.get(done_key)
+        if done is False:
+            raise RuntimeError(
+                f"Could not find any done signal in tensordict:\n{tensordict}"
+            )
+        self._memo["done"] = done
+        final = next_tensordict.pop(self.final_name, None)
         # if anything's done, we need to swap the final obs
         if done.any():
             done = done.squeeze(-1)
-            saved_next = next_tensordict.select(*final.keys(True, True)).clone()
-            next_tensordict[done] = final[done]
-            self._memo["saved_done"] = saved_next
+            if final is not None:
+                saved_next = next_tensordict.select(*final.keys(True, True)).clone()
+                next_tensordict[done] = final[done]
+            else:
+                saved_next = next_tensordict.select(*self.obs_keys).clone()
+                for obs_key in self.obs_keys:
+                    next_tensordict[obs_key][done] = torch.tensor(np.nan)
+
+            self._memo["saved_next"] = saved_next
         else:
-            self._memo["saved_done"] = None
+            self._memo["saved_next"] = None
         return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -5735,20 +5745,59 @@ class VecGymEnvTransform(Transform):
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
         if reset is not None and reset.any() and not reset.all():
-            saved_done = self._memo["saved_done"]
+            saved_done = self._memo["saved_next"]
             reset = reset.view(tensordict.shape)
-            updated_td = torch.where(
-                ~reset, tensordict.select(*saved_done.keys(True, True)), saved_done
-            )
-            tensordict.update(updated_td)
-            if "truncated" in tensordict.keys():
-                tensordict.set(
-                    "truncated", tensordict.get("truncated").clone().fill_(0)
-                )
-            tensordict.set("done", tensordict.get("done").clone().fill_(0))
-        tensordict.pop("final", None)
+            # we have a data container from the previous call to step
+            # that contains part of the observation we need.
+            # We can safely place them back in the reset result tensordict:
+            # in env.rollout(), the result of reset() is assumed to be just
+            # the td from previous step with updated values from reset.
+            # In our case, it will always be the case that all these values
+            # are properly set.
+            # collectors even take care of doing an extra masking so it's even
+            # safer.
+            tensordict.update(saved_done)
+            for done_key in self.done_keys:
+                # Make sure that all done are False
+                done = tensordict.get(done_key, None)
+                if done is not None:
+                    done = done.clone().fill_(0)
+                else:
+                    done = torch.zeros(
+                        (*tensordict.batch_size, 1),
+                        device=tensordict.device,
+                        dtype=torch.bool,
+                    )
+                tensordict.set(done_key, done)
+        tensordict.pop(self.final_name, None)
         return tensordict
 
+    @property
+    def done_keys(self) -> List[NestedKey]:
+        keys = self.__dict__.get("_done_keys", None)
+        if keys is None:
+            keys = self.parent.done_keys
+            self._done_keys = keys
+            expected_done_keys = {"done", "truncated"}
+            # put this check for now. We can consider relaxing that later
+            # and allow nested values, though they will still need to be unique.
+            for done_key in keys:
+                if done_key not in expected_done_keys:
+                    raise RuntimeError(
+                        f"VecGymEnvTransform only supports the following "
+                        f"done keys: {expected_done_keys}, but it got {done_key}."
+                    )
+        return keys
+
+    @property
+    def obs_keys(self) -> List[NestedKey]:
+        keys = self.__dict__.get("_obs_keys", None)
+        if keys is None:
+            keys = list(self.parent.observation_spec.keys(True, True))
+            self._obs_keys = keys
+        return keys
+
     def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        del observation_spec[self.final_name]
+        if self.final_name in observation_spec.keys(True):
+            del observation_spec[self.final_name]
         return observation_spec

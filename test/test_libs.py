@@ -523,6 +523,82 @@ class TestGym:
             assert "truncated" in rollout.keys()
         check_env_specs(penv)
 
+    @implement_for("gym", None, "0.22.0")
+    def test_vecenvs_nan(self):  # noqa: F811
+        print("here")
+        # old versions of gym must return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert not torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert not torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
+
+    @implement_for("gym", "0.22.0", None)
+    def test_vecenvs_nan(self):  # noqa: F811
+        # new versions of gym must never return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
+
+    @implement_for("gymnasium")
+    def test_vecenvs_nan(self):  # noqa: F811
+        # new versions of gym must never return nan for next values when there is a done state
+        torch.manual_seed(0)
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        rollout = env.rollout(200)
+        assert torch.isfinite(rollout.get("observation")).all()
+        assert torch.isfinite(rollout.get(("next", "observation"))).all()
+        env.close()
+        del env
+
+        # same with collector
+        env = GymEnv("CartPole-v0", num_envs=2)
+        env.set_seed(0)
+        c = SyncDataCollector(
+            env, RandomPolicy(env.action_spec), total_frames=2000, frames_per_batch=200
+        )
+        for rollout in c:
+            assert torch.isfinite(rollout.get("observation")).all()
+            assert torch.isfinite(rollout.get(("next", "observation"))).all()
+            break
+        del c
+        return
+
 
 @implement_for("gym", None, "0.26")
 def _make_gym_environment(env_name):  # noqa: F811
@@ -543,12 +619,7 @@ def _make_gym_environment(env_name):  # noqa: F811
 @pytest.mark.parametrize("env_name,task", [["cheetah", "run"]])
 @pytest.mark.parametrize("frame_skip", [1, 3])
 @pytest.mark.parametrize(
-    "from_pixels,pixels_only",
-    [
-        [True, True],
-        [True, False],
-        [False, False],
-    ],
+    "from_pixels,pixels_only", [[True, True], [True, False], [False, False]]
 )
 class TestDMControl:
     def test_dmcontrol(self, env_name, task, frame_skip, from_pixels, pixels_only):

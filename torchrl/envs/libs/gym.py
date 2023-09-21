@@ -390,18 +390,6 @@ class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
         # before gym 0.22, there was no final_observation
-        backend = instance.get_library_name(instance._env)
-        if backend == "gym":
-            import gym
-
-            if version.parse(gym.__version__) < version.parse("0.22"):
-                warn(
-                    "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
-                    "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
-                    "and discards the true next observation to return the result of the step). "
-                    "This isn't compatible with TorchRL API and should be used with caution."
-                )
-                return instance
         if instance._is_batched:
             from torchrl.envs.transforms.transforms import (
                 TransformedEnv,
@@ -417,9 +405,28 @@ class _AsyncMeta(_EnvPostInit):
                     backend = "gym"
             else:
                 backend = "gym"
-            instance.set_info_dict_reader(
-                terminal_obs_reader(instance.observation_spec, backend=backend)
-            )
+
+            # we need 3 checks: the backend is not sb3 (if so, gymnasium is used),
+            # it is gym and not gymnasium and the version is before 0.22.0
+            add_info_dict = True
+            if backend == "gym":
+                gym_backend = instance.get_library_name(instance._env)
+                if gym_backend == "gym":  # check gym against gymnasium
+                    import gym
+
+                    if version.parse(gym.__version__) < version.parse("0.22.0"):
+                        warn(
+                            "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
+                            "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
+                            "and discards the true next observation to return the result of the step). "
+                            "This isn't compatible with TorchRL API and should be used with caution.",
+                            category=UserWarning,
+                        )
+                        add_info_dict = False
+            if add_info_dict:
+                instance.set_info_dict_reader(
+                    terminal_obs_reader(instance.observation_spec, backend=backend)
+                )
             return TransformedEnv(instance, VecGymEnvTransform())
         return instance
 
@@ -652,7 +659,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return seed
 
-    @implement_for("gym", None, "0.19.0")
+    @implement_for("gym", None, "0.15.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        self._seed_calls_reset = False
+        self._env.seed(seed)
+
+    @implement_for("gym", "0.15.0", "0.19.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         self._seed_calls_reset = False
         self._env.seed(seed=seed)

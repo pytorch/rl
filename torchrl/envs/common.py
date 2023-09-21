@@ -1719,7 +1719,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if break_when_any_done and any_done:
                 break
             if not break_when_any_done and any_done:
-                self.reset(tensordict)
+                tensordict = self.reset(tensordict)
 
             if callback is not None:
                 callback(self, tensordict)
