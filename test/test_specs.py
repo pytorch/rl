@@ -1762,13 +1762,9 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
+
 class TestUnbind:
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5, 4)
-        ]
-    )
+    @pytest.mark.parametrize("shape1", [(5, 4)])
     def test_binary(self, shape1):
         spec = BinaryDiscreteTensorSpec(
             n=4, shape=shape1, device="cpu", dtype=torch.bool
@@ -1847,13 +1843,7 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (5,6)
-        ]
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_discrete(
         self,
         shape1,
@@ -1866,8 +1856,11 @@ class TestUnbind:
         "shape1",
         [
             (5,),
-            (5,6,)
-        ]
+            (
+                5,
+                6,
+            ),
+        ],
     )
     def test_multidiscrete(
         self,
@@ -1888,8 +1881,11 @@ class TestUnbind:
         "shape1",
         [
             (5,),
-            (5,6,)
-        ]
+            (
+                5,
+                6,
+            ),
+        ],
     )
     def test_multionehot(
         self,
@@ -1910,7 +1906,10 @@ class TestUnbind:
         "shape1",
         [
             (5,),
-            (5,6,)
+            (
+                5,
+                6,
+            ),
         ],
     )
     def test_onehot(
@@ -1932,8 +1931,11 @@ class TestUnbind:
         "shape1",
         [
             (5,),
-            (5,6,)
-        ]
+            (
+                5,
+                6,
+            ),
+        ],
     )
     def test_unbounded(
         self,
@@ -1953,8 +1955,11 @@ class TestUnbind:
         "shape1",
         [
             (5,),
-            (5,6,)
-        ]
+            (
+                5,
+                6,
+            ),
+        ],
     )
     def test_unboundeddiscrete(
         self,
@@ -1967,6 +1972,7 @@ class TestUnbind:
         spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
+
 
 class TestUnbind:
     @pytest.mark.parametrize("shape1", [(5, 4)])

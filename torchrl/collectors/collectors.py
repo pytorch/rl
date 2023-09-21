@@ -30,8 +30,8 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
     _check_for_faulty_process,
-    accept_remote_rref_udf_invocation,
     _ProcessNoWarn,
+    accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
     VERBOSE,
@@ -1097,6 +1097,15 @@ class _MultiDataCollector(DataCollectorBase):
             Defaults to ``False``.
         preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
             that will be allowed to finished collecting their rollout before the rest are forced to end early.
+        num_threads (int, optional): number of threads for this process.
+            Defaults to the number of workers.
+            This parameter has no effect for the :class:`~SerialEnv` class.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
+            Should be equal to one plus the number of processes launched within
+            each subprocess (or one if a single process is launched).
+            Defaults to 1 for safety: if none is indicated, launching multiple
+            workers may charge the cpu load too much and harm performance.
+
     """
 
     def __init__(
@@ -1126,11 +1135,17 @@ class _MultiDataCollector(DataCollectorBase):
         update_at_each_batch: bool = False,
         devices=None,
         storing_devices=None,
+        num_threads: int = 1,
+        num_sub_threads: int = None,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
         )
         self.closed = True
+        if num_threads is None:
+            num_threads = len(create_env_fn)
+        self.num_sub_threads = num_sub_threads
+        self.num_threads = num_threads
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
         self.create_env_kwargs = (
@@ -1305,6 +1320,7 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
+        torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
@@ -1336,7 +1352,11 @@ class _MultiDataCollector(DataCollectorBase):
                 "idx": i,
                 "interruptor": self.interruptor,
             }
-            proc = _ProcessNoWarn(target=_main_async_collector, kwargs=kwargs)
+            proc = _ProcessNoWarn(
+                target=_main_async_collector,
+                num_threads=self.num_sub_threads,
+                kwargs=kwargs,
+            )
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
             try:
                 proc.start()
