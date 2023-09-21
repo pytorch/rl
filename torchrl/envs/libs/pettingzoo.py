@@ -372,9 +372,9 @@ class PettingZooWrapper(_EnvWrapper):
     def _init_env(self) -> Optional[int]:
         # Add info
         if self.parallel:
-            _, info_dict = self._reset_parallel()
+            _, info_dict = self._reset_parallel(seed=self.seed)
         else:
-            _, info_dict = self._reset_aec()
+            _, info_dict = self._reset_aec(seed=self.seed)
 
         for group, agents in self.group_map.items():
             info_specs = []
@@ -440,8 +440,9 @@ class PettingZooWrapper(_EnvWrapper):
         self.cached_step_output_zero.update(self.output_spec["full_reward_spec"].zero())
         self.cached_step_output_zero.update(self.output_spec["full_done_spec"].zero())
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int):
         self.seed = seed
+        self.reset(seed=self.seed)
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -449,10 +450,10 @@ class PettingZooWrapper(_EnvWrapper):
 
         if self.parallel:
             # This resets when any is done
-            observation_dict, info_dict = self._reset_parallel()
+            observation_dict, info_dict = self._reset_parallel(**kwargs)
         else:
             # This resets when all are done
-            observation_dict, info_dict = self._reset_aec(tensordict)
+            observation_dict, info_dict = self._reset_aec(tensordict, **kwargs)
 
         # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_reset_output_zero.clone()
@@ -481,7 +482,7 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def _reset_aec(self, tensordict=None) -> Tuple[Dict, Dict]:
+    def _reset_aec(self, tensordict=None, **kwargs) -> Tuple[Dict, Dict]:
         all_done = True
         if tensordict is not None:
             _resets = []
@@ -500,7 +501,7 @@ class PettingZooWrapper(_EnvWrapper):
                         break
 
         if all_done:
-            self._env.reset(seed=self.seed)
+            self._env.reset(**kwargs)
 
         observation_dict = {
             agent: self._env.observe(agent) for agent in self.possible_agents
@@ -508,10 +509,8 @@ class PettingZooWrapper(_EnvWrapper):
         info_dict = self._env.infos
         return observation_dict, info_dict
 
-    def _reset_parallel(
-        self,
-    ) -> Tuple[Dict, Dict]:
-        return self._env.reset(seed=self.seed)
+    def _reset_parallel(self, **kwargs) -> Tuple[Dict, Dict]:
+        return self._env.reset(**kwargs)
 
     def _step(
         self,

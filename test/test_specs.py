@@ -1215,14 +1215,7 @@ class TestSpec:
 
 
 class TestExpand:
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (4,),
-            (5, 4),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (4,), (5, 4)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_binary(self, shape1, shape2):
         spec = BinaryDiscreteTensorSpec(
@@ -1344,14 +1337,7 @@ class TestExpand:
             assert new_spec["spec7"].shape == torch.Size([4, *batch_size, 9])
             assert new_spec["spec8"].shape == torch.Size([4, *batch_size, 9])
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_discrete(self, shape1, shape2):
         spec = DiscreteTensorSpec(n=4, shape=shape1, device="cpu", dtype=torch.long)
@@ -1373,14 +1359,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_multidiscrete(self, shape1, shape2):
         if shape1 is None:
@@ -1408,14 +1387,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_multionehot(self, shape1, shape2):
         if shape1 is None:
@@ -1443,14 +1415,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_onehot(self, shape1, shape2):
         if shape1 is None:
@@ -1478,14 +1443,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_unbounded(self, shape1, shape2):
         if shape1 is None:
@@ -1513,14 +1471,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_unboundeddiscrete(self, shape1, shape2):
         if shape1 is None:
@@ -1638,14 +1589,7 @@ class TestClone:
             assert item == spec_clone[key], key
         assert spec == spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_discrete(
         self,
         shape1,
@@ -1654,14 +1598,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_multidiscrete(
         self,
         shape1,
@@ -1676,14 +1613,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_multionehot(
         self,
         shape1,
@@ -1698,14 +1628,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_onehot(
         self,
         shape1,
@@ -1720,14 +1643,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_unbounded(
         self,
         shape1,
@@ -1742,14 +1658,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_unboundeddiscrete(
         self,
         shape1,
@@ -1852,16 +1761,7 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (
-                5,
-                6,
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_multidiscrete(
         self,
         shape1,
@@ -1877,16 +1777,7 @@ class TestUnbind:
         with pytest.raises(ValueError):
             spec.unbind(-1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (
-                5,
-                6,
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_multionehot(
         self,
         shape1,
@@ -1902,16 +1793,7 @@ class TestUnbind:
         with pytest.raises(ValueError):
             spec.unbind(-1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (
-                5,
-                6,
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_onehot(
         self,
         shape1,
@@ -1927,16 +1809,7 @@ class TestUnbind:
         with pytest.raises(ValueError):
             spec.unbind(-1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (
-                5,
-                6,
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_unbounded(
         self,
         shape1,
@@ -1951,16 +1824,7 @@ class TestUnbind:
         assert spec == torch.stack(spec.unbind(0), 0)
         assert spec == torch.stack(spec.unbind(-1), -1)
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            (5,),
-            (
-                5,
-                6,
-            ),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
     def test_unboundeddiscrete(
         self,
         shape1,
