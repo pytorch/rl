@@ -8128,6 +8128,8 @@ class TestInitTracker(TransformBase):
         check_env_specs(env)
 
     def test_transform_no_env(self):
+        with pytest.raises(ValueError, match="init_key can only be of type str"):
+            InitTracker(init_key=("some", "nested"))
         with pytest.raises(
             NotImplementedError, match="InitTracker cannot be executed without a parent"
         ):

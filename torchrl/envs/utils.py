@@ -864,7 +864,7 @@ def _bring_reset_to_root(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
             return torch.ones(batch_size, dtype=torch.bool, device=data.device)
         return reset
 
-    reset = False
+    reset = torch.tensor(False, device=data.device)
 
     def skim_through(td, reset=reset):
         for key in td.keys():

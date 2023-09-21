@@ -5056,6 +5056,8 @@ class InitTracker(Transform):
     """
 
     def __init__(self, init_key: NestedKey = "is_init"):
+        if not isinstance(init_key, str):
+            raise ValueError("init_key can only be of type str.")
         self.init_key = init_key
         self._init_keys = None
         self.reset_key = "_reset"
@@ -5160,7 +5162,6 @@ class InitTracker(Transform):
                     shape = full_done_spec[done_key].shape
                     break
             else:
-                print("here!")
                 raise KeyError(
                     f"Could not find root of init_key {init_key} within done_keys {self.parent.done_keys}."
                 )
