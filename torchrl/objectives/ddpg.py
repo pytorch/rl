@@ -293,7 +293,9 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> torch.Tensor:
-        td_copy = tensordict.select(*self.actor_in_keys).detach()
+        td_copy = tensordict.select(
+            *self.actor_in_keys, *self.value_network.in_keys
+        ).detach()
         td_copy = self.actor_network(
             td_copy,
             params=self.actor_network_params,
