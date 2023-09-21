@@ -1,4 +1,4 @@
-# Task and env
+# environment and task
 env:
   name: HalfCheetah-v3
   task: ""
@@ -10,7 +10,6 @@ env:
   num_train_envs: 1
   num_eval_envs: 10
   reward_scaling: 0.001 # for r2g
-  noop: 1
   seed: 42
   target_return_mode: reduce
   eval_target_return: 6000
@@ -26,7 +25,7 @@ logger:
   fintune_log_interval: 1
   eval_steps: 1000
 
-# Buffer
+# replay buffer
 replay_buffer:
   dataset: halfcheetah-medium-v2
   batch_size: 256
@@ -38,7 +37,7 @@ replay_buffer:
   device: cuda:0
   prefetch: 3
 
-# Optimization
+# optimizer
 optim:
   device: cuda:0
   lr: 1.0e-4
@@ -55,6 +54,7 @@ loss:
   alpha_init: 0.1
   target_entropy: auto
 
+# transformer model
 transformer:
   n_embd: 512
   n_layer: 4

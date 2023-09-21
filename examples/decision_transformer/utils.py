@@ -19,7 +19,6 @@ from torchrl.envs import (
     DoubleToFloat,
     EnvCreator,
     ExcludeTransform,
-    NoopResetEnv,
     ObservationNorm,
     RandomCropTensorDict,
     Reward2GoTransform,
@@ -65,8 +64,6 @@ def make_base_env(env_cfg):
         env_task = env_cfg.task
         env_kwargs.update({"task_name": env_task})
     env = env_library(**env_kwargs)
-    if env_cfg.noop > 1:
-        env = TransformedEnv(env, NoopResetEnv(env_cfg.noop))
     return env
 
 
@@ -472,3 +469,13 @@ def make_logger(cfg):
         wandb_kwargs={"config": cfg},
     )
     return logger
+
+
+# ====================================================================
+# General utils
+# ---------
+
+
+def log_metrics(logger, metrics, step):
+    for metric_name, metric_value in metrics.items():
+        logger.log_scalar(metric_name, metric_value, step)
