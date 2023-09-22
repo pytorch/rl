@@ -129,18 +129,18 @@ class TestGym:
     @pytest.mark.parametrize(
         "env_name",
         [
+            HALFCHEETAH_VERSIONED,
             PONG_VERSIONED,
             # PENDULUM_VERSIONED,
-            HALFCHEETAH_VERSIONED,
         ],
     )
     @pytest.mark.parametrize("frame_skip", [1, 3])
     @pytest.mark.parametrize(
         "from_pixels,pixels_only",
         [
-            [False, False],
             [True, True],
             [True, False],
+            [False, False],
         ],
     )
     def test_gym(self, env_name, frame_skip, from_pixels, pixels_only):
@@ -151,7 +151,21 @@ class TestGym:
         elif (
             env_name != PONG_VERSIONED and from_pixels and torch.cuda.device_count() < 1
         ):
-            raise pytest.skip("no cuda device")
+            pass
+            # raise pytest.skip("no cuda device")
+
+        def non_null_obs(batched_td):
+            if from_pixels:
+                pix_norm = batched_td.get("pixels").flatten(-3, -1).float().norm(dim=-1)
+                pix_norm_next = batched_td.get(("next", "pixels")).flatten(-3, -1).float().norm(dim=-1)
+                idx = (pix_norm > 1) & (pix_norm_next > 1)
+                # eliminate batch size: all idx must be True (otherwise one could be filled with 0s)
+                while idx.ndim > 1:
+                    idx = idx.all(0)
+                idx = idx.nonzero().squeeze(-1)
+                assert idx.numel(), "Did not find pixels with norm > 1"
+                return idx
+            return slice(None)
 
         tdreset = []
         tdrollout = []
@@ -167,14 +181,20 @@ class TestGym:
             np.random.seed(0)
             final_seed.append(env0.set_seed(0))
             tdreset.append(env0.reset())
-            tdrollout.append(env0.rollout(max_steps=50))
+            rollout = env0.rollout(max_steps=50)
+            tdrollout.append(rollout)
             assert env0.from_pixels is from_pixels
             env0.close()
             env_type = type(env0._env)
-            del env0
 
         assert_allclose_td(*tdreset, rtol=RTOL, atol=ATOL)
-        assert_allclose_td(*tdrollout, rtol=RTOL, atol=ATOL)
+        tdrollout = torch.stack(tdrollout, 0).contiguous()
+
+        # custom filtering of non-null obs: mujoco rendering sometimes fails
+        # and renders black images. To counter this in the tests, we select
+        # tensordicts with all non-null observations
+        idx = non_null_obs(tdrollout)
+        assert_allclose_td(tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL)
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
@@ -187,7 +207,15 @@ class TestGym:
         if from_pixels and not _is_from_pixels(base_env):
             base_env = PixelObservationWrapper(base_env, pixels_only=pixels_only)
         assert type(base_env) is env_type
+
+        # Compare GymEnv output with GymWrapper output
         env1 = GymWrapper(base_env, frame_skip=frame_skip)
+        assert env0.get_library_name(env0._env) == env1.get_library_name(env1._env)
+        # check that we didn't do more wrapping
+        assert type(env0._env) == type(env1._env)
+        assert env0.output_spec == env1.output_spec
+        assert env0.input_spec == env1.input_spec
+        del env0
         torch.manual_seed(0)
         np.random.seed(0)
         final_seed2 = env1.set_seed(0)
@@ -199,7 +227,10 @@ class TestGym:
 
         assert_allclose_td(tdreset[0], tdreset2, rtol=RTOL, atol=ATOL)
         assert final_seed0 == final_seed2
-        assert_allclose_td(tdrollout[0], rollout2, rtol=RTOL, atol=ATOL)
+        # same magic trick for mujoco as above
+        tdrollout = torch.stack([tdrollout[0], rollout2], 0).contiguous()
+        idx = non_null_obs(tdrollout)
+        assert_allclose_td(tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL)
 
     @pytest.mark.parametrize(
         "env_name",

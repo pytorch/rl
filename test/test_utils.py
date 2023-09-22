@@ -269,7 +269,7 @@ def test_set_gym_environments_no_version_gymnasium_found():
     # this version of gymnasium does not exist in implement_for
     # therefore, set_gym_backend will not set anything and raise an ImportError.
     msg = f"could not set anything related to gym backend {gymnasium_name} with version={gymnasium_version}."
-    with pytest.raises(ImportError, match=msg) as exc_info:
+    with pytest.raises(ImportError, match=msg):
         with set_gym_backend(gymnasium):
             _utils_internal._set_gym_environments()
 
