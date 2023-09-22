@@ -236,7 +236,7 @@ class DDPGLoss(LossModule):
         self._set_in_keys()
 
     def _set_in_keys(self):
-        keys = {
+        in_keys = {
             unravel_key(("next", self.tensor_keys.reward)),
             unravel_key(("next", self.tensor_keys.done)),
             *self.actor_in_keys,
@@ -244,7 +244,7 @@ class DDPGLoss(LossModule):
             *self.value_network.in_keys,
             *[unravel_key(("next", key)) for key in self.value_network.in_keys],
         }
-        self._in_keys = sorted(keys, keys=str)
+        self._in_keys = sorted(in_keys, keys=str)
 
     @property
     def in_keys(self):
