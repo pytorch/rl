@@ -5,6 +5,7 @@ env:
   exp_name: "HalfCheetah-SAC"
   library: gym
   frame_skip: 1
+  max_episode_steps: 1_000_000
   seed: 1
 
 # collector

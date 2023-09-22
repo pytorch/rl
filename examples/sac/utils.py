@@ -25,10 +25,16 @@ from torchrl.objectives.sac import SACLoss
 # -----------------
 
 
-def env_maker(task, frame_skip=1, device="cpu", from_pixels=False):
+def env_maker(
+    task, frame_skip=1, device="cpu", from_pixels=False, max_episode_steps=1000
+):
     with set_gym_backend("gym"):
         return GymEnv(
-            task, device=device, frame_skip=frame_skip, from_pixels=from_pixels
+            task,
+            device=device,
+            frame_skip=frame_skip,
+            from_pixels=from_pixels,
+            max_episode_steps=max_episode_steps,
         )
 
 
@@ -48,7 +54,11 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(lambda: env_maker(task=cfg.env.name)),
+        EnvCreator(
+            lambda: env_maker(
+                task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
+            )
+        ),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -57,7 +67,11 @@ def make_environment(cfg):
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(lambda: env_maker(task=cfg.env.name)),
+            EnvCreator(
+                lambda: env_maker(
+                    task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
+                )
+            ),
         ),
         train_env.transform.clone(),
     )
