@@ -1,26 +1,24 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
+  num_envs: 32
 
 # collector
 collector:
-  frames_per_batch: 80
+  frames_per_batch: 2560
   total_frames: 40_000_000
-  num_workers: 8
 
 # logger
 logger:
-  backend: null
-  exp_name: Atari_Espeholt18
-  test_interval: 40_000_000
+  backend: wandb
+  exp_name: Atari_Schulman17
+  test_interval: 200_000_000
   num_test_episodes: 3
 
 # Optim
 optim:
-  lr: 0.00048
-  eps: 0.01
-  alpha: 0.99
-  momentum: 0.0
+  lr: 0.001
+  eps: 1.0e-6
   weight_decay: 0.0
   max_grad_norm: 1.0
   anneal_lr: True
@@ -28,7 +26,11 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  batch_size: 32
+  mini_batch_size: 2560
+  ppo_epochs: 2
+  gae_lambda: 0.95
+  clip_epsilon: 0.1
+  anneal_clip_epsilon: True
   critic_coef: 0.25
-  entropy_coef: 0.05
+  entropy_coef: 0.01
   loss_critic_type: l2

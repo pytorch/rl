@@ -1,7 +1,7 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  num_envs: 8
+  num_envs: 2
 
 # collector
 collector:
@@ -12,7 +12,7 @@ collector:
 logger:
   backend: wandb
   exp_name: Atari_Schulman17
-  test_interval: 40_000_000
+  test_interval: 200_000_000
   num_test_episodes: 3
 
 # Optim
@@ -27,10 +27,10 @@ optim:
 loss:
   gamma: 0.99
   mini_batch_size: 1024
-  ppo_epochs: 1
+  ppo_epochs: 3
   gae_lambda: 0.95
   clip_epsilon: 0.1
   anneal_clip_epsilon: True
-  critic_coef: 1.0
+  critic_coef: 0.5
   entropy_coef: 0.01
   loss_critic_type: l2

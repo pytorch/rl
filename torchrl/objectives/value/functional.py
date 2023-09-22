@@ -1053,6 +1053,10 @@ def vec_td_lambda_advantage_estimate(
     )
 
 
+########################################################################
+# V-Trace
+# -----
+
 @_transpose_time
 def vtrace_advantage_estimate(
     gamma: float,

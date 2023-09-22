@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import gymnasium as gym
 import numpy as np
 import torch.nn
@@ -32,7 +31,6 @@ from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
-    LSTMModule,
     MLP,
     OneHotCategorical,
     ProbabilisticActor,
@@ -54,13 +52,13 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.lives = 0
 
     def step(self, action):
-        obs, rew, done, truncate, info = self.env.step(action)
+        obs, rew, done, truncated, info = self.env.step(action)
         lives = self.env.unwrapped.ale.lives()
         info["end_of_life"] = False
         if (lives < self.lives) or done:
             info["end_of_life"] = True
         self.lives = lives
-        return obs, rew, done, truncate, info
+        return obs, rew, done, truncated, info
 
     def reset(self, **kwargs):
         reset_data = self.env.reset(**kwargs)
@@ -69,7 +67,7 @@ class EpisodicLifeEnv(gym.Wrapper):
 
 
 def make_base_env(
-    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
+        env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
     env = gym.make(env_name)
     if not is_test:
@@ -86,12 +84,11 @@ def make_base_env(
 
 
 def make_parallel_env(env_name, num_envs, device, is_test=False):
-
     env = ParallelEnv(
         num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
     )
     env = TransformedEnv(env)
-    env.append_transform(ToTensorImage())
+    env.append_transform(ToTensorImage(from_int=True))
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
@@ -100,7 +97,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(VecNorm(in_keys=["pixels"], eps=0.999))
+    env.append_transform(VecNorm(in_keys=["pixels"], decay=0.99999, eps=1e-2))
     return env
 
 
@@ -207,12 +204,18 @@ def make_ppo_models(env_name):
         value_operator=value_module,
     )
 
+    with torch.no_grad():
+        td = proof_environment.rollout(max_steps=100, break_when_any_done=False)
+        td = actor_critic(td)
+        del td
+
     actor = actor_critic.get_policy_operator()
     critic = actor_critic.get_value_operator()
+    critic_head = actor_critic.get_value_head()
 
     del proof_environment
 
-    return actor, critic
+    return actor, critic, critic_head
 
 
 # ====================================================================

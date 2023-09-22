@@ -134,6 +134,7 @@ from torchrl.objectives.value.advantages import (
 from torchrl.objectives.value.functional import (
     _transpose_time,
     generalized_advantage_estimate,
+    vtrace_advantage_estimate,
     td0_advantage_estimate,
     td1_advantage_estimate,
     td_lambda_advantage_estimate,
@@ -8569,6 +8570,158 @@ class TestValues:
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("rho_thresh", [1.0, 0.5])
+    @pytest.mark.parametrize("c_thresh", [1.0, 0.5])
+    @pytest.mark.parametrize("N", [(1,), (3,), (7, 3)])
+    @pytest.mark.parametrize("T", [200, 5, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_vtrace(self, device, gamma, N, T, dtype, has_done, rho_thresh, c_thresh):
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        log_pi = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+
+        r1 = vtrace_advantage_estimate(
+            gamma, log_pi, log_mu, state_value, next_state_value, reward, done, rho_thresh, c_thresh
+        )
+
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("N", [(1,), (8,), (7, 3)])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize(
+        "gamma_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    @pytest.mark.parametrize(
+        "rho_thresh_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    @pytest.mark.parametrize(
+        "c_thresh_tensor", ["scalar", "tensor", "tensor_single_element"]
+    )
+    def test_vtrace_param_as_tensor(
+            self, device, N, dtype, has_done, gamma_tensor, rho_thresh_tensor, c_thresh_tensor
+    ):
+        torch.manual_seed(0)
+
+        gamma = 0.95
+        lmbda = 0.90
+        T = 200
+
+        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
+        log_pi = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+
+        if gamma_tensor == "tensor":
+            gamma_vec = torch.full_like(reward, gamma)
+        elif gamma_tensor == "tensor_single_element":
+            gamma_vec = torch.as_tensor([gamma], device=device)
+        else:
+            gamma_vec = gamma
+
+        if rho_thresh_tensor == "tensor":
+            rho_thresh_tensor_vec = torch.full_like(reward, rho_thresh_tensor)
+        elif rho_thresh_tensor == "tensor_single_element":
+            rho_thresh_tensor_vec = torch.as_tensor([rho_thresh_tensor], device=device)
+        else:
+            rho_thresh_tensor_vec = rho_thresh_tensor
+
+        if c_thresh_tensor == "tensor":
+            c_thresh_tensor_vec = torch.full_like(reward, c_thresh_tensor)
+        elif c_thresh_tensor == "tensor_single_element":
+            c_thresh_tensor_vec = torch.as_tensor([c_thresh_tensor], device=device)
+        else:
+            c_thresh_tensor_vec = c_thresh_tensor
+
+        r1 = vtrace_advantage_estimate(
+            gamma_vec, log_pi, log_mu, state_value, next_state_value, reward, done, rho_thresh_tensor_vec, c_thresh_tensor_vec
+        )
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    @pytest.mark.parametrize("gamma", [0.99, 0.5, 0.1])
+    @pytest.mark.parametrize("N", [(3,), (7, 3)])
+    @pytest.mark.parametrize("T", [100, 3])
+    @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+    @pytest.mark.parametrize("feature_dim", [[5], [2, 5]])
+    @pytest.mark.parametrize("has_done", [True, False])
+    def test_vtrace_multidim(
+            self, device, gamma, N, T, dtype, has_done, feature_dim
+    ):
+        D = feature_dim
+        time_dim = -1 - len(D)
+
+        torch.manual_seed(0)
+
+        done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool)
+        if has_done:
+            done = done.bernoulli_(0.1)
+        reward = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        next_state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
+        log_pi = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+        log_mu = torch.log(torch.randn(*N, T, 1, device=device, dtype=dtype))
+
+        r1 = vtrace_advantage_estimate(
+            gamma,
+            log_pi,
+            log_mu,
+            state_value,
+            next_state_value,
+            reward,
+            done,
+            time_dim=time_dim,
+        )
+
+        if len(D) == 2:
+            r2 = [
+                vtrace_advantage_estimate(
+                    gamma,
+                    log_pi[..., i : i + 1, j],
+                    log_mu[..., i : i + 1, j],
+                    state_value[..., i : i + 1, j],
+                    next_state_value[..., i : i + 1, j],
+                    reward[..., i : i + 1, j],
+                    done[..., i : i + 1, j],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+                for j in range(D[1])
+            ]
+        else:
+            r2 = [
+                vtrace_advantage_estimate(
+                    gamma,
+                    log_pi[..., i : i + 1],
+                    log_mu[..., i : i + 1],
+                    state_value[..., i : i + 1],
+                    next_state_value[..., i : i + 1],
+                    reward[..., i : i + 1],
+                    done[..., i : i + 1],
+                    time_dim=-2,
+                )
+                for i in range(D[0])
+            ]
+
+        list2 = list(zip(*r2))
+        r2 = [torch.cat(list2[0], -1), torch.cat(list2[1], -1)]
+        if len(D) == 2:
+            r2 = [r2[0].unflatten(-1, D), r2[1].unflatten(-1, D)]
+        torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
@@ -9337,6 +9490,7 @@ class TestAdv:
                 in_keys=["loc", "scale"],
                 spec=UnboundedContinuousTensorSpec(n_act),
             )
+            kwargs["actor_network"] = actor_net
         module = adv(
             gamma=0.98,
             value_network=value_net,
