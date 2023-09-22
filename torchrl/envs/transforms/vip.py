@@ -391,9 +391,13 @@ class VIPRewardTransform(VIPTransform):
         return tensordict
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        state_spec = input_spec["state_spec"]
+        if "state_spec" in input_spec.keys():
+            state_spec = input_spec["state_spec"]
+        else:
+            state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         # find the obs spec
         in_key = self.in_keys[0]
         spec = self.parent.output_spec["observation_spec"][in_key].clone()
         state_spec["goal_image"] = spec
+        input_spec["state_spec"] = state_spec
         return input_spec
