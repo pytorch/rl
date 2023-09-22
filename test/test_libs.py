@@ -151,8 +151,7 @@ class TestGym:
         elif (
             env_name != PONG_VERSIONED and from_pixels and torch.cuda.device_count() < 1
         ):
-            pass
-            # raise pytest.skip("no cuda device")
+            raise pytest.skip("no cuda device")
 
         def non_null_obs(batched_td):
             if from_pixels:
