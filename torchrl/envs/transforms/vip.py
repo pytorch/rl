@@ -389,3 +389,11 @@ class VIPRewardTransform(VIPTransform):
     def forward(self, tensordict):
         tensordict = super().forward(tensordict)
         return tensordict
+
+    def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
+        state_spec = input_spec["state_spec"]
+        # find the obs spec
+        in_key = self.in_keys[0]
+        spec = self.parent.output_spec["observation_spec"][in_key].clone()
+        state_spec["goal_image"] = spec
+        return input_spec

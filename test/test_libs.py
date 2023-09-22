@@ -156,7 +156,12 @@ class TestGym:
         def non_null_obs(batched_td):
             if from_pixels:
                 pix_norm = batched_td.get("pixels").flatten(-3, -1).float().norm(dim=-1)
-                pix_norm_next = batched_td.get(("next", "pixels")).flatten(-3, -1).float().norm(dim=-1)
+                pix_norm_next = (
+                    batched_td.get(("next", "pixels"))
+                    .flatten(-3, -1)
+                    .float()
+                    .norm(dim=-1)
+                )
                 idx = (pix_norm > 1) & (pix_norm_next > 1)
                 # eliminate batch size: all idx must be True (otherwise one could be filled with 0s)
                 while idx.ndim > 1:
@@ -193,7 +198,9 @@ class TestGym:
         # and renders black images. To counter this in the tests, we select
         # tensordicts with all non-null observations
         idx = non_null_obs(tdrollout)
-        assert_allclose_td(tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL)
+        assert_allclose_td(
+            tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL
+        )
         final_seed0, final_seed1 = final_seed
         assert final_seed0 == final_seed1
 
@@ -211,7 +218,7 @@ class TestGym:
         env1 = GymWrapper(base_env, frame_skip=frame_skip)
         assert env0.get_library_name(env0._env) == env1.get_library_name(env1._env)
         # check that we didn't do more wrapping
-        assert type(env0._env) == type(env1._env)
+        assert type(env0._env) == type(env1._env)  # noqa: E721
         assert env0.output_spec == env1.output_spec
         assert env0.input_spec == env1.input_spec
         del env0
@@ -229,7 +236,9 @@ class TestGym:
         # same magic trick for mujoco as above
         tdrollout = torch.stack([tdrollout[0], rollout2], 0).contiguous()
         idx = non_null_obs(tdrollout)
-        assert_allclose_td(tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL)
+        assert_allclose_td(
+            tdrollout[0][..., idx], tdrollout[1][..., idx], rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.parametrize(
         "env_name",
