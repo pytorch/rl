@@ -6,6 +6,7 @@ import abc
 import argparse
 
 import itertools
+import sys
 from copy import copy
 from functools import partial
 
@@ -25,6 +26,7 @@ from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
     CountingEnvCountPolicy,
+    DiscreteActionConvMockEnv,
     DiscreteActionConvMockEnvNumpy,
     IncrementingEnv,
     MockBatchedLockedEnv,
@@ -52,6 +54,7 @@ from torchrl.envs import (
     CatFrames,
     CatTensors,
     CenterCrop,
+    ClipTransform,
     Compose,
     DeviceCastTransform,
     DiscreteActionProjection,
@@ -68,6 +71,7 @@ from torchrl.envs import (
     NoopResetEnv,
     ObservationNorm,
     ParallelEnv,
+    PermuteTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,
@@ -321,6 +325,253 @@ class TestBinarizeReward(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for BinerizedReward")
+
+
+class TestClipTransform(TransformBase):
+    @pytest.mark.parametrize("rbclass", [ReplayBuffer, TensorDictReplayBuffer])
+    def test_transform_rb(self, rbclass):
+        device = "cpu"
+        batch = [20]
+        torch.manual_seed(0)
+        rb = rbclass(storage=LazyTensorStorage(20))
+
+        t = Compose(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                in_keys_inv=["input"],
+                out_keys_inv=["input_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        rb.append_transform(t)
+        data = TensorDict({"observation": 1, "reward": 2, "input": 3}, [])
+        rb.add(data)
+        sample = rb.sample(20)
+
+        assert (sample["observation"] == 1).all()
+        assert (sample["obs_clip"] == 0.1).all()
+        assert (sample["reward"] == 2).all()
+        assert (sample["reward_clip"] == 0.1).all()
+        assert (sample["input"] == 3).all()
+        assert (sample["input_clip"] == 0.1).all()
+
+    def test_single_trans_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_transform_compose(self):
+        t = Compose(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_transform_env(self, device):
+        base_env = ContinuousActionVecMockEnv(device=device)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        r = env.rollout(3)
+        assert r.device == device
+        assert (r["observation"] <= 0.1).all()
+        assert (r["next", "observation"] <= 0.1).all()
+        assert (r["next", "reward"] <= 0.1).all()
+        assert (r["observation"] >= -0.1).all()
+        assert (r["next", "observation"] >= -0.1).all()
+        assert (r["next", "reward"] >= -0.1).all()
+        check_env_specs(env)
+        with pytest.raises(
+            TypeError, match="Either one or both of `high` and `low` must be provided"
+        ):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=None,
+                high=None,
+            )
+        with pytest.raises(TypeError, match="low and high must be scalars or None"):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=torch.randn(2),
+                high=None,
+            )
+        with pytest.raises(ValueError, match="`low` must be stricly lower than `high`"):
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=1.0,
+                high=-1.0,
+            )
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=1.0,
+                high=None,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=None,
+                high=1.0,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-1,
+                high=1,
+            ),
+        )
+        check_env_specs(env)
+        env = TransformedEnv(
+            base_env,
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-torch.ones(()),
+                high=1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_transform_inverse(self):
+        t = ClipTransform(
+            in_keys_inv=["observation", "reward"],
+            out_keys_inv=["obs_clip", "reward_clip"],
+            low=-0.1,
+            high=0.1,
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t.inv(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_transform_model(self):
+        t = nn.Sequential(
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                out_keys=["obs_clip", "reward_clip"],
+                low=-0.1,
+                high=0.1,
+            )
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_transform_no_env(self):
+        t = ClipTransform(
+            in_keys=["observation", "reward"],
+            out_keys=["obs_clip", "reward_clip"],
+            low=-0.1,
+            high=0.1,
+        )
+        data = TensorDict({"observation": 1, "reward": 2}, [])
+        data = t(data)
+        assert data["observation"] == 1
+        assert data["obs_clip"] == 0.1
+        assert data["reward"] == 2
+        assert data["reward_clip"] == 0.1
+
+    def test_parallel_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                ClipTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                    low=-0.1,
+                    high=0.1,
+                ),
+            )
+
+        env = ParallelEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_serial_trans_env_check(self):
+        def make_env():
+            env = ContinuousActionVecMockEnv()
+            return TransformedEnv(
+                env,
+                ClipTransform(
+                    in_keys=["observation", "reward"],
+                    in_keys_inv=["observation_orig"],
+                    low=-0.1,
+                    high=0.1,
+                ),
+            )
+
+        env = SerialEnv(2, make_env)
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            ParallelEnv(2, ContinuousActionVecMockEnv),
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = ContinuousActionVecMockEnv()
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv),
+            ClipTransform(
+                in_keys=["observation", "reward"],
+                in_keys_inv=["observation_orig"],
+                low=-0.1,
+                high=0.1,
+            ),
+        )
+        check_env_specs(env)
 
 
 class TestCatFrames(TransformBase):
@@ -596,10 +847,10 @@ class TestCatFrames(TransformBase):
         for key in keys:
             for i in range(N):
                 assert torch.equal(
-                    result[key].space.maximum[i], observation_spec[key].space.maximum[0]
+                    result[key].space.high[i], observation_spec[key].space.high[0]
                 )
                 assert torch.equal(
-                    result[key].space.minimum[i], observation_spec[key].space.minimum[0]
+                    result[key].space.low[i], observation_spec[key].space.low[0]
                 )
 
     @pytest.mark.parametrize("device", get_default_devices())
@@ -618,7 +869,7 @@ class TestCatFrames(TransformBase):
         td = TensorDict(dict(zip(keys, key_tensors)), batch_size, device=device)
         if dim > 0:
             with pytest.raises(
-                ValueError, match="dim must be > 0 to accomodate for tensordict"
+                ValueError, match="dim must be < 0 to accomodate for tensordict"
             ):
                 cat_frames = CatFrames(N=N, in_keys=keys, dim=dim)
             return
@@ -3535,13 +3786,11 @@ class TestObservationNorm(TransformBase):
             observation_spec = on.transform_observation_spec(observation_spec)
             for key in keys:
                 if standard_normal:
-                    assert (observation_spec[key].space.minimum == -loc / scale).all()
-                    assert (
-                        observation_spec[key].space.maximum == (1 - loc) / scale
-                    ).all()
+                    assert (observation_spec[key].space.low == -loc / scale).all()
+                    assert (observation_spec[key].space.high == (1 - loc) / scale).all()
                 else:
-                    assert (observation_spec[key].space.minimum == loc).all()
-                    assert (observation_spec[key].space.maximum == scale + loc).all()
+                    assert (observation_spec[key].space.low == loc).all()
+                    assert (observation_spec[key].space.high == scale + loc).all()
 
     @pytest.mark.parametrize("keys", [["observation"], ["observation", "next_pixel"]])
     @pytest.mark.parametrize("size", [1, 3])
@@ -3555,15 +3804,13 @@ class TestObservationNorm(TransformBase):
             base_env = ContinuousActionVecMockEnv(
                 observation_spec=CompositeSpec(
                     observation=BoundedTensorSpec(
-                        minimum=1, maximum=1, shape=torch.Size([size])
+                        low=1, high=1, shape=torch.Size([size])
                     ),
                     observation_orig=BoundedTensorSpec(
-                        minimum=1, maximum=1, shape=torch.Size([size])
+                        low=1, high=1, shape=torch.Size([size])
                     ),
                 ),
-                action_spec=BoundedTensorSpec(
-                    minimum=1, maximum=1, shape=torch.Size((size,))
-                ),
+                action_spec=BoundedTensorSpec(low=1, high=1, shape=torch.Size((size,))),
                 seed=0,
             )
             base_env.out_key = "observation"
@@ -5321,8 +5568,8 @@ class TestToTensorImage(TransformBase):
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
-                assert (observation_spec[key].space.minimum == 0).all()
-                assert (observation_spec[key].space.maximum == 1).all()
+                assert (observation_spec[key].space.low == 0).all()
+                assert (observation_spec[key].space.high == 1).all()
 
     @pytest.mark.parametrize("batch", [[], [1], [3, 2]])
     @pytest.mark.parametrize(
@@ -5370,8 +5617,8 @@ class TestToTensorImage(TransformBase):
             )
             for key in keys:
                 assert observation_spec[key].shape == torch.Size([3, 16, 16])
-                assert (observation_spec[key].space.minimum == 0).all()
-                assert (observation_spec[key].space.maximum == 1).all()
+                assert (observation_spec[key].space.low == 0).all()
+                assert (observation_spec[key].space.high == 1).all()
 
     @pytest.mark.parametrize("out_keys", [None, ["stuff"]])
     def test_single_trans_env_check(self, out_keys):
@@ -6814,6 +7061,11 @@ class TestVecNorm:
         queue_in.close()
         del parallel_env, queue_out, queue_in
 
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 11),
+        reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+        "See https://github.com/python/cpython/pull/108568 for info and fix.",
+    )
     def test_parallelenv_vecnorm(self):
         if _has_gym:
             make_env = EnvCreator(
@@ -6928,7 +7180,7 @@ def test_added_transforms_are_in_eval_mode():
 class TestTransformedEnv:
     def test_independent_obs_specs_from_shared_env(self):
         obs_spec = CompositeSpec(
-            observation=BoundedTensorSpec(minimum=0, maximum=10, shape=torch.Size((1,)))
+            observation=BoundedTensorSpec(low=0, high=10, shape=torch.Size((1,)))
         )
         base_env = ContinuousActionVecMockEnv(observation_spec=obs_spec)
         t1 = TransformedEnv(base_env, transform=ObservationNorm(loc=3, scale=2))
@@ -6937,14 +7189,14 @@ class TestTransformedEnv:
         t1_obs_spec = t1.observation_spec
         t2_obs_spec = t2.observation_spec
 
-        assert t1_obs_spec["observation"].space.minimum == 3
-        assert t1_obs_spec["observation"].space.maximum == 23
+        assert t1_obs_spec["observation"].space.low == 3
+        assert t1_obs_spec["observation"].space.high == 23
 
-        assert t2_obs_spec["observation"].space.minimum == 1
-        assert t2_obs_spec["observation"].space.maximum == 61
+        assert t2_obs_spec["observation"].space.low == 1
+        assert t2_obs_spec["observation"].space.high == 61
 
-        assert base_env.observation_spec["observation"].space.minimum == 0
-        assert base_env.observation_spec["observation"].space.maximum == 10
+        assert base_env.observation_spec["observation"].space.low == 0
+        assert base_env.observation_spec["observation"].space.high == 10
 
     def test_independent_reward_specs_from_shared_env(self):
         reward_spec = UnboundedContinuousTensorSpec()
@@ -8194,11 +8446,11 @@ class TestActionMask(TransformBase):
                 super().__init__(*args, **kwargs)
                 self.action_spec = DiscreteTensorSpec(4)
                 self.state_spec = CompositeSpec(
-                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool)
+                    action_mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool)
                 )
                 self.observation_spec = CompositeSpec(
                     obs=UnboundedContinuousTensorSpec(3),
-                    mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool),
+                    action_mask=BinaryDiscreteTensorSpec(4, dtype=torch.bool),
                 )
                 self.reward_spec = UnboundedContinuousTensorSpec(1)
 
@@ -8209,11 +8461,11 @@ class TestActionMask(TransformBase):
 
             def _step(self, data):
                 td = self.observation_spec.rand()
-                mask = data.get("mask")
+                mask = data.get("action_mask")
                 action = data.get("action")
                 mask = mask.scatter(-1, action.unsqueeze(-1), 0)
 
-                td.set("mask", mask)
+                td.set("action_mask", mask)
                 td.set("reward", self.reward_spec.rand())
                 td.set("done", ~(mask.any().view(1)))
                 return td
@@ -8270,7 +8522,7 @@ class TestActionMask(TransformBase):
                 break
         else:
             raise RuntimeError
-        assert not td.get("mask").any()
+        assert not td.get("action_mask").any()
 
     def test_transform_model(self):
         t = ActionMask()
@@ -8391,6 +8643,141 @@ class TestDeviceCastTransform(TransformBase):
         assert t._inv_call(TensorDict({}, [], device="cpu:1")).device == torch.device(
             "cpu:0"
         )
+
+
+class TestPermuteTransform(TransformBase):
+    envclass = DiscreteActionConvMockEnv
+
+    @classmethod
+    def _get_permute(cls):
+        return PermuteTransform(
+            (-1, -2, -3), in_keys=["pixels_orig", "pixels"], in_keys_inv=["pixels_orig"]
+        )
+
+    def test_single_trans_env_check(self):
+        base_env = TestPermuteTransform.envclass()
+        env = TransformedEnv(base_env, TestPermuteTransform._get_permute())
+        check_env_specs(env)
+        assert env.observation_spec["pixels"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] == env.observation_spec["pixels_orig"]
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(
+            2,
+            lambda: TransformedEnv(
+                TestPermuteTransform.envclass(), TestPermuteTransform._get_permute()
+            ),
+        )
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(
+            2,
+            lambda: TransformedEnv(
+                TestPermuteTransform.envclass(), TestPermuteTransform._get_permute()
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, TestPermuteTransform.envclass),
+            TestPermuteTransform._get_permute(),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, TestPermuteTransform.envclass),
+            TestPermuteTransform._get_permute(),
+        )
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_compose(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = Compose(
+            PermuteTransform(
+                dims=(-1, -4, -2, -3),
+                in_keys=["pixels"],
+            )
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td = trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+    def test_transform_env(self):
+        base_env = TestPermuteTransform.envclass()
+        env = TransformedEnv(base_env, TestPermuteTransform._get_permute())
+        check_env_specs(env)
+        assert env.observation_spec["pixels"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] == env.observation_spec["pixels_orig"]
+        assert env.state_spec["pixels_orig"] != base_env.state_spec["pixels_orig"]
+        assert env.observation_spec["pixels"] != base_env.observation_spec["pixels"]
+
+        td = env.rollout(3)
+        assert td["pixels"].shape == torch.Size([3, 7, 7, 1])
+
+        # check error
+        with pytest.raises(ValueError, match="Only tailing dims with negative"):
+            t = PermuteTransform((-1, -10))
+
+    def test_transform_model(self):
+        batch = [2]
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        out_channels = 4
+        from tensordict.nn import TensorDictModule
+
+        model = nn.Sequential(
+            trans,
+            TensorDictModule(
+                nn.Conv3d(C, out_channels, 3, padding=1),
+                in_keys=["pixels"],
+                out_keys=["pixels"],
+            ),
+        )
+        td = model(td)
+        assert td["pixels"].shape == torch.Size((*batch, out_channels, D, H, W))
+
+    def test_transform_rb(self):
+        batch = [6]
+        D, W, H, C = 4, 5, 6, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        rb = TensorDictReplayBuffer(storage=LazyTensorStorage(5), transform=trans)
+        rb.extend(td)
+        sample = rb.sample(2)
+        assert sample["pixels"].shape == torch.Size([2, C, D, H, W])
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_inverse(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys_inv=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, C, D, H, W))}, batch_size=batch)
+        td = trans.inv(td)
+        assert td["pixels"].shape == torch.Size((*batch, D, W, H, C))
+
+    @pytest.mark.parametrize("batch", [[], [2], [2, 4]])
+    def test_transform_no_env(self, batch):
+        D, W, H, C = 8, 32, 64, 3
+        trans = PermuteTransform(
+            dims=(-1, -4, -2, -3),
+            in_keys=["pixels"],
+        )  # DxWxHxC => CxDxHxW
+        td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
+        td = trans(td)
+        assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
 
 
 if __name__ == "__main__":

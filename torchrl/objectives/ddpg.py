@@ -13,8 +13,8 @@ from typing import Tuple
 import torch
 from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
 
+from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -216,6 +216,9 @@ class DDPGLoss(LossModule):
         self.actor_critic.module[1] = self.value_network
 
         self.actor_in_keys = actor_network.in_keys
+        self.value_exclusive_keys = set(self.value_network.in_keys) - (
+            set(self.actor_in_keys) | set(self.actor_network.out_keys)
+        )
 
         self.loss_function = loss_function
 
@@ -233,14 +236,15 @@ class DDPGLoss(LossModule):
         self._set_in_keys()
 
     def _set_in_keys(self):
-        keys = [
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
+        in_keys = {
+            unravel_key(("next", self.tensor_keys.reward)),
+            unravel_key(("next", self.tensor_keys.done)),
             *self.actor_in_keys,
-            *[("next", key) for key in self.actor_in_keys],
+            *[unravel_key(("next", key)) for key in self.actor_in_keys],
             *self.value_network.in_keys,
-        ]
-        self._in_keys = list(set(keys))
+            *[unravel_key(("next", key)) for key in self.value_network.in_keys],
+        }
+        self._in_keys = sorted(in_keys, key=str)
 
     @property
     def in_keys(self):
@@ -269,7 +273,6 @@ class DDPGLoss(LossModule):
         """
         loss_value, td_error, pred_val, target_value = self._loss_value(tensordict)
         td_error = td_error.detach()
-        td_error = td_error.unsqueeze(tensordict.ndimension())
         if tensordict.device is not None:
             td_error = td_error.to(tensordict.device)
         tensordict.set(
@@ -294,7 +297,9 @@ class DDPGLoss(LossModule):
         self,
         tensordict: TensorDictBase,
     ) -> torch.Tensor:
-        td_copy = tensordict.select(*self.actor_in_keys).detach()
+        td_copy = tensordict.select(
+            *self.actor_in_keys, *self.value_exclusive_keys
+        ).detach()
         td_copy = self.actor_network(
             td_copy,
             params=self.actor_network_params,

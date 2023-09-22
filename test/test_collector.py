@@ -4,12 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
 import sys
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    decorate_thread_sub_func,
+    generate_seeds,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -29,7 +36,6 @@ from mocking_classes import (
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
-from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -773,6 +779,11 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     assert_allclose_td(data10, data20)
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 11),
+    reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+    "See https://github.com/python/cpython/pull/108568 for info and fix.",
+)
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize("static_seed", [True, False])
 def test_collector_vecnorm_envcreator(static_seed):
@@ -1577,7 +1588,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
@@ -1729,6 +1740,78 @@ class TestUpdateParams:
                     assert (data["action"] == 3).all()
         finally:
             col.shutdown()
+
+
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
+)
+def test_collector_reloading(collector_class):
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
+    dummy_env = make_env()
+    obs_spec = dummy_env.observation_spec["observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        "create_env_fn": make_env,
+        "policy": policy_explore,
+        "frames_per_batch": 30,
+        "total_frames": 90,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    for i, _ in enumerate(collector):
+        if i == 3:
+            break
+    collector_frames = collector._frames
+    collector_iter = collector._iter
+    collector_state_dict = collector.state_dict()
+    collector.shutdown()
+
+    collector = collector_class(**collector_kwargs)
+    collector.load_state_dict(collector_state_dict)
+    assert collector._frames == collector_frames
+    assert collector._iter == collector_iter
+    for _ in enumerate(collector):
+        raise AssertionError
+    collector.shutdown()
+
+
+def test_num_threads():
+    from torchrl.collectors import collectors
+
+    _main_async_collector_saved = collectors._main_async_collector
+    collectors._main_async_collector = decorate_thread_sub_func(
+        collectors._main_async_collector, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        env = ContinuousActionVecMockEnv()
+        c = MultiSyncDataCollector(
+            [env],
+            policy=RandomPolicy(env.action_spec),
+            num_threads=7,
+            num_sub_threads=3,
+            total_frames=200,
+            frames_per_batch=200,
+        )
+        assert torch.get_num_threads() == 7
+        for _ in c:
+            pass
+        c.shutdown()
+        del c
+    finally:
+        # reset vals
+        collectors._main_async_collector = _main_async_collector_saved
+        torch.set_num_threads(num_threads)
 
 
 if __name__ == "__main__":

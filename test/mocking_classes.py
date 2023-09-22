@@ -653,7 +653,7 @@ class DiscreteActionConvMockEnv(DiscreteActionVecMockEnv):
             cls._out_key = "pixels_orig"
             state_spec = CompositeSpec(
                 {
-                    cls._out_key: observation_spec["pixels_orig"],
+                    cls._out_key: observation_spec["pixels_orig"].clone(),
                 },
                 shape=batch_size,
             )
@@ -1392,13 +1392,13 @@ class HeteroCountingEnv(EnvBase):
         )
 
     def get_agent_obs_spec(self, i):
-        camera = BoundedTensorSpec(minimum=0, maximum=200, shape=(7, 7, 3))
+        camera = BoundedTensorSpec(low=0, high=200, shape=(7, 7, 3))
         vector_3d = UnboundedContinuousTensorSpec(shape=(3,))
         vector_2d = UnboundedContinuousTensorSpec(shape=(2,))
-        lidar = BoundedTensorSpec(minimum=0, maximum=5, shape=(8,))
+        lidar = BoundedTensorSpec(low=0, high=5, shape=(8,))
 
         tensor_0 = UnboundedContinuousTensorSpec(shape=(1,))
-        tensor_1 = BoundedTensorSpec(minimum=0, maximum=3, shape=(1, 2))
+        tensor_1 = BoundedTensorSpec(low=0, high=3, shape=(1, 2))
         tensor_2 = UnboundedContinuousTensorSpec(shape=(1, 2, 3))
 
         if i == 0:
@@ -1431,8 +1431,8 @@ class HeteroCountingEnv(EnvBase):
             raise ValueError(f"Index {i} undefined for index 3")
 
     def get_agent_action_spec(self, i):
-        action_3d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(3,))
-        action_2d = BoundedTensorSpec(minimum=-1, maximum=1, shape=(2,))
+        action_3d = BoundedTensorSpec(low=-1, high=1, shape=(3,))
+        action_2d = BoundedTensorSpec(low=-1, high=1, shape=(2,))
 
         # Some have 2d action and some 3d
         # TODO Introduce composite heterogeneous actions
@@ -1575,7 +1575,7 @@ class MultiKeyCountingEnv(EnvBase):
         self.unbatched_observation_spec = CompositeSpec(
             nested_1=CompositeSpec(
                 observation=BoundedTensorSpec(
-                    minimum=0, maximum=200, shape=(self.nested_dim_1, 3)
+                    low=0, high=200, shape=(self.nested_dim_1, 3)
                 ),
                 shape=(self.nested_dim_1,),
             ),
@@ -1598,9 +1598,7 @@ class MultiKeyCountingEnv(EnvBase):
                 shape=(self.nested_dim_1,),
             ),
             nested_2=CompositeSpec(
-                azione=BoundedTensorSpec(
-                    minimum=0, maximum=100, shape=(self.nested_dim_2, 1)
-                ),
+                azione=BoundedTensorSpec(low=0, high=100, shape=(self.nested_dim_2, 1)),
                 shape=(self.nested_dim_2,),
             ),
             action=OneHotDiscreteTensorSpec(n=2),

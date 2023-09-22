@@ -7,8 +7,6 @@ import math
 from dataclasses import dataclass
 from typing import Union
 
-import numpy as np
-
 import torch
 from tensordict.nn import dispatch
 from tensordict.tensordict import TensorDict, TensorDictBase
@@ -127,7 +125,20 @@ class OnlineDTLoss(LossModule):
                     "the target entropy explicitely or provide the spec of the "
                     "action tensor in the actor network."
                 )
-            target_entropy = -float(np.prod(actor_network.spec["action"].shape))
+            if (
+                isinstance(self.tensor_keys.action, tuple)
+                and len(self.tensor_keys.action) > 1
+            ):
+                action_container_shape = actor_network.spec[
+                    self.tensor_keys.action[:-1]
+                ].shape
+            else:
+                action_container_shape = actor_network.spec.shape
+            target_entropy = -float(
+                actor_network.spec[self.tensor_keys.action]
+                .shape[len(action_container_shape) :]
+                .numel()
+            )
         self.register_buffer(
             "target_entropy", torch.tensor(target_entropy, device=device)
         )

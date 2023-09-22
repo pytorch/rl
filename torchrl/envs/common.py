@@ -152,8 +152,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 action: BoundedTensorSpec(
                     shape=torch.Size([1]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
@@ -161,8 +161,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         BoundedTensorSpec(
             shape=torch.Size([1]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)
@@ -171,8 +171,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             observation: BoundedTensorSpec(
                 shape=torch.Size([3]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous), device=cpu, shape=torch.Size([]))
@@ -204,8 +204,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([])),
@@ -221,14 +221,18 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     def __init__(
         self,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING = None,
         dtype: Optional[Union[torch.dtype, np.dtype]] = None,
         batch_size: Optional[torch.Size] = None,
         run_type_checks: bool = False,
+        allow_done_after_reset: bool = False,
     ):
-        self.__dict__["_done_keys"] = None
-        self.__dict__["_reward_keys"] = None
-        self.__dict__["_action_keys"] = None
+        if device is None:
+            device = torch.device("cpu")
+        self.__dict__.setdefault("_done_keys", None)
+        self.__dict__.setdefault("_reward_keys", None)
+        self.__dict__.setdefault("_action_keys", None)
+        self.__dict__.setdefault("_batch_size", None)
         if device is not None:
             self.__dict__["_device"] = torch.device(device)
             output_spec = self.__dict__.get("_output_spec", None)
@@ -247,6 +251,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             # it's already been set
             self.batch_size = torch.Size(batch_size)
         self._run_type_checks = run_type_checks
+        self._allow_done_after_reset = allow_done_after_reset
 
     @classmethod
     def __new__(cls, *args, _inplace_update=False, _batch_locked=True, **kwargs):
@@ -318,7 +323,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     @property
     def batch_size(self) -> torch.Size:
-        _batch_size = getattr(self, "_batch_size", None)
+        _batch_size = self.__dict__["_batch_size"]
         if _batch_size is None:
             _batch_size = self._batch_size = torch.Size([])
         return _batch_size
@@ -385,8 +390,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action: BoundedTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])), device=cpu, shape=torch.Size([]))
@@ -438,8 +443,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     observation: BoundedTensorSpec(
                         shape=torch.Size([3]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous), device=cpu, shape=torch.Size([])),
@@ -514,8 +519,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -528,8 +533,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -544,8 +549,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     action: UnboundedContinuousTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
@@ -569,8 +574,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             BoundedTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -612,7 +617,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
 
             if isinstance(value, CompositeSpec):
@@ -681,8 +686,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -695,8 +700,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             UnboundedContinuousTensorSpec(
                 shape=torch.Size([1]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous)
@@ -711,8 +716,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     reward: UnboundedContinuousTensorSpec(
                         shape=torch.Size([1]),
                         space=ContinuousBox(
-                            minimum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
-                            maximum=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
+                            low=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True),
+                            high=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, contiguous=True)),
                         device=cpu,
                         dtype=torch.float32,
                         domain=continuous),
@@ -786,7 +791,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
@@ -815,6 +820,15 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
 
     # done spec
     def _get_done_keys(self):
+        if "full_done_spec" not in self.output_spec.keys():
+            # populate the "done" entry
+            # this will be raised if there is not full_done_spec (unlikely) or no done_key
+            # Since output_spec is lazily populated with an empty composite spec for
+            # done_spec, the second case is much more likely to occur.
+            self.done_spec = DiscreteTensorSpec(
+                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
+            )
+
         keys = self.output_spec["full_done_spec"].keys(True, True)
         if not len(keys):
             raise AttributeError("Could not find done spec")
@@ -962,7 +976,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 )
             if value.shape[: len(self.batch_size)] != self.batch_size:
                 raise ValueError(
-                    "The value of spec.shape must match the env batch size."
+                    f"The value of spec.shape ({value.shape}) must match the env batch size ({self.batch_size})."
                 )
             if isinstance(value, CompositeSpec):
                 for _ in value.values(True, True):  # noqa: B007
@@ -1019,8 +1033,8 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 observation: BoundedTensorSpec(
                     shape=torch.Size([3]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([]))
@@ -1297,13 +1311,14 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                         self.output_spec["full_done_spec"][done_key].zero(leading_dim),
                     )
 
-        for done_key in self.done_keys:
-            if done_key not in _reset_map:
-                if tensordict_reset.get(done_key).any():
-                    raise DONE_AFTER_RESET_ERROR
-            else:
-                if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
-                    raise DONE_AFTER_RESET_ERROR
+        if not self._allow_done_after_reset:
+            for done_key in self.done_keys:
+                if done_key not in _reset_map:
+                    if tensordict_reset.get(done_key).any():
+                        raise DONE_AFTER_RESET_ERROR
+                else:
+                    if tensordict_reset.get(done_key)[_reset_map[done_key]].any():
+                        raise DONE_AFTER_RESET_ERROR
 
         if tensordict is not None:
             tensordict.update(tensordict_reset)
@@ -1568,7 +1583,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             if auto_cast_to_device:
                 tensordict = tensordict.to(env_device, non_blocking=True)
             tensordict = self.step(tensordict)
-
             tensordicts.append(tensordict.clone(False))
 
             any_done = False
@@ -1609,7 +1623,6 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 callback(self, tensordict)
 
         batch_size = self.batch_size if tensordict is None else tensordict.batch_size
-
         out_td = torch.stack(tensordicts, len(batch_size))
         if return_contiguous:
             out_td = out_td.contiguous()
@@ -1708,14 +1721,18 @@ class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
         self,
         *args,
         dtype: Optional[np.dtype] = None,
-        device: DEVICE_TYPING = "cpu",
+        device: DEVICE_TYPING = None,
         batch_size: Optional[torch.Size] = None,
+        allow_done_after_reset: bool = False,
         **kwargs,
     ):
+        if device is None:
+            device = torch.device("cpu")
         super().__init__(
             device=device,
             dtype=dtype,
             batch_size=batch_size,
+            allow_done_after_reset=allow_done_after_reset,
         )
         if len(args):
             raise ValueError(
