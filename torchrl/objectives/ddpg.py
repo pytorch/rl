@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-
 from tensordict.nn import dispatch, make_functional, repopulate_module, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
-from tensordict.utils import NestedKey
+
+from tensordict.utils import NestedKey, unravel_key
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -236,15 +236,15 @@ class DDPGLoss(LossModule):
         self._set_in_keys()
 
     def _set_in_keys(self):
-        keys = [
-            ("next", self.tensor_keys.reward),
-            ("next", self.tensor_keys.done),
+        keys = {
+            unravel_key(("next", self.tensor_keys.reward)),
+            unravel_key(("next", self.tensor_keys.done)),
             *self.actor_in_keys,
-            *[("next", key) for key in self.actor_in_keys],
+            *[unravel_key(("next", key)) for key in self.actor_in_keys],
             *self.value_network.in_keys,
-            *[("next", key) for key in self.value_network.in_keys],
-        ]
-        self._in_keys = list(set(keys))
+            *[unravel_key(("next", key)) for key in self.value_network.in_keys],
+        }
+        self._in_keys = sorted(keys, keys=str)
 
     @property
     def in_keys(self):
