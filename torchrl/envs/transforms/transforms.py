@@ -4095,6 +4095,7 @@ class RewardSum(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[NestedKey]] = None,
+        done_keys: Optional[Sequence[NestedKey]] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
@@ -4105,22 +4106,34 @@ class RewardSum(Transform):
                 _replace_last(in_key, f"episode_{_unravel_key_to_tuple(in_key)[-1]}")
                 for in_key in in_keys
             ]
-        elif out_keys is None:
-            raise RuntimeError(
-                "the out_keys must be specified for non-conventional in-keys in RewardSum."
+        if len(in_keys) != len(out_keys):
+            raise ValueError(
+                "RewardSum expects the same number of input and output keys"
+            )
+        if done_keys is None:
+            # The default if done_keys is not provided is that we expect
+            # to find the dones in the same tensordicts as the in_keys
+            self._done_keys = [_replace_last(in_key, "done") for in_key in in_keys]
+        elif isinstance(done_keys, list) and len(done_keys) == 1:
+            # If there is one done key than it is used for all rewards
+            self._done_keys = done_keys * len(in_keys)
+        elif isinstance(done_keys, list) and len(done_keys) == len(in_keys):
+            # The full list of done_keys has been provided
+            self._done_keys = done_keys
+        else:
+            raise ValueError(
+                f"Provided done_keys should be a list of length 1 or length equals to the number of in_keys, got {done_keys}"
             )
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
-        _reset = tensordict.get("_reset", None)  # Try to get reset from root
-
-        for in_key, out_key in zip(self.in_keys, self.out_keys):
-            in_key = _unravel_key_to_tuple(in_key)
-            # If the root reset is None, try to get it from the same td as the reward
-            if len(in_key) > 1 and _reset is None:
-                _reset = tensordict.get(_replace_last(in_key, "_reset"), None)
+        for in_key, done_key, out_key in zip(
+            self.in_keys, self._done_keys, self.out_keys
+        ):
+            done_key = _unravel_key_to_tuple(done_key)
+            _reset = tensordict.get(_replace_last(done_key, "_reset"), None)
 
             if _reset is None or _reset.any():
                 if out_key in tensordict.keys(True, True):
