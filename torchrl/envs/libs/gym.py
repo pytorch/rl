@@ -761,6 +761,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
                 "truncated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
@@ -773,6 +776,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return CompositeSpec(
             {
                 "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(

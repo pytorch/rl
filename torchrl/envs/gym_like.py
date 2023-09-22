@@ -242,7 +242,12 @@ class GymLikeEnv(_EnvWrapper):
             if "truncated" in self.done_keys:
                 obs_dict["truncated"] = truncation
             else:
-                raise KeyError("Could not find truncated key")
+                raise KeyError("Could not find truncated key.")
+        if termination is not None:
+            if "terminated" in self.done_keys:
+                obs_dict["terminated"] = termination
+            else:
+                raise KeyError("Could not find truncated key.")
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
