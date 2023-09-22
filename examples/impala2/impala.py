@@ -23,7 +23,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.objectives import ClipPPOLoss, A2CLoss
+    from torchrl.objectives import A2CLoss
     from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils import eval_model, make_parallel_env, make_ppo_models
@@ -47,7 +47,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)] * 8,
+        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)]
+        * 8,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -108,7 +109,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    total_network_updates = (total_frames // frames_per_batch * cfg.loss.batch_size) * cfg.loss.sgd_updates
+    total_network_updates = (
+        total_frames // frames_per_batch * cfg.loss.batch_size
+    ) * cfg.loss.sgd_updates
 
     accumulator = []
     sampling_start = time.time()
@@ -128,7 +131,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 {
                     "train/reward": episode_rewards.mean().item(),
                     "train/episode_length": episode_length.sum().item()
-                                            / len(episode_length),
+                    / len(episode_length),
                 }
             )
 
@@ -174,7 +177,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     "loss_critic", "loss_entropy", "loss_objective"
                 ).detach()
                 loss_sum = (
-                        loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
+                    loss["loss_critic"] + loss["loss_objective"] + loss["loss_entropy"]
                 )
 
                 # Backward pass
@@ -203,7 +206,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # Get test rewards
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
             if ((i - 1) * frames_in_batch * frame_skip) // test_interval < (
-                    i * frames_in_batch * frame_skip
+                i * frames_in_batch * frame_skip
             ) // test_interval:
                 actor.eval()
                 eval_start = time.time()

@@ -1462,7 +1462,9 @@ class VTrace(ValueEstimatorBase):
 
         # Make sure we have the log prob computed at collection time
         if self.tensor_keys.sample_log_prob not in tensordict.keys():
-            raise ValueError(f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict")
+            raise ValueError(
+                f"Expected {self.tensor_keys.sample_log_prob} to be in tensordict"
+            )
         log_mu = tensordict.get(self.tensor_keys.sample_log_prob).view_as(value)
 
         # Compute log prob with current policy

@@ -18,6 +18,7 @@ from torchrl.envs import (
     ExplorationType,
     GrayScale,
     NoopResetEnv,
+    ObservationNorm,
     ParallelEnv,
     Resize,
     RewardClipping,
@@ -25,8 +26,6 @@ from torchrl.envs import (
     StepCounter,
     ToTensorImage,
     TransformedEnv,
-    VecNorm,
-    ObservationNorm
 )
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
@@ -68,7 +67,7 @@ class EpisodicLifeEnv(gym.Wrapper):
 
 
 def make_base_env(
-        env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
+    env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
     env = gym.make(env_name)
     if not is_test:
@@ -98,7 +97,11 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(ObservationNorm(in_keys=['pixels'], scale=1/255., loc=-0.5, standard_normal=False))
+    env.append_transform(
+        ObservationNorm(
+            in_keys=["pixels"], scale=1 / 255.0, loc=-0.5, standard_normal=False
+        )
+    )
     return env
 
 

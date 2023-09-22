@@ -1057,6 +1057,7 @@ def vec_td_lambda_advantage_estimate(
 # V-Trace
 # -----
 
+
 @_transpose_time
 def vtrace_advantage_estimate(
     gamma: float,
@@ -1103,7 +1104,7 @@ def vtrace_advantage_estimate(
     clipped_rho = rho.clamp_max(rho_thresh)
     deltas = clipped_rho * (reward + discounts * next_state_value - state_value)
     c_thresh = c_thresh.to(device)
-    clipped_c = torch.clamp(rho, max=c_thresh)
+    clipped_c = rho.clamp_max(c_thresh)
 
     vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
     for i in reversed(range(time_steps)):
