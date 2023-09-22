@@ -146,16 +146,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     replay_buffer.update_priority(sampled_tensordict)
 
         training_time = time.time() - training_start
-        episode_rewards = tensordict["next", "episode_reward"][
+        episode_end = (
             tensordict["next", "done"]
-        ]
+            if tensordict["next", "done"].any()
+            else tensordict["next", "truncated"]
+        )
+        episode_rewards = tensordict["next", "episode_reward"][episode_end]
 
         # Logging
         metrics_to_log = {}
         if len(episode_rewards) > 0:
-            episode_length = tensordict["next", "step_count"][
-                tensordict["next", "done"]
-            ]
+            episode_length = tensordict["next", "step_count"][episode_end]
             metrics_to_log["train/reward"] = episode_rewards.mean().item()
             metrics_to_log["train/episode_length"] = episode_length.sum().item() / len(
                 episode_length
