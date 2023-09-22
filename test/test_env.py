@@ -18,6 +18,7 @@ from _utils_internal import (
     _make_envs,
     CARTPOLE_VERSIONED,
     check_rollout_consistency_multikey_env,
+    decorate_thread_sub_func,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
@@ -2171,6 +2172,29 @@ class TestDoneOrTruncated:
         assert data["nested", "_reset"].shape == (2, 1)
         assert data["_reset"].all()
         assert not data["nested", "_reset"].any()
+
+
+def test_num_threads():
+    from torchrl.envs import batched_envs
+
+    _run_worker_pipe_shared_mem_save = batched_envs._run_worker_pipe_shared_mem
+    batched_envs._run_worker_pipe_shared_mem = decorate_thread_sub_func(
+        batched_envs._run_worker_pipe_shared_mem, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        env = ParallelEnv(
+            2, ContinuousActionVecMockEnv, num_sub_threads=3, num_threads=7
+        )
+        # We could test that the number of threads isn't changed until we start the procs.
+        # Even though it's unlikely that we have 7 threads, we still disable this for safety
+        # assert torch.get_num_threads() != 7
+        env.rollout(3)
+        assert torch.get_num_threads() == 7
+    finally:
+        # reset vals
+        batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
+        torch.set_num_threads(num_threads)
 
 
 if __name__ == "__main__":

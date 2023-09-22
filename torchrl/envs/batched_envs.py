@@ -711,7 +711,6 @@ class ParallelEnv(_BatchedEnv):
         from torchrl.envs.env_creator import EnvCreator
 
         torch.set_num_threads(self.num_threads)
-        print(f"ParallelEnv has {torch.get_num_threads()} threads")
 
         ctx = mp.get_context("spawn")
 

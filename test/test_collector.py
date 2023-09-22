@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
 import sys
 
 import numpy as np
@@ -11,6 +12,7 @@ import pytest
 import torch
 from _utils_internal import (
     check_rollout_consistency_multikey_env,
+    decorate_thread_sub_func,
     generate_seeds,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
@@ -1954,6 +1956,35 @@ def test_collector_reloading(collector_class):
     for _ in enumerate(collector):
         raise AssertionError
     collector.shutdown()
+
+
+def test_num_threads():
+    from torchrl.collectors import collectors
+
+    _main_async_collector_saved = collectors._main_async_collector
+    collectors._main_async_collector = decorate_thread_sub_func(
+        collectors._main_async_collector, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        env = ContinuousActionVecMockEnv()
+        c = MultiSyncDataCollector(
+            [env],
+            policy=RandomPolicy(env.action_spec),
+            num_threads=7,
+            num_sub_threads=3,
+            total_frames=200,
+            frames_per_batch=200,
+        )
+        assert torch.get_num_threads() == 7
+        for _ in c:
+            pass
+        c.shutdown()
+        del c
+    finally:
+        # reset vals
+        collectors._main_async_collector = _main_async_collector_saved
+        torch.set_num_threads(num_threads)
 
 
 if __name__ == "__main__":

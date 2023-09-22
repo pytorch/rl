@@ -1304,7 +1304,6 @@ class _MultiDataCollector(DataCollectorBase):
 
     def _run_processes(self) -> None:
         torch.set_num_threads(self.num_threads)
-        print(f"Collector has {torch.get_num_threads()} threads")
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []

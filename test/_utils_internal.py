@@ -19,6 +19,7 @@ import torch.cuda
 
 from tensordict import tensorclass, TensorDict
 from torchrl._utils import implement_for, seed_generator
+from torchrl.data.utils import CloudpickleWrapper
 
 from torchrl.envs import MultiThreadedEnv, ObservationNorm
 from torchrl.envs.batched_envs import ParallelEnv, SerialEnv
@@ -453,3 +454,11 @@ def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
         == td["nested_2", "observation"][~action_is_count]
     ).all()
     assert (td["next", "nested_2", "reward"][~action_is_count] == 0).all()
+
+
+def decorate_thread_sub_func(func, num_threads):
+    def new_func(*args, **kwargs):
+        assert torch.get_num_threads() == num_threads
+        return func(*args, **kwargs)
+
+    return CloudpickleWrapper(new_func)
