@@ -603,7 +603,7 @@ class TestGym:
         del c
         return
 
-    @implement_for("gymnasium")
+    @implement_for("gymnasium", "0.27.0", None)
     def test_vecenvs_nan(self):  # noqa: F811
         # new versions of gym must never return nan for next values when there is a done state
         torch.manual_seed(0)
