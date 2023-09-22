@@ -24,7 +24,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import ClipPPOLoss, A2CLoss
-    from torchrl.objectives.value.vtrace import VTrace
+    from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils import eval_model, make_parallel_env, make_ppo_models
 
@@ -72,15 +72,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         actor_network=actor,
         average_adv=False,
     )
-    # loss_module = ClipPPOLoss(
-    #     actor=actor,
-    #     critic=critic,
-    #     clip_epsilon=cfg.loss.clip_epsilon,
-    #     loss_critic_type=cfg.loss.loss_critic_type,
-    #     entropy_coef=cfg.loss.entropy_coef,
-    #     critic_coef=cfg.loss.critic_coef,
-    #     normalize_advantage=True,
-    # )
     loss_module = A2CLoss(
         actor=actor,
         critic=critic,
@@ -90,11 +81,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizer
-    optim = torch.optim.Adam(
+    optim = torch.optim.RMSprop(
         loss_module.parameters(),
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.eps,
+        alpha=cfg.optim.alpha,
     )
 
     # Create logger
@@ -165,8 +157,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg.optim.anneal_lr:
                     for group in optim.param_groups:
                         group["lr"] = cfg.optim.lr * alpha
-                # if cfg.loss.anneal_clip_epsilon:
-                #     loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
                 num_network_updates += 1
 
                 # Get a data batch
@@ -201,7 +191,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg.optim.lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                # "train/clip_epsilon": alpha * cfg.loss.clip_epsilon,
             }
         )
 

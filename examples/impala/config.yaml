@@ -6,7 +6,7 @@ env:
 # collector
 collector:
   frames_per_batch: 2560
-  total_frames: 40_000_000
+  total_frames: 200_000_000
 
 # logger
 logger:
@@ -17,9 +17,11 @@ logger:
 
 # Optim
 optim:
-  lr: 0.001
-  eps: 1.0e-6
+  lr: 0.0006
+  eps: 0.01
   weight_decay: 0.0
+  momentum: 0.0
+  alpha: 0.99
   max_grad_norm: 1.0
   anneal_lr: True
 
@@ -27,10 +29,7 @@ optim:
 loss:
   gamma: 0.99
   mini_batch_size: 2560
-  ppo_epochs: 2
-  gae_lambda: 0.95
-  clip_epsilon: 0.1
-  anneal_clip_epsilon: True
+  ppo_epochs: 1
   critic_coef: 0.25
   entropy_coef: 0.01
   loss_critic_type: l2

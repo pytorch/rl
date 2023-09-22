@@ -26,6 +26,7 @@ from torchrl.envs import (
     ToTensorImage,
     TransformedEnv,
     VecNorm,
+    ObservationNorm
 )
 from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
@@ -88,7 +89,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
         num_envs, EnvCreator(lambda: make_base_env(env_name, device=device))
     )
     env = TransformedEnv(env)
-    env.append_transform(ToTensorImage(from_int=True))
+    env.append_transform(ToTensorImage(from_int=False))
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
@@ -97,7 +98,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(VecNorm(in_keys=["pixels"], decay=0.99999, eps=1e-2))
+    env.append_transform(ObservationNorm(in_keys=['pixels'], scale=1/255., loc=-0.5, standard_normal=False))
     return env
 
 

@@ -24,7 +24,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import ClipPPOLoss, A2CLoss
-    from torchrl.objectives.value.vtrace import VTrace
+    from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
     from utils import eval_model, make_parallel_env, make_ppo_models
 
@@ -47,7 +47,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)] * 4,
+        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)] * 8,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -60,9 +60,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(frames_per_batch),
+        storage=LazyMemmapStorage(frames_per_batch * cfg.loss.batch_size),
         sampler=sampler,
-        batch_size=mini_batch_size,
+        batch_size=mini_batch_size * cfg.loss.batch_size,
     )
 
     # Create loss and adv modules
@@ -81,11 +81,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
 
     # Create optimizer
-    optim = torch.optim.Adam(
+    optim = torch.optim.RMSprop(
         loss_module.parameters(),
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.eps,
+        alpha=cfg.optim.alpha,
     )
 
     # Create logger
@@ -107,11 +108,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (
-            (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
-    )
+    total_network_updates = (total_frames // frames_per_batch * cfg.loss.batch_size) * cfg.loss.sgd_updates
 
+    accumulator = []
     sampling_start = time.time()
     for i, data in enumerate(collector):
 
@@ -137,17 +136,25 @@ def main(cfg: "DictConfig"):  # noqa: F821
         data["done"].copy_(data["end_of_life"])
         data["next", "done"].copy_(data["next", "end_of_life"])
 
-        losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
+        if len(accumulator) < cfg.loss.batch_size:
+            accumulator.append(data)
+            if logger:
+                for key, value in log_info.items():
+                    logger.log_scalar(key, value, collected_frames)
+            continue
+
+        losses = TensorDict({}, batch_size=[cfg.loss.sgd_updates, 1])
         training_start = time.time()
-        for j in range(cfg.loss.ppo_epochs):
+        for j in range(cfg.loss.sgd_updates):
 
-            # Compute adv
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
+            for acc_data in accumulator:
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
+                with torch.no_grad():
+                    acc_data = adv_module(acc_data)
+                acc_data_reshape = acc_data.reshape(-1)
+
+                # Update the data buffer
+                data_buffer.extend(acc_data_reshape)
 
             for k, batch in enumerate(data_buffer):
 
@@ -156,8 +163,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 if cfg.optim.anneal_lr:
                     for group in optim.param_groups:
                         group["lr"] = cfg.optim.lr * alpha
-                # if cfg.loss.anneal_clip_epsilon:
-                #     loss_module.clip_epsilon.copy_(cfg.loss.clip_epsilon * alpha)
                 num_network_updates += 1
 
                 # Get a data batch
@@ -192,7 +197,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 "train/lr": alpha * cfg.optim.lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
-                # "train/clip_epsilon": alpha * cfg.loss.clip_epsilon,
             }
         )
 
@@ -221,6 +225,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         collector.update_policy_weights_()
         sampling_start = time.time()
+        accumulator = []
 
     end_time = time.time()
     execution_time = end_time - start_time

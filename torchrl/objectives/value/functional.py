@@ -1099,10 +1099,11 @@ def vtrace_advantage_estimate(
     *batch_size, time_steps, lastdim = not_done.shape
     discounts = gamma * not_done
 
-    clipped_rho = (log_pi - log_mu).exp().clamp_max(rho_thresh)
+    rho = (log_pi - log_mu).exp()
+    clipped_rho = rho.clamp_max(rho_thresh)
     deltas = clipped_rho * (reward + discounts * next_state_value - state_value)
     c_thresh = c_thresh.to(device)
-    clipped_c = torch.clamp(c_thresh, max=clipped_rho)
+    clipped_c = torch.clamp(rho, max=c_thresh)
 
     vs_minus_v_xs = [torch.zeros_like(next_state_value[..., -1, :])]
     for i in reversed(range(time_steps)):

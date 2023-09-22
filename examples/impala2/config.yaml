@@ -1,12 +1,12 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  num_envs: 2
+  num_envs: 4
 
 # collector
 collector:
-  frames_per_batch: 1024
-  total_frames: 40_000_000
+  frames_per_batch: 320
+  total_frames: 200_000_000
 
 # logger
 logger:
@@ -17,20 +17,19 @@ logger:
 
 # Optim
 optim:
-  lr: 2.5e-4
-  eps: 1.0e-6
+  lr: 0.0006
+  eps: 0.01
   weight_decay: 0.0
-  max_grad_norm: 0.5
+  momentum: 0.0
+  alpha: 0.99
+  max_grad_norm: 1.0
   anneal_lr: True
 
 # loss
 loss:
   gamma: 0.99
-  mini_batch_size: 1024
-  ppo_epochs: 3
-  gae_lambda: 0.95
-  clip_epsilon: 0.1
-  anneal_clip_epsilon: True
-  critic_coef: 0.5
+  batch_size: 8
+  sgd_updates: 1
+  critic_coef: 0.25
   entropy_coef: 0.01
   loss_critic_type: l2
