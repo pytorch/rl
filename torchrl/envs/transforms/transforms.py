@@ -5088,43 +5088,31 @@ class InitTracker(Transform):
             raise NotImplementedError(
                 FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
             )
-        for done_key in self.parent.done_keys:
+        for done_key, *_ in self.parent.done_keys_groups:
             if isinstance(done_key, str):
                 init_key = self.init_key
             else:
                 init_key = unravel_key((*done_key[:-1], self.init_key))
-            if init_key not in init_keys:
-                init_keys.append(init_key)
+            init_keys.append(init_key)
         self._init_keys = init_keys
         return self._init_keys
 
     @property
     def reset_keys(self):
-        reset_keys = []
-        if self.parent is None:
-            raise NotImplementedError(
-                FORWARD_NOT_IMPLEMENTED.format(self.__class__.__name__)
-            )
-        for done_key in self.parent.done_keys:
-            if isinstance(done_key, str):
-                reset_key = self.reset_key
-            else:
-                reset_key = unravel_key((*done_key[:-1], self.reset_key))
-            if reset_key not in reset_keys:
-                reset_keys.append(reset_key)
-        return reset_keys
+        return self.parent.reset_keys
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for init_key in self.init_keys:
+        for init_key, (done_key, *_) in zip(
+            self.init_keys, self.parent.done_keys_groups
+        ):
             if init_key not in tensordict.keys(True, True):
                 device = tensordict.device
                 if device is None:
                     device = torch.device("cpu")
+                shape = self.parent.full_done_spec[done_key].shape
                 tensordict.set(
                     init_key,
-                    torch.zeros(
-                        self.parent.done_spec.shape, device=device, dtype=torch.bool
-                    ),
+                    torch.zeros(shape, device=device, dtype=torch.bool),
                 )
         return tensordict
 
@@ -5132,13 +5120,16 @@ class InitTracker(Transform):
         device = tensordict.device
         if device is None:
             device = torch.device("cpu")
-        for reset_key, init_key in zip(self.reset_keys, self.init_keys):
+        for reset_key, init_key, (done_key, *_) in zip(
+            self.reset_keys, self.init_keys, self.parent.done_keys_groups
+        ):
             _reset = tensordict.get(reset_key, None)
             if _reset is None:
+                shape = self.parent.full_done_spec[done_key].shape
                 tensordict.set(
                     init_key,
                     torch.ones(
-                        self.parent.done_spec.shape,
+                        shape,
                         device=device,
                         dtype=torch.bool,
                     ),

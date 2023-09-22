@@ -758,10 +758,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
-                "done": DiscreteTensorSpec(
+                "stop": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "terminated": DiscreteTensorSpec(
+                "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -775,10 +775,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
-                "done": DiscreteTensorSpec(
+                "stop": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "terminated": DiscreteTensorSpec(
+                "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -806,12 +806,26 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # info needs to be flipped
             info = _flip_info_tuple(info)
-        return (observations, reward, None, None, done, info)
+        # a done is interpreted as terminal in earlier versions of gym.
+        # This isn't optimal, but it is the most natural option.
+        # Interpreting this as a "stop" would break in value functions because
+        # we can't decide if the env is done (ie, game over) or truncated.
+        # By making an opinionated decision, we make sure that value function can
+        # be computed with a certain heuristic, even if it is wrong in some cases
+        # (by lack of information).
+        return (observations, reward, done, None, None, info)
 
     @implement_for("gym", "0.24", "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        # a done is interpreted as terminal in earlier versions of gym.
+        # This isn't optimal, but it is the most natural option.
+        # Interpreting this as a "stop" would break in value functions because
+        # we can't decide if the env is done (ie, game over) or truncated.
+        # By making an opinionated decision, we make sure that value function can
+        # be computed with a certain heuristic, even if it is wrong in some cases
+        # (by lack of information).
         observations, reward, done, info = step_outputs_tuple
-        return (observations, reward, None, None, done, info)
+        return (observations, reward, done, None, None, info)
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
@@ -819,9 +833,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return (
             observations,
             reward,
-            termination,
-            truncation,
-            termination | truncation,
+            termination,  # torchrl done
+            truncation,  # torchrl truncated
+            termination | truncation,  # torchrl stop
             info,
         )
 
@@ -831,9 +845,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return (
             observations,
             reward,
-            termination,
-            truncation,
-            termination | truncation,
+            termination,  # torchrl done
+            truncation,  # torchrl truncated
+            termination | truncation,  # torchrl stop
             info,
         )
 

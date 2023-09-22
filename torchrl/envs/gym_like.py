@@ -135,10 +135,10 @@ class GymLikeEnv(_EnvWrapper):
 
     def read_done(
         self,
-        gym_done: bool,
-        termination: bool | None = None,
-        truncation: bool | None = None,
-    ) -> Tuple[bool, bool, bool]:
+        done: bool,
+        truncated: bool | None = None,
+        stop: bool | None = None,
+    ) -> Tuple[bool | np.ndarray, bool | np.ndarray, bool | np.ndarray, bool]:
         """Done state reader.
 
         In torchrl, a `"done"` signal means that a trajectory is terminated
@@ -146,9 +146,14 @@ class GymLikeEnv(_EnvWrapper):
         Truncated means the trajectory has been interrupted.
 
         Args:
-            gym_done (np.ndarray, boolean or other format): done state obtained from the environment
-            termination (bool or None): termination signal. Defaults to `None`.
-            truncation (bool or None): truncation signal. Defaults to `None`.
+            done (np.ndarray, boolean or other format): done state obtained from the environment.
+                ``"done"`` equates to ``"termination"`` in gymnasium: the signal that
+                the environment has reached the end of the game, any data coming
+                after this should be considered as nonsensical.
+                In TorchRL, the convention is that all envs must have a
+                ``done`` of some sort.
+            truncated (bool or None): termination signal. Defaults to ``None``.
+            stop (bool or None): end-of-trajectory signal. Defaults to ``None``.
 
         Returns: a tuple with 3 boolean values,
             - a done state to be set in the environment.
@@ -156,15 +161,15 @@ class GymLikeEnv(_EnvWrapper):
             - a boolean value indicating whether the frame_skip loop should be broken.
 
         """
-        if termination is not None:
-            done = termination
-            do_break = gym_done | truncation
-        else:
-            do_break = gym_done
-            done = gym_done
+        if truncated is not None and stop is None:
+            stop = truncated | done
+        elif truncated is None and stop is None:
+            stop = done
+        do_break = stop.any() if not isinstance(stop, bool) else stop
         return (
             done,
-            truncation,
+            truncated,
+            stop,
             do_break.any() if not isinstance(do_break, bool) else do_break,
         )
 
@@ -209,7 +214,7 @@ class GymLikeEnv(_EnvWrapper):
 
         reward = 0
         for _ in range(self.wrapper_frame_skip):
-            obs, _reward, termination, truncation, done, info = self._output_transform(
+            obs, _reward, done, truncated, stop, info = self._output_transform(
                 self._env.step(action_np)
             )
             if isinstance(obs, list) and len(obs) == 1:
@@ -225,7 +230,7 @@ class GymLikeEnv(_EnvWrapper):
                 isinstance(done, np.ndarray) and not len(done)
             ):
                 done = torch.tensor([done])
-            done, truncation, do_break = self.read_done(done, termination, truncation)
+            done, truncated, stop, do_break = self.read_done(done, truncated, stop)
             if do_break:
                 break
 
@@ -237,17 +242,16 @@ class GymLikeEnv(_EnvWrapper):
 
         obs_dict[self.reward_key] = reward
 
-        obs_dict[self.done_keys[0]] = done
-        if truncation is not None:
-            if "truncated" in self.done_keys:
-                obs_dict["truncated"] = truncation
-            else:
-                raise KeyError("Could not find truncated key.")
-        if termination is not None:
-            if "terminated" in self.done_keys:
-                obs_dict["terminated"] = termination
-            else:
-                raise KeyError("Could not find truncated key.")
+        # torchrl envs should always have a done
+        obs_dict["done"] = done
+        if truncated is not None and "truncated" in self.done_keys:
+            obs_dict["truncated"] = truncated
+            # if truncated is not in the keys, we just don't pass it even if it
+            # is defined.
+        if stop is not None and "stop" in self.done_keys:
+            obs_dict["stop"] = stop
+            # if stop is not in the keys, we just don't pass it even if it
+            # is defined.
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
@@ -292,9 +296,26 @@ class GymLikeEnv(_EnvWrapper):
     def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
         """A method to read the output of the env step.
 
-        Must return a tuple: (obs, reward, termination, truncation, done, info).
-        truncated and terminal can be None, in which case they are discarded.
-        If done is None, truncated and terminal mustn't be None.
+        Must return a tuple: (obs, reward, done, truncated, stop, info).
+        If only one end-of-trajectory is passed, it is interpreted as ``"done"``, ie.
+        the state is terminal (game over).
+        If 2 are passed (like in gymnasium), we interpret them as ``"done", "truncated"``
+        (``"truncated"`` meaning that the trajectory has been interrupted early).
+        and ``"stop"`` is the union of the two, ie. the end-of-trajectory signal.
+
+        These three concepts have different usage:
+
+          - "done" means that one should not pay attention to the upcoming observations
+            (eg., in value functions) as they should be regarded as not valid.
+            This is a "game-over" situation, the result of the action is the
+            end of the game (win or loose).
+          - "truncated" means that the environment has reached a stage where
+            we decided to stop the collection for some reason but the next
+            observation should not be discarded. If it were not for this
+            arbitrary decision, the collection could proceed further.
+          - "stop" is either one or the other. It is to be interpreted as
+            "a reset should be called at the next step".
+
         """
         ...
 
