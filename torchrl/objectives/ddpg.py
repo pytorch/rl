@@ -216,6 +216,9 @@ class DDPGLoss(LossModule):
         self.actor_critic.module[1] = self.value_network
 
         self.actor_in_keys = actor_network.in_keys
+        self.value_exclusive_keys = set(self.value_network.in_keys) - (
+            set(self.actor_in_keys) | set(self.actor_network.out_keys)
+        )
 
         self.loss_function = loss_function
 
@@ -239,6 +242,7 @@ class DDPGLoss(LossModule):
             *self.actor_in_keys,
             *[("next", key) for key in self.actor_in_keys],
             *self.value_network.in_keys,
+            *[("next", key) for key in self.value_network.in_keys],
         ]
         self._in_keys = list(set(keys))
 
@@ -294,7 +298,7 @@ class DDPGLoss(LossModule):
         tensordict: TensorDictBase,
     ) -> torch.Tensor:
         td_copy = tensordict.select(
-            *self.actor_in_keys, *self.value_network.in_keys
+            *self.actor_in_keys, *self.value_exclusive_keys
         ).detach()
         td_copy = self.actor_network(
             td_copy,
