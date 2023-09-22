@@ -2181,28 +2181,37 @@ class TestRoboHive:
     # In the CI, robohive should not coexist with other libs so that's fine.
     # Locally these imports can be annoying, especially given the amount of
     # stuff printed by robohive.
-    @pytest.mark.parametrize("envname", RoboHiveEnv.available_envs)
     @pytest.mark.parametrize("from_pixels", [True, False])
     @set_gym_backend("gym")
-    def test_robohive(self, envname, from_pixels):
-        if any(substr in envname for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")):
-            print("not testing envs with prebuilt rendering")
-            return
-        if "Adroit" in envname:
-            print("tcdm are broken")
-            return
-        try:
-            env = RoboHiveEnv(envname)
-        except AttributeError as err:
-            if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
-                print("tcdm are broken")
-                return
-            else:
-                raise err
-        if from_pixels and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0:
-            print("no camera")
-            return
-        check_env_specs(env)
+    def test_robohive(self, from_pixels):
+        for envname in RoboHiveEnv.available_envs:
+            try:
+                if any(
+                    substr in envname
+                    for substr in ("_vr3m", "_vrrl", "_vflat", "_vvc1s")
+                ):
+                    print("not testing envs with prebuilt rendering")
+                    return
+                if "Adroit" in envname:
+                    print("tcdm are broken")
+                    return
+                try:
+                    env = RoboHiveEnv(envname)
+                except AttributeError as err:
+                    if "'MjData' object has no attribute 'get_body_xipos'" in str(err):
+                        print("tcdm are broken")
+                        return
+                    else:
+                        raise err
+                if (
+                    from_pixels
+                    and len(RoboHiveEnv.get_available_cams(env_name=envname)) == 0
+                ):
+                    print("no camera")
+                    return
+                check_env_specs(env)
+            except Exception as err:
+                raise RuntimeError(f"Test with robohive end {envname} failed.") from err
 
 
 @pytest.mark.skipif(not _has_smacv2, reason="SMACv2 not found")
