@@ -1057,6 +1057,8 @@ def test_collector_output_keys(
     if "gymnasium" in str(gym_backend()) or gym_backend().__version__ >= version.parse(
         "0.26"
     ):
+        keys.add(("next", "stop"))
+        keys.add("stop")
         keys.add(("next", "truncated"))
         keys.add("truncated")
     b = next(iter(collector))

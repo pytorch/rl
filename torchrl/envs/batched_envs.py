@@ -1011,7 +1011,6 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
-    print(f"single env has {torch.get_num_threads()} threads")
     if device is None:
         device = torch.device("cpu")
     if device.type == "cuda":

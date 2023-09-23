@@ -242,9 +242,10 @@ class DMControlWrapper(GymLikeEnv):
 
         done = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
-        truncation = termination = None
+        truncated = terminated = None
         info = {}
-        return observation, reward, termination, truncation, done, info
+
+        return observation, reward, done, truncated, terminated, info
 
     def _reset_output_transform(self, reset_data):
         (

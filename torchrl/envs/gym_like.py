@@ -293,7 +293,7 @@ class GymLikeEnv(_EnvWrapper):
         return tensordict_out
 
     @abc.abstractmethod
-    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple:
+    def _output_transform(self, step_outputs_tuple: Tuple) -> Tuple[Any, float | np.ndarray, bool, bool | np.ndarray | None, bool | np.ndarray | None, dict]:
         """A method to read the output of the env step.
 
         Must return a tuple: (obs, reward, done, truncated, stop, info).
