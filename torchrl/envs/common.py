@@ -1213,7 +1213,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
             for done_key in self.done_keys:
                 if (
                     next_tensordict_out.get(done_key).dtype
-                    is not self.output_spec["full_done_spec"].get(done_key).dtype
+                    is not self.output_spec["full_done_spec", done_key].dtype
                 ):
                     raise TypeError(
                         f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
