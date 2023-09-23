@@ -59,6 +59,7 @@ from torchrl.envs import (
     Compose,
     DeviceCastTransform,
     DiscreteActionProjection,
+    DMControlEnv,
     DoubleToFloat,
     EnvBase,
     EnvCreator,
@@ -95,6 +96,7 @@ from torchrl.envs import (
     VC1Transform,
     VIPTransform,
 )
+from torchrl.envs.libs.dm_control import _has_dm_control
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms import VecNorm
 from torchrl.envs.transforms.r3m import _R3MNet
@@ -1383,9 +1385,30 @@ class TestR3M(TransformBase):
 
 
 class TestStepCounter(TransformBase):
-    def test_single_trans_env_check(self):
-        env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(max_steps=10))
+    @pytest.mark.skipif(not _has_gym, reason="no gym detected")
+    def test_step_count_gym(self):
+        env = TransformedEnv(GymEnv(PENDULUM_VERSIONED), StepCounter(max_steps=30))
+        env.rollout(1000)
         check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
+    def test_step_count_gym(self):
+        env = TransformedEnv(DMControlEnv("cheetah", "run"), StepCounter(max_steps=30))
+        env.rollout(1000)
+        check_env_specs(env)
+
+    @pytest.mark.parametrize("write_stop", [False, True])
+    @pytest.mark.parametrize("max_steps", [10, None])
+    def test_single_trans_env_check(self, write_stop, max_steps):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            StepCounter(max_steps=max_steps, write_stop=write_stop),
+        )
+        check_env_specs(env)
+        if write_stop and max_steps:
+            assert "stop" in env.full_done_spec.keys()
+        else:
+            assert not "stop" in env.full_done_spec.keys()
 
     def test_parallel_trans_env_check(self):
         def make_env():
@@ -1430,13 +1453,11 @@ class TestStepCounter(TransformBase):
         policy = CountingEnvCountPolicy(
             action_spec=env.action_spec, action_key=env.action_key
         )
-        if nested_done:
-            step_key = (*env.done_key[:-1], step_key)
         transformed_env = TransformedEnv(
             env,
             StepCounter(
                 max_steps=max_steps,
-                step_count_keys=[step_key],
+                step_count_key=step_key,
             ),
         )
         td = transformed_env.rollout(
@@ -8086,6 +8107,26 @@ class TestRenameTransform(TransformBase):
 
 
 class TestInitTracker(TransformBase):
+    @pytest.mark.skipif(not _has_gym, reason="no gym detected")
+    def test_init_gym(
+        self,
+    ):
+        env = TransformedEnv(
+            GymEnv(PENDULUM_VERSIONED),
+            Compose(StepCounter(max_steps=30), InitTracker()),
+        )
+        env.rollout(1000)
+        check_env_specs(env)
+
+    @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
+    def test_init_gym(self):
+        env = TransformedEnv(
+            DMControlEnv("cheetah", "run"),
+            Compose(StepCounter(max_steps=30), InitTracker()),
+        )
+        env.rollout(1000)
+        check_env_specs(env)
+
     def test_single_trans_env_check(self):
         env = CountingBatchedEnv(max_steps=torch.tensor([4, 5]), batch_size=[2])
         env = TransformedEnv(env, InitTracker())

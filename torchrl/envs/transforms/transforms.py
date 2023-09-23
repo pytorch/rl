@@ -4342,27 +4342,25 @@ class StepCounter(Transform):
     def __init__(
         self,
         max_steps: Optional[int] = None,
-        truncated_key: str | None = None,
-        step_count_key: str | None=None,
-        write_stop: bool | None=False,
+        truncated_key: str | None = "truncated",
+        step_count_key: str | None = "step_count",
+        write_stop: bool | None = False,
     ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
-        if isinstance(step_count_keys, (str, tuple)):
-            step_count_keys = [step_count_keys]
-
+        if not isinstance(truncated_key, str):
+            raise ValueError("truncated_key must be a string.")
+        if not isinstance(step_count_key, str):
+            raise ValueError("step_count_key must be a string.")
         self.max_steps = max_steps
         self.truncated_key = truncated_key
-        self._step_count_keys = None
         self.step_count_key = step_count_key
-        self._done_keys = None
         self.write_stop = write_stop
-        self._stop_keys = None
         super().__init__([])
 
     @property
     def truncated_keys(self):
-        truncated_keys = self._truncated_keys
+        truncated_keys = self.__dict__.get("_truncated_keys", None)
         if truncated_keys is None:
             # make the default truncated keys
             truncated_keys = []
@@ -4372,12 +4370,12 @@ class StepCounter(Transform):
                 else:
                     key = (*done_key[:-1], self.truncated_key)
                 truncated_keys.append(key)
-        truncated_keys = self._truncated_keys = truncated_keys
+        self._truncated_keys = truncated_keys
         return truncated_keys
 
     @property
     def stop_keys(self):
-        stop_keys = self._stop_keys
+        stop_keys = self.__dict__.get("_stop_keys", None)
         if stop_keys is None:
             # make the default stop keys
             stop_keys = []
@@ -4387,12 +4385,12 @@ class StepCounter(Transform):
                 else:
                     key = (*done_key[:-1], "stop")
                 stop_keys.append(key)
-        stop_keys = self._stop_keys = stop_keys
+        self._stop_keys = stop_keys
         return stop_keys
 
     @property
     def done_keys(self):
-        done_keys = self._done_keys
+        done_keys = self.__dict__.get("_done_keys", None)
         if done_keys is None:
             if self.parent is not None:
                 self._done_keys = done_keys = self.parent.done_keys
@@ -4402,7 +4400,7 @@ class StepCounter(Transform):
 
     @property
     def step_count_keys(self):
-        step_count_keys = self._step_count_keys
+        step_count_keys = self.__dict__.get("_step_count_keys", None)
         if step_count_keys is None:
             # make the default step_count keys
             step_count_keys = []
@@ -4412,7 +4410,7 @@ class StepCounter(Transform):
                 else:
                     key = (*done_key[:-1], self.step_count_key)
                 step_count_keys.append(key)
-        step_count_keys = self._step_count_keys = step_count_keys
+        self._step_count_keys = step_count_keys
         return step_count_keys
 
     @property
@@ -4463,8 +4461,8 @@ class StepCounter(Transform):
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
                 if self.write_stop:
-                    stop = truncated # we assume no done after reset
-                    tensordict.set(stop_key, truncated)
+                    stop = truncated  # we assume no done after reset
+                    tensordict.set(stop_key, stop)
                 tensordict.set(truncated_key, truncated)
         return tensordict
 
@@ -4472,7 +4470,10 @@ class StepCounter(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         for step_count_key, truncated_key, stop_key, done_keys in zip(
-            self.step_count_keys, self.truncated_keys, self.stop_keys, self.done_keys_groups,
+            self.step_count_keys,
+            self.truncated_keys,
+            self.stop_keys,
+            self.done_keys_groups,
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
@@ -4482,9 +4483,9 @@ class StepCounter(Transform):
                 if self.write_stop:
                     any_done = False
                     for done_key in done_keys:
-                        any_done = any_done | tensordict.get(done_key, default=False)
-                    stop = truncated | any_done# we assume no done after reset
-                    tensordict.set(stop_key, truncated)
+                        any_done = any_done | next_tensordict.get(done_key, default=False)
+                    stop = truncated | any_done  # we assume no done after reset
+                    next_tensordict.set(stop_key, stop)
                 next_tensordict.set(truncated_key, truncated)
         return next_tensordict
 
@@ -4549,31 +4550,30 @@ class StepCounter(Transform):
                 full_done_spec[truncated_key] = DiscreteTensorSpec(
                     2, dtype=torch.bool, device=output_spec.device, shape=shape
                 )
-            output_spec["full_done_spec"] = full_done_spec
-        if self.write_stop:
-            for stop_key in self.stop_keys:
-                stop_key = unravel_key(stop_key)
-                # find a matching done key (there might be more than one)
-                for done_key in self.done_keys:
-                    # check root
-                    if type(done_key) != type(stop_key):
-                        continue
-                    if isinstance(done_key, tuple):
-                        if done_key[:-1] == stop_key[:-1]:
+            if self.write_stop:
+                for stop_key in self.stop_keys:
+                    stop_key = unravel_key(stop_key)
+                    # find a matching done key (there might be more than one)
+                    for done_key in self.done_keys:
+                        # check root
+                        if type(done_key) != type(stop_key):
+                            continue
+                        if isinstance(done_key, tuple):
+                            if done_key[:-1] == stop_key[:-1]:
+                                shape = full_done_spec[done_key].shape
+                                break
+                        if isinstance(done_key, str):
                             shape = full_done_spec[done_key].shape
                             break
-                    if isinstance(done_key, str):
-                        shape = full_done_spec[done_key].shape
-                        break
 
-                else:
-                    raise KeyError(
-                        f"Could not find root of stop_key {stop_key} in done keys {self.done_keys}."
+                    else:
+                        raise KeyError(
+                            f"Could not find root of stop_key {stop_key} in done keys {self.done_keys}."
+                        )
+                    full_done_spec[stop_key] = DiscreteTensorSpec(
+                        2, dtype=torch.bool, device=output_spec.device, shape=shape
                     )
-                full_done_spec[stop_key] = DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=output_spec.device, shape=shape
-                )
-        output_spec["full_done_spec"] = full_done_spec
+            output_spec["full_done_spec"] = full_done_spec
         output_spec["full_observation_spec"] = self.transform_observation_spec(
             output_spec["full_observation_spec"]
         )
