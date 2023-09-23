@@ -4288,6 +4288,13 @@ class StepCounter(Transform):
         done_keys (list of NestedKeys, optional): the keys that are indicative of the
             done signal. Must match the length of ``truncated_keys`` and ``step_count_keys``,
             if provided.
+        write_stop (bool, optional): if ``True``, a ``"stop"`` boolean tensor
+            will be written at the level of ``"truncated"``. If ``"stop"`` is
+            already present, it will be updated accordingly.
+            This signal indicates that the trajectory has reached its ends,
+            either because the task is completed (``"done"``) or because it has
+            been truncated (``"truncated"``).
+            Defaults to ``False``.
 
     .. note:: To ensure compatibility with environments that have multiple
         done_key(s), this transform will write a step_count entry for
@@ -4338,6 +4345,7 @@ class StepCounter(Transform):
         truncated_keys: Optional[List[NestedKey]] = None,
         step_count_keys: Optional[List[NestedKey]] = None,
         done_keys: Optional[List[NestedKey]] = None,
+        write_stop: bool | None=False,
         *,
         truncated_key: Optional[NestedKey] = None,
         step_count_key: Optional[NestedKey] = None,
@@ -4381,6 +4389,7 @@ class StepCounter(Transform):
             else None
         )
         self._done_keys = done_keys
+        self.write_stop = write_stop
         self.done_key = done_keys[0] if done_keys and len(done_keys) == 1 else None
         super().__init__([])
 
