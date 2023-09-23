@@ -1195,7 +1195,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
         if self.run_type_checks:
             for key, spec in self.observation_spec.items():
                 obs = next_tensordict_out.get(key)
-                spec.type_check(obs, key)
+                spec.type_check(obs)
 
             for reward_key in self.reward_keys:
                 if (
