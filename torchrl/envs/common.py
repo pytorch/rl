@@ -1216,7 +1216,7 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                     is not self.output_spec["full_done_spec", done_key].dtype
                 ):
                     raise TypeError(
-                        f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
+                        f"expected done.dtype to be {self.output_spec['full_done_spec', done_key].dtype} but got {next_tensordict_out.get(done_key).dtype}"
                     )
         return next_tensordict_out
 

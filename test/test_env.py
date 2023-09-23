@@ -2118,6 +2118,10 @@ def test_run_type_checks():
     check_env_specs(env)
     env._run_type_checks = True
     check_env_specs(env)
+    env.output_spec.unlock_()
+    env.output_spec["full_done_spec", "done"].dtype = torch.int
+    with pytest.raises(TypeError, match="expected done.dtype to"):
+        check_env_specs(env)
 
 
 if __name__ == "__main__":
