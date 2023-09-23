@@ -285,12 +285,12 @@ class MultiAgentConvNet(nn.Module):
             )
         )
         >>> result = cnn(obs)
+        >>> # The final dimension of the resulting tensor would be determined based on the layer definition arguments and the shape of input 'obs'.
         >>> print(result.shape)
         torch.Size([3, 2, 7, 2592])
-        >>> # where the final dimension is determined by the input x
+        >>> # Since both observations and parameters are shared, we expect all agents to have identical outputs (eg. for a value function)
         >>> print(all(result[0,0,0] == result[0,0,1]))
         True
-        >>> # Since both shared observations and parameters leads to all agents having identical outputs (eg. for a value function)
 
         >>> # Alternatively, a local network with parameter sharing (eg. decentralised weight sharing policy)
         >>> cnn = MultiAgentConvNet(
@@ -314,6 +314,7 @@ class MultiAgentConvNet(nn.Module):
         )
         >>> print(result.shape)
         torch.Size([3, 2, 7, 2592])
+        >>> # Parameters are shared but not observations, hence each agent has a different output.
         >>> print(all(result[0,0,0] == result[0,0,1]))
         False
 
