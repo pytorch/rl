@@ -2111,6 +2111,14 @@ def test_num_threads():
         batched_envs._run_worker_pipe_shared_mem = _run_worker_pipe_shared_mem_save
         torch.set_num_threads(num_threads)
 
+@pytest.mark.skipif(not _has_gym, reason="no gym detected")
+def test_run_type_checks():
+    env = GymEnv("Pendulum-v1")
+    env._run_type_checks = False
+    check_env_specs(env)
+    env._run_type_checks = True
+    check_env_specs(env)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
