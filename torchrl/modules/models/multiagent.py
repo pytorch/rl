@@ -285,7 +285,7 @@ class MultiAgentConvNet(nn.Module):
             )
         )
         >>> result = cnn(obs)
-        ... print(result.shape)
+        >>> print(result.shape)
         torch.Size([3, 2, 7, 2592])
         >>> # where the final dimension is determined by the input x
         >>> print(all(result[0,0,0] == result[0,0,1]))
