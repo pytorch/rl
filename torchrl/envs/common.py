@@ -1193,10 +1193,9 @@ class EnvBase(nn.Module, metaclass=abc.ABCMeta):
                 next_tensordict_out.set(done_key, done)
 
         if self.run_type_checks:
-            # TODO: check these errors
-            for key in self._select_observation_keys(next_tensordict_out):
+            for key, spec in self.observation_spec.items():
                 obs = next_tensordict_out.get(key)
-                self.observation_spec.type_check(obs, key)
+                spec.type_check(obs, key)
 
             for reward_key in self.reward_keys:
                 if (
