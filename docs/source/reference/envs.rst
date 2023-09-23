@@ -252,7 +252,7 @@ Some of the main differences between these paradigms include:
 
 - **observation** can be per-agent and also have some shared components
 - **reward** can be per-agent or shared
-- **done** (and ``"truncated"`` or ``"stop"``) can be per-agent or shared
+- **done** (and ``"truncated"`` or ``"stop"``) can be per-agent or shared.
 
 TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
 In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
