@@ -1518,7 +1518,11 @@ class TestStepCounter(TransformBase):
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
-
+        step_counter[0]._step_count_keys = ["step_count"]
+        step_counter[0]._done_keys = ["done"]
+        step_counter[0]._truncated_keys = ["truncated"]
+        step_counter[0]._reset_keys = ["_reset"]
+        step_counter[0]._stop_keys = ["stop"]
         td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0
@@ -1572,6 +1576,11 @@ class TestStepCounter(TransformBase):
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
+        step_counter._step_count_keys = ["step_count"]
+        step_counter._done_keys = ["done"]
+        step_counter._truncated_keys = ["truncated"]
+        step_counter._reset_keys = ["_reset"]
+        step_counter._stop_keys = ["stop"]
 
         td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
