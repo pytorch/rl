@@ -2124,7 +2124,8 @@ def test_run_type_checks():
         check_env_specs(env)
     env.output_spec["full_done_spec", "done"].dtype = torch.bool
     env.output_spec["full_observation_spec", "observation"].dtype = torch.bool
-    check_env_specs(env)
+    with pytest.raises(TypeError):
+        check_env_specs(env)
 
 
 if __name__ == "__main__":
