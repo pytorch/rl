@@ -2113,7 +2113,7 @@ def test_num_threads():
 
 @pytest.mark.skipif(not _has_gym, reason="no gym detected")
 def test_run_type_checks():
-    env = GymEnv("Pendulum-v1")
+    env = GymEnv(PENDULUM_VERSIONED)
     env._run_type_checks = False
     check_env_specs(env)
     env._run_type_checks = True
