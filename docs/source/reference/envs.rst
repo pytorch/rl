@@ -36,7 +36,7 @@ Each env will have the following attributes:
 - :obj:`env.reward_spec`: a :class:`~torchrl.data.TensorSpec` object representing
   the reward spec.
 - :obj:`env.done_spec`: a :class:`~torchrl.data.TensorSpec` object representing
-  the done-flag spec.
+  the done-flag spec. See the section on trajectory termination below.
 - :obj:`env.input_spec`: a :class:`~torchrl.data.CompositeSpec` object containing
   all the input keys (:obj:`"full_action_spec"` and :obj:`"full_state_spec"`).
   It is locked and should not be modified directly.
@@ -79,7 +79,7 @@ The following figure summarizes how a rollout is executed in torchrl.
 
 In brief, a TensorDict is created by the :meth:`~.EnvBase.reset` method,
 then populated with an action by the policy before being passed to the
-:meth:`~.EnvBase.step` method which writes the observations, done flag and
+:meth:`~.EnvBase.step` method which writes the observations, done flag(s) and
 reward under the ``"next"`` entry. The result of this call is stored for
 delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
 function.
@@ -87,12 +87,25 @@ function.
 .. note::
 
   The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
-  into a ``terminated`` (the env is done and results should not be trusted)
-  and ``truncated`` (the maximum number of steps is reached) flags.
-  In TorchRL, ``"done"`` usually refers to ``"terminated"``. Truncation is
-  achieved via the :class:`~.StepCounter` transform class, and the output
-  key will be ``"truncated"`` if not chosen to be something else (e.g.
-  ``StepCounter(max_steps=100, truncated_key="done")``).
+  into a ``termination`` (the env is done and results should not be trusted)
+  and ``truncation`` (the maximum number of steps is reached) flags.
+  In TorchRL, ``"done"`` strictly refers to ``"termination"``.
+  If the environment provides it (eg, Gymnasium), the truncation entry is also
+  updated. In this case, a ``"stop"`` entry can also be provided, which represents
+  the union of ``"done"`` (task completion) and ``"truncated"`` (task interruption).
+  If the environment carries a single value, it will interpreted as a completion
+  (``"done"``) signal by default (and not ``"stop"`` or ``"truncated"``). The
+  reason for this choice is that without any more information, one has to assume
+  task completion for follow-up tasks (eg, computing value estimations), so any
+  unspecified end-of-trajectory signal will eventually need to be interpreted
+  with a worst-case-scenario strategy. Another motivation is that a ``"stop"``
+  signal will be modified by a ``"truncation"`` implemented, for instance, via
+  a :class:`~.StepCounter` transform, and the original ``"stop"`` signal
+  will be lost.
+
+  Truncation can also be achieved via the :class:`~.StepCounter` transform
+  class, and the output key will be ``"truncated"`` if not chosen to be
+  something else (e.g. ``StepCounter(max_steps=100, truncated_key="interrupted")``).
   TorchRL's collectors and rollout methods will be looking for one of these
   keys when assessing if the env should be reset.
 
@@ -172,12 +185,13 @@ It is also possible to reset some but not all of the environments:
    :caption: Parallel environment reset
 
         >>> tensordict = TensorDict({"_reset": [[True], [False], [True], [True]]}, [4])
-        >>> env.reset(tensordict)
+        >>> env.reset(tensordict)  # eliminates the "_reset" entry
         TensorDict(
             fields={
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
+                truncated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
+                stop: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
-                _reset: Tensor(torch.Size([4, 1]), dtype=torch.bool)},
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -238,7 +252,7 @@ Some of the main differences between these paradigms include:
 
 - **observation** can be per-agent and also have some shared components
 - **reward** can be per-agent or shared
-- **done** can be per-agent or shared
+- **done** (and ``"truncated"`` or ``"stop"``) can be per-agent or shared
 
 TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
 In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
