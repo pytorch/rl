@@ -2123,6 +2123,10 @@ def test_run_type_checks():
     with pytest.raises(TypeError, match="expected done.dtype to"):
         check_env_specs(env)
     env.output_spec["full_done_spec", "done"].dtype = torch.bool
+    env.output_spec["full_reward_spec", "reward"].dtype = torch.int
+    with pytest.raises(TypeError, match="expected"):
+        check_env_specs(env)
+    env.output_spec["full_reward_spec", "reward"].dtype = torch.float
     env.output_spec["full_observation_spec", "observation"].dtype = torch.bool
     with pytest.raises(TypeError):
         check_env_specs(env)
