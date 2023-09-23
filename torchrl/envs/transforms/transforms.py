@@ -4275,19 +4275,19 @@ class StepCounter(Transform):
         max_steps (int, optional): a positive integer that indicates the
             maximum number of steps to take before setting the ``truncated_key``
             entry to ``True``.
-        truncated_keys (list of NestedKey, optional): the keys where the truncated entries
-            should be written. Defaults to ``["truncated"]``, which is recognised by
+        truncated_key (str, optional): the key where the truncated entries
+            should be written. Defaults to ``"truncated"``, which is recognised by
             data collectors as a reset signal.
-            Must match the length of ``step_count_keys`` and ``done_keys``,
-            if provided.
-            If the transform is nested within a transformed environment, the
-            truncated entry will be integrated in the ``done_spec``.
-        step_count_keys (list of NestedKeys, optional): the key names of the step
-            count. Must match the length of ``truncated_keys`` and ``done_keys``,
-            if provided. If not, it will default to the ``"step_count"`` key name.
-        done_keys (list of NestedKeys, optional): the keys that are indicative of the
-            done signal. Must match the length of ``truncated_keys`` and ``step_count_keys``,
-            if provided.
+            This argument can only be a string (not a nested key) as it will be
+            matched to each of the leaf done key in the parent environment
+            (eg, a ``("agent", "done")`` key will be accompanied by a ``("agent", "truncated")``
+            if the ``"truncated"`` key name is used).
+        step_count_key (str, optional): the key where the step count entries
+            should be written. Defaults to ``"step_count"``.
+            This argument can only be a string (not a nested key) as it will be
+            matched to each of the leaf done key in the parent environment
+            (eg, a ``("agent", "done")`` key will be accompanied by a ``("agent", "step_count")``
+            if the ``"step_count"`` key name is used).
         write_stop (bool, optional): if ``True``, a ``"stop"`` boolean tensor
             will be written at the level of ``"truncated"``. If ``"stop"`` is
             already present, it will be updated accordingly.
@@ -4342,55 +4342,22 @@ class StepCounter(Transform):
     def __init__(
         self,
         max_steps: Optional[int] = None,
-        truncated_keys: Optional[List[NestedKey]] = None,
-        step_count_keys: Optional[List[NestedKey]] = None,
-        done_keys: Optional[List[NestedKey]] = None,
+        truncated_key: str | None = None,
+        step_count_key: str | None=None,
         write_stop: bool | None=False,
-        *,
-        truncated_key: Optional[NestedKey] = None,
-        step_count_key: Optional[NestedKey] = None,
     ):
         if max_steps is not None and max_steps < 1:
             raise ValueError("max_steps should have a value greater or equal to one.")
-        if truncated_key is not None:
-            warnings.warn(
-                "truncated_key will be deprecated in torchrl v0.3. Use truncated_keys instead.",
-                category=DeprecationWarning,
-            )
-            if truncated_keys:
-                if len(truncated_keys) > 1 or truncated_keys[0] != truncated_key:
-                    raise ValueError("truncated_key and truncated_keys mismatch.")
-            truncated_keys = [truncated_key]
-        if isinstance(truncated_keys, (str, tuple)):
-            truncated_keys = [truncated_keys]
-        if isinstance(done_keys, (str, tuple)):
-            done_keys = [done_keys]
-        if step_count_key is not None:
-            warnings.warn(
-                "step_count_key will be deprecated in torchrl v0.3. Use step_count_keys instead.",
-                category=DeprecationWarning,
-            )
-            if step_count_keys:
-                if len(step_count_keys) > 1 or step_count_keys[0] != step_count_key:
-                    raise ValueError("step_count_key and step_count_keys mismatch.")
-            step_count_keys = [step_count_key]
         if isinstance(step_count_keys, (str, tuple)):
             step_count_keys = [step_count_keys]
 
         self.max_steps = max_steps
-        self._truncated_keys = truncated_keys
-        self.truncated_key = (
-            truncated_keys[0] if truncated_keys and len(truncated_keys) == 1 else None
-        )
-        self._step_count_keys = step_count_keys
-        self.step_count_key = (
-            step_count_keys[0]
-            if step_count_keys and len(step_count_keys) == 1
-            else None
-        )
-        self._done_keys = done_keys
+        self.truncated_key = truncated_key
+        self._step_count_keys = None
+        self.step_count_key = step_count_key
+        self._done_keys = None
         self.write_stop = write_stop
-        self.done_key = done_keys[0] if done_keys and len(done_keys) == 1 else None
+        self._stop_keys = None
         super().__init__([])
 
     @property
@@ -4399,15 +4366,29 @@ class StepCounter(Transform):
         if truncated_keys is None:
             # make the default truncated keys
             truncated_keys = []
-            for done_key in self.done_keys:
+            for (done_key, *_) in self.parent.done_keys_groups:
                 if isinstance(done_key, str):
-                    key = "truncated"
+                    key = self.truncated_key
                 else:
-                    key = (*done_key[:-1], "truncated")
-                if key not in truncated_keys:
-                    truncated_keys.append(key)
-                truncated_keys = self._truncated_keys = truncated_keys
+                    key = (*done_key[:-1], self.truncated_key)
+                truncated_keys.append(key)
+        truncated_keys = self._truncated_keys = truncated_keys
         return truncated_keys
+
+    @property
+    def stop_keys(self):
+        stop_keys = self._stop_keys
+        if stop_keys is None:
+            # make the default stop keys
+            stop_keys = []
+            for (done_key, *_) in self.parent.done_keys_groups:
+                if isinstance(done_key, str):
+                    key = "stop"
+                else:
+                    key = (*done_key[:-1], "stop")
+                stop_keys.append(key)
+        stop_keys = self._stop_keys = stop_keys
+        return stop_keys
 
     @property
     def done_keys(self):
@@ -4425,14 +4406,13 @@ class StepCounter(Transform):
         if step_count_keys is None:
             # make the default step_count keys
             step_count_keys = []
-            for done_key in self.done_keys:
+            for (done_key, *_) in self.parent.done_keys_groups:
                 if isinstance(done_key, str):
-                    key = "step_count"
+                    key = self.step_count_key
                 else:
-                    key = (*done_key[:-1], "step_count")
-                if key not in step_count_keys:
-                    step_count_keys.append(key)
-                step_count_keys = self._step_count_keys = step_count_keys
+                    key = (*done_key[:-1], self.step_count_key)
+                step_count_keys.append(key)
+        step_count_keys = self._step_count_keys = step_count_keys
         return step_count_keys
 
     @property
@@ -4454,10 +4434,11 @@ class StepCounter(Transform):
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         # get reset signal
-        for step_count_key, truncated_key, reset_key, done_list_sorted in zip(
+        for step_count_key, truncated_key, reset_key, stop_key, done_list_sorted in zip(
             self.step_count_keys,
             self.truncated_keys,
             self.reset_keys,
+            self.stop_keys,
             self.done_keys_groups,
         ):
             step_count = tensordict.get(step_count_key, default=None)
@@ -4481,20 +4462,29 @@ class StepCounter(Transform):
             tensordict.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps
+                if self.write_stop:
+                    stop = truncated # we assume no done after reset
+                    tensordict.set(stop_key, truncated)
                 tensordict.set(truncated_key, truncated)
         return tensordict
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key in zip(
-            self.step_count_keys, self.truncated_keys
+        for step_count_key, truncated_key, stop_key, done_keys in zip(
+            self.step_count_keys, self.truncated_keys, self.stop_keys, self.done_keys_groups,
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
             next_tensordict.set(step_count_key, next_step_count)
             if self.max_steps is not None:
                 truncated = next_step_count >= self.max_steps
+                if self.write_stop:
+                    any_done = False
+                    for done_key in done_keys:
+                        any_done = any_done | tensordict.get(done_key, default=False)
+                    stop = truncated | any_done# we assume no done after reset
+                    tensordict.set(stop_key, truncated)
                 next_tensordict.set(truncated_key, truncated)
         return next_tensordict
 
@@ -4560,6 +4550,30 @@ class StepCounter(Transform):
                     2, dtype=torch.bool, device=output_spec.device, shape=shape
                 )
             output_spec["full_done_spec"] = full_done_spec
+        if self.write_stop:
+            for stop_key in self.stop_keys:
+                stop_key = unravel_key(stop_key)
+                # find a matching done key (there might be more than one)
+                for done_key in self.done_keys:
+                    # check root
+                    if type(done_key) != type(stop_key):
+                        continue
+                    if isinstance(done_key, tuple):
+                        if done_key[:-1] == stop_key[:-1]:
+                            shape = full_done_spec[done_key].shape
+                            break
+                    if isinstance(done_key, str):
+                        shape = full_done_spec[done_key].shape
+                        break
+
+                else:
+                    raise KeyError(
+                        f"Could not find root of stop_key {stop_key} in done keys {self.done_keys}."
+                    )
+                full_done_spec[stop_key] = DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=output_spec.device, shape=shape
+                )
+        output_spec["full_done_spec"] = full_done_spec
         output_spec["full_observation_spec"] = self.transform_observation_spec(
             output_spec["full_observation_spec"]
         )
@@ -5703,25 +5717,26 @@ class VecGymEnvTransform(Transform):
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
         # save the final info
-        done = False
+        stop = False
+        # TODO: check if there's a done, and if there is, get it
         for done_key in self.done_keys:
-            done = done | next_tensordict.get(done_key)
-        if done is False:
+            stop = stop | next_tensordict.get(done_key)
+        if stop is False:
             raise RuntimeError(
                 f"Could not find any done signal in tensordict:\n{tensordict}"
             )
-        self._memo["done"] = done
+        self._memo["stop"] = stop
         final = next_tensordict.pop(self.final_name, None)
         # if anything's done, we need to swap the final obs
-        if done.any():
-            done = done.squeeze(-1)
+        if stop.any():
+            stop = stop.squeeze(-1)
             if final is not None:
                 saved_next = next_tensordict.select(*final.keys(True, True)).clone()
-                next_tensordict[done] = final[done]
+                next_tensordict[stop] = final[stop]
             else:
                 saved_next = next_tensordict.select(*self.obs_keys).clone()
                 for obs_key in self.obs_keys:
-                    next_tensordict[obs_key][done] = torch.tensor(np.nan)
+                    next_tensordict[obs_key][stop] = torch.tensor(np.nan)
 
             self._memo["saved_next"] = saved_next
         else:
@@ -5729,24 +5744,24 @@ class VecGymEnvTransform(Transform):
         return next_tensordict
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
-        done = self._memo.get("done", None)
-        reset = tensordict.get("_reset", done)
-        if done is not None:
-            done = done.view_as(reset)
+        stop = self._memo.get("stop", None)
+        reset = tensordict.get("_reset", stop)
+        if stop is not None:
+            stop = stop.view_as(reset)
         if (
-            reset is not done
-            and (reset != done).any()
+            reset is not stop
+            and (reset != stop).any()
             and (not reset.all() or not reset.any())
         ):
             raise RuntimeError(
                 "Cannot partially reset a gym(nasium) async env with a reset mask that does not match the done mask. "
-                f"Got reset={reset}\nand done={done}"
+                f"Got reset={reset}\nand done={stop}"
             )
         # if not reset.any(), we don't need to do anything.
         # if reset.all(), we don't either (bc GymWrapper will call a plain reset).
         if reset is not None and reset.any() and not reset.all():
-            saved_done = self._memo["saved_next"]
-            reset = reset.view(tensordict.shape)
+            saved_next = self._memo["saved_next"]
+            # reset = reset.view(tensordict.shape)
             # we have a data container from the previous call to step
             # that contains part of the observation we need.
             # We can safely place them back in the reset result tensordict:
@@ -5756,19 +5771,19 @@ class VecGymEnvTransform(Transform):
             # are properly set.
             # collectors even take care of doing an extra masking so it's even
             # safer.
-            tensordict.update(saved_done)
+            tensordict.update(saved_next)
             for done_key in self.done_keys:
                 # Make sure that all done are False
-                done = tensordict.get(done_key, None)
-                if done is not None:
-                    done = done.clone().fill_(0)
+                stop = tensordict.get(done_key, None)
+                if stop is not None:
+                    stop = stop.clone().fill_(0)
                 else:
-                    done = torch.zeros(
+                    stop = torch.zeros(
                         (*tensordict.batch_size, 1),
                         device=tensordict.device,
                         dtype=torch.bool,
                     )
-                tensordict.set(done_key, done)
+                tensordict.set(done_key, stop)
         tensordict.pop(self.final_name, None)
         return tensordict
 
@@ -5778,7 +5793,7 @@ class VecGymEnvTransform(Transform):
         if keys is None:
             keys = self.parent.done_keys
             self._done_keys = keys
-            expected_done_keys = {"done", "truncated"}
+            expected_done_keys = {"done", "truncated", "stop"}
             # put this check for now. We can consider relaxing that later
             # and allow nested values, though they will still need to be unique.
             for done_key in keys:
