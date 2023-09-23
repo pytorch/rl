@@ -1460,6 +1460,7 @@ class TestStepCounter(TransformBase):
                 step_count_key=step_key,
             ),
         )
+        step_key = transformed_env.transform.step_count_keys[0]
         td = transformed_env.rollout(
             rollout_length, policy=policy, break_when_any_done=False
         )
