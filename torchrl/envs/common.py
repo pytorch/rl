@@ -1307,10 +1307,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 next_tensordict_out.set(done_key, done)
 
         if self.run_type_checks:
-            # TODO: check these errors
-            for key in self._select_observation_keys(next_tensordict_out):
+            for key, spec in self.observation_spec.items():
                 obs = next_tensordict_out.get(key)
-                self.observation_spec.type_check(obs, key)
+                spec.type_check(obs)
 
             for reward_key in self.reward_keys:
                 if (
@@ -1327,10 +1326,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             for done_key in self.done_keys:
                 if (
                     next_tensordict_out.get(done_key).dtype
-                    is not self.output_spec["full_done_spec"].get(done_key).dtype
+                    is not self.output_spec["full_done_spec", done_key].dtype
                 ):
                     raise TypeError(
-                        f"expected done.dtype to be torch.bool but got {next_tensordict_out.get(done_key).dtype}"
+                        f"expected done.dtype to be {self.output_spec['full_done_spec', done_key].dtype} but got {next_tensordict_out.get(done_key).dtype}"
                     )
         return next_tensordict_out
 
