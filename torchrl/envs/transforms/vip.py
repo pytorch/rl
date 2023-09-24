@@ -397,7 +397,7 @@ class VIPRewardTransform(VIPTransform):
             state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         # find the obs spec
         in_key = self.in_keys[0]
-        spec = self.parent.output_spec["observation_spec"][in_key].clone()
+        spec = self.parent.output_spec["full_observation_spec"][in_key].clone()
         state_spec["goal_image"] = spec
         input_spec["state_spec"] = state_spec
         return input_spec

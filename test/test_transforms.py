@@ -6633,7 +6633,7 @@ class TestVIP(TransformBase):
             _ = transformed_env.reset()
         with pytest.raises(
             KeyError,
-            match=r"observation_spec",
+            match=r"VIPRewardTransform.* requires .* key to be present in the input tensordict",
         ):
             _ = transformed_env.reset(tensordict_reset.select())
 
