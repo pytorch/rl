@@ -88,7 +88,7 @@ function.
 
   The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
   into a ``termination`` (the env is done and results should not be trusted)
-  and ``truncation`` (the maximum number of steps is reached) flags.
+  and ``truncation`` (an external limit on the number of steps is reached) flags.
   In TorchRL, ``"done"`` strictly refers to ``"termination"``.
   If the environment provides it (eg, Gymnasium), the truncation entry is also
   updated. In this case, a ``"stop"`` entry can also be provided, which represents
