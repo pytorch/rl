@@ -8,6 +8,7 @@ import os.path
 import re
 from collections import defaultdict
 from functools import partial
+from sys import platform
 
 import numpy as np
 import pytest
