@@ -67,10 +67,10 @@ from torchrl.envs.utils import (
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
-_os_is_windows = sys.platform == "win32"
-_python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
-_python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
-_os_is_osx = sys.platform == "darwin"
+IS_WINDOWS = sys.platform == "win32"
+IS_OSX = sys.platform == "darwin"
+PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
+PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 
 class WrappablePolicy(nn.Module):
@@ -178,7 +178,7 @@ def _is_consistent_device_type(
 
 
 @pytest.mark.skipif(
-    _os_is_windows and _python_is_3_10,
+    IS_WINDOWS and PYTHON_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
 @pytest.mark.parametrize("num_env", [2])
@@ -193,7 +193,7 @@ def test_output_device_consistency(
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
-    if _os_is_windows and _python_is_3_7:
+    if IS_WINDOWS and PYTHON_3_7:
         if device == "cuda" and policy_device == "cuda" and device is None:
             pytest.skip(
                 "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
@@ -518,7 +518,7 @@ def test_collector_batch_size(
     num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
 ):
     """Tests that there are 'frames_per_batch' frames in each batch of a collection."""
-    if num_env == 3 and _os_is_windows:
+    if num_env == 3 and IS_WINDOWS:
         pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
 
@@ -1072,12 +1072,7 @@ def test_collector_output_keys(
 @pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_collector_device_combinations(device, storing_device):
-    if (
-        _os_is_windows
-        and _python_is_3_10
-        and storing_device == "cuda"
-        and device == "cuda"
-    ):
+    if IS_WINDOWS and PYTHON_3_10 and storing_device == "cuda" and device == "cuda":
         pytest.skip("Windows fatal exception: access violation in torch.storage")
 
     def env_fn(seed):
@@ -1293,7 +1288,7 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.skipif(_os_is_osx, reason="Queue.qsize does not work on osx.")
+@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
 class TestPreemptiveThreshold:
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
@@ -1960,6 +1955,9 @@ def test_collector_reloading(collector_class):
     collector.shutdown()
 
 
+@pytest.mark.skipif(
+    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
+)
 def test_num_threads():
     from torchrl.collectors import collectors
 
