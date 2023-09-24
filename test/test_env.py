@@ -2117,6 +2117,29 @@ def test_num_threads():
         torch.set_num_threads(num_threads)
 
 
+def test_run_type_checks():
+    env = ContinuousActionVecMockEnv()
+    env._run_type_checks = False
+    check_env_specs(env)
+    env._run_type_checks = True
+    check_env_specs(env)
+    env.output_spec.unlock_()
+    # check type check on done
+    env.output_spec["full_done_spec", "done"].dtype = torch.int
+    with pytest.raises(TypeError, match="expected done.dtype to"):
+        check_env_specs(env)
+    env.output_spec["full_done_spec", "done"].dtype = torch.bool
+    # check type check on reward
+    env.output_spec["full_reward_spec", "reward"].dtype = torch.int
+    with pytest.raises(TypeError, match="expected"):
+        check_env_specs(env)
+    env.output_spec["full_reward_spec", "reward"].dtype = torch.float
+    # check type check on obs
+    env.output_spec["full_observation_spec", "observation"].dtype = torch.float16
+    with pytest.raises(TypeError):
+        check_env_specs(env)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
