@@ -8,6 +8,7 @@ import os.path
 import re
 from collections import defaultdict
 from functools import partial
+from sys import platform
 
 import numpy as np
 import pytest
@@ -91,6 +92,7 @@ except FileNotFoundError:
     _atari_found = False
     atari_confs = defaultdict(lambda: "")
 
+IS_OSX = platform == "darwin"
 
 ## TO BE FIXED: DiscreteActionProjection queries a randint on each worker, which leads to divergent results between
 ## the serial and parallel batched envs
@@ -2089,6 +2091,9 @@ def test_mocking_envs(envclass):
     check_env_specs(env, seed=100, return_contiguous=False)
 
 
+@pytest.mark.skipif(
+    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
+)
 def test_num_threads():
     from torchrl.envs import batched_envs
 
