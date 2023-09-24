@@ -358,7 +358,7 @@ class VIPRewardTransform(VIPTransform):
         if "goal_image" not in tensordict.keys():
             raise KeyError(
                 f"{self.__class__.__name__}.reset() requires a `'goal_image'` key to be "
-                f"present in the input tensordict."
+                f"present in the input tensordict. Got keys {list(tensordict.keys())}."
             )
         tensordict_in = tensordict.select("goal_image").rename_key_(
             "goal_image", self.in_keys[0]
@@ -391,13 +391,13 @@ class VIPRewardTransform(VIPTransform):
         return tensordict
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        if "state_spec" in input_spec.keys():
-            state_spec = input_spec["state_spec"]
+        if "full_state_spec" in input_spec.keys():
+            full_state_spec = input_spec["full_state_spec"]
         else:
-            state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
+            full_state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         # find the obs spec
         in_key = self.in_keys[0]
-        spec = self.parent.output_spec["full_observation_spec"][in_key].clone()
-        state_spec["goal_image"] = spec
-        input_spec["state_spec"] = state_spec
-        return input_spec
+        spec = self.parent.output_spec["full_observation_spec"][in_key]
+        full_state_spec["goal_image"] = spec.clone()
+        input_spec["full_state_spec"] = full_state_spec
+        return super().transform_input_spec(input_spec)
