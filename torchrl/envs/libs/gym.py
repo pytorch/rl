@@ -806,7 +806,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # info needs to be flipped
             info = _flip_info_tuple(info)
-        # a done is interpreted as terminal in earlier versions of gym.
+        # The variable naming follow's torchrl's convention here.
+        # A done is interpreted as terminal in earlier versions of gym.
         # This isn't optimal, but it is the most natural option.
         # Interpreting this as a "stop" would break in value functions because
         # we can't decide if the env is done (ie, game over) or truncated.
@@ -817,7 +818,8 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", "0.24", "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        # a done is interpreted as terminal in earlier versions of gym.
+        # The variable naming follow's torchrl's convention here.
+        # A done is interpreted as terminal in earlier versions of gym.
         # This isn't optimal, but it is the most natural option.
         # Interpreting this as a "stop" would break in value functions because
         # we can't decide if the env is done (ie, game over) or truncated.
@@ -829,25 +831,26 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, termination, truncation, info = step_outputs_tuple
+        # The variable naming follow's torchrl's convention here.
+        observations, reward, done, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            termination,  # torchrl done
-            truncation,  # torchrl truncated
-            termination | truncation,  # torchrl stop
+            done,
+            truncated,  # torchrl truncated
+            done | truncated,  # torchrl stop
             info,
         )
 
     @implement_for("gymnasium", "0.27", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, termination, truncation, info = step_outputs_tuple
+        observations, reward, done, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            termination,  # torchrl done
-            truncation,  # torchrl truncated
-            termination | truncation,  # torchrl stop
+            done,
+            truncated,  # torchrl truncated
+            done | truncated,  # torchrl stop
             info,
         )
 

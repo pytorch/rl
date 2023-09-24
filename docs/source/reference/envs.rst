@@ -99,9 +99,20 @@ function.
   task completion for follow-up tasks (eg, computing value estimations), so any
   unspecified end-of-trajectory signal will eventually need to be interpreted
   with a worst-case-scenario strategy. Another motivation is that a ``"stop"``
-  signal will be modified by a ``"truncation"`` implemented, for instance, via
-  a :class:`~.StepCounter` transform, and the original ``"stop"`` signal
-  will be lost.
+  signal returned directly by the env during a ``_step`` call will be modified
+  by a ``"truncation"`` implemented further down the line. For instance,
+  using a :class:`~.StepCounter` transform will irreversibly change the original
+  ``"stop"`` signal:
+
+    >>> class StepCounter(transform):
+    ...     def _call(self, tensordict, next_tensordict):
+    ...         [...]
+    ...         truncated = step_count > self.max_steps
+    ...         # the following line overrides the stop: this information is lost
+    ...         # and cannot be recovered
+    ...         stop = stop | truncated
+
+  Using ``"done"`` instead will make it robust to these additions.
 
   Truncation can also be achieved via the :class:`~.StepCounter` transform
   class, and the output key will be ``"truncated"`` if not chosen to be
