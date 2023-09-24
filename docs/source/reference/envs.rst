@@ -611,6 +611,7 @@ Helpers
     exploration_type
     check_env_specs
     make_composite_from_td
+    done_or_truncated
 
 Domain-specific
 ---------------

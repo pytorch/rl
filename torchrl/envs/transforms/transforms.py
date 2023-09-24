@@ -4483,7 +4483,9 @@ class StepCounter(Transform):
                 if self.write_stop:
                     any_done = False
                     for done_key in done_keys:
-                        any_done = any_done | next_tensordict.get(done_key, default=False)
+                        any_done = any_done | next_tensordict.get(
+                            done_key, default=False
+                        )
                     stop = truncated | any_done  # we assume no done after reset
                     next_tensordict.set(stop_key, stop)
                 next_tensordict.set(truncated_key, truncated)

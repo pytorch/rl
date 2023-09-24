@@ -18,9 +18,10 @@ from torchrl._utils import VERBOSE
 from torchrl.data.tensor_specs import (
     BoundedTensorSpec,
     CompositeSpec,
+    DiscreteTensorSpec,
     TensorSpec,
     UnboundedContinuousTensorSpec,
-    UnboundedDiscreteTensorSpec, DiscreteTensorSpec,
+    UnboundedDiscreteTensorSpec,
 )
 
 from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict
@@ -182,11 +183,11 @@ class DMControlWrapper(GymLikeEnv):
         self.reward_spec = reward_spec
         # populate default done spec
         done_spec = DiscreteTensorSpec(
-                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
-            )
+            n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
+        )
         self.done_spec = CompositeSpec(
             done=done_spec.clone(),
-            terminated=done_spec.clone(),
+            truncated=done_spec.clone(),
             stop=done_spec.clone(),
             device=self.device,
         )
@@ -248,11 +249,11 @@ class DMControlWrapper(GymLikeEnv):
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
-        truncated = terminated = done = False  # dm_control envs are non-terminating
+        done = truncated = stop = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
         info = {}
 
-        return observation, reward, done, truncated, terminated, info
+        return observation, reward, done, truncated, stop, info
 
     def _reset_output_transform(self, reset_data):
         (

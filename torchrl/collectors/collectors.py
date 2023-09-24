@@ -811,20 +811,20 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            traj_done_or_terminated = _bring_reset_to_root(td_reset)
+            traj_sop = _bring_reset_to_root(td_reset)
             td_reset = self.env.reset(td_reset)
 
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
                 # cloning is necessary to avoid modifying entries in-place
                 self._tensordict = torch.where(
-                    traj_done_or_terminated, td_reset, self._tensordict
+                    traj_sop, td_reset, self._tensordict
                 )
             else:
                 self._tensordict.update(td_reset)
 
-            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
-                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
+            traj_ids[traj_sop] = traj_ids.max() + torch.arange(
+                1, traj_sop.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set(("collector", "traj_ids"), traj_ids)
 

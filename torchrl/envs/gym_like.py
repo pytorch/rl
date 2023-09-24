@@ -141,7 +141,7 @@ class GymLikeEnv(_EnvWrapper):
     ) -> Tuple[bool | np.ndarray, bool | np.ndarray, bool | np.ndarray, bool]:
         """Done state reader.
 
-        In torchrl, a `"done"` signal means that a trajectory is terminated
+        In torchrl, a `"done"` signal means that a trajectory is completed
         (what is referred to as `termination` in gymnasium).
         Truncated means the trajectory has been interrupted.
 

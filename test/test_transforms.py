@@ -1392,7 +1392,7 @@ class TestStepCounter(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
-    def test_step_count_gym(self):
+    def test_step_count_dmc(self):
         env = TransformedEnv(DMControlEnv("cheetah", "run"), StepCounter(max_steps=30))
         env.rollout(1000)
         check_env_specs(env)
@@ -1408,7 +1408,7 @@ class TestStepCounter(TransformBase):
         if write_stop and max_steps:
             assert "stop" in env.full_done_spec.keys()
         else:
-            assert not "stop" in env.full_done_spec.keys()
+            assert "stop" not in env.full_done_spec.keys()
 
     def test_parallel_trans_env_check(self):
         def make_env():
@@ -8129,7 +8129,7 @@ class TestInitTracker(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.skipif(not _has_dm_control, reason="no dm_control detected")
-    def test_init_gym(self):
+    def test_init_dmc(self):
         env = TransformedEnv(
             DMControlEnv("cheetah", "run"),
             Compose(StepCounter(max_steps=30), InitTracker()),

@@ -738,14 +738,15 @@ def done_or_truncated(
     """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
-    This function can be used to compute the `"_reset"` signal in batched
+    This function can be used to compute the `"_reset"` signals in batched
     or multiagent settings, hence the default name of the output key.
 
     Args:
         data (TensorDictBase): the input data, generally resulting from a call to :meth:`~torchrl.envs.EnvBase.step`.
         full_done_spec (TensorSpec, optional): the done_spec from the env, indicating where
-            the done leaves have to be found. If not provided, the default `"done"` and
-            `"truncated"` entries will be searched for in the data.
+            the done leaves have to be found. If not provided, the default
+            ``"step"``, ``"done"`` and ``"truncated"`` entries will be
+            searched for in the data.
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
@@ -782,56 +783,65 @@ def done_or_truncated(
     list_of_keys = []
 
     def inner_done_or_truncated(data, full_done_spec, key, curr_done_key=()):
-        any_done = False
+        any_eot = False
         aggregate = None
         if full_done_spec is None:
-            for done_key, item in data.items():
-                if done_key in ("done", "truncated"):
-                    done = data.get(done_key, None)
-                    if done is None:
-                        done = torch.zeros(
+            for eot_key, item in data.items():
+                if eot_key == "stop":
+                    stop = data.get(eot_key, None)
+                    if stop is None:
+                        stop = torch.zeros(
                             (*data.shape, 1), dtype=torch.bool, device=data.device
                         )
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=done.device)
-                    aggregate = aggregate | done
+                        aggregate = torch.tensor(False, device=stop.device)
+                    aggregate = aggregate | stop
+                elif eot_key in ("done", "truncated"):
+                    stop = data.get(eot_key, None)
+                    if stop is None:
+                        stop = torch.zeros(
+                            (*data.shape, 1), dtype=torch.bool, device=data.device
+                        )
+                    if aggregate is None:
+                        aggregate = torch.tensor(False, device=stop.device)
+                    aggregate = aggregate | stop
                 elif isinstance(item, TensorDictBase):
-                    any_done = any_done | inner_done_or_truncated(
+                    any_eot = any_eot | inner_done_or_truncated(
                         data=item,
                         full_done_spec=None,
                         key=key,
-                        curr_done_key=curr_done_key + (done_key,),
+                        curr_done_key=curr_done_key + (eot_key,),
                     )
         else:
-            for done_key, item in full_done_spec.items():
+            for eot_key, item in full_done_spec.items():
                 if isinstance(item, CompositeSpec):
-                    any_done = any_done | inner_done_or_truncated(
-                        data=data.get(done_key),
+                    any_eot = any_eot | inner_done_or_truncated(
+                        data=data.get(eot_key),
                         full_done_spec=item,
                         key=key,
-                        curr_done_key=curr_done_key + (done_key,),
+                        curr_done_key=curr_done_key + (eot_key,),
                     )
                 else:
-                    done = data.get(done_key, None)
-                    if done is None:
-                        done = torch.zeros(
+                    sop = data.get(eot_key, None)
+                    if sop is None:
+                        sop = torch.zeros(
                             (*data.shape, 1), dtype=torch.bool, device=data.device
                         )
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=done.device)
-                    aggregate = aggregate | done
+                        aggregate = torch.tensor(False, device=sop.device)
+                    aggregate = aggregate | sop
         if aggregate is not None:
             if key is not None:
                 data.set(key, aggregate)
                 list_of_keys.append(curr_done_key + (key,))
-            any_done = any_done | aggregate.any()
-        return any_done
+            any_eot = any_eot | aggregate.any()
+        return any_eot
 
-    any_done = inner_done_or_truncated(data, full_done_spec, key)
-    if not any_done and not write_full_false:
+    any_eot = inner_done_or_truncated(data, full_done_spec, key)
+    if not any_eot and not write_full_false:
         # remove the list of reset keys
         data.exclude(*list_of_keys, inplace=True)
-    return any_done
+    return any_eot
 
 
 PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
