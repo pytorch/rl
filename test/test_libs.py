@@ -1618,10 +1618,11 @@ class TestVmas:
             .all()
         )
 
-        tensordict = env.reset(
-            TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
+        td_reset = TensorDict(
+            rand_reset(env), batch_size=env.batch_size, device=env.device
         )
-        reset = tensordict["_reset"]
+        reset = td_reset["_reset"]
+        tensordict = env.reset(td_reset)
         assert not tensordict["done"][reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done

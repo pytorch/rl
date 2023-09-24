@@ -394,7 +394,9 @@ class VIPRewardTransform(VIPTransform):
         if "full_state_spec" in input_spec.keys():
             full_state_spec = input_spec["full_state_spec"]
         else:
-            full_state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
+            full_state_spec = CompositeSpec(
+                shape=input_spec.shape, device=input_spec.device
+            )
         # find the obs spec
         in_key = self.in_keys[0]
         spec = self.parent.output_spec["full_observation_spec"][in_key]

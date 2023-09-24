@@ -817,9 +817,7 @@ class SyncDataCollector(DataCollectorBase):
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
                 # cloning is necessary to avoid modifying entries in-place
-                self._tensordict = torch.where(
-                    traj_sop, td_reset, self._tensordict
-                )
+                self._tensordict = torch.where(traj_sop, td_reset, self._tensordict)
             else:
                 self._tensordict.update(td_reset)
 
