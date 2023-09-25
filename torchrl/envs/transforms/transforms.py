@@ -40,7 +40,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, step_mdp
+from torchrl.envs.utils import _sort_keys, step_mdp, _complete_done_at_reset
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -653,6 +653,7 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         next_tensordict = self.base_env._step(tensordict_in)
+        _complete_done_at_step(self.full_done_spec, next_tensordict)
         # we want the input entries to remain unchanged
         next_tensordict = self.transform._step(tensordict, next_tensordict)
         return next_tensordict
@@ -682,6 +683,7 @@ but got an object of type {type(transform)}."""
             # the contrary because newer data prevails.
             out_tensordict = tensordict.update(out_tensordict)
         out_tensordict = self.transform.reset(out_tensordict)
+        _complete_done_at_reset(self.full_done_spec, out_tensordict)
 
         mt_mode = self.transform.missing_tolerance
         self.set_missing_tolerance(True)
