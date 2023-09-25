@@ -51,12 +51,13 @@ class EpisodicLifeEnv(gym.Wrapper):
         return obs, rew, done, truncated, info
 
     def reset(self, **kwargs):
-        reset_data = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         self.lives = self.env.unwrapped.ale.lives()
-        return reset_data
+        info["end_of_life"] = False
+        return obs, info
 
 
-def make_base_env(env_name, frame_skip, device, is_test=False):
+def make_env(env_name, frame_skip, device, is_test=False):
     env = gym.make(env_name)
     if not is_test:
         env = EpisodicLifeEnv(env)
@@ -68,17 +69,6 @@ def make_base_env(env_name, frame_skip, device, is_test=False):
     if not is_test:
         reader = default_info_dict_reader(["end_of_life"])
         env.set_info_dict_reader(reader)
-    return env
-
-
-def make_env(env_name, frame_skip, device, is_test=False):
-    num_envs = 1
-    env = ParallelEnv(
-        num_envs,
-        EnvCreator(
-            lambda: make_base_env(env_name, frame_skip, device=device, is_test=is_test)
-        ),
-    )
     env = TransformedEnv(env)
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
