@@ -911,9 +911,12 @@ def _complete_done_at_reset(done_spec, data):
     data_keys = set(data.keys())
     done_spec_keys = set(done_spec.keys())
     for key, item in list(done_spec.items()):
+        val = data.get(key, None)
         if isinstance(item, CompositeSpec):
             _complete_done_at_reset(item, data.get(key))
-        elif (
+            continue
+        shape = (*leading_dim, *item.shape)
+        if (
             key == "done"
             and "done" in data_keys
             and "terminated" in done_spec_keys
@@ -923,7 +926,7 @@ def _complete_done_at_reset(done_spec, data):
                 raise RuntimeError(
                     "Cannot infer the value of terminated when only done and truncated are present."
                 )
-            data.set("terminated", data.get("done").clone())
+            data.set("terminated", data.get("done").clone().reshape(shape))
         elif (
             key == "terminated"
             and "terminated" in data_keys
@@ -931,12 +934,14 @@ def _complete_done_at_reset(done_spec, data):
             and "done" not in data_keys
         ):
             if "truncated" in data.keys():
-                data.set("done", data.get("terminated") | data.get("truncated"))
+                data.set("done", torch.reshape(data.get("terminated") | data.get("truncated"), shape))
             else:
-                data.set("done", data.get("terminated").clone())
-        else:
+                data.set("done", data.get("terminated").clone().reshape(shape))
+        elif val is None:
             # in this case, just fill with 0s
             data.set(key, item.zero(leading_dim))
+        elif val.shape != shape:
+            data.set(key, val.reshape(shape))
 
 
 def _complete_done_at_step(done_spec, data):
@@ -946,30 +951,36 @@ def _complete_done_at_step(done_spec, data):
     # there is a "terminated" but no "done".
     leading_dim = data.shape[: -done_spec.ndim]
     data_keys = set(data.keys())
+    done_spec_keys = set(done_spec.keys())
     for key, item in list(done_spec.items()):
+        val = data.get(key, None)
         if isinstance(item, CompositeSpec):
-            _complete_done_at_step(item, data.get(key))
-        elif (
+            _complete_done_at_step(item, val)
+            continue
+        shape = (*leading_dim, *item.shape)
+        if (
             key == "done"
             and "done" in data_keys
-            and "terminated" in done_spec.keys()
+            and "terminated" in done_spec_keys
             and "terminated" not in data_keys
         ):
             if "truncated" in data.keys():
                 raise RuntimeError(
                     "Cannot infer the value of terminated when only done and truncated are present."
                 )
-            data.set("terminated", data.get("done").clone())
+            data.set("terminated", data.get("done").clone().reshape(shape))
         elif (
             key == "terminated"
             and "terminated" in data_keys
-            and "done" in done_spec.keys()
+            and "done" in done_spec_keys
             and "done" not in data_keys
         ):
             if "truncated" in data.keys():
-                data.set("done", data.get("terminated") | data.get("truncated"))
+                data.set("done", torch.reshape(data.get("terminated") | data.get("truncated"), shape))
             else:
-                data.set("done", data.get("terminated").clone())
-        else:
+                data.set("done", data.get("terminated").clone().reshape(shape))
+        elif val is None:
             # in this case, just fill with 0s
-            data.set("done", item.zero(leading_dim))
+            data.set(key, item.zero(leading_dim))
+        elif val.shape != shape:
+            data.set(key, val.reshape(shape))

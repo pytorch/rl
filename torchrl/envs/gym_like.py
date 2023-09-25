@@ -249,12 +249,12 @@ class GymLikeEnv(_EnvWrapper):
 
         # if truncated/terminated is not in the keys, we just don't pass it even if it
         # is defined.
-        if terminated is not None and "terminated" in self.done_keys:
-            obs_dict["terminated"] = terminated
+        if terminated is None:
+            terminated = done
         if truncated is not None and "truncated" in self.done_keys:
             obs_dict["truncated"] = truncated
-        if done is not None and "done" in self.done_keys:
-            obs_dict["done"] = done
+        obs_dict["done"] = done
+        obs_dict["terminated"] = terminated
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
