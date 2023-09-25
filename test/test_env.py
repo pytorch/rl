@@ -292,7 +292,7 @@ class TestModelBasedEnvBase:
         check_env_specs(mb_env)
         rollout = mb_env.rollout(max_steps=100)
         expected_keys = {
-            ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
+            ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done", "terminated")
         }
         expected_keys = expected_keys.union(
             set(mb_env.input_spec["full_action_spec"].keys())
@@ -300,7 +300,7 @@ class TestModelBasedEnvBase:
         expected_keys = expected_keys.union(
             set(mb_env.input_spec["full_state_spec"].keys())
         )
-        expected_keys = expected_keys.union({"done", "next"})
+        expected_keys = expected_keys.union({"done", "terminated", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 

@@ -533,6 +533,7 @@ class TestRollout:
         expected_keys = {
             ("next", "attention_mask"),
             ("next", "done"),
+            ("next", "terminated"),
             ("next", "input_ids"),
             ("next", "reward"),
             "action",

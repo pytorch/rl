@@ -907,7 +907,10 @@ def _complete_done_at_reset(done_spec, data):
     # by default, if a done key is missing, it is assumed that it is False
     # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
     # there is a "terminated" but no "done".
-    leading_dim = data.shape[: -done_spec.ndim]
+    if done_spec.ndim:
+        leading_dim = data.shape[: -done_spec.ndim]
+    else:
+        leading_dim = data.shape
     data_keys = set(data.keys())
     done_spec_keys = set(done_spec.keys())
     for key, item in list(done_spec.items()):
@@ -951,7 +954,10 @@ def _complete_done_at_step(done_spec, data):
     # by default, if a done key is missing, it is assumed that it is False
     # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
     # there is a "terminated" but no "done".
-    leading_dim = data.shape[: -done_spec.ndim]
+    if done_spec.ndim:
+        leading_dim = data.shape[: -done_spec.ndim]
+    else:
+        leading_dim = data.shape
     data_keys = set(data.keys())
     done_spec_keys = set(done_spec.keys())
     for key, item in list(done_spec.items()):

@@ -1379,7 +1379,7 @@ class TestR3M(TransformBase):
             + list(transformed_env.observation_spec.keys())
             + ["action"]
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "next"]
+            + [("next", "reward"), ("next", "done"),("next", "terminated"), "terminated", "done", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
@@ -6759,7 +6759,7 @@ class TestVIP(TransformBase):
             + ["action"]
             + list(transformed_env.observation_spec.keys())
             + [("next", key) for key in transformed_env.observation_spec.keys()]
-            + [("next", "reward"), ("next", "done"), "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", ("next", "terminated"), "terminated", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 
@@ -7013,7 +7013,7 @@ class TestVC1(TransformBase):
                 unravel_key(("next", key))
                 for key in transformed_env.observation_spec.keys(True)
             ]
-            + [("next", "reward"), ("next", "done"), "done", "next"]
+            + [("next", "reward"), ("next", "done"), "done", ("next", "terminated"), "terminated", "next"]
         )
         assert set(expected_keys) == set(transformed_env.rollout(3).keys(True))
 

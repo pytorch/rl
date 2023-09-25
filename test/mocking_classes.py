@@ -1022,6 +1022,7 @@ class CountingEnv(EnvBase):
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
+                "terminated": self.count > self.max_steps,
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1037,6 +1038,7 @@ class CountingEnv(EnvBase):
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
+                "terminated": self.count > self.max_steps,
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
@@ -1056,6 +1058,7 @@ class IncrementingEnv(CountingEnv):
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps,
+                "terminated": self.count > self.max_steps,
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
@@ -1284,6 +1287,7 @@ class CountingBatchedEnv(EnvBase):
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps.view_as(self.count),
+                "terminated": self.count > self.max_steps.view_as(self.count),
             },
             batch_size=self.batch_size,
             device=self.device,
@@ -1299,6 +1303,7 @@ class CountingBatchedEnv(EnvBase):
             source={
                 "observation": self.count.clone(),
                 "done": self.count > self.max_steps.unsqueeze(-1),
+                "terminated": self.count > self.max_steps.unsqueeze(-1),
                 "reward": torch.zeros_like(self.count, dtype=torch.float),
             },
             batch_size=self.batch_size,
