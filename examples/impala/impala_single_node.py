@@ -47,12 +47,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     max_grad_norm = cfg.optim.max_grad_norm
     num_test_episodes = cfg.logger.num_test_episodes
     total_network_updates = (
-        total_frames // frames_per_batch * batch_size
+        total_frames // (frames_per_batch * batch_size)
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils_atari.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
-    actor, critic = (actor.to(device), critic.to(device))
+    actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
     collector = MultiaSyncDataCollector(
@@ -236,6 +236,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sampling_start = time.time()
         accumulator = []
 
+    collector.shutdown()
     end_time = time.time()
     execution_time = end_time - start_time
     print(f"Training took {execution_time:.2f} seconds to finish")
