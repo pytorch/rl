@@ -923,6 +923,8 @@ def _complete_done_at_reset(done_spec, data):
             and "terminated" not in data_keys
         ):
             if "truncated" in data.keys():
+                # if we have a done in the data and a terminated in the specs but not in the data,
+                # the presence of a truncated is problematic
                 raise RuntimeError(
                     "Cannot infer the value of terminated when only done and truncated are present."
                 )
