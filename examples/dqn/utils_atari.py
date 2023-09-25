@@ -69,7 +69,6 @@ def make_env(env_name, frame_skip, device, is_test=False):
     if not is_test:
         reader = default_info_dict_reader(["end_of_life"])
         env.set_info_dict_reader(reader)
-    env = TransformedEnv(env)
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
