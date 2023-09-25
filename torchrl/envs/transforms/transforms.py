@@ -677,6 +677,7 @@ but got an object of type {type(transform)}."""
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
+        # TODO: figure out how to call this only once
         _complete_done_at_reset(self.full_done_spec, out_tensordict)
         if tensordict is not None:
             # the transform may need to read previous info during reset.
