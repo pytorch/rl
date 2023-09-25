@@ -1397,8 +1397,8 @@ class TestStepCounter(TransformBase):
         env.rollout(1000)
         check_env_specs(env)
 
-    @pytest.mark.parametrize("write_stop", [False, True])
-    @pytest.mark.parametrize("update_done", [10, None])
+    @pytest.mark.parametrize("update_done", [False, True])
+    @pytest.mark.parametrize("max_steps", [10, None])
     def test_single_trans_env_check(self, update_done, max_steps):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
