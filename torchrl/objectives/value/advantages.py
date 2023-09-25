@@ -584,7 +584,7 @@ class TD0Estimator(ValueEstimatorBase):
 
         if self.average_rewards:
             reward = reward - reward.mean()
-            reward = reward / reward.std().clamp_min(1e-4)
+            reward = reward / reward.std().clamp_min(1e-5)
             tensordict.set(
                 ("next", self.tensor_keys.reward), reward
             )  # we must update the rewards if they are used later in the code

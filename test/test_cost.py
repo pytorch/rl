@@ -129,7 +129,7 @@ from torchrl.objectives.value.advantages import (
     GAE,
     TD1Estimator,
     TDLambdaEstimator,
-    # VTrace,
+    VTrace,
 )
 from torchrl.objectives.value.functional import (
     _transpose_time,
@@ -5195,7 +5195,7 @@ class TestPPO(LossModuleTestBase):
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_ppo(self, loss_class, device, gradient_mode, advantage, td_est):
@@ -5207,6 +5207,13 @@ class TestPPO(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5274,7 +5281,7 @@ class TestPPO(LossModuleTestBase):
         loss_fn2.load_state_dict(sd)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_ppo_shared(self, loss_class, device, advantage):
         torch.manual_seed(self.seed)
@@ -5286,6 +5293,12 @@ class TestPPO(LossModuleTestBase):
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5418,7 +5431,7 @@ class TestPPO(LossModuleTestBase):
     )
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_ppo_diff(self, loss_class, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -5431,6 +5444,13 @@ class TestPPO(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5494,6 +5514,7 @@ class TestPPO(LossModuleTestBase):
             ValueEstimators.TD1,
             ValueEstimators.TD0,
             ValueEstimators.GAE,
+            ValueEstimators.VTrace,
             ValueEstimators.TDLambda,
         ],
     )
@@ -5533,7 +5554,7 @@ class TestPPO(LossModuleTestBase):
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_ppo_tensordict_keys_run(self, loss_class, advantage, td_est):
         """Test PPO loss module with non-default tensordict keys."""
@@ -5559,6 +5580,13 @@ class TestPPO(LossModuleTestBase):
                 gamma=0.9,
                 lmbda=0.9,
                 value_network=value,
+                differentiable=gradient_mode,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
                 differentiable=gradient_mode,
             )
         elif advantage == "td":
@@ -5805,10 +5833,8 @@ class TestA2C(LossModuleTestBase):
         action_dim=4,
         atoms=None,
         device="cpu",
+        sample_log_prob_key="sample_log_prob",
         action_key="action",
-        observation_key="observation",
-        reward_key="reward",
-        done_key="done",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -5822,24 +5848,23 @@ class TestA2C(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
-        mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
+        mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
         td = TensorDict(
             batch_size=(batch, T),
             source={
-                observation_key: obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
-                    observation_key: next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                    done_key: done,
-                    reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "done": done,
+                    "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
                 action_key: action.masked_fill_(~mask.unsqueeze(-1), 0.0),
-                "sample_log_prob": torch.randn_like(action[..., 1]).masked_fill_(
-                    ~mask, 0.0
-                )
-                / 10,
+                sample_log_prob_key: (
+                    torch.randn_like(action[..., 1]) / 10
+                ).masked_fill_(~mask, 0.0),
                 "loc": params_mean.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "scale": params_scale.masked_fill_(~mask.unsqueeze(-1), 0.0),
             },
@@ -5849,7 +5874,7 @@ class TestA2C(LossModuleTestBase):
         return td
 
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     def test_a2c(self, device, gradient_mode, advantage, td_est):
@@ -5861,6 +5886,13 @@ class TestA2C(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -5986,7 +6018,7 @@ class TestA2C(LossModuleTestBase):
         not _has_functorch, reason=f"functorch not found, {FUNCTORCH_ERR}"
     )
     @pytest.mark.parametrize("gradient_mode", (True, False))
-    @pytest.mark.parametrize("advantage", ("gae", "td", "td_lambda", None))
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
     @pytest.mark.parametrize("device", get_default_devices())
     def test_a2c_diff(self, device, gradient_mode, advantage):
         if pack_version.parse(torch.__version__) > pack_version.parse("1.14"):
@@ -5999,6 +6031,13 @@ class TestA2C(LossModuleTestBase):
         if advantage == "gae":
             advantage = GAE(
                 gamma=0.9, lmbda=0.9, value_network=value, differentiable=gradient_mode
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
             )
         elif advantage == "td":
             advantage = TD1Estimator(
@@ -6053,6 +6092,7 @@ class TestA2C(LossModuleTestBase):
             ValueEstimators.TD1,
             ValueEstimators.TD0,
             ValueEstimators.GAE,
+            ValueEstimators.VTrace,
             ValueEstimators.TDLambda,
         ],
     )
@@ -6090,51 +6130,76 @@ class TestA2C(LossModuleTestBase):
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
+    @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))
+    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
     @pytest.mark.parametrize("device", get_default_devices())
-    def test_a2c_tensordict_keys_run(self, device):
+    def test_a2c_tensordict_keys_run(self, device, advantage, td_est):
         """Test A2C loss module with non-default tensordict keys."""
         torch.manual_seed(self.seed)
         gradient_mode = True
-        advantage_key = "advantage_test"
-        value_target_key = "value_target_test"
-        value_key = "state_value_test"
-        action_key = "action_test"
-        reward_key = "reward_test"
-        done_key = ("done", "test")
+        tensor_keys = {
+            "advantage": "advantage_test",
+            "value_target": "value_target_test",
+            "value": "state_value_test",
+            "sample_log_prob": "sample_log_prob_test",
+            "action": "action_test",
+        }
 
         td = self._create_seq_mock_data_a2c(
+            sample_log_prob_key=tensor_keys["sample_log_prob"],
+            action_key=tensor_keys["action"],
             device=device,
-            action_key=action_key,
-            reward_key=reward_key,
-            done_key=done_key,
         )
 
         actor = self._create_mock_actor(device=device)
-        value = self._create_mock_value(device=device, out_keys=[value_key])
-        advantage = GAE(
-            gamma=0.9,
-            lmbda=0.9,
-            value_network=value,
-            differentiable=gradient_mode,
-        )
-        advantage.set_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-            reward=reward_key,
-            done=done_key,
-        )
-        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
-        loss_fn.set_keys(
-            advantage=advantage_key,
-            value_target=value_target_key,
-            value=value_key,
-            action=action_key,
-            reward=reward_key,
-            done=done_key,
-        )
+        value = self._create_mock_value(device=device, out_keys=[tensor_keys["value"]])
 
-        advantage(td)
+        if advantage == "gae":
+            advantage = GAE(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+                differentiable=gradient_mode,
+            )
+        elif advantage == "vtrace":
+            advantage = VTrace(
+                gamma=0.9,
+                value_network=value,
+                actor_network=actor,
+                differentiable=gradient_mode,
+            )
+        elif advantage == "td":
+            advantage = TD1Estimator(
+                gamma=0.9,
+                value_network=value,
+                differentiable=gradient_mode,
+            )
+        elif advantage == "td_lambda":
+            advantage = TDLambdaEstimator(
+                gamma=0.9,
+                lmbda=0.9,
+                value_network=value,
+                differentiable=gradient_mode,
+            )
+        elif advantage is None:
+            pass
+        else:
+            raise NotImplementedError
+
+        loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+        loss_fn.set_keys(**tensor_keys)
+        if advantage is not None:
+            # collect tensordict key names for the advantage module
+            adv_keys = {
+                key: value
+                for key, value in tensor_keys.items()
+                if key in asdict(GAE._AcceptedKeys()).keys()
+            }
+            advantage.set_keys(**adv_keys)
+            advantage(td)
+        else:
+            if td_est is not None:
+                loss_fn.make_value_estimator(td_est)
 
         loss = loss_fn(td)
         loss_critic = loss["loss_critic"]
@@ -6175,9 +6240,6 @@ class TestA2C(LossModuleTestBase):
         value = self._create_mock_value(observation_key=observation_key)
         td = self._create_seq_mock_data_a2c(
             action_key=action_key,
-            observation_key=observation_key,
-            reward_key=reward_key,
-            done_key=done_key,
         )
 
         loss = A2CLoss(actor, value)
@@ -6924,7 +6986,7 @@ class TestDreamer(LossModuleTestBase):
             imagination_horizon=imagination_horizon,
             discount_loss=discount_loss,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_module.make_value_estimator(td_est)
             return
@@ -7656,7 +7718,7 @@ class TestIQL(LossModuleTestBase):
             expectile=expectile,
             loss_function="l2",
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
