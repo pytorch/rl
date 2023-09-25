@@ -1,13 +1,13 @@
 # Environment
 env:
   env_name: PongNoFrameskip-v4
-  num_envs: 4
+  num_envs: 1
 
 # collector
 collector:
-  frames_per_batch: 320
+  frames_per_batch: 80
   total_frames: 200_000_000
-  num_workers: 8
+  num_workers: 12
 
 # logger
 logger:
@@ -29,7 +29,7 @@ optim:
 # loss
 loss:
   gamma: 0.99
-  batch_size: 8
+  batch_size: 32
   sgd_updates: 1
   critic_coef: 0.5
   entropy_coef: 0.01

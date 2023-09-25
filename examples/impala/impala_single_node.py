@@ -51,7 +51,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     ) * cfg.loss.sgd_updates
 
     # Create models (check utils_atari.py)
-    actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
+    actor, critic = make_ppo_models(cfg.env.env_name)
     actor, critic = (actor.to(device), critic.to(device))
 
     # Create collector
