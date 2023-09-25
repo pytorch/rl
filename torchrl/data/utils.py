@@ -261,9 +261,8 @@ class CloudpickleWrapper(object):
         self.fn, self.kwargs = pickle.loads(ob)
 
     def __call__(self, *args, **kwargs) -> Any:
-        kwargs = {k: item for k, item in kwargs.items()}
         kwargs.update(self.kwargs)
-        return self.fn(**kwargs)
+        return self.fn(*args, **kwargs)
 
 
 def _process_action_space_spec(action_space, spec):
