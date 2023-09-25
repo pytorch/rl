@@ -6349,6 +6349,7 @@ class TestReinforce(LossModuleTestBase):
                     "done": torch.zeros(batch, 1, dtype=torch.bool),
                 },
                 "action": torch.randn(batch, n_act),
+                "sample_log_prob": torch.randn(batch, 1),
             },
             [batch],
             names=["time"],
@@ -6399,6 +6400,7 @@ class TestReinforce(LossModuleTestBase):
             ValueEstimators.TD1,
             ValueEstimators.TD0,
             ValueEstimators.GAE,
+            ValueEstimators.VTrace,
             ValueEstimators.TDLambda,
         ],
     )

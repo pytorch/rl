@@ -463,7 +463,9 @@ class PPOLoss(LossModule):
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.VTrace:
-            self._value_estimator = VTrace(value_network=self.critic, **hp)
+            self._value_estimator = VTrace(
+                value_network=self.critic, actor_network=self.actor, **hp
+            )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
 
