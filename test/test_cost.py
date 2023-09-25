@@ -129,6 +129,7 @@ from torchrl.objectives.value.advantages import (
     GAE,
     TD1Estimator,
     TDLambdaEstimator,
+    # VTrace,
 )
 from torchrl.objectives.value.functional import (
     _transpose_time,
@@ -139,6 +140,7 @@ from torchrl.objectives.value.functional import (
     vec_generalized_advantage_estimate,
     vec_td1_advantage_estimate,
     vec_td_lambda_advantage_estimate,
+    # vtrace_advantage_estimate,
 )
 from torchrl.objectives.value.utils import (
     _custom_conv1d,
@@ -432,7 +434,7 @@ class TestDQN(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = DQNLoss(actor, loss_function="l2", delay_value=delay_value)
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -900,7 +902,7 @@ class TestQMixer(LossModuleTestBase):
             action_spec_type=action_spec_type, device=device
         )
         loss_fn = QMixerLoss(actor, mixer, loss_function="l2", delay_value=delay_value)
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1363,7 +1365,7 @@ class TestDDPG(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_value=delay_value,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1957,7 +1959,7 @@ class TestTD3(LossModuleTestBase):
             delay_actor=delay_actor,
             delay_qvalue=delay_qvalue,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -2624,7 +2626,7 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3351,7 +3353,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             loss_function="l2",
             **kwargs,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3944,7 +3946,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -4311,7 +4313,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -4328,7 +4330,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_deprec.make_value_estimator(td_est)
             return
@@ -4734,7 +4736,7 @@ class TestCQL(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est is ValueEstimators.GAE:
+        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return

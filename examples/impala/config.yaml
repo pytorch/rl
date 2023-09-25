@@ -23,7 +23,7 @@ optim:
   weight_decay: 0.0
   momentum: 0.0
   alpha: 0.99
-  max_grad_norm: 1.0
+  max_grad_norm: 40.0
   anneal_lr: True
 
 # loss
