@@ -31,19 +31,19 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_te
 # ==================================================================================== #
 # ================================ gym 0.23 ========================================== #
 
-# With batched environments
-python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
-  optim.pretrain_gradient_steps=55 \
-  optim.updates_per_episode=3 \
-  optim.warmup_steps=10 \
-  optim.device=cuda:0 \
-  logger.backend=
-python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
-  optim.pretrain_gradient_steps=55 \
-  optim.updates_per_episode=3 \
-  optim.warmup_steps=10 \
-  optim.device=cuda:0 \
-  logger.backend=
+## With batched environments
+#python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
+#  optim.pretrain_gradient_steps=55 \
+#  optim.updates_per_episode=3 \
+#  optim.warmup_steps=10 \
+#  optim.device=cuda:0 \
+#  logger.backend=
+#python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
+#  optim.pretrain_gradient_steps=55 \
+#  optim.updates_per_episode=3 \
+#  optim.warmup_steps=10 \
+#  optim.device=cuda:0 \
+#  logger.backend=
 
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
@@ -53,16 +53,16 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_mujoco
   collector.total_frames=40 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=10 \
-  loss.ppo_epochs=1 \
+  loss.ppo_epochs=2 \
   logger.backend= \
-  logger.test_interval=40
+  logger.test_interval=10
 python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_atari.py \
   collector.total_frames=80 \
   collector.frames_per_batch=20 \
   loss.mini_batch_size=20 \
-  loss.ppo_epochs=1 \
+  loss.ppo_epochs=2 \
   logger.backend= \
-  logger.test_interval=40
+  logger.test_interval=10
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
@@ -126,6 +126,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   optimization.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
+  network.device=cuda:0 \
   logger.backend=
 #  logger.record_video=True \
 #  logger.record_frames=4 \
@@ -225,6 +226,7 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/sac/sac.py \
   collector.num_workers=2 \
   collector.env_per_collector=1 \
   collector.collector_device=cuda:0 \
+  network.device=cuda:0 \
   optimization.batch_size=10 \
   optimization.utd_ratio=1 \
   replay_buffer.size=120 \

@@ -1866,7 +1866,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return fake_in_out
 
 
-class _EnvWrapper(EnvBase, metaclass=abc.ABCMeta):
+class _EnvWrapper(EnvBase):
     """Abstract environment wrapper class.
 
     Unlike EnvBase, _EnvWrapper comes with a :obj:`_build_env` private method that will be called upon instantiation.

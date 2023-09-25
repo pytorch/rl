@@ -113,9 +113,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
         pbar.update(data.numel())
 
         # Get training rewards and lengths
-        episode_rewards = data["next", "episode_reward"][data["next", "done"]]
+        episode_rewards = data["next", "episode_reward"][data["next", "stop"]]
         if len(episode_rewards) > 0:
-            episode_length = data["next", "step_count"][data["next", "done"]]
+            episode_length = data["next", "step_count"][data["next", "stop"]]
             log_info.update(
                 {
                     "train/reward": episode_rewards.mean().item(),
@@ -123,10 +123,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     / len(episode_length),
                 }
             )
-
-        # Apply episodic end of life
-        data["done"].copy_(data["end_of_life"])
-        data["next", "done"].copy_(data["next", "end_of_life"])
 
         losses = TensorDict({}, batch_size=[num_mini_batches])
         training_start = time.time()

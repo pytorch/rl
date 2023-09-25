@@ -749,7 +749,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             {
                 "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                )
+                ),
+                "stop": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
             },
             shape=self.batch_size,
         )
@@ -814,7 +817,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # By making an opinionated decision, we make sure that value function can
         # be computed with a certain heuristic, even if it is wrong in some cases
         # (by lack of information).
-        return (observations, reward, done, None, None, info)
+        return (observations, reward, done, None, done, info)
 
     @implement_for("gym", "0.24", "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
@@ -827,7 +830,7 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # be computed with a certain heuristic, even if it is wrong in some cases
         # (by lack of information).
         observations, reward, done, info = step_outputs_tuple
-        return (observations, reward, done, None, None, info)
+        return (observations, reward, done, None, done, info)
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
