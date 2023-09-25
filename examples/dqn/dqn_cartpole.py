@@ -73,8 +73,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.optim.lr)
 
     # Create the logger
-    exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
-    logger = get_logger(cfg.logger.backend, logger_name="dqn", experiment_name=exp_name)
+    logger = None
+    if cfg.logger.backend:
+        exp_name = generate_exp_name("DQN", f"CartPole_{cfg.env.env_name}")
+        logger = get_logger(cfg.logger.backend, logger_name="dqn", experiment_name=exp_name)
 
     # Create the test environment
     test_env = make_env(cfg.env.env_name, device)
@@ -156,7 +158,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_time = time.time() - eval_start
                 log_info.update(
                     {
-                        "eval/reward": np.mean(test_rewards),
+                        "eval/reward": test_rewards,
                         "eval/eval_time": eval_time,
                     }
                 )

@@ -177,7 +177,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 eval_time = time.time() - eval_start
                 log_info.update(
                     {
-                        "eval/reward": test_rewards.mean(),
+                        "eval/reward": test_rewards,
                         "eval/eval_time": eval_time,
                     }
                 )
