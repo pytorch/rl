@@ -40,7 +40,8 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, step_mdp, _complete_done_at_reset
+from torchrl.envs.utils import _sort_keys, step_mdp, _complete_done_at_reset, \
+    _complete_done_at_step
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -676,6 +677,7 @@ but got an object of type {type(transform)}."""
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
+        _complete_done_at_reset(self.full_done_spec, out_tensordict)
         if tensordict is not None:
             # the transform may need to read previous info during reset.
             # For instance, we may need to pass the step_count for partial resets.
@@ -683,7 +685,6 @@ but got an object of type {type(transform)}."""
             # the contrary because newer data prevails.
             out_tensordict = tensordict.update(out_tensordict)
         out_tensordict = self.transform.reset(out_tensordict)
-        _complete_done_at_reset(self.full_done_spec, out_tensordict)
 
         mt_mode = self.transform.missing_tolerance
         self.set_missing_tolerance(True)
