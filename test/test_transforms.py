@@ -1398,17 +1398,18 @@ class TestStepCounter(TransformBase):
         check_env_specs(env)
 
     @pytest.mark.parametrize("write_stop", [False, True])
-    @pytest.mark.parametrize("max_steps", [10, None])
-    def test_single_trans_env_check(self, write_stop, max_steps):
+    @pytest.mark.parametrize("update_done", [10, None])
+    def test_single_trans_env_check(self, update_done, max_steps):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
-            StepCounter(max_steps=max_steps, write_stop=write_stop),
+            StepCounter(max_steps=max_steps, update_done=update_done),
         )
         check_env_specs(env)
-        if write_stop and max_steps:
-            assert "stop" in env.full_done_spec.keys()
+        r = env.rollout(100, break_when_any_done=False)
+        if update_done and max_steps:
+            assert r["next", "done"][r["next", "truncated"]].all()
         else:
-            assert "stop" not in env.full_done_spec.keys()
+            assert not r["next", "done"][r["next", "truncated"]].all()
 
     def test_parallel_trans_env_check(self):
         def make_env():
@@ -1519,10 +1520,10 @@ class TestStepCounter(TransformBase):
             td.set("done", _reset)
             td.set(("next", "done"), done)
         step_counter[0]._step_count_keys = ["step_count"]
-        step_counter[0]._done_keys = ["done"]
+        step_counter[0]._terminated_keys = ["completed"]
         step_counter[0]._truncated_keys = ["truncated"]
         step_counter[0]._reset_keys = ["_reset"]
-        step_counter[0]._stop_keys = ["stop"]
+        step_counter[0]._done_keys = ["done"]
         td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))
         i = 0
@@ -1580,7 +1581,7 @@ class TestStepCounter(TransformBase):
         step_counter._done_keys = ["done"]
         step_counter._truncated_keys = ["truncated"]
         step_counter._reset_keys = ["_reset"]
-        step_counter._stop_keys = ["stop"]
+        step_counter._completed_keys = ["completed"]
 
         td = step_counter.reset(td)
         assert not torch.all(td.get("step_count"))

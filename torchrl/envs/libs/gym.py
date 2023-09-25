@@ -750,9 +750,6 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "stop": DiscreteTensorSpec(
-                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                ),
             },
             shape=self.batch_size,
         )
@@ -761,10 +758,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
-                "stop": DiscreteTensorSpec(
+                "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "done": DiscreteTensorSpec(
+                "terminated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -778,10 +775,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     def _make_done_spec(self):  # noqa: F811
         return CompositeSpec(
             {
-                "stop": DiscreteTensorSpec(
+                "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
-                "done": DiscreteTensorSpec(
+                "terminated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -809,51 +806,46 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # info needs to be flipped
             info = _flip_info_tuple(info)
-        # The variable naming follow's torchrl's convention here.
-        # A done is interpreted as terminal in earlier versions of gym.
-        # This isn't optimal, but it is the most natural option.
-        # Interpreting this as a "stop" would break in value functions because
-        # we can't decide if the env is done (ie, game over) or truncated.
-        # By making an opinionated decision, we make sure that value function can
-        # be computed with a certain heuristic, even if it is wrong in some cases
-        # (by lack of information).
-        return (observations, reward, done, None, done, info)
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        terminated = done
+        truncated = None
+        return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        # The variable naming follow's torchrl's convention here.
-        # A done is interpreted as terminal in earlier versions of gym.
-        # This isn't optimal, but it is the most natural option.
-        # Interpreting this as a "stop" would break in value functions because
-        # we can't decide if the env is done (ie, game over) or truncated.
-        # By making an opinionated decision, we make sure that value function can
-        # be computed with a certain heuristic, even if it is wrong in some cases
-        # (by lack of information).
         observations, reward, done, info = step_outputs_tuple
-        return (observations, reward, done, None, done, info)
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        terminated = done
+        truncated = None
+        return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        # The variable naming follow's torchrl's convention here.
-        observations, reward, done, truncated, info = step_outputs_tuple
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            done,
-            truncated,  # torchrl truncated
-            done | truncated,  # torchrl stop
+            terminated,
+            truncated,
+            terminated | truncated,
             info,
         )
 
     @implement_for("gymnasium", "0.27", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, done, truncated, info = step_outputs_tuple
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            done,
-            truncated,  # torchrl truncated
-            done | truncated,  # torchrl stop
+            terminated,
+            truncated,
+            terminated | truncated,
             info,
         )
 

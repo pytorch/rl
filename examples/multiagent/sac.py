@@ -236,8 +236,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
         sampling_time = time.time() - sampling_start
 
         tensordict_data.set(
-            ("next", "stop"),
-            tensordict_data.get(("next", "stop"))
+            ("next", "done"),
+            tensordict_data.get(("next", "done"))
             .unsqueeze(-1)
             .expand(tensordict_data.get(("next", env.reward_key)).shape),
         )  # We need to expand the done to match the reward shape

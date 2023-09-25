@@ -729,31 +729,36 @@ def check_marl_grouping(group_map: Dict[str, List[str]], agent_names: List[str])
             raise ValueError(f"Agent {agent_name} not found in any group")
 
 
-def done_or_truncated(
+def terminated_or_truncated(
     data: TensorDictBase,
     full_done_spec: TensorSpec | None = None,
     key: str = "_reset",
     write_full_false: bool = False,
 ) -> bool:
-    """Reads the done / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
+    """Reads the done / terminated / truncated keys within a tensordict, and
+    writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
     This function can be used to compute the `"_reset"` signals in batched
     or multiagent settings, hence the default name of the output key.
 
     Args:
-        data (TensorDictBase): the input data, generally resulting from a call to :meth:`~torchrl.envs.EnvBase.step`.
-        full_done_spec (TensorSpec, optional): the done_spec from the env, indicating where
-            the done leaves have to be found. If not provided, the default
-            ``"step"``, ``"done"`` and ``"truncated"`` entries will be
+        data (TensorDictBase): the input data, generally resulting from a call
+            to :meth:`~torchrl.envs.EnvBase.step`.
+        full_done_spec (TensorSpec, optional): the done_spec from the env,
+            indicating where the done leaves have to be found.
+            If not provided, the default
+            ``"done"``, ``"terminated"`` and ``"truncated"`` entries will be
             searched for in the data.
         key (NestedKey, optional): where the aggregated result should be written.
             If ``None``, then the function will not write any key but just output
             whether any of the done values was true.
-            .. note:: if a value is already present for the ``key`` entry, the previous
-                value will prevail and no update will be achieved.
-        write_full_false (bool, optional): if ``True``, the reset keys will be written
-            even if the output if ``False`` (ie, no done is ``True``). Defaults to ``False``.
+            .. note:: if a value is already present for the ``key`` entry,
+                the previous value will prevail and no update will be achieved.
+        write_full_false (bool, optional): if ``True``, the reset keys will be
+            written even if the output is ``False`` (ie, no done is ``True``
+            in the provided data structure).
+            Defaults to ``False``.
 
     Returns: a boolean value indicating whether any of the done states found in the data
         contained a ``True``.
@@ -774,7 +779,7 @@ def done_or_truncated(
         ...     "nested": {"done": False, "truncated": True}},
         ...     batch_size=[]
         ... )
-        >>> data = done_or_truncated(data, spec)
+        >>> data = terminated_or_truncated(data, spec)
         >>> print(data["_reset"])
         tensor(True)
         >>> print(data["nested", "_reset"])
@@ -782,31 +787,31 @@ def done_or_truncated(
     """
     list_of_keys = []
 
-    def inner_done_or_truncated(data, full_done_spec, key, curr_done_key=()):
+    def inner_terminated_or_truncated(data, full_done_spec, key, curr_done_key=()):
         any_eot = False
         aggregate = None
         if full_done_spec is None:
             for eot_key, item in data.items():
-                if eot_key == "stop":
-                    stop = data.get(eot_key, None)
-                    if stop is None:
-                        stop = torch.zeros(
+                if eot_key == "done":
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
                             (*data.shape, 1), dtype=torch.bool, device=data.device
                         )
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=stop.device)
-                    aggregate = aggregate | stop
-                elif eot_key in ("done", "truncated"):
-                    stop = data.get(eot_key, None)
-                    if stop is None:
-                        stop = torch.zeros(
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
+                elif eot_key in ("terminated", "truncated"):
+                    done = data.get(eot_key, None)
+                    if done is None:
+                        done = torch.zeros(
                             (*data.shape, 1), dtype=torch.bool, device=data.device
                         )
                     if aggregate is None:
-                        aggregate = torch.tensor(False, device=stop.device)
-                    aggregate = aggregate | stop
+                        aggregate = torch.tensor(False, device=done.device)
+                    aggregate = aggregate | done
                 elif isinstance(item, TensorDictBase):
-                    any_eot = any_eot | inner_done_or_truncated(
+                    any_eot = any_eot | inner_terminated_or_truncated(
                         data=item,
                         full_done_spec=None,
                         key=key,
@@ -815,7 +820,7 @@ def done_or_truncated(
         else:
             for eot_key, item in full_done_spec.items():
                 if isinstance(item, CompositeSpec):
-                    any_eot = any_eot | inner_done_or_truncated(
+                    any_eot = any_eot | inner_terminated_or_truncated(
                         data=data.get(eot_key),
                         full_done_spec=item,
                         key=key,
@@ -837,7 +842,7 @@ def done_or_truncated(
             any_eot = any_eot | aggregate.any()
         return any_eot
 
-    any_eot = inner_done_or_truncated(data, full_done_spec, key)
+    any_eot = inner_terminated_or_truncated(data, full_done_spec, key)
     if not any_eot and not write_full_false:
         # remove the list of reset keys
         data.exclude(*list_of_keys, inplace=True)
@@ -895,3 +900,76 @@ def _bring_reset_to_root(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
 
     reset = skim_through(data)
     return reset
+
+
+def _complete_done_at_reset(done_spec, data):
+    """Completes the data structure at reset to put missing done keys."""
+    # by default, if a done key is missing, it is assumed that it is False
+    # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
+    # there is a "terminated" but no "done".
+    leading_dim = data.shape[: -done_spec.ndim]
+    data_keys = set(data.keys())
+    done_spec_keys = set(done_spec.keys())
+    for key, item in list(done_spec.items()):
+        if isinstance(item, CompositeSpec):
+            _complete_done_at_reset(item, data.get(key))
+        elif (
+            key == "done"
+            and "done" in data_keys
+            and "terminated" in done_spec_keys
+            and "terminated" not in data_keys
+        ):
+            if "truncated" in data.keys():
+                raise RuntimeError(
+                    "Cannot infer the value of terminated when only done and truncated are present."
+                )
+            data.set("terminated", data.get("done").clone())
+        elif (
+            key == "terminated"
+            and "terminated" in data_keys
+            and "done" in done_spec_keys
+            and "done" not in data_keys
+        ):
+            if "truncated" in data.keys():
+                data.set("done", data.get("terminated") | data.get("truncated"))
+            else:
+                data.set("done", data.get("terminated").clone())
+        else:
+            # in this case, just fill with 0s
+            data.set(key, item.zero(leading_dim))
+
+
+def _complete_done_at_step(done_spec, data):
+    """Completes the data structure at step time to put missing done keys."""
+    # by default, if a done key is missing, it is assumed that it is False
+    # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
+    # there is a "terminated" but no "done".
+    leading_dim = data.shape[: -done_spec.ndim]
+    data_keys = set(data.keys())
+    for key, item in list(done_spec.items()):
+        if isinstance(item, CompositeSpec):
+            _complete_done_at_step(item, data.get(key))
+        elif (
+            key == "done"
+            and "done" in data_keys
+            and "terminated" in done_spec.keys()
+            and "terminated" not in data_keys
+        ):
+            if "truncated" in data.keys():
+                raise RuntimeError(
+                    "Cannot infer the value of terminated when only done and truncated are present."
+                )
+            data.set("terminated", data.get("done").clone())
+        elif (
+            key == "terminated"
+            and "terminated" in data_keys
+            and "done" in done_spec.keys()
+            and "done" not in data_keys
+        ):
+            if "truncated" in data.keys():
+                data.set("done", data.get("terminated") | data.get("truncated"))
+            else:
+                data.set("done", data.get("terminated").clone())
+        else:
+            # in this case, just fill with 0s
+            data.set("done", item.zero(leading_dim))

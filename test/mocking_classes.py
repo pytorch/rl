@@ -1126,20 +1126,11 @@ class NestedCountingEnv(CountingEnv):
             )
 
         if self.nested_done:
+            done_spec = self.done_spec.unsqueeze(-1).expand(
+                *self.batch_size, self.nested_dim
+            )
             self.done_spec = CompositeSpec(
-                {
-                    "data": CompositeSpec(
-                        {
-                            "done": self.done_spec.unsqueeze(-1).expand(
-                                *self.batch_size, self.nested_dim, 1
-                            )
-                        },
-                        shape=(
-                            *self.batch_size,
-                            self.nested_dim,
-                        ),
-                    )
-                },
+                {"data": done_spec},
                 shape=self.batch_size,
             )
 
@@ -1153,9 +1144,12 @@ class NestedCountingEnv(CountingEnv):
             tensordict["_reset"] = tensordict["_reset"].sum(-2, dtype=torch.bool)
         td = super()._reset(tensordict)
         if self.nested_done:
-            td[self.done_key] = (
-                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
-            )
+            for done_key in self.done_keys:
+                td[done_key] = (
+                    td["done"]
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                )
             del td["done"]
         if self.nested_obs_action:
             td["data", "states"] = (
@@ -1184,9 +1178,12 @@ class NestedCountingEnv(CountingEnv):
             td["data"].batch_size = (*self.batch_size, self.nested_dim)
         td = next_td
         if self.nested_done:
-            td[self.done_key] = (
-                td["done"].unsqueeze(-1).expand(*self.batch_size, self.nested_dim, 1)
-            )
+            for done_key in self.done_keys:
+                td[done_key] = (
+                    td["done"]
+                    .unsqueeze(-1)
+                    .expand(*self.batch_size, self.nested_dim, 1)
+                )
             del td["done"]
         if self.nested_obs_action:
             td["data", "states"] = (
@@ -1481,9 +1478,11 @@ class HeteroCountingEnv(EnvBase):
         td.update(self.output_spec["full_reward_spec"].zero())
 
         assert td.batch_size == self.batch_size
-        td[self.done_key] = expand_right(
-            self.count > self.max_steps, self.done_spec.shape
-        )
+        for done_key in self.done_keys:
+            td[done_key] = expand_right(
+                self.count > self.max_steps,
+                self.full_done_spec[done_key].shape,
+            )
 
         return td
 

@@ -44,10 +44,10 @@ from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _bring_reset_to_root,
     _convert_exploration_type,
-    done_or_truncated,
     ExplorationType,
     set_exploration_type,
     step_mdp,
+    terminated_or_truncated,
 )
 
 _TIMEOUT = 1.0
@@ -800,7 +800,7 @@ class SyncDataCollector(DataCollectorBase):
         if not self.reset_when_done:
             return
         td_reset = self._tensordict.clone(False)
-        any_done = done_or_truncated(
+        any_done = terminated_or_truncated(
             td_reset,
             full_done_spec=self.env.output_spec["full_done_spec"],
             key="_reset",

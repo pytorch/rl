@@ -89,36 +89,20 @@ function.
   The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
   into a ``termination`` (the env is done and results should not be trusted)
   and ``truncation`` (an external limit on the number of steps is reached) flags.
-  In TorchRL, ``"done"`` strictly refers to ``"termination"``.
+  In TorchRL, ``"done"`` strictly refers to ``termination | truncation``.
   If the environment provides it (eg, Gymnasium), the truncation entry is also
-  updated. In this case, a ``"stop"`` entry can also be provided, which represents
-  the union of ``"done"`` (task completion) and ``"truncated"`` (task interruption).
-  If the environment carries a single value, it will interpreted as a completion
-  (``"done"``) signal by default (and not ``"stop"`` or ``"truncated"``). The
-  reason for this choice is that without any more information, one has to assume
-  task completion for follow-up tasks (eg, computing value estimations), so any
-  unspecified end-of-trajectory signal will eventually need to be interpreted
-  with a worst-case-scenario strategy. Another motivation is that a ``"stop"``
-  signal returned directly by the env during a ``_step`` call will be modified
-  by a ``"truncation"`` implemented further down the line. For instance,
-  using a :class:`~.StepCounter` transform will irreversibly change the original
-  ``"stop"`` signal:
+  written in the :meth:`EnvBase.step` output under a ``"truncated"`` entry.
+  If the environment carries a single value, it will interpreted as a ``"done"``
+  signal by default.
+  Some classes in TorchRL may require a ``"terminated"`` signal (eg, value functions).
+  If none is available, they will fall back on ``"done"`` instead.
+  The caveat of this choice is that adding a truncation transform (eg, :class:`.StepCounter`)
+  will override the content of the ``"done"`` signal. If this is a problem
+  a :class:`~.RenameTransform` should be used to move or copy the ``"done"``
+  entry (for instance to ``"terminated"``).
 
-    >>> class StepCounter(transform):
-    ...     def _call(self, tensordict, next_tensordict):
-    ...         [...]
-    ...         truncated = step_count > self.max_steps
-    ...         # the following line overrides the stop: this information is lost
-    ...         # and cannot be recovered
-    ...         stop = stop | truncated
-
-  Using ``"done"`` instead will make it robust to these additions.
-
-  Truncation can also be achieved via the :class:`~.StepCounter` transform
-  class, and the output key will be ``"truncated"`` if not chosen to be
-  something else (e.g. ``StepCounter(max_steps=100, truncated_key="interrupted")``).
-  TorchRL's collectors and rollout methods will be looking for one of these
-  keys when assessing if the env should be reset.
+  By default, TorchRL's collectors and rollout methods will be looking for the ``"done"``
+  entry to assess if the environment should be reset.
 
 .. note::
 
@@ -199,10 +183,10 @@ It is also possible to reset some but not all of the environments:
         >>> env.reset(tensordict)  # eliminates the "_reset" entry
         TensorDict(
             fields={
+                terminated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 done: Tensor(torch.Size([4, 1]), dtype=torch.bool),
-                truncated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
-                stop: Tensor(torch.Size([4, 1]), dtype=torch.bool),
                 pixels: Tensor(torch.Size([4, 500, 500, 3]), dtype=torch.uint8),
+                truncated: Tensor(torch.Size([4, 1]), dtype=torch.bool),
             batch_size=torch.Size([4]),
             device=None,
             is_shared=True)
@@ -263,7 +247,7 @@ Some of the main differences between these paradigms include:
 
 - **observation** can be per-agent and also have some shared components
 - **reward** can be per-agent or shared
-- **done** (and ``"truncated"`` or ``"stop"``) can be per-agent or shared.
+- **done** (and ``"truncated"`` or ``"terminated"``) can be per-agent or shared.
 
 TorchRL accommodates all these possible paradigms thanks to its :class:`tensordict.TensorDict` data carrier.
 In particular, in multi-agent environments, per-agent keys will be carried in a nested "agents" TensorDict.
@@ -611,7 +595,7 @@ Helpers
     exploration_type
     check_env_specs
     make_composite_from_td
-    done_or_truncated
+    terminated_or_truncated
 
 Domain-specific
 ---------------

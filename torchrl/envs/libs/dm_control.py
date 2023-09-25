@@ -188,7 +188,7 @@ class DMControlWrapper(GymLikeEnv):
         self.done_spec = CompositeSpec(
             done=done_spec.clone(),
             truncated=done_spec.clone(),
-            stop=done_spec.clone(),
+            terminated=done_spec.clone(),
             device=self.device,
         )
         self.action_spec = _dmcontrol_to_torchrl_spec_transform(
@@ -249,18 +249,18 @@ class DMControlWrapper(GymLikeEnv):
             timestep_tuple = (timestep_tuple,)
         reward = timestep_tuple[0].reward
 
-        done = truncated = stop = False  # dm_control envs are non-terminating
+        done = truncated = terminated = False  # dm_control envs are non-terminating
         observation = timestep_tuple[0].observation
         info = {}
 
-        return observation, reward, done, truncated, stop, info
+        return observation, reward, terminated, truncated, done, info
 
     def _reset_output_transform(self, reset_data):
         (
             observation,
             reward,
-            termination,
-            truncation,
+            terminated,
+            truncated,
             done,
             info,
         ) = self._output_transform(reset_data)

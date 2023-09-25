@@ -495,6 +495,7 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" not in env.done_keys
+        assert "terminated" not in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -510,6 +511,7 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -535,6 +537,7 @@ class TestGym:
             with set_gym_backend("gymnasium"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -558,14 +561,15 @@ class TestGym:
         penv = ParallelEnv(2, make_fun)
         rollout = penv.rollout(2)
         if old_api:
+            assert "terminated" not in rollout.keys()
             assert "truncated" not in rollout.keys()
         else:
+            assert "terminated" in rollout.keys()
             assert "truncated" in rollout.keys()
         check_env_specs(penv)
 
     @implement_for("gym", None, "0.22.0")
     def test_vecenvs_nan(self):  # noqa: F811
-        print("here")
         # old versions of gym must return nan for next values when there is a done state
         torch.manual_seed(0)
         env = GymEnv("CartPole-v0", num_envs=2)
@@ -1811,7 +1815,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1829,7 +1833,7 @@ class TestD4RL:
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1848,7 +1852,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

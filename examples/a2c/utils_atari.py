@@ -233,7 +233,7 @@ def eval_model(actor, test_env, num_episodes=3):
             break_when_any_done=True,
             max_steps=10_000_000,
         )
-        reward = td_test["next", "episode_reward"][td_test["next", "stop"]]
+        reward = td_test["next", "episode_reward"][td_test["next", "done"]]
         test_rewards = np.append(test_rewards, reward.cpu().numpy())
     del td_test
     return test_rewards.mean()

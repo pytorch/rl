@@ -25,10 +25,12 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
+    _complete_done_at_reset,
+    _complete_done_at_step,
     _replace_last,
-    done_or_truncated,
     get_available_libraries,
     step_mdp,
+    terminated_or_truncated,
 )
 
 LIBRARIES = get_available_libraries()
@@ -132,6 +134,8 @@ class EnvMetaData:
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         instance: EnvBase = super().__call__(*args, **kwargs)
+        # we create the done spec by adding a done/terminated entry if one is missing
+        instance._create_done_specs()
         # we access lazy attributed to make sure they're built properly.
         # This isn't done in `__init__` because we don't know if supre().__init__
         # will be called before or after the specs, batch size etc are set.
@@ -1025,22 +1029,67 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 dtype=torch.bool,
                 domain=discrete)
         """
+        done_spec = self.output_spec["full_done_spec"]
+        return done_spec
+
+    def _create_done_specs(self):
+        """Reads through the done specs and makes it so that it's complete.
+
+        If the done_specs contain only a ``"done"`` entry, a similar ``"terminated"`` entry is created.
+        Same goes if only ``"terminated"`` key is present.
+
+        If none of ``"done"`` and ``"terminated"`` can be found and the spec is not
+        empty, nothing is changed.
+
+        """
         try:
-            done_spec = self.output_spec["full_done_spec"]
-        except (KeyError, AttributeError):
-            # populate the "done" entry
-            # this will be raised if there is not full_done_spec (unlikely) or no done_key
-            # Since output_spec is lazily populated with an empty composite spec for
-            # done_spec, the second case is much more likely to occur.
-            self.done_spec = DiscreteTensorSpec(
-                n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device
+            full_done_spec = self.output_spec["full_done_spec"]
+        except KeyError:
+            full_done_spec = CompositeSpec(
+                shape=self.output_spec.shape, device=self.output_spec.device
             )
-            done_spec = self.output_spec["full_done_spec"]
-        done_keys = self.done_keys
-        if len(done_keys) > 1 or not len(done_keys):
-            return done_spec
-        else:
-            return done_spec[self.done_keys[0]]
+            full_done_spec["done"] = DiscreteTensorSpec(
+                n=2,
+                shape=(*full_done_spec.shape, 1),
+                dtype=torch.bool,
+                device=self.device,
+            )
+            full_done_spec["terminated"] = DiscreteTensorSpec(
+                n=2,
+                shape=(*full_done_spec.shape, 1),
+                dtype=torch.bool,
+                device=self.device,
+            )
+            self.output_spec.unlock_()
+            self.output_spec["full_done_spec"] = full_done_spec
+            self.output_spec.lock_()
+            return
+
+        def check_local_done(spec):
+            for key, item in list(
+                spec.items()
+            ):  # list to avoid error due to in-loop changes
+                # in the case where the spec is non-empty and there is no done and no terminated, we do nothing
+                if key == "done" and "terminated" not in spec.keys():
+                    spec["terminated"] = item.clone()
+                elif key == "terminated" and "done" not in spec.keys():
+                    spec["done"] = item.clone()
+                elif isinstance(item, CompositeSpec):
+                    check_local_done(item)
+            # if the spec is empty, we need to add a done and truncated manually
+            if spec.is_empty():
+                spec["done"] = DiscreteTensorSpec(
+                    n=2, shape=(*spec.shape, 1), dtype=torch.bool, device=self.device
+                )
+                spec["terminated"] = DiscreteTensorSpec(
+                    n=2, shape=(*spec.shape, 1), dtype=torch.bool, device=self.device
+                )
+
+        self.output_spec.unlock_()
+        check_local_done(full_done_spec)
+        self.output_spec["full_done_spec"] = full_done_spec
+        self.output_spec.lock_()
+        return
 
     @done_spec.setter
     def done_spec(self, value: TensorSpec) -> None:
@@ -1070,7 +1119,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     )
             else:
                 value = CompositeSpec(
-                    done=value.to(device), shape=self.batch_size, device=device
+                    done=value.to(device),
+                    terminated=value.to(device),
+                    shape=self.batch_size,
+                    device=device,
                 )
             for leaf in value.values(True, True):
                 if len(leaf.shape) == 0:
@@ -1081,6 +1133,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                         " spec instead, for instance with a singleton dimension at the tail)."
                     )
             self.output_spec["full_done_spec"] = value.to(device)
+            self._create_done_specs()
             self._get_done_keys()
         finally:
             self.output_spec.lock_()
@@ -1292,19 +1345,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 reward = reward.view(expected_reward_shape)
                 next_tensordict_out.set(reward_key, reward)
 
-        # TODO: Refactor this using done spec
-        for done_key in self.done_keys:
-            done = next_tensordict_out.get(done_key)
-            expected_done_shape = torch.Size(
-                [
-                    *leading_batch_size,
-                    *self.output_spec[unravel_key(("full_done_spec", done_key))].shape,
-                ]
-            )
-            actual_done_shape = done.shape
-            if actual_done_shape != expected_done_shape:
-                done = done.view(expected_done_shape)
-                next_tensordict_out.set(done_key, done)
+        _complete_done_at_step(self.full_done_spec, next_tensordict_out)
 
         if self.run_type_checks:
             for key, spec in self.observation_spec.items():
@@ -1392,19 +1433,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-
-        if len(self.batch_size):
-            leading_dim = tensordict_reset.shape[: -len(self.batch_size)]
-        else:
-            leading_dim = tensordict_reset.shape
-        if self.done_spec is not None:
-            td_reset_keys = tensordict_reset.keys(True, True)
-            for done_key in self.done_keys:
-                if done_key not in td_reset_keys:
-                    tensordict_reset.set(
-                        done_key,
-                        self.output_spec["full_done_spec"][done_key].zero(leading_dim),
-                    )
+        _complete_done_at_reset(self.full_done_spec, tensordict_reset)
 
         if not self._allow_done_after_reset:
             # we iterate over (reset_key, (done_key, truncated_key)) and check that all
@@ -1710,7 +1739,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
             # done and truncated are in done_keys
             # We read if any key is done.
-            any_done = done_or_truncated(
+            any_done = terminated_or_truncated(
                 tensordict,
                 full_done_spec=self.output_spec["full_done_spec"],
                 key=None if break_when_any_done else "_reset",

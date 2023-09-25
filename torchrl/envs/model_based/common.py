@@ -160,18 +160,12 @@ class ModelBasedEnvBase(EnvBase):
             )
         else:
             tensordict_out = self.world_model(tensordict_out)
-        # Step requires a done flag. No sense for MBRL so we set it to False
-        for done_key in self.done_keys:
-            if done_key not in self.world_model.out_keys:
-                tensordict_out[done_key] = torch.zeros(
-                    tensordict_out.shape,
-                    dtype=torch.bool,
-                    device=tensordict_out.device,
-                )
+        # done can be missing, it will be filled by `step`
         return tensordict_out.select(
             *self.observation_spec.keys(),
             *self.full_done_spec.keys(),
-            *self.full_reward_spec.keys()
+            *self.full_reward_spec.keys(),
+            strict=False,
         )
 
     @abc.abstractmethod
