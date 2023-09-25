@@ -34,21 +34,30 @@ def main(cfg: "DictConfig"):  # noqa: F821
     frame_skip = 4
     total_frames = cfg.collector.total_frames // frame_skip
     frames_per_batch = cfg.collector.frames_per_batch // frame_skip
-    mini_batch_size = cfg.loss.mini_batch_size // frame_skip
     test_interval = cfg.logger.test_interval // frame_skip
+
+    # Extract other config parameters
+    batch_size = cfg.loss.batch_size  # Number of rollouts per batch
+    num_workers = (
+        cfg.collector.num_workers
+    )  # Number of parallel workers collecting rollouts
+    lr = cfg.optim.lr
+    anneal_lr = cfg.optim.anneal_lr
+    sgd_updates = cfg.loss.sgd_updates
+    max_grad_norm = cfg.optim.max_grad_norm
+    num_test_episodes = cfg.logger.num_test_episodes
+    total_network_updates = (
+        total_frames // frames_per_batch * batch_size
+    ) * cfg.loss.sgd_updates
 
     # Create models (check utils_atari.py)
     actor, critic, critic_head = make_ppo_models(cfg.env.env_name)
-    actor, critic, critic_head = (
-        actor.to(device),
-        critic.to(device),
-        critic_head.to(device),
-    )
+    actor, critic = (actor.to(device), critic.to(device))
 
     # Create collector
     collector = MultiaSyncDataCollector(
         create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)]
-        * 1,
+        * num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
@@ -61,9 +70,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create data buffer
     sampler = SamplerWithoutReplacement()
     data_buffer = TensorDictReplayBuffer(
-        storage=LazyMemmapStorage(frames_per_batch),
+        storage=LazyMemmapStorage(frames_per_batch * batch_size),
         sampler=sampler,
-        batch_size=mini_batch_size,
+        batch_size=frames_per_batch * batch_size,
     )
 
     # Create loss and adv modules
@@ -109,11 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     num_network_updates = 0
     start_time = time.time()
     pbar = tqdm.tqdm(total=total_frames)
-    num_mini_batches = frames_per_batch // mini_batch_size
-    total_network_updates = (
-        (total_frames // frames_per_batch) * cfg.loss.ppo_epochs * num_mini_batches
-    )
-
+    accumulator = []
     sampling_start = time.time()
     for i, data in enumerate(collector):
 
@@ -136,36 +141,45 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         # Apply episodic end of life
-        data["done"].copy_(data["end_of_life"])
-        data["next", "done"].copy_(data["next", "end_of_life"])
+        # data["done"].copy_(data["end_of_life"])
+        # data["next", "done"].copy_(data["next", "end_of_life"])
 
-        losses = TensorDict({}, batch_size=[cfg.loss.ppo_epochs, num_mini_batches])
+        if len(accumulator) < batch_size:
+            accumulator.append(data)
+            if logger:
+                for key, value in log_info.items():
+                    logger.log_scalar(key, value, collected_frames)
+            continue
+
+        losses = TensorDict({}, batch_size=[sgd_updates])
         training_start = time.time()
-        for j in range(cfg.loss.ppo_epochs):
+        for j in range(sgd_updates):
 
-            # Compute adv
-            with torch.no_grad():
-                data = adv_module(data)
-            data_reshape = data.reshape(-1)
+            for acc_data in accumulator:
 
-            # Update the data buffer
-            data_buffer.extend(data_reshape)
+                with torch.no_grad():
+                    acc_data = adv_module(acc_data)
+                acc_data_reshape = acc_data.reshape(-1)
 
-            for k, batch in enumerate(data_buffer):
+                # Update the data buffer
+                data_buffer.extend(acc_data_reshape)
+
+            for batch in data_buffer:
 
                 # Linearly decrease the learning rate and clip epsilon
-                alpha = 1 - (num_network_updates / total_network_updates)
-                if cfg.optim.anneal_lr:
+                alpha = 1.0
+                if anneal_lr:
+                    alpha = 1 - (num_network_updates / total_network_updates)
                     for group in optim.param_groups:
-                        group["lr"] = cfg.optim.lr * alpha
+                        group["lr"] = lr * alpha
                 num_network_updates += 1
 
                 # Get a data batch
                 batch = batch.to(device)
 
-                # Forward pass PPO loss
+                # Forward pass loss
                 loss = loss_module(batch)
-                losses[j, k] = loss.select(
+                losses[j] = loss.select(
                     "loss_critic", "loss_entropy", "loss_objective"
                 ).detach()
                 loss_sum = (
@@ -175,7 +189,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 # Backward pass
                 loss_sum.backward()
                 torch.nn.utils.clip_grad_norm_(
-                    list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
+                    list(loss_module.parameters()), max_norm=max_grad_norm
                 )
 
                 # Update the networks
@@ -189,7 +203,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             log_info.update({f"train/{key}": value.item()})
         log_info.update(
             {
-                "train/lr": alpha * cfg.optim.lr,
+                "train/lr": alpha * lr,
                 "train/sampling_time": sampling_time,
                 "train/training_time": training_time,
             }
@@ -202,13 +216,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
             ) // test_interval:
                 actor.eval()
                 eval_start = time.time()
-                test_rewards = eval_model(
-                    actor, test_env, num_episodes=cfg.logger.num_test_episodes
+                test_reward = eval_model(
+                    actor, test_env, num_episodes=num_test_episodes
                 )
                 eval_time = time.time() - eval_start
                 log_info.update(
                     {
-                        "eval/reward": test_rewards.mean(),
+                        "eval/reward": test_reward,
                         "eval/time": eval_time,
                     }
                 )
@@ -220,6 +234,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         collector.update_policy_weights_()
         sampling_start = time.time()
+        accumulator = []
 
     end_time = time.time()
     execution_time = end_time - start_time
