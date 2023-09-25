@@ -495,11 +495,12 @@ class DiscreteActionVecMockEnv(_MockEnv):
 
         done = torch.isclose(obs, torch.ones_like(obs) * (self.counter + 1))
         reward = done.any(-1).unsqueeze(-1)
+
         # set done to False
         done = torch.zeros_like(done).all(-1).unsqueeze(-1)
         tensordict.set("reward", reward.to(torch.get_default_dtype()))
         tensordict.set("done", done)
-        tensordict.set("terminated", done)
+        tensordict.set("terminated", done.clone())
         return tensordict
 
 

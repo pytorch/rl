@@ -647,10 +647,11 @@ def test_collector_consistency(num_env, env_name, seed=100):
 
     # Get a single rollout with dummypolicy
     env = env_fn(seed)
-    rollout1a = env.rollout(policy=policy, max_steps=20, auto_reset=True)
+    env = TransformedEnv(env, StepCounter(20))
+    rollout1a = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     env.set_seed(seed)
-    rollout1b = env.rollout(policy=policy, max_steps=20, auto_reset=True)
-    rollout2 = env.rollout(policy=policy, max_steps=20, auto_reset=True)
+    rollout1b = env.rollout(policy=policy, max_steps=50, auto_reset=True)
+    rollout2 = env.rollout(policy=policy, max_steps=50, auto_reset=True)
     assert_allclose_td(rollout1a, rollout1b)
     with pytest.raises(AssertionError):
         assert_allclose_td(rollout1a, rollout2)
@@ -677,7 +678,6 @@ def test_collector_consistency(num_env, env_name, seed=100):
     assert (
         rollout1a.batch_size == b1.batch_size
     ), f"got batch_size {rollout1a.batch_size} and {b1.batch_size}"
-
     assert_allclose_td(rollout1a, b1.select(*rollout1a.keys(True, True)))
     collector.shutdown()
 
