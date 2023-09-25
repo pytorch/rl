@@ -1408,9 +1408,11 @@ class TestStepCounter(TransformBase):
         r = env.rollout(100, break_when_any_done=False)
         if update_done and max_steps:
             assert r["next", "done"][r["next", "truncated"]].all()
-        else:
+        elif max_steps:
             assert not r["next", "done"][r["next", "truncated"]].all()
-
+        else:
+            assert "truncated" not in r.keys()
+            assert ("next", "truncated") not in r.keys(True)
     def test_parallel_trans_env_check(self):
         def make_env():
             return TransformedEnv(ContinuousActionVecMockEnv(), StepCounter(10))
