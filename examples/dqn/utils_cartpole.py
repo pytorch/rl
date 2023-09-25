@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import numpy as np
 import torch.nn
 import torch.optim
 from torchrl.data import CompositeSpec
@@ -67,8 +66,8 @@ def make_dqn_model(env_name):
 
 
 def eval_model(actor, test_env, num_episodes=3):
-    test_rewards = []
-    for _ in range(num_episodes):
+    test_rewards = torch.zeros(num_episodes, dtype=torch.float32)
+    for i in range(num_episodes):
         td_test = test_env.rollout(
             policy=actor,
             auto_reset=True,
@@ -77,6 +76,6 @@ def eval_model(actor, test_env, num_episodes=3):
             max_steps=10_000_000,
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_rewards[i] = reward.sum()
     del td_test
     return test_rewards.mean()

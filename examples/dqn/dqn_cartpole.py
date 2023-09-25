@@ -82,6 +82,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     collected_frames = 0
     start_time = time.time()
+    num_updates = cfg.loss.num_updates
+    batch_size = cfg.buffer.batch_size
+    test_interval = cfg.logger.test_interval
+    num_test_episodes = cfg.logger.num_test_episodes
+    frames_per_batch = cfg.collector.frames_per_batch
     pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     sampling_start = time.time()
 
@@ -100,7 +105,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         log_info.update(
             {
                 "train/q_values": (data["action_value"] * data["action"]).sum().item()
-                / cfg.collector.frames_per_batch,
+                / frames_per_batch,
             }
         )
         episode_rewards = data["next", "episode_reward"][data["next", "done"]]
@@ -115,10 +120,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
             )
 
         # optimization steps
-        q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
+        q_losses = TensorDict({}, batch_size=[num_updates])
         training_start = time.time()
-        for j in range(cfg.loss.num_updates):
-            sampled_tensordict = replay_buffer.sample(cfg.buffer.batch_size)
+        for j in range(num_updates):
+            sampled_tensordict = replay_buffer.sample(batch_size)
             loss_td = loss_module(sampled_tensordict)
             q_loss = loss_td["loss"]
             optimizer.zero_grad()
@@ -142,14 +147,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (
-                collected_frames - cfg.collector.frames_per_batch
-            ) // cfg.logger.test_interval < (
-                collected_frames // cfg.logger.test_interval
+            if (collected_frames - frames_per_batch) // test_interval < (
+                collected_frames // test_interval
             ):
                 model.eval()
                 eval_start = time.time()
-                test_rewards = eval_model(model, test_env, cfg.logger.num_test_episodes)
+                test_rewards = eval_model(model, test_env, num_test_episodes)
                 eval_time = time.time() - eval_start
                 log_info.update(
                     {

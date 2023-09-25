@@ -3,28 +3,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gymnasium as gym
-import numpy as np
 import torch.nn
 import torch.optim
-
-from torchrl.data import CompositeSpec
+from torchrl.data import CompositeSpec, UnboundedDiscreteTensorSpec
 from torchrl.envs import (
     CatFrames,
-    default_info_dict_reader,
     DoubleToFloat,
-    EnvCreator,
     GrayScale,
+    GymEnv,
     NoopResetEnv,
-    ParallelEnv,
     Resize,
     RewardClipping,
     RewardSum,
     StepCounter,
     ToTensorImage,
+    Transform,
     TransformedEnv,
 )
-from torchrl.envs.libs.gym import GymWrapper
+
 from torchrl.modules import ConvNet, MLP, QValueActor
 
 
@@ -33,50 +29,52 @@ from torchrl.modules import ConvNet, MLP, QValueActor
 # --------------------------------------------------------------------
 
 
-class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env):
-        """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. It helps value estimation.
-        """
-        gym.Wrapper.__init__(self, env)
-        self.lives = 0
+class EndOfLifeTransform(Transform):
+    def _step(self, tensordict, next_tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = torch.tensor(
+            [tensordict["lives"] < lives], device=self.parent.device
+        )
+        end_of_life = end_of_life | next_tensordict.get("done")
+        next_tensordict.set("eol", end_of_life)
+        next_tensordict.set("lives", lives)
+        return next_tensordict
 
-    def step(self, action):
-        obs, rew, done, truncated, info = self.env.step(action)
-        lives = self.env.unwrapped.ale.lives()
-        info["end_of_life"] = False
-        if (lives < self.lives) or done:
-            info["end_of_life"] = True
-        self.lives = lives
-        return obs, rew, done, truncated, info
+    def reset(self, tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = False
+        tensordict.set("eol", [end_of_life])
+        tensordict.set("lives", lives)
+        return tensordict
 
-    def reset(self, **kwargs):
-        obs, info = self.env.reset(**kwargs)
-        self.lives = self.env.unwrapped.ale.lives()
-        info["end_of_life"] = False
-        return obs, info
+    def transform_observation_spec(self, observation_spec):
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        observation_spec["eol"] = full_done_spec["done"].clone()
+        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
+            self.parent.batch_size, device=self.parent.device
+        )
+        return observation_spec
 
 
 def make_env(env_name, frame_skip, device, is_test=False):
-    env = gym.make(env_name)
-    if not is_test:
-        env = EpisodicLifeEnv(env)
-    env = GymWrapper(
-        env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
+    env = GymEnv(
+        env_name,
+        frame_skip=frame_skip,
+        from_pixels=True,
+        pixels_only=False,
+        device=device,
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        reader = default_info_dict_reader(["end_of_life"])
-        env.set_info_dict_reader(reader)
+        env.append_transform(EndOfLifeTransform())
+        env.append_transform(RewardClipping(-1, 1))
     env.append_transform(ToTensorImage())
     env.append_transform(GrayScale())
     env.append_transform(Resize(84, 84))
     env.append_transform(CatFrames(N=4, dim=-3))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=4500))
-    if not is_test:
-        env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
     return env
 
@@ -129,8 +127,8 @@ def make_dqn_model(env_name, frame_skip):
 
 
 def eval_model(actor, test_env, num_episodes=3):
-    test_rewards = []
-    for _ in range(num_episodes):
+    test_rewards = torch.zeros(num_episodes, dtype=torch.float32)
+    for i in range(num_episodes):
         td_test = test_env.rollout(
             policy=actor,
             auto_reset=True,
@@ -139,6 +137,6 @@ def eval_model(actor, test_env, num_episodes=3):
             max_steps=10_000_000,
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_rewards[i] = reward.sum()
     del td_test
     return test_rewards.mean()

@@ -98,9 +98,12 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Main loop
     collected_frames = 0
     start_time = time.time()
-    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     sampling_start = time.time()
-
+    num_updates = cfg.loss.num_updates
+    max_grad = cfg.optim.max_grad_norm
+    test_interval = cfg.logger.test_interval
+    num_test_episodes = cfg.logger.num_test_episodes
+    pbar = tqdm.tqdm(total=cfg.collector.total_frames)
     for data in collector:
 
         log_info = {}
@@ -132,8 +135,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # optimization steps
         training_start = time.time()
-        q_losses = TensorDict({}, batch_size=[cfg.loss.num_updates])
-        for j in range(cfg.loss.num_updates):
+        q_losses = TensorDict({}, batch_size=[num_updates])
+        for j in range(num_updates):
 
             sampled_tensordict = replay_buffer.sample()
 
@@ -142,7 +145,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             optimizer.zero_grad()
             q_loss.backward()
             torch.nn.utils.clip_grad_norm_(
-                list(loss_module.parameters()), max_norm=cfg.optim.max_grad_norm
+                list(loss_module.parameters()), max_norm=max_grad
             )
             optimizer.step()
             target_net_updater.step()
@@ -163,13 +166,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
         # Get evaluation rewards and eval time
         with torch.no_grad(), set_exploration_type(ExplorationType.MODE):
-            if (collected_frames - frames_per_batch) // cfg.logger.test_interval < (
-                collected_frames // cfg.logger.test_interval
+            if (collected_frames - frames_per_batch) // test_interval < (
+                collected_frames // test_interval
             ):
                 model.eval()
                 eval_start = time.time()
                 test_rewards = eval_model(
-                    model, test_env, num_episodes=cfg.logger.num_test_episodes
+                    model, test_env, num_episodes=num_test_episodes
                 )
                 eval_time = time.time() - eval_start
                 log_info.update(
