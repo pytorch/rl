@@ -1482,10 +1482,11 @@ class TestStepCounter(TransformBase):
         if nested_done:
             for done_key in env.done_keys:
                 reset_key = (*done_key[:-1], "_reset")
+                _reset = env.full_done_spec[done_key].rand()
                 break
         else:
             reset_key = "_reset"
-        _reset = env.done_spec.rand()
+            _reset = env.full_done_spec["done"].rand()
         td_reset = transformed_env.reset(
             TensorDict(
                 {reset_key: _reset, step_key: last_step},
