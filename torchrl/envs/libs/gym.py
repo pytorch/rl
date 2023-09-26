@@ -212,8 +212,8 @@ def _gym_to_torchrl_spec_transform(
         remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
-    gym = gym_backend()
-    if isinstance(spec, gym.spaces.tuple.Tuple):
+    gym_spaces = gym_backend("spaces")
+    if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
             [
                 _gym_to_torchrl_spec_transform(
@@ -226,7 +226,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    if isinstance(spec, gym.spaces.discrete.Discrete):
+    if isinstance(spec, gym_spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
             if categorical_action_encoding
@@ -238,11 +238,11 @@ def _gym_to_torchrl_spec_transform(
             else torch.long
         )
         return action_space_cls(spec.n, device=device, dtype=dtype)
-    elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
+    elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
-    elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
+    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
         if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
             dtype = (
                 numpy_to_torch_dtype_dict[spec.dtype]
@@ -270,7 +270,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    elif isinstance(spec, gym.spaces.Box):
+    elif isinstance(spec, gym_spaces.Box):
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
@@ -311,7 +311,7 @@ def _gym_to_torchrl_spec_transform(
                 remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
-    elif isinstance(spec, gym.spaces.dict.Dict):
+    elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
