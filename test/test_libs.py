@@ -1767,15 +1767,15 @@ class TestVmas:
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
-    def test_terminate_on_end(self, task):
-        t0 = time.time()
+    @pytest.mark.parametrize("use_truncated_as_done", [True, False])
+    def test_terminate_on_end(self, task, use_truncated_as_done):
         data_true = D4RLExperienceReplay(
             task,
             split_trajs=True,
             from_env=False,
             terminate_on_end=True,
             batch_size=2,
-            use_truncated_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
         _ = D4RLExperienceReplay(
             task,
@@ -1783,17 +1783,18 @@ class TestD4RL:
             from_env=False,
             terminate_on_end=False,
             batch_size=2,
-            use_truncated_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
         data_from_env = D4RLExperienceReplay(
             task,
             split_trajs=True,
             from_env=True,
             batch_size=2,
-            use_truncated_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
+        assert data_true._storage._storage.shape == data_from_env._storage._storage.shape
         assert_allclose_td(
             data_true._storage._storage.select(*keys),
             data_from_env._storage._storage.select(*keys),
