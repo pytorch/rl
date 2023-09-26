@@ -257,7 +257,7 @@ class RoboHiveEnv(GymEnv):
 
         rollout = self.rollout(2, return_contiguous=False).get("next")
         rollout = rollout.exclude(
-            self.reward_key, self.done_key, *self.observation_spec.keys(True, True)
+            self.reward_key, *self.done_keys, *self.observation_spec.keys(True, True)
         )
         rollout = rollout[..., 0]
         spec = make_composite_from_td(rollout)

@@ -1036,12 +1036,6 @@ def _run_worker_pipe_shared_mem(
 
     child_pipe.send("started")
 
-    # _excluded_reset_keys = {
-    #     _unravel_key_to_tuple(env.reward_key),
-    #     # _unravel_key_to_tuple(env.done_key),
-    #     _unravel_key_to_tuple(env.action_key),
-    # }
-
     while True:
         try:
             cmd, data = child_pipe.recv()

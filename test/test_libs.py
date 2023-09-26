@@ -1720,13 +1720,14 @@ class TestVmas:
             n_observations_per_agent,
         )
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
 
-    def test_collector_hetero(self, n_envs=10, frames_per_batch=20):
+    def test_collector_heterogeneous(self, n_envs=10, frames_per_batch=20):
         env = VmasEnv(
             scenario="simple_tag",
             num_envs=n_envs,
@@ -1755,8 +1756,9 @@ class TestVmas:
         assert _td["next", "agents"].shape == agents_td_batch
         assert _td["collector"].shape == td_batch
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)

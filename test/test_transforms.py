@@ -1480,7 +1480,9 @@ class TestStepCounter(TransformBase):
             assert step[max_steps:].eq(torch.arange(rollout_length - max_steps)).all()
 
         if nested_done:
-            reset_key = (*env.done_key[:-1], "_reset")
+            for done_key in env.done_keys:
+                reset_key = (*done_key[:-1], "_reset")
+                break
         else:
             reset_key = "_reset"
         _reset = env.done_spec.rand()
@@ -2568,8 +2570,9 @@ class TestExcludeTransform(TransformBase):
         td = transformed_env.rollout(1)
         td_keys = td.keys(True, True)
         assert ("next", env.reward_key) in td_keys
-        assert ("next", env.done_key) in td_keys
-        assert env.done_key in td_keys
+        for done_key in env.done_keys:
+            assert ("next", done_key) in td_keys
+            assert done_key in td_keys
         assert env.action_key in td_keys
         assert ("data", "states") in td_keys
         assert ("next", "data", "states") in td_keys
@@ -2578,8 +2581,9 @@ class TestExcludeTransform(TransformBase):
         td = transformed_env.rollout(1)
         td_keys = td.keys(True, True)
         assert ("next", env.reward_key) in td_keys
-        assert ("next", env.done_key) in td_keys
-        assert env.done_key in td_keys
+        for done_key in env.done_keys:
+            assert ("next", done_key) in td_keys
+            assert done_key in td_keys
         assert env.action_key in td_keys
         assert ("data", "states") not in td_keys
         assert ("next", "data", "states") not in td_keys
@@ -2806,8 +2810,9 @@ class TestSelectTransform(TransformBase):
         td = transformed_env.rollout(1)
         td_keys = td.keys(True, True)
         assert ("next", env.reward_key) in td_keys
-        assert ("next", env.done_key) in td_keys
-        assert env.done_key in td_keys
+        for done_key in env.done_keys:
+            assert ("next", done_key) in td_keys
+            assert done_key in td_keys
         assert env.action_key in td_keys
         assert ("data", "states") not in td_keys
         assert ("next", "data", "states") not in td_keys
@@ -2816,8 +2821,9 @@ class TestSelectTransform(TransformBase):
         td = transformed_env.rollout(1)
         td_keys = td.keys(True, True)
         assert ("next", env.reward_key) in td_keys
-        assert ("next", env.done_key) in td_keys
-        assert env.done_key in td_keys
+        for done_key in env.done_keys:
+            assert ("next", done_key) in td_keys
+            assert done_key in td_keys
         assert env.action_key in td_keys
         assert ("data", "states") in td_keys
         assert ("next", "data", "states") in td_keys

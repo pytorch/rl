@@ -1821,10 +1821,11 @@ class TestNestedSpecs:
         reset = env.reset()
         assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
-        assert (
-            env.done_spec
-            == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(env.done_key))]
-        )
+        for done_key in env.done_keys:
+            assert (
+                env.full_done_spec[done_key]
+                == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
+            )
         assert (
             env.reward_spec
             == env.output_spec[
@@ -1832,12 +1833,14 @@ class TestNestedSpecs:
             ]
         )
         if envclass == "NestedCountingEnv":
-            assert env.done_key == ("data", "done")
+            for done_key in env.done_keys:
+                assert done_key in (("data", "done"), ("data", "terminated"))
             assert env.reward_key == ("data", "reward")
             assert ("data", "done") in reset.keys(True)
             assert ("data", "states") in reset.keys(True)
             assert ("data", "reward") not in reset.keys(True)
-        assert env.done_key in reset.keys(True)
+        for done_key in env.done_keys:
+            assert done_key in reset.keys(True)
         assert env.reward_key not in reset.keys(True)
 
         next_state = env.rand_step()
@@ -1845,7 +1848,8 @@ class TestNestedSpecs:
             assert ("next", "data", "done") in next_state.keys(True)
             assert ("next", "data", "states") in next_state.keys(True)
             assert ("next", "data", "reward") in next_state.keys(True)
-        assert ("next", *_unravel_key_to_tuple(env.done_key)) in next_state.keys(True)
+        for done_key in env.done_keys:
+            assert ("next", *_unravel_key_to_tuple(done_key)) in next_state.keys(True)
         assert ("next", *_unravel_key_to_tuple(env.reward_key)) in next_state.keys(True)
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])

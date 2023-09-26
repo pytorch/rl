@@ -65,7 +65,11 @@ class IsaacGymWrapper(GymWrapper):
 
         data = self.rollout(3).get("next")[..., 0]
         del data[self.reward_key]
-        del data[self.done_key]
+        for done_key in self.done_keys:
+            try:
+                del data[done_key]
+            except KeyError:
+                continue
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
