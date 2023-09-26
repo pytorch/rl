@@ -691,7 +691,9 @@ but got an object of type {type(transform)}."""
         self.set_missing_tolerance(mt_mode)
         return out_tensordict
 
-    def _complete_done(cls, done_spec: CompositeSpec, data: TensorDictBase) -> TensorDictBase:
+    def _complete_done(
+        cls, done_spec: CompositeSpec, data: TensorDictBase
+    ) -> TensorDictBase:
         # This step has already been completed. We assume the transform module do their job correctly.
         return data
 

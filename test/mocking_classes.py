@@ -66,7 +66,14 @@ class _MockEnv(EnvBase):
             )
         reward_spec = cls._output_spec["full_reward_spec"]
         if isinstance(reward_spec, CompositeSpec):
-            reward_spec = CompositeSpec({key: item.to(torch.get_default_dtype()) for key, item in reward_spec.items(True, True)}, shape=reward_spec.shape, device=reward_spec.device)
+            reward_spec = CompositeSpec(
+                {
+                    key: item.to(torch.get_default_dtype())
+                    for key, item in reward_spec.items(True, True)
+                },
+                shape=reward_spec.shape,
+                device=reward_spec.device,
+            )
         else:
             reward_spec = reward_spec.to(torch.get_default_dtype())
         cls._output_spec["full_reward_spec"] = reward_spec
@@ -207,10 +214,7 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {"reward": n,
-             "done": done,
-             "terminated": done,
-             "observation": n.clone()},
+            {"reward": n, "done": done, "terminated": done, "observation": n.clone()},
             batch_size=[],
         )
 
@@ -222,7 +226,9 @@ class MockSerialEnv(EnvBase):
         )
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
-        return TensorDict({"done": done, "terminated": done.clone(), "observation": n}, [])
+        return TensorDict(
+            {"done": done, "terminated": done.clone(), "observation": n}, []
+        )
 
     def rand_step(self, tensordict: Optional[TensorDictBase] = None) -> TensorDictBase:
         return self.step(tensordict)
@@ -435,9 +441,15 @@ class DiscreteActionVecMockEnv(_MockEnv):
                 action_spec_cls = OneHotDiscreteTensorSpec
                 action_spec = action_spec_cls(n=7, shape=(*batch_size, 7))
         if reward_spec is None:
-            reward_spec = CompositeSpec(reward=UnboundedContinuousTensorSpec(shape=(1,)))
+            reward_spec = CompositeSpec(
+                reward=UnboundedContinuousTensorSpec(shape=(1,))
+            )
         if done_spec is None:
-            done_spec = CompositeSpec(terminated=DiscreteTensorSpec(2, dtype=torch.bool, shape=(*batch_size, 1)))
+            done_spec = CompositeSpec(
+                terminated=DiscreteTensorSpec(
+                    2, dtype=torch.bool, shape=(*batch_size, 1)
+                )
+            )
 
         if state_spec is None:
             cls._out_key = "observation_orig"
@@ -474,7 +486,9 @@ class DiscreteActionVecMockEnv(_MockEnv):
         tensordict = tensordict.select().set(self.out_key, self._get_out_obs(state))
         tensordict = tensordict.set(self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
-        tensordict.set("terminated", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        tensordict.set(
+            "terminated", torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
+        )
         return tensordict
 
     def _step(
@@ -581,7 +595,9 @@ class ContinuousActionVecMockEnv(_MockEnv):
         # tensordict.set("next_" + self.out_key, self._get_out_obs(state))
         # tensordict.set("next_" + self._out_key, self._get_out_obs(state))
         tensordict.set("done", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
-        tensordict.set("terminated", torch.zeros(*tensordict.shape, 1, dtype=torch.bool))
+        tensordict.set(
+            "terminated", torch.zeros(*tensordict.shape, 1, dtype=torch.bool)
+        )
         return tensordict
 
     def _step(

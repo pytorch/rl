@@ -292,7 +292,8 @@ class TestModelBasedEnvBase:
         check_env_specs(mb_env)
         rollout = mb_env.rollout(max_steps=100)
         expected_keys = {
-            ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done", "terminated")
+            ("next", key)
+            for key in (*mb_env.observation_spec.keys(), "reward", "done", "terminated")
         }
         expected_keys = expected_keys.union(
             set(mb_env.input_spec["full_action_spec"].keys())
@@ -1819,7 +1820,6 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
         for done_key in env.done_keys:
             assert (

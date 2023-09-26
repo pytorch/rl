@@ -1361,6 +1361,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     data.set("done", data.get("terminated").reshape(shape))
             elif val is None:
+                # we must keep this here: we only want to fill with 0s if we're sure
+                # done should not be copied to terminated or terminated to done
                 # in this case, just fill with 0s
                 data.set(key, item.zero(leading_dim))
                 continue
