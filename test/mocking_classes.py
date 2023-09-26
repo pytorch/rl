@@ -1157,7 +1157,7 @@ class NestedCountingEnv(CountingEnv):
             )
 
         if self.nested_done:
-            done_spec = self.done_spec.unsqueeze(-1).expand(
+            done_spec = self.full_done_spec.unsqueeze(-1).expand(
                 *self.batch_size, self.nested_dim
             )
             self.done_spec = CompositeSpec(
@@ -1177,11 +1177,11 @@ class NestedCountingEnv(CountingEnv):
         if self.nested_done:
             for done_key in self.done_keys:
                 td[done_key] = (
-                    td["done"]
+                    td[done_key[-1]]
                     .unsqueeze(-1)
                     .expand(*self.batch_size, self.nested_dim, 1)
                 )
-            del td["done"]
+                del td[done_key[-1]]
         if self.nested_obs_action:
             td["data", "states"] = (
                 td["observation"]
@@ -1211,11 +1211,11 @@ class NestedCountingEnv(CountingEnv):
         if self.nested_done:
             for done_key in self.done_keys:
                 td[done_key] = (
-                    td["done"]
+                    td[done_key[-1]]
                     .unsqueeze(-1)
                     .expand(*self.batch_size, self.nested_dim, 1)
                 )
-            del td["done"]
+                del td[done_key[-1]]
         if self.nested_obs_action:
             td["data", "states"] = (
                 td["observation"]
