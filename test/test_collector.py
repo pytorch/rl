@@ -1353,8 +1353,8 @@ class TestPreemptiveThreshold:
             frames_per_batch=frames_per_batch,
             init_random_frames=-1,
             reset_at_each_iter=False,
-            devices="cpu",
-            storing_devices="cpu",
+            devices=get_default_devices()[0],
+            storing_devices=get_default_devices()[0],
             split_trajs=False,
             preemptive_threshold=0.0,  # stop after one iteration
         )
@@ -1531,7 +1531,7 @@ class TestHetEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
 
         for _td in ccollector:
@@ -1565,7 +1565,7 @@ class TestHetEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1584,7 +1584,7 @@ class TestHetEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:
