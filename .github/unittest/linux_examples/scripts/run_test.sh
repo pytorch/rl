@@ -78,15 +78,19 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
-python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
-  env.num_envs=1 \
-  collector.total_frames=48 \
-  collector.frames_per_batch=16 \
-  collector.collector_device=cuda:0 \
+python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_mujoco.py \
+  env.env_name=HalfCheetah-v4 \
+  collector.total_frames=40 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=10 \
   logger.backend= \
-  logger.log_interval=4 \
-  optim.lr_scheduler=False \
-  optim.device=cuda:0
+  logger.test_interval=40
+python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c_atari.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=20 \
+  logger.backend= \
+  logger.test_interval=40
 python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
@@ -189,15 +193,6 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   logger.backend=
 #  record_video=True \
 #  record_frames=4 \
-python .github/unittest/helpers/coverage_run_parallel.py examples/a2c/a2c.py \
-  env.num_envs=1 \
-  collector.total_frames=48 \
-  collector.frames_per_batch=16 \
-  collector.collector_device=cuda:0 \
-  logger.backend= \
-  logger.log_interval=4 \
-  optim.lr_scheduler=False \
-  optim.device=cuda:0
 python .github/unittest/helpers/coverage_run_parallel.py examples/dqn/dqn.py \
   total_frames=48 \
   init_random_frames=10 \
