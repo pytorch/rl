@@ -15,23 +15,14 @@ from tensordict import TensorDict
 from tensordict.tensordict import make_tensordict
 from torchrl._utils import implement_for
 from torchrl.data import UnboundedContinuousTensorSpec
-from torchrl.envs.libs.gym import (
-    _gym_to_torchrl_spec_transform,
-    GymEnv,
-    set_gym_backend,
-)
-from torchrl.envs.utils import make_composite_from_td
+from torchrl.envs.libs.gym import _gym_to_torchrl_spec_transform, GymEnv
+from torchrl.envs.utils import _classproperty, make_composite_from_td
 
-_has_robohive = importlib.util.find_spec("robohive") is not None
+_has_gym = importlib.util.find_spec("gym") is not None
+_has_robohive = importlib.util.find_spec("robohive") is not None and _has_gym
 
 if _has_robohive:
     os.environ.setdefault("sim_backend", "MUJOCO")
-    import gym
-
-    with set_gym_backend("gym"):
-        existing_envs = set(GymEnv.available_envs)
-    import robohive.envs.multi_task.substeps1
-    from robohive.envs.env_variants import register_env_variant
 
 
 class set_directory(object):
@@ -77,24 +68,34 @@ class RoboHiveEnv(GymEnv):
     """
 
     env_list = []
-    if _has_robohive:
-        CURR_DIR = robohive.envs.multi_task.substeps1.CURR_DIR
-    else:
-        CURR_DIR = None
+
+    @_classproperty
+    def CURR_DIR(cls):
+        if _has_robohive:
+            import robohive.envs.multi_task.substeps1
+
+            return robohive.envs.multi_task.substeps1.CURR_DIR
+        else:
+            return None
+
+    @_classproperty
+    def available_envs(cls):
+        if not _has_robohive:
+            return
+        RoboHiveEnv.register_envs()
+        yield from cls.env_list
 
     @classmethod
     def register_envs(cls):
-
         if not _has_robohive:
-            raise ImportError("Cannot load robohive.")
+            raise ImportError(
+                "Cannot load robohive from the current virtual environment."
+            )
         from robohive import robohive_env_suite as robohive_envs
         from robohive.utils.prompt_utils import Prompt, set_prompt_verbosity
 
         set_prompt_verbosity(Prompt.WARN)
-        # with set_gym_backend("gym"):
-        # robo_envs = set(GymEnv.available_envs) - existing_envs
         cls.env_list += robohive_envs
-        # cls.env_list = sorted(cls.env_list)
         if not len(robohive_envs):
             raise RuntimeError("did not load any environment.")
 
@@ -115,7 +116,7 @@ class RoboHiveEnv(GymEnv):
         from_pixels: bool = False,
         pixels_only: bool = False,
         **kwargs,
-    ) -> "gym.core.Env":
+    ) -> "gym.core.Env":  # noqa: F821
         if from_pixels:
             if "cameras" not in kwargs:
                 warnings.warn(
@@ -139,8 +140,8 @@ class RoboHiveEnv(GymEnv):
             render_device = 0
 
         if not _has_robohive:
-            raise RuntimeError(
-                f"gym not found, unable to create {env_name}. "
+            raise ImportError(
+                f"gym/robohive not found, unable to create {env_name}. "
                 f"Consider downloading and installing dm_control from"
                 f" {self.git_url}"
             )
@@ -170,12 +171,14 @@ class RoboHiveEnv(GymEnv):
         self.from_pixels = from_pixels
         self.render_device = render_device
         if kwargs.get("read_info", True):
-            self.info_dict_reader = self.read_info
+            self.set_info_dict_reader(self.read_info)
         return env
 
     @classmethod
     def register_visual_env(cls, env_name, cams):
         with set_directory(cls.CURR_DIR):
+            from robohive.envs.env_variants import register_env_variant
+
             if not len(cams):
                 raise RuntimeError("Cannot create a visual envs without cameras.")
             cams = sorted(cams)
@@ -194,7 +197,7 @@ class RoboHiveEnv(GymEnv):
             cls.env_list += [env_name]
             return env_name
 
-    def _make_specs(self, env: "gym.Env") -> None:
+    def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         # if self.from_pixels:
         #     num_cams = len(env.visual_keys)
         # n_pix = 224 * 224 * 3 * num_cams
@@ -331,10 +334,8 @@ class RoboHiveEnv(GymEnv):
 
     @classmethod
     def get_available_cams(cls, env_name):
+        import gym
+
         env = gym.make(env_name)
         cams = [env.sim.model.id2name(ic, 7) for ic in range(env.sim.model.ncam)]
         return cams
-
-
-if _has_robohive:
-    RoboHiveEnv.register_envs()

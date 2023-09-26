@@ -136,6 +136,12 @@ environments in parallel.
 As this class inherits from :class:`SerialEnv`, it enjoys the exact same API as other environment.
 Of course, a :class:`ParallelEnv` will have a batch size that corresponds to its environment count:
 
+.. note::
+  Given the library's many optional dependencies (eg, Gym, Gymnasium, and many others)
+  warnings can quickly become quite annoying in multiprocessed / distributed settings.
+  By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
+  see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
+
 It is important that your environment specs match the input and output that it sends and receives, as
 :class:`ParallelEnv` will create buffers from these specs to communicate with the spawn processes.
 Check the :func:`~torchrl.envs.utils.check_env_specs` method for a sanity check.
@@ -477,6 +483,7 @@ to be able to create this other composition:
     NoopResetEnv
     ObservationNorm
     ObservationTransform
+    PermuteTransform
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
@@ -494,6 +501,7 @@ to be able to create this other composition:
     TimeMaxPool
     ToTensorImage
     UnsqueezeTransform
+    VecGymEnvTransform
     VecNorm
     VC1Transform
     VIPRewardTransform
@@ -594,7 +602,7 @@ Domain-specific
 Libraries
 ---------
 
-.. currentmodule:: torchrl.envs.libs
+.. currentmodule:: torchrl.envs
 
 TorchRL's mission is to make the training of control and decision algorithm as
 easy as it gets, irrespective of the simulator being used (if any).
@@ -670,28 +678,28 @@ the following function will return ``1`` when queried:
     :toctree: generated/
     :template: rl_template_fun.rst
 
-    brax.BraxEnv
-    brax.BraxWrapper
-    dm_control.DMControlEnv
-    dm_control.DMControlWrapper
-    envpool.MultiThreadedEnv
-    envpool.MultiThreadedEnvWrapper
-    gym.GymEnv
-    gym.GymWrapper
-    gym.MOGymEnv
-    gym.MOGymWrapper
-    gym.set_gym_backend
-    gym.gym_backend
-    habitat.HabitatEnv
-    isaacgym.IsaacGymWrapper
-    isaacgym.IsaacGymEnv
-    jumanji.JumanjiEnv
-    jumanji.JumanjiWrapper
-    openml.OpenMLEnv
-    pettingzoo.PettingZooEnv
-    pettingzoo.PettingZooWrapper
-    robohive.RoboHiveEnv
-    smacv2.SMACv2Env
-    smacv2.SMACv2Wrapper
-    vmas.VmasEnv
-    vmas.VmasWrapper
+    BraxEnv
+    BraxWrapper
+    DMControlEnv
+    DMControlWrapper
+    GymEnv
+    GymWrapper
+    HabitatEnv
+    IsaacGymEnv
+    IsaacGymWrapper
+    JumanjiEnv
+    JumanjiWrapper
+    MOGymEnv
+    MOGymWrapper
+    MultiThreadedEnv
+    MultiThreadedEnvWrapper
+    OpenMLEnv
+    PettingZooEnv
+    PettingZooWrapper
+    RoboHiveEnv
+    SMACv2Env
+    SMACv2Wrapper
+    VmasEnv
+    VmasWrapper
+    gym_backend
+    set_gym_backend

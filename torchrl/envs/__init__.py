@@ -7,7 +7,29 @@ from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .env_creator import EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
-from .libs.envpool import MultiThreadedEnv
+from .libs import (
+    BraxEnv,
+    BraxWrapper,
+    DMControlEnv,
+    DMControlWrapper,
+    GymEnv,
+    GymWrapper,
+    HabitatEnv,
+    IsaacGymEnv,
+    IsaacGymWrapper,
+    JumanjiEnv,
+    JumanjiWrapper,
+    MultiThreadedEnv,
+    MultiThreadedEnvWrapper,
+    OpenMLEnv,
+    PettingZooEnv,
+    PettingZooWrapper,
+    RoboHiveEnv,
+    SMACv2Env,
+    SMACv2Wrapper,
+    VmasEnv,
+    VmasWrapper,
+)
 from .model_based import ModelBasedEnvBase
 from .transforms import (
     ActionMask,
@@ -32,6 +54,7 @@ from .transforms import (
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
+    PermuteTransform,
     PinMemoryTransform,
     R3MTransform,
     RandomCropTensorDict,

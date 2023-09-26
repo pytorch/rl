@@ -20,7 +20,7 @@ from tensordict import TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from torch import multiprocessing as mp
-from torchrl._utils import _check_for_faulty_process, VERBOSE
+from torchrl._utils import _check_for_faulty_process, _ProcessNoWarn, VERBOSE
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.env_creator import get_env_metadata
@@ -121,6 +121,15 @@ class _BatchedEnv(EnvBase):
             It is assumed that all environments will run on the same device as a common shared
             tensordict will be used to pass data from process to process. The device can be
             changed after instantiation using :obj:`env.to(device)`.
+        num_threads (int, optional): number of threads for this process.
+            Defaults to the number of workers.
+            This parameter has no effect for the :class:`~SerialEnv` class.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
+            Should be equal to one plus the number of processes launched within
+            each subprocess (or one if a single process is launched).
+            Defaults to 1 for safety: if none is indicated, launching multiple
+            workers may charge the cpu load too much and harm performance.
+            This parameter has no effect for the :class:`~SerialEnv` class.
 
     """
 
@@ -144,6 +153,8 @@ class _BatchedEnv(EnvBase):
         policy_proof: Optional[Callable] = None,
         device: Optional[DEVICE_TYPING] = None,
         allow_step_when_done: bool = False,
+        num_threads: int = None,
+        num_sub_threads: int = 1,
     ):
         if device is not None:
             raise ValueError(
@@ -154,6 +165,10 @@ class _BatchedEnv(EnvBase):
 
         super().__init__(device=None)
         self.is_closed = True
+        if num_threads is None:
+            num_threads = num_workers + 1  # 1 more thread for this proc
+        self.num_sub_threads = num_sub_threads
+        self.num_threads = num_threads
         self._cache_in_keys = None
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
@@ -692,6 +707,8 @@ class ParallelEnv(_BatchedEnv):
     def _start_workers(self) -> None:
         from torchrl.envs.env_creator import EnvCreator
 
+        torch.set_num_threads(self.num_threads)
+
         ctx = mp.get_context("spawn")
 
         _num_workers = self.num_workers
@@ -715,8 +732,9 @@ class ParallelEnv(_BatchedEnv):
                 if not isinstance(env_fun, EnvCreator):
                     env_fun = CloudpickleWrapper(env_fun)
 
-                process = ctx.Process(
+                process = _ProcessNoWarn(
                     target=_run_worker_pipe_shared_mem,
+                    num_threads=self.num_sub_threads,
                     args=(
                         parent_pipe,
                         child_pipe,
@@ -793,14 +811,10 @@ class ParallelEnv(_BatchedEnv):
         for i in range(self.num_workers):
             self.parent_channels[i].send(("step", None))
 
-        completed = set()
-        while len(completed) < self.num_workers:
-            for i, event in enumerate(self._events):
-                if i in completed:
-                    continue
-                if event.is_set():
-                    completed.add(i)
-                    event.clear()
+        for i in range(self.num_workers):
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
@@ -863,15 +877,10 @@ class ParallelEnv(_BatchedEnv):
             channel.send(out)
             workers.append(i)
 
-        completed = set()
-        while len(completed) < len(workers):
-            for i in workers:
-                event = self._events[i]
-                if i in completed:
-                    continue
-                if event.is_set():
-                    completed.add(i)
-                    event.clear()
+        for i in workers:
+            event = self._events[i]
+            event.wait()
+            event.clear()
 
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only

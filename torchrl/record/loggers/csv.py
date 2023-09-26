@@ -5,7 +5,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence, Union
 
 import torch
 from torch import Tensor
@@ -21,10 +21,10 @@ class CSVExperiment:
         self.videos_counter = defaultdict(lambda: 0)
         self.text_counter = defaultdict(lambda: 0)
         self.log_dir = log_dir
-        os.makedirs(self.log_dir)
-        os.makedirs(os.path.join(self.log_dir, "scalars"))
-        os.makedirs(os.path.join(self.log_dir, "videos"))
-        os.makedirs(os.path.join(self.log_dir, "texts"))
+        os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "scalars"), exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "videos"), exist_ok=True)
+        os.makedirs(os.path.join(self.log_dir, "texts"), exist_ok=True)
 
         self.files = {}
 
@@ -38,6 +38,7 @@ class CSVExperiment:
             self.files[filepath] = open(filepath, "a")
         fd = self.files[filepath]
         fd.write(",".join([str(global_step), str(value)]) + "\n")
+        fd.flush()
 
     def add_video(self, tag, vid_tensor, global_step: Optional[int] = None, **kwargs):
         if global_step is None:
@@ -61,6 +62,7 @@ class CSVExperiment:
             self.files[filepath] = open(filepath, "w+")
         fd = self.files[filepath]
         fd.writelines(text)
+        fd.flush()
 
     def __repr__(self) -> str:
         return f"CSVExperiment(log_dir={self.log_dir})"
@@ -122,13 +124,13 @@ class CSVLogger(Logger):
             **kwargs,
         )
 
-    def log_hparams(self, cfg: "DictConfig") -> None:  # noqa: F821
+    def log_hparams(self, cfg: Union["DictConfig", Dict]) -> None:  # noqa: F821
         """Logs the hyperparameters of the experiment.
 
         Args:
-            cfg (DictConfig): The configuration of the experiment.
+            cfg (DictConfig or dict): The configuration of the experiment.
         """
-        txt = "\n\t".join([f"{k}: {val}" for k, val in sorted(vars(cfg).items())])
+        txt = "\n".join([f"{k}: {val}" for k, val in sorted(cfg.items())])
         self.experiment.add_text("hparams", txt)
 
     def __repr__(self) -> str:

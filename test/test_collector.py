@@ -4,12 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
 import sys
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import generate_seeds, PENDULUM_VERSIONED, PONG_VERSIONED
+from _utils_internal import (
+    check_rollout_consistency_multikey_env,
+    decorate_thread_sub_func,
+    generate_seeds,
+    PENDULUM_VERSIONED,
+    PONG_VERSIONED,
+)
 from mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
@@ -29,7 +36,6 @@ from mocking_classes import (
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
-from test_env import TestMultiKeyEnvs
 from torch import nn
 from torchrl._utils import prod, seed_generator
 from torchrl.collectors import aSyncDataCollector, SyncDataCollector
@@ -55,10 +61,10 @@ from torchrl.envs.utils import _replace_last
 from torchrl.modules import Actor, LSTMNet, OrnsteinUhlenbeckProcessWrapper, SafeModule
 
 # torch.set_default_dtype(torch.double)
-_os_is_windows = sys.platform == "win32"
-_python_is_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
-_python_is_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
-_os_is_osx = sys.platform == "darwin"
+IS_WINDOWS = sys.platform == "win32"
+IS_OSX = sys.platform == "darwin"
+PYTHON_3_10 = sys.version_info.major == 3 and sys.version_info.minor == 10
+PYTHON_3_7 = sys.version_info.major == 3 and sys.version_info.minor == 7
 
 
 class WrappablePolicy(nn.Module):
@@ -166,7 +172,7 @@ def _is_consistent_device_type(
 
 
 @pytest.mark.skipif(
-    _os_is_windows and _python_is_3_10,
+    IS_WINDOWS and PYTHON_3_10,
     reason="Windows Access Violation in torch.multiprocessing / BrokenPipeError in multiprocessing.connection",
 )
 @pytest.mark.parametrize("num_env", [2])
@@ -181,7 +187,7 @@ def test_output_device_consistency(
     ) and not torch.cuda.is_available():
         pytest.skip("cuda is not available")
 
-    if _os_is_windows and _python_is_3_7:
+    if IS_WINDOWS and PYTHON_3_7:
         if device == "cuda" and policy_device == "cuda" and device is None:
             pytest.skip(
                 "BrokenPipeError in multiprocessing.connection with Python 3.7 on Windows"
@@ -503,7 +509,7 @@ def test_collector_batch_size(
     num_env, env_name, seed=100, num_workers=2, frames_per_batch=20
 ):
     """Tests that there are 'frames_per_batch' frames in each batch of a collection."""
-    if num_env == 3 and _os_is_windows:
+    if num_env == 3 and IS_WINDOWS:
         pytest.skip("Test timeout (> 10 min) on CI pipeline Windows machine with GPU")
     if num_env == 1:
 
@@ -773,6 +779,11 @@ def test_traj_len_consistency(num_env, env_name, collector_class, seed=100):
     assert_allclose_td(data10, data20)
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 11),
+    reason="Nested spawned multiprocessed is currently failing in python 3.11. "
+    "See https://github.com/python/cpython/pull/108568 for info and fix.",
+)
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
 @pytest.mark.parametrize("static_seed", [True, False])
 def test_collector_vecnorm_envcreator(static_seed):
@@ -1042,12 +1053,7 @@ def test_collector_output_keys(
 @pytest.mark.parametrize("storing_device", ["cuda", "cpu"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device found")
 def test_collector_device_combinations(device, storing_device):
-    if (
-        _os_is_windows
-        and _python_is_3_10
-        and storing_device == "cuda"
-        and device == "cuda"
-    ):
+    if IS_WINDOWS and PYTHON_3_10 and storing_device == "cuda" and device == "cuda":
         pytest.skip("Windows fatal exception: access violation in torch.storage")
 
     def env_fn(seed):
@@ -1263,7 +1269,7 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.skipif(_os_is_osx, reason="Queue.qsize does not work on osx.")
+@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
 class TestPreemptiveThreshold:
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
@@ -1577,7 +1583,7 @@ class TestMultiKeyEnvsCollector:
         ccollector.shutdown()
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
-        TestMultiKeyEnvs.check_rollout_consistency(_td, max_steps=max_steps)
+        check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
@@ -1729,6 +1735,81 @@ class TestUpdateParams:
                     assert (data["action"] == 3).all()
         finally:
             col.shutdown()
+
+
+@pytest.mark.parametrize(
+    "collector_class",
+    [MultiSyncDataCollector, MultiaSyncDataCollector, SyncDataCollector],
+)
+def test_collector_reloading(collector_class):
+    def make_env():
+        return ContinuousActionVecMockEnv()
+
+    dummy_env = make_env()
+    obs_spec = dummy_env.observation_spec["observation"]
+    policy_module = nn.Linear(obs_spec.shape[-1], dummy_env.action_spec.shape[-1])
+    policy = Actor(policy_module, spec=dummy_env.action_spec)
+    policy_explore = OrnsteinUhlenbeckProcessWrapper(policy)
+
+    collector_kwargs = {
+        "create_env_fn": make_env,
+        "policy": policy_explore,
+        "frames_per_batch": 30,
+        "total_frames": 90,
+    }
+    if collector_class is not SyncDataCollector:
+        collector_kwargs["create_env_fn"] = [
+            collector_kwargs["create_env_fn"] for _ in range(3)
+        ]
+
+    collector = collector_class(**collector_kwargs)
+    for i, _ in enumerate(collector):
+        if i == 3:
+            break
+    collector_frames = collector._frames
+    collector_iter = collector._iter
+    collector_state_dict = collector.state_dict()
+    collector.shutdown()
+
+    collector = collector_class(**collector_kwargs)
+    collector.load_state_dict(collector_state_dict)
+    assert collector._frames == collector_frames
+    assert collector._iter == collector_iter
+    for _ in enumerate(collector):
+        raise AssertionError
+    collector.shutdown()
+
+
+@pytest.mark.skipif(
+    IS_OSX, reason="setting different threads across workeres can randomly fail on OSX."
+)
+def test_num_threads():
+    from torchrl.collectors import collectors
+
+    _main_async_collector_saved = collectors._main_async_collector
+    collectors._main_async_collector = decorate_thread_sub_func(
+        collectors._main_async_collector, num_threads=3
+    )
+    num_threads = torch.get_num_threads()
+    try:
+        env = ContinuousActionVecMockEnv()
+        c = MultiSyncDataCollector(
+            [env],
+            policy=RandomPolicy(env.action_spec),
+            num_threads=7,
+            num_sub_threads=3,
+            total_frames=200,
+            frames_per_batch=200,
+        )
+        assert torch.get_num_threads() == 7
+        for _ in c:
+            pass
+        c.shutdown()
+        del c
+    finally:
+        # reset vals
+        collectors._main_async_collector = _main_async_collector_saved
+        torch.set_num_threads(num_threads)
 
 
 if __name__ == "__main__":

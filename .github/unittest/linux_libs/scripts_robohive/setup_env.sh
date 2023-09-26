@@ -74,9 +74,5 @@ conda deactivate && conda activate "${env_dir}"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
-#conda install -c conda-forge fltk -y
 
-#pip install git+https://github.com/vmoens/mj_envs@patch-2
-pip install git+https://github.com/vikashplus/robohive@dev
-
-#pip uninstall free-mujoco-py -y
+pip install git+https://github.com/vikashplus/robohive@main
