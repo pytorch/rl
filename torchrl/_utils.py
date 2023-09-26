@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import collections
 
@@ -534,19 +535,23 @@ def get_trace():
 
 
 class _ProcessNoWarn(mp.Process):
-    """A private Process class that shuts down warnings on the subprocess."""
+    """A private Process class that shuts down warnings on the subprocess and controls the number of threads in the subprocess."""
+
     @wraps(mp.Process.__init__)
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, num_threads=None, **kwargs):
         import torchrl
 
-        if torchrl.filter_warnings_subprocess:
-            self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        self.filter_warnings_subprocess = torchrl.filter_warnings_subprocess
+        self.num_threads = num_threads
         super().__init__(*args, **kwargs)
 
     def run(self, *args, **kwargs):
+        if self.num_threads is not None:
+            torch.set_num_threads(self.num_threads)
         if self.filter_warnings_subprocess:
             import warnings
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-            return mp.Process.run(self, *args, **kwargs)
+                return mp.Process.run(self, *args, **kwargs)
         return mp.Process.run(self, *args, **kwargs)
