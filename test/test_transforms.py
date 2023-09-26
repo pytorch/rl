@@ -1548,8 +1548,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset.unsqueeze(-1)) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset.unsqueeze(-1)) == i)
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
@@ -1576,7 +1576,7 @@ class TestStepCounter(TransformBase):
         td = TensorDict({"done": done, ("next", "done"): done}, batch, device=device)
         _reset = torch.zeros((), dtype=torch.bool, device=device)
         while not _reset.any() and reset_workers:
-            _reset = torch.rand(batch, device=device) < 0.5
+            _reset = torch.randn(done.shape, device=device) < 0
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
@@ -1607,8 +1607,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset.unsqueeze(-1)) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset.unsqueeze(-1)) == i)
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
