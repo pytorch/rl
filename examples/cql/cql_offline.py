@@ -60,11 +60,14 @@ def main(cfg: "DictConfig"):  # noqa: F821
     loss_module, target_net_updater = make_loss(cfg.loss, model)
 
     # Create Optimizer
-    optimizer = make_cql_optimizer(cfg.optim, loss_module)
+    policy_optim, critic_optim, alpha_optim, alpha_prime_optim = make_cql_optimizer(
+        cfg.optim, loss_module
+    )
 
     pbar = tqdm.tqdm(total=cfg.optim.gradient_steps)
 
     gradient_steps = cfg.optim.gradient_steps
+    policy_eval_start = cfg.optim.policy_eval_start
     evaluation_interval = cfg.logger.eval_iter
     eval_steps = cfg.logger.eval_steps
 
@@ -77,21 +80,42 @@ def main(cfg: "DictConfig"):  # noqa: F821
         # compute loss
         loss_vals = loss_module(data.clone())
 
-        actor_loss = loss_vals["loss_actor"]
+        if i >= policy_eval_start:
+            actor_loss = loss_vals["loss_actor"]
+        else:
+            actor_loss = loss_vals["loss_actor_bc"]
         q_loss = loss_vals["loss_qvalue"]
         alpha_loss = loss_vals["loss_alpha"]
         alpha_prime_loss = loss_vals["loss_alpha_prime"]
-        loss_val = actor_loss + q_loss + alpha_loss + alpha_prime_loss
 
         # update model
-        optimizer.zero_grad()
-        loss_val.backward()
-        optimizer.step()
-        target_net_updater.step()
+        alpha_loss = loss_vals["loss_alpha"]
+        alpha_prime_loss = loss_vals["loss_alpha_prime"]
+
+        alpha_optim.zero_grad()
+        alpha_loss.backward()
+        alpha_optim.step()
+
+        policy_optim.zero_grad()
+        actor_loss.backward()
+        policy_optim.step()
+
+        if alpha_prime_optim is not None:
+            alpha_prime_optim.zero_grad()
+            alpha_prime_loss.backward(retain_graph=True)
+            alpha_prime_optim.step()
+
+        critic_optim.zero_grad()
+        q_loss.backward(retain_graph=False)
+        critic_optim.step()
+
+        loss = actor_loss + q_loss + alpha_loss + alpha_prime_loss
 
         # log metrics
         to_log = {
-            "loss_actor": actor_loss.item(),
+            "loss": loss.item(),
+            "loss_actor_bc": loss_vals["loss_actor_bc"].item(),
+            "loss_actor": loss_vals["loss_actor"].item(),
             "loss_qvalue": q_loss.item(),
             "loss_alpha": alpha_loss.item(),
             "loss_alpha_prime": alpha_prime_loss.item(),

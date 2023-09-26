@@ -460,6 +460,7 @@ class CQLLoss(LossModule):
         if self._out_keys is None:
             keys = [
                 "loss_actor",
+                "loss_actor_bc",
                 "loss_qvalue",
                 "loss_alpha",
                 "loss_alpha_prime",
@@ -486,6 +487,7 @@ class CQLLoss(LossModule):
         td_device = tensordict_reshape.to(device)
 
         loss_qvalue, loss_alpha_prime, priority = self._loss_qvalue_v(td_device)
+        loss_actor_bc = self._loss_actor_bc(td_device)
         loss_actor = self._loss_actor(td_device)
         loss_alpha = self._loss_alpha(td_device)
         tensordict_reshape.set(self.tensor_keys.priority, priority)
@@ -497,6 +499,7 @@ class CQLLoss(LossModule):
             tensordict.update(tensordict_reshape.view(shape))
         out = {
             "loss_actor": loss_actor.mean(),
+            "loss_actor_bc": loss_actor_bc.mean(),
             "loss_qvalue": loss_qvalue.mean(),
             "loss_alpha": loss_alpha.mean(),
             "loss_alpha_prime": loss_alpha_prime,
@@ -511,6 +514,17 @@ class CQLLoss(LossModule):
     def _cached_detach_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
+    def _loss_actor_bc(self, tensordict: TensorDictBase) -> Tensor:
+        with set_exploration_type(ExplorationType.RANDOM):
+            dist = self.actor_network.get_dist(
+                tensordict,
+                params=self.actor_network_params,
+            )
+            a_reparm = dist.rsample()
+        log_prob = dist.log_prob(a_reparm)
+        bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
+        return self._alpha * log_prob - bc_log_prob
+
     def _loss_actor(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(ExplorationType.RANDOM):
             dist = self.actor_network.get_dist(
@@ -524,7 +538,7 @@ class CQLLoss(LossModule):
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qvalue_networkN0(
             td_q,
-            self.qvalue_network_params,  # _cached_detach_qvalue_params
+            self._cached_detach_qvalue_params,
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
