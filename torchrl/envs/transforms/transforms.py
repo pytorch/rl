@@ -618,7 +618,7 @@ but got an object of type {type(transform)}."""
     @property
     def output_spec(self) -> TensorSpec:
         """Observation spec of the transformed environment."""
-        if self.__dict__.get("_output_spec", None) is None or not self.cache_specs:
+        if not self.cache_specs or self.__dict__.get("_output_spec", None) is None:
             output_spec = self.base_env.output_spec.clone()
 
             # remove cached key values
