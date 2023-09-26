@@ -265,6 +265,7 @@ def test_output_device_consistency(
     assert d.names[-1] == "time"
 
     ccollector.shutdown()
+    del ccollector
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -571,6 +572,7 @@ def test_collector_batch_size(
             break
     assert b.names[-1] == "time"
     ccollector.shutdown()
+    del ccollector
 
 
 @pytest.mark.parametrize("num_env", [1, 2])
@@ -852,7 +854,7 @@ def test_collector_vecnorm_envcreator(static_seed):
     td4 = s["worker1"]["env_state_dict"]["worker0"]["_extra_state"]["td"].clone()
     assert (td3 == td4).all()
     assert (td1 != td4).any()
-
+    c.shutdown()
     del c
 
 
@@ -960,6 +962,7 @@ def test_excluded_keys(collector_class, exclude):
         break
     collector.shutdown()
     dummy_env.close()
+    del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
@@ -1139,6 +1142,7 @@ def test_collector_device_combinations(device, storing_device):
     batch = next(collector.iterator())
     assert batch.device == torch.device(storing_device)
     collector.shutdown()
+    del collector
 
 
 @pytest.mark.skipif(not _has_gym, reason="test designed with GymEnv")
@@ -1198,6 +1202,8 @@ class TestAutoWrap:
             assert isinstance(collector.policy, TensorDictModule)
             assert collector.policy.out_keys == out_keys
             assert collector.policy.module is policy
+        collector.shutdown()
+        del collector
 
     def test_no_wrap_compatible_module(self, collector_class, env_maker):
         policy = TensorDictCompatiblePolicy(
@@ -1222,6 +1228,8 @@ class TestAutoWrap:
             assert isinstance(collector.policy, TensorDictCompatiblePolicy)
             assert collector.policy.out_keys == ["action"]
             assert collector.policy is policy
+        collector.shutdown()
+        del collector
 
     def test_auto_wrap_error(self, collector_class, env_maker):
         policy = UnwrappablePolicy(out_features=env_maker().action_spec.shape[-1])
@@ -1281,6 +1289,8 @@ def test_initial_obs_consistency(env_class, seed=1):
         expected_1 = torch.cat([arange_0, arange_0, arange])
         expected = torch.stack([expected_0, expected_1])
     assert torch.allclose(obs, expected.to(obs.dtype))
+    collector.shutdown()
+    del collector
 
 
 def weight_reset(m):
@@ -1316,6 +1326,8 @@ class TestPreemptiveThreshold:
         for batch in collector:
             assert batch["collector"]["traj_ids"][0] != -1
             assert batch["collector"]["traj_ids"][1] == -1
+        collector.shutdown()
+        del collector
 
     @pytest.mark.parametrize(
         "env_name", ["vec"]
@@ -1350,6 +1362,8 @@ class TestPreemptiveThreshold:
             trajectory_ids = batch["collector"]["traj_ids"]
             trajectory_ids_mask = trajectory_ids != -1  # valid frames mask
             assert trajectory_ids[trajectory_ids_mask].numel() < frames_per_batch
+        collector.shutdown()
+        del collector
 
 
 def test_maxframes_error():
@@ -1371,10 +1385,10 @@ def test_reset_heterogeneous_envs():
     env1 = lambda: TransformedEnv(CountingEnv(), StepCounter(2))
     env2 = lambda: TransformedEnv(CountingEnv(), StepCounter(3))
     env = SerialEnv(2, [env1, env2])
-    c = SyncDataCollector(
+    collector = SyncDataCollector(
         env, RandomPolicy(env.action_spec), total_frames=10_000, frames_per_batch=1000
     )
-    for data in c:  # noqa: B007
+    for data in collector:  # noqa: B007
         break
     assert (
         data[0]["next", "truncated"].squeeze()
@@ -1384,6 +1398,8 @@ def test_reset_heterogeneous_envs():
         data[1]["next", "truncated"].squeeze()
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
+    collector.shutdown()
+    del collector
 
 
 class TestNestedEnvsCollector:
@@ -1430,7 +1446,7 @@ class TestNestedEnvsCollector:
         with pytest.raises(AssertionError):
             assert_allclose_td(d1, d2)
         ccollector.shutdown()
-
+        del ccollector
         assert_allclose_td(c1, d1)
         assert_allclose_td(c2, d2)
 
@@ -1463,6 +1479,7 @@ class TestNestedEnvsCollector:
         for _td in ccollector:
             break
         ccollector.shutdown()
+        del ccollector
 
     @pytest.mark.parametrize("batch_size", [(), (5,), (5, 2)])
     def test_nested_env_dims(self, batch_size, nested_dim=5, frames_per_batch=20):
@@ -1484,7 +1501,7 @@ class TestNestedEnvsCollector:
         for _td in ccollector:
             break
         ccollector.shutdown()
-
+        del ccollector
         assert ("data", "reward") not in _td.keys(True)
         assert _td.batch_size == (*batch_size, frames_per_batch // prod(batch_size))
         assert _td["data"].batch_size == (
@@ -1530,6 +1547,7 @@ class TestHetEnvsCollector:
                     == torch.arange(max_steps).repeat(collected_frames // max_steps)
                 ).all()  # Check reset worked
             assert (_td["lazy"][..., i]["action"] == 1).all()
+        del ccollector
 
     def test_multi_collector_het_env_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
@@ -1577,6 +1595,7 @@ class TestHetEnvsCollector:
         with pytest.raises(AssertionError):
             assert_allclose_td(d1, d2)
         ccollector.shutdown()
+        del ccollector
 
         assert_allclose_td(c1, d1)
         assert_allclose_td(c2, d2)
@@ -1604,6 +1623,7 @@ class TestMultiKeyEnvsCollector:
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
         check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
+        del ccollector
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
@@ -1652,6 +1672,7 @@ class TestMultiKeyEnvsCollector:
         with pytest.raises(AssertionError):
             assert_allclose_td(d1, d2)
         ccollector.shutdown()
+        del ccollector
 
         assert_allclose_td(c1, d1)
         assert_allclose_td(c2, d2)
@@ -1755,7 +1776,7 @@ class TestUpdateParams:
                     assert (data["action"] == 3).all()
         finally:
             col.shutdown()
-
+            del col
 
 class TestBringReset:
     def test_bring_reset_to_root(self):
@@ -1953,6 +1974,7 @@ def test_collector_reloading(collector_class):
     for _ in enumerate(collector):
         raise AssertionError
     collector.shutdown()
+    del collector
 
 
 @pytest.mark.skipif(
@@ -1979,9 +2001,12 @@ def test_num_threads():
         assert torch.get_num_threads() == 7
         for _ in c:
             pass
-        c.shutdown()
-        del c
     finally:
+        try:
+            c.shutdown()
+            del c
+        except Exception:
+            print("Failed to shut down collector")
         # reset vals
         collectors._main_async_collector = _main_async_collector_saved
         torch.set_num_threads(num_threads)

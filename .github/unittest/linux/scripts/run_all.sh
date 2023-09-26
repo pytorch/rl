@@ -178,7 +178,7 @@ python -m torch.utils.collect_env
 #export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
-
+export MAX_IDLE_COUNT=100
 
 pytest test/smoke_test.py -v --durations 200
 pytest test/smoke_test_deps.py -v --durations 200 -k 'test_gym or test_dm_control_pixels or test_dm_control or test_tb'
