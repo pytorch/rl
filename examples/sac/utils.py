@@ -239,8 +239,20 @@ def make_loss_module(cfg, model):
     return loss_module, target_net_updater
 
 
+def split_critic_params(critic_params):
+    critic1_params = []
+    critic2_params = []
+
+    for param in critic_params:
+        data1, data2 = param.data.chunk(2, dim=0)
+        critic1_params.append(nn.Parameter(data1))
+        critic2_params.append(nn.Parameter(data2))
+    return critic1_params, critic2_params
+
+
 def make_sac_optimizer(cfg, loss_module):
     critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
+    critic1_params, critic2_params = split_critic_params(critic_params)
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
@@ -249,8 +261,14 @@ def make_sac_optimizer(cfg, loss_module):
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
     )
-    optimizer_critic = optim.Adam(
-        critic_params,
+    optimizer_critic1 = optim.Adam(
+        critic1_params,
+        lr=cfg.optim.lr,
+        weight_decay=cfg.optim.weight_decay,
+        eps=cfg.optim.adam_eps,
+    )
+    optimizer_critic2 = optim.Adam(
+        critic2_params,
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
@@ -259,7 +277,7 @@ def make_sac_optimizer(cfg, loss_module):
         [loss_module.log_alpha],
         lr=cfg.optim.lr,
     )
-    return optimizer_actor, optimizer_critic, optimizer_alpha
+    return optimizer_actor, optimizer_critic1, optimizer_critic2, optimizer_alpha
 
 
 # ====================================================================

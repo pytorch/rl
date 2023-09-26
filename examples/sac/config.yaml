@@ -28,7 +28,7 @@ optim:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
-  lr: 3.0e-4
+  lr: 1.0e-3
   weight_decay: 0.0
   batch_size: 256
   target_update_polyak: 0.995
