@@ -2163,7 +2163,7 @@ class TestTerminatedOrTruncated:
 
         spec = CompositeSpec(
             {
-                "done": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
+                "truncated": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
                 "terminated": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
                 ("nested", "terminated"): DiscreteTensorSpec(
                     2, shape=(2, 1), dtype=torch.bool
