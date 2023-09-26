@@ -698,11 +698,15 @@ class SACLoss(LossModule):
             -1
         )
         td_error = abs(pred_val - target_value)
-        loss_qval = distance_loss(
-            pred_val,
-            target_value.expand_as(pred_val),
-            loss_function=self.loss_function,
-        ).mean(0)
+        loss_qval = (
+            distance_loss(
+                pred_val,
+                target_value.expand_as(pred_val),
+                loss_function=self.loss_function,
+            )
+            .mean(-1)
+            .sum(0)
+        )
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
