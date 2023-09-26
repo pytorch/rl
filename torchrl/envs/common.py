@@ -1341,11 +1341,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 if val.shape != shape:
                     data.set(key, val.reshape(shape))
                 vals[key] = val
+
         if len(vals) < i + 1:
             # complete missing dones: we only want to do that if we don't have enough done values
             data_keys = set(data.keys())
             done_spec_keys = set(done_spec.keys())
-            for key, item in done_spec.items():
+            for key, item in done_spec.items(False, True):
                 val = vals.get(key, None)
                 if (
                     key == "done"
