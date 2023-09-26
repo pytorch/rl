@@ -301,8 +301,11 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
 
     def _shift_reward_done(self, dataset):
         dataset["reward"] = dataset["reward"].clone()
-        dataset["done"] = dataset["done"].clone()
         dataset["reward"][1:] = dataset["reward"][:-1].clone()
-        dataset["done"][1:] = dataset["done"][:-1].clone()
         dataset["reward"][0] = 0
-        dataset["done"][0] = 0
+        for key in ("done", "terminated", "truncated"):
+            if key not in dataset.keys():
+                continue
+            dataset[key] = dataset[key].clone()
+            dataset[key][1:] = dataset[key][:-1].clone()
+            dataset[key][0] = 0
