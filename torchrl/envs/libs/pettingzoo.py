@@ -82,11 +82,11 @@ class PettingZooWrapper(_EnvWrapper):
                     batch_size=torch.Size([3]))},
                 adversary: TensorDict(
                     fields={
-                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
-                        action_mask: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.bool, is_shared=False),
-                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
-                    batch_size=torch.Size([]))},
+                        action: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([1]))},
             batch_size=torch.Size([]))
         >>> print(env.group_map)
         {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}
@@ -351,12 +351,6 @@ class PettingZooWrapper(_EnvWrapper):
             },
             shape=torch.Size((n_agents,)),
         )
-        if n_agents == 1:
-            # When there is only one agent in the group we remove the singleton corresponding to the group size
-            group_observation_spec = group_observation_spec.squeeze(0)
-            group_action_spec = group_action_spec.squeeze(0)
-            group_reward_spec = group_reward_spec.squeeze(0)
-            group_done_spec = group_done_spec.squeeze(0)
         return (
             group_observation_spec,
             group_action_spec,
@@ -378,9 +372,9 @@ class PettingZooWrapper(_EnvWrapper):
     def _init_env(self) -> Optional[int]:
         # Add info
         if self.parallel:
-            _, info_dict = self._reset_parallel()
+            _, info_dict = self._reset_parallel(seed=self.seed)
         else:
-            _, info_dict = self._reset_aec()
+            _, info_dict = self._reset_aec(seed=self.seed)
 
         for group, agents in self.group_map.items():
             info_specs = []
@@ -446,8 +440,9 @@ class PettingZooWrapper(_EnvWrapper):
         self.cached_step_output_zero.update(self.output_spec["full_reward_spec"].zero())
         self.cached_step_output_zero.update(self.output_spec["full_done_spec"].zero())
 
-    def _set_seed(self, seed: Optional[int]):
+    def _set_seed(self, seed: int):
         self.seed = seed
+        self.reset(seed=self.seed)
 
     def _reset(
         self, tensordict: Optional[TensorDictBase] = None, **kwargs
@@ -455,10 +450,10 @@ class PettingZooWrapper(_EnvWrapper):
 
         if self.parallel:
             # This resets when any is done
-            observation_dict, info_dict = self._reset_parallel()
+            observation_dict, info_dict = self._reset_parallel(**kwargs)
         else:
             # This resets when all are done
-            observation_dict, info_dict = self._reset_aec(tensordict)
+            observation_dict, info_dict = self._reset_aec(tensordict, **kwargs)
 
         # We start with zeroed data and fill in the data for alive agents
         tensordict_out = self.cached_reset_output_zero.clone()
@@ -474,10 +469,7 @@ class PettingZooWrapper(_EnvWrapper):
             group_observation = tensordict_out.get((group, "observation"))
             group_info = tensordict_out.get((group, "info"), None)
 
-            for i, agent in enumerate(agent_names):
-                index = (
-                    i if len(agent_names) > 1 else Ellipsis
-                )  # If group has one agent we index with '...'
+            for index, agent in enumerate(agent_names):
                 group_observation[index] = self.observation_spec[group, "observation"][
                     index
                 ].encode(observation_dict[agent])
@@ -490,7 +482,7 @@ class PettingZooWrapper(_EnvWrapper):
 
         return tensordict_out
 
-    def _reset_aec(self, tensordict=None) -> Tuple[Dict, Dict]:
+    def _reset_aec(self, tensordict=None, **kwargs) -> Tuple[Dict, Dict]:
         all_done = True
         if tensordict is not None:
             _resets = []
@@ -509,7 +501,7 @@ class PettingZooWrapper(_EnvWrapper):
                         break
 
         if all_done:
-            self._env.reset(seed=self.seed)
+            self._env.reset(**kwargs)
 
         observation_dict = {
             agent: self._env.observe(agent) for agent in self.possible_agents
@@ -517,10 +509,8 @@ class PettingZooWrapper(_EnvWrapper):
         info_dict = self._env.infos
         return observation_dict, info_dict
 
-    def _reset_parallel(
-        self,
-    ) -> Tuple[Dict, Dict]:
-        return self._env.reset(seed=self.seed)
+    def _reset_parallel(self, **kwargs) -> Tuple[Dict, Dict]:
+        return self._env.reset(**kwargs)
 
     def _step(
         self,
@@ -560,11 +550,8 @@ class PettingZooWrapper(_EnvWrapper):
             group_done = tensordict_out.get((group, "done"))
             group_info = tensordict_out.get((group, "info"), None)
 
-            for i, agent in enumerate(agent_names):
+            for index, agent in enumerate(agent_names):
                 if agent in observation_dict:  # Live agents
-                    index = (
-                        i if len(agent_names) > 1 else Ellipsis
-                    )  # If group has one agent, we index with '...'
                     group_observation[index] = self.observation_spec[
                         group, "observation"
                     ][index].encode(observation_dict[agent])
@@ -605,8 +592,7 @@ class PettingZooWrapper(_EnvWrapper):
             group_action_np = self.input_spec[
                 "full_action_spec", group, "action"
             ].to_numpy(group_action)
-            for i, agent in enumerate(agents):
-                index = i if len(agents) > 1 else Ellipsis
+            for index, agent in enumerate(agents):
                 action_dict[agent] = group_action_np[index]
 
         return self._env.step(action_dict)
@@ -618,11 +604,7 @@ class PettingZooWrapper(_EnvWrapper):
 
         for group, agents in self.group_map.items():
             if self.agent_selection in agents:
-                agent_index = (
-                    agents.index(self._env.agent_selection)
-                    if len(agents) > 1
-                    else Ellipsis
-                )
+                agent_index = agents.index(self._env.agent_selection)
                 group_action = tensordict.get((group, "action"))
                 group_action_np = self.input_spec[
                     "full_action_spec", group, "action"
@@ -658,10 +640,7 @@ class PettingZooWrapper(_EnvWrapper):
             if self.has_action_mask[group]:
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
-                for i, agent in enumerate(agents):
-                    index = (
-                        i if len(agents) > 1 else Ellipsis
-                    )  # If group has one agent we index with '...'
+                for index, agent in enumerate(agents):
                     agent_obs = observation_dict[agent]
                     agent_info = info_dict[agent]
                     if isinstance(agent_obs, Dict) and "action_mask" in agent_obs:
@@ -699,10 +678,7 @@ class PettingZooWrapper(_EnvWrapper):
                 group_mask += True
 
                 # We now add dead agents to the mask
-                for i, agent in enumerate(agents):
-                    index = (
-                        i if len(agents) > 1 else Ellipsis
-                    )  # If group has one agent we index with '...'
+                for index, agent in enumerate(agents):
                     if agent not in agents_acting:
                         group_mask[index] = False
 
@@ -762,11 +738,11 @@ class PettingZooEnv(PettingZooWrapper):
                     batch_size=torch.Size([3]))},
                 adversary: TensorDict(
                     fields={
-                        action: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.int64, is_shared=False),
-                        action_mask: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.bool, is_shared=False),
-                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),
-                        observation: Tensor(shape=torch.Size([3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
-                    batch_size=torch.Size([]))},
+                        action: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.int64, is_shared=False),
+                        action_mask: Tensor(shape=torch.Size([1, 9]), device=cpu, dtype=torch.bool, is_shared=False),
+                        done: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        observation: Tensor(shape=torch.Size([1, 3, 3, 2]), device=cpu, dtype=torch.int8, is_shared=False)},
+                    batch_size=torch.Size([1]))},
             batch_size=torch.Size([]))
         >>> print(env.group_map)
         {"agent": ["agent_0", "agent_1", "agent_2"], "adversary": ["adversary_0"]}

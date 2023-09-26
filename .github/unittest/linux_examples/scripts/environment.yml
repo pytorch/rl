@@ -27,3 +27,5 @@ dependencies:
     - coverage
     - vmas
     - transformers
+    - gym[atari]
+    - gym[accept-rom-license]
