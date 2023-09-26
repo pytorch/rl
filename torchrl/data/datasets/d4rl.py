@@ -254,10 +254,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             self.metadata = {}
 
-        dataset.rename_key("observations", "observation")
-        dataset.rename_key("terminals", "terminated")
+        dataset.rename_key_("observations", "observation")
+        dataset.rename_key_("terminals", "terminated")
         if "timeouts" in dataset.keys():
-            dataset.rename_key("timeouts", "truncated")
+            dataset.rename_key_("timeouts", "truncated")
         if self.use_truncated_as_done:
             dataset.set(
                 "done",
@@ -267,10 +267,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         else:
             dataset.set("done", dataset.get("terminated"))
 
-        dataset.rename_key("rewards", "reward")
-        dataset.rename_key("actions", "action")
+        dataset.rename_key_("rewards", "reward")
+        dataset.rename_key_("actions", "action")
         try:
-            dataset.rename_key("infos", "info")
+            dataset.rename_key_("infos", "info")
         except KeyError:
             pass
 
@@ -286,7 +286,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset["terminated"] = dataset["terminated"].unsqueeze(-1)
         if "truncated" in dataset.keys():
             dataset["truncated"] = dataset["truncated"].unsqueeze(-1)
-        # dataset.rename_key("next_observations", "next/observation")
+        # dataset.rename_key_("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
             "next",
