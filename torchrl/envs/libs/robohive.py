@@ -321,6 +321,9 @@ class RoboHiveEnv(GymEnv):
         )
         return tensordict_out
 
+    def _init_env(self):
+        pass
+
     def to(self, *args, **kwargs):
         out = super().to(*args, **kwargs)
         try:

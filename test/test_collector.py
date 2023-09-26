@@ -1525,13 +1525,14 @@ class TestHetEnvsCollector:
         batch_size = torch.Size(batch_size)
         env = HeteroCountingEnv(max_steps=max_steps - 1, batch_size=batch_size)
         torch.manual_seed(seed)
+        device = get_default_devices()[0]
         policy = HeteroCountingEnvPolicy(env.input_spec["full_action_spec"])
         ccollector = SyncDataCollector(
             create_env_fn=env,
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device=get_default_devices()[0],
+            device=device,
         )
 
         for _td in ccollector:
@@ -1546,7 +1547,9 @@ class TestHetEnvsCollector:
                     agent_obs = agent_obs.mean(-1)
                 assert (
                     agent_obs
-                    == torch.arange(max_steps).repeat(collected_frames // max_steps)
+                    == torch.arange(max_steps, device=device).repeat(
+                        collected_frames // max_steps
+                    )
                 ).all()  # Check reset worked
             assert (_td["lazy"][..., i]["action"] == 1).all()
         del ccollector
@@ -1706,7 +1709,7 @@ class TestUpdateParams:
                 {
                     "state": self.state.clone(),
                     "reward": self.reward_spec.zero(),
-                    "done": self.done_spec.zero(),
+                    **self.full_done_spec.zero(),
                 },
                 self.batch_size,
             )
