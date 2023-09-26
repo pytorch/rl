@@ -43,7 +43,6 @@ optim:
   lr: 1.0e-4
   weight_decay: 5.0e-4
   batch_size: 256
-  lr_scheduler: ""
   pretrain_gradient_steps: 10000
   updates_per_episode: 300
   warmup_steps: 10000
