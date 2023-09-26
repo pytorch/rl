@@ -15,7 +15,7 @@ from _utils_internal import (
     decorate_thread_sub_func,
     generate_seeds,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED,
+    PONG_VERSIONED,get_default_devices,
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -1614,16 +1614,16 @@ class TestMultiKeyEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
 
         for _td in ccollector:
             break
         ccollector.shutdown()
+        del ccollector
         for done_key in env.done_keys:
             assert _replace_last(done_key, "_reset") not in _td.keys(True, True)
         check_rollout_consistency_multikey_env(_td, max_steps=max_steps)
-        del ccollector
 
     def test_multi_collector_consistency(
         self, seed=1, frames_per_batch=20, batch_dim=10
@@ -1640,7 +1640,7 @@ class TestMultiKeyEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1659,7 +1659,7 @@ class TestMultiKeyEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:

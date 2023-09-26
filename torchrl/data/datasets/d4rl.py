@@ -181,19 +181,19 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset = dataset.unflatten_keys("/")
         else:
             self.metadata = {}
-        dataset.rename_key("observations", "observation")
+        dataset.rename_key_("observations", "observation")
         dataset.set("next", dataset.select())
-        dataset.rename_key("next_observations", ("next", "observation"))
-        dataset.rename_key("terminals", "terminated")
+        dataset.rename_key_("next_observations", ("next", "observation"))
+        dataset.rename_key_("terminals", "terminated")
         if "timeouts" in dataset.keys():
-            dataset.rename_key("timeouts", "truncated")
+            dataset.rename_key_("timeouts", "truncated")
         if self.use_truncated_as_done:
             done = dataset.get("terminated") | dataset.get("truncated", False)
             dataset.set("done", done)
         else:
             dataset.set("done", dataset.get("terminated"))
-        dataset.rename_key("rewards", "reward")
-        dataset.rename_key("actions", "action")
+        dataset.rename_key_("rewards", "reward")
+        dataset.rename_key_("actions", "action")
 
         # let's make sure that the dtypes match what's expected
         for key, spec in env.observation_spec.items(True, True):
@@ -201,14 +201,14 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset["next", key] = dataset["next", key].to(spec.dtype)
         dataset["action"] = dataset["action"].to(env.action_spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
-        dataset["done"] = dataset["done"].bool()
 
+        # format done etc
+        dataset["done"] = dataset["done"].bool()
         dataset["done"] = dataset["done"].unsqueeze(-1)
-        if "terminated" in dataset.keys():
-            dataset["terminated"] = dataset["terminated"].unsqueeze(-1)
+        dataset["terminated"] = dataset["terminated"].bool().unsqueeze(-1)
         if "truncated" in dataset.keys():
-            dataset["truncated"] = dataset["truncated"].unsqueeze(-1)
-        # dataset.rename_key("next_observations", "next/observation")
+            dataset["truncated"] = dataset["truncated"].bool().unsqueeze(-1)
+        # dataset.rename_key_("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(
             dataset.select("reward", "done", "terminated", "truncated", strict=False)
@@ -276,14 +276,13 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
             dataset[key] = dataset[key].to(spec.dtype)
         dataset["action"] = dataset["action"].to(env.action_spec.dtype)
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
-        dataset["done"] = dataset["done"].bool()
 
-        dataset["done"] = dataset["done"].unsqueeze(-1)
-        if "terminated" in dataset.keys():
-            dataset["terminated"] = dataset["terminated"].unsqueeze(-1)
+        # format done
+        dataset["done"] = dataset["done"].bool().unsqueeze(-1)
+        dataset["terminated"] = dataset["terminated"].bool().unsqueeze(-1)
         if "truncated" in dataset.keys():
-            dataset["truncated"] = dataset["truncated"].unsqueeze(-1)
-        # dataset.rename_key_("next_observations", "next/observation")
+            dataset["truncated"] = dataset["truncated"].bool().unsqueeze(-1)
+
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
             "next",

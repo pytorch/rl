@@ -1652,6 +1652,11 @@ class MultiKeyCountingEnv(EnvBase):
                     shape=(self.nested_dim_1, 1),
                     dtype=torch.bool,
                 ),
+                terminated=DiscreteTensorSpec(
+                    n=2,
+                    shape=(self.nested_dim_1, 1),
+                    dtype=torch.bool,
+                ),
                 shape=(self.nested_dim_1,),
             ),
             nested_2=CompositeSpec(
@@ -1660,9 +1665,19 @@ class MultiKeyCountingEnv(EnvBase):
                     shape=(self.nested_dim_2, 1),
                     dtype=torch.bool,
                 ),
+                terminated=DiscreteTensorSpec(
+                    n=2,
+                    shape=(self.nested_dim_2, 1),
+                    dtype=torch.bool,
+                ),
                 shape=(self.nested_dim_2,),
             ),
             done=DiscreteTensorSpec(
+                n=2,
+                shape=(1,),
+                dtype=torch.bool,
+            ),
+            terminated=DiscreteTensorSpec(
                 n=2,
                 shape=(1,),
                 dtype=torch.bool,
@@ -1729,6 +1744,7 @@ class MultiKeyCountingEnv(EnvBase):
         self.count += one_hot_action.to(torch.int)
         td["observation"] += expand_right(self.count, td["observation"].shape)
         done["done"] = self.count > self.max_steps
+        done["terminated"] = self.count > self.max_steps
 
         discrete_action = tensordict["nested_1"]["action"].unsqueeze(-1)
         reward["nested_1"]["gift"] += discrete_action.to(torch.float)
@@ -1737,6 +1753,7 @@ class MultiKeyCountingEnv(EnvBase):
             self.count_nested_1, td["nested_1", "observation"].shape
         )
         done["nested_1", "done"] = self.count_nested_1 > self.max_steps
+        done["nested_1", "terminated"] = self.count_nested_1 > self.max_steps
 
         continuous_action = tensordict["nested_2"]["azione"]
         reward["nested_2"]["reward"] += continuous_action.to(torch.float)
@@ -1745,6 +1762,7 @@ class MultiKeyCountingEnv(EnvBase):
             self.count_nested_2, td["nested_2", "observation"].shape
         )
         done["nested_2", "done"] = self.count_nested_2 > self.max_steps
+        done["nested_2", "terminated"] = self.count_nested_2 > self.max_steps
 
         td.update(done)
         td.update(reward)
