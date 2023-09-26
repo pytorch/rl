@@ -173,6 +173,12 @@ class GymLikeEnv(_EnvWrapper):
         elif truncated is None and done is None:
             done = terminated
         do_break = done.any() if not isinstance(done, bool) else done
+        if isinstance(done, bool):
+            done = [done]
+            if terminated is not None:
+                terminated = [terminated]
+            if truncated is not None:
+                truncated = [truncated]
         return (
             terminated,
             truncated,
@@ -214,7 +220,6 @@ class GymLikeEnv(_EnvWrapper):
             )
         # observations = self.observation_spec.encode(observations, ignore_device=True)
         return observations
-
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key)
         action_np = self.read_action(action)
@@ -256,7 +261,7 @@ class GymLikeEnv(_EnvWrapper):
         obs_dict["done"] = done
         obs_dict["terminated"] = terminated
 
-        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
+        tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size, device=self.device)
 
         if self.info_dict_reader and info is not None:
             if not isinstance(info, dict):
@@ -268,7 +273,7 @@ class GymLikeEnv(_EnvWrapper):
                     out = info_dict_reader(info, tensordict_out)
                     if out is not None:
                         tensordict_out = out
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        # tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(

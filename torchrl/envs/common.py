@@ -1317,7 +1317,6 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             next_tensordict.update(next_preset)
         tensordict.set("next", next_tensordict)
         return tensordict
-
     @classmethod
     def _complete_done(
         cls, done_spec: CompositeSpec, data: TensorDictBase
@@ -1330,44 +1329,51 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             leading_dim = data.shape[: -done_spec.ndim]
         else:
             leading_dim = data.shape
-        data_keys = set(data.keys())
-        done_spec_keys = set(done_spec.keys())
-        for key, item in list(done_spec.items()):
+        vals = {}
+        i = -1
+        for i, (key, item) in enumerate(done_spec.items()):
             val = data.get(key, None)
             if isinstance(item, CompositeSpec):
                 cls._complete_done(item, val)
                 continue
             shape = (*leading_dim, *item.shape)
-            if (
-                key == "done"
-                and val is not None
-                and "terminated" in done_spec_keys
-                and "terminated" not in data_keys
-            ):
-                if "truncated" in data.keys():
-                    raise RuntimeError(
-                        "Cannot infer the value of terminated when only done and truncated are present."
-                    )
-                data.set("terminated", data.get("done").reshape(shape))
-            elif (
-                key == "terminated"
-                and val is not None
-                and "done" in done_spec_keys
-                and "done" not in data_keys
-            ):
-                if "truncated" in data.keys():
-                    done = data.get("terminated") | data.get("truncated")
-                    data.set("done", done.reshape(shape))
-                else:
-                    data.set("done", data.get("terminated").reshape(shape))
-            elif val is None:
-                # we must keep this here: we only want to fill with 0s if we're sure
-                # done should not be copied to terminated or terminated to done
-                # in this case, just fill with 0s
-                data.set(key, item.zero(leading_dim))
-                continue
-            if val.shape != shape:
-                data.set(key, val.reshape(shape))
+            if val is not None:
+                if val.shape != shape:
+                    data.set(key, val.reshape(shape))
+                vals[key] = val
+        if len(vals) < i + 1:
+            # complete missing dones: we only want to do that if we don't have enough done values
+            data_keys = set(data.keys())
+            done_spec_keys = set(done_spec.keys())
+            for key, item in done_spec.items():
+                val = vals.get(key, None)
+                if (
+                    key == "done"
+                    and val is not None
+                    and "terminated" in done_spec_keys
+                    and "terminated" not in data_keys
+                ):
+                    if "truncated" in data_keys:
+                        raise RuntimeError(
+                            "Cannot infer the value of terminated when only done and truncated are present."
+                        )
+                    data.set("terminated", val)
+                elif (
+                    key == "terminated"
+                    and val is not None
+                    and "done" in done_spec_keys
+                    and "done" not in data_keys
+                ):
+                    if "truncated" in data_keys:
+                        done = val | data.get("truncated")
+                        data.set("done", done)
+                    else:
+                        data.set("done", val)
+                elif val is None:
+                    # we must keep this here: we only want to fill with 0s if we're sure
+                    # done should not be copied to terminated or terminated to done
+                    # in this case, just fill with 0s
+                    data.set(key, item.zero(leading_dim))
         return data
 
     def _step_proc_data(self, next_tensordict_out):
