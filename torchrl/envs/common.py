@@ -1319,7 +1319,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return tensordict
 
     @classmethod
-    def _complete_done(cls, done_spec: CompositeSpec, data: TensorDictBase) -> TensorDictBase:
+    def _complete_done(
+        cls, done_spec: CompositeSpec, data: TensorDictBase
+    ) -> TensorDictBase:
         """Completes the data structure at step time to put missing done keys."""
         # by default, if a done key is missing, it is assumed that it is False
         # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
@@ -1338,7 +1340,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             shape = (*leading_dim, *item.shape)
             if (
                 key == "done"
-                and "done" in data_keys
+                and val is not None
                 and "terminated" in done_spec_keys
                 and "terminated" not in data_keys
             ):
@@ -1346,30 +1348,23 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     raise RuntimeError(
                         "Cannot infer the value of terminated when only done and truncated are present."
                     )
-                data.set("terminated", data.get("done").clone().reshape(shape))
+                data.set("terminated", data.get("done").reshape(shape))
             elif (
                 key == "terminated"
-                and "terminated" in data_keys
+                and val is not None
                 and "done" in done_spec_keys
                 and "done" not in data_keys
             ):
                 if "truncated" in data.keys():
-                    data.set(
-                        "done",
-                        torch.reshape(
-                            data.get("terminated") | data.get("truncated"),
-                            shape
-                            )
-                        )
+                    done = data.get("terminated") | data.get("truncated")
+                    data.set("done", done.reshape(shape))
                 else:
-                    data.set(
-                        "done",
-                        data.get("terminated").clone().reshape(shape)
-                        )
+                    data.set("done", data.get("terminated").reshape(shape))
             elif val is None:
                 # in this case, just fill with 0s
                 data.set(key, item.zero(leading_dim))
-            elif val.shape != shape:
+                continue
+            if val.shape != shape:
                 data.set(key, val.reshape(shape))
         return data
 
@@ -1918,9 +1913,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         # instantiates reward_spec if needed
         _ = self.reward_spec
         reward_spec = self.output_spec["full_reward_spec"]
-        # instantiates done_spec if needed
-        _ = self.done_spec
-        done_spec = self.output_spec["full_done_spec"]
+        full_done_spec = self.output_spec["full_done_spec"]
 
         fake_obs = observation_spec.zero()
 
@@ -1933,7 +1926,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         fake_in_out = fake_input.update(fake_obs)
 
         fake_reward = reward_spec.zero()
-        fake_done = done_spec.zero()
+        fake_done = full_done_spec.zero()
 
         next_output = fake_obs.clone()
         next_output.update(fake_reward)

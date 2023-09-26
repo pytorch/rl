@@ -310,6 +310,7 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        # tensordict_out.set("terminated", done)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
@@ -333,7 +334,7 @@ class JumanjiWrapper(GymLikeEnv):
         # collect outputs
         state_dict = self.read_state(state)
         obs_dict = self.read_obs(timestep.observation)
-        done = self.done_spec.zero()
+        done_td = self.full_done_spec.zero()
 
         # build results
         tensordict_out = TensorDict(
@@ -341,7 +342,8 @@ class JumanjiWrapper(GymLikeEnv):
             batch_size=self.batch_size,
             device=self.device,
         )
-        tensordict_out.set("done", done)
+        tensordict_out.update(done_td)
+        print("done_td", done_td)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
