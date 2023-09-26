@@ -340,7 +340,7 @@ class ReinforceLoss(LossModule):
             self._value_estimator = TDLambdaEstimator(value_network=self.critic, **hp)
         elif value_type == ValueEstimators.VTrace:
             self._value_estimator = VTrace(
-                value_network=self.critic, actor_network=self.actor, **hp
+                value_network=self.critic, actor_network=self.actor_network, **hp
             )
         else:
             raise NotImplementedError(f"Unknown value type {value_type}")
