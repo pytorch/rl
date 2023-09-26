@@ -1160,10 +1160,12 @@ class NestedCountingEnv(CountingEnv):
             done_spec = self.full_done_spec.unsqueeze(-1).expand(
                 *self.batch_size, self.nested_dim
             )
-            self.done_spec = CompositeSpec(
+            self.output_spec.unlock_()
+            self.output_spec["full_done_spec"] = CompositeSpec(
                 {"data": done_spec},
                 shape=self.batch_size,
             )
+            self.output_spec.lock_()
 
     def _reset(self, tensordict):
         if (
@@ -1176,6 +1178,8 @@ class NestedCountingEnv(CountingEnv):
         td = super()._reset(tensordict)
         if self.nested_done:
             for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    done_key = (done_key,)
                 td[done_key] = (
                     td[done_key[-1]]
                     .unsqueeze(-1)
@@ -1210,6 +1214,8 @@ class NestedCountingEnv(CountingEnv):
         td = next_td
         if self.nested_done:
             for done_key in self.done_keys:
+                if isinstance(done_key, str):
+                    done_key = (done_key,)
                 td[done_key] = (
                     td[done_key[-1]]
                     .unsqueeze(-1)

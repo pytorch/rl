@@ -1397,7 +1397,10 @@ also that the state dict is synchronised across processes if needed."""
                 continue
 
         for proc in self.procs:
-            proc.join()
+            exitcode = proc.join(1.0)
+            if exitcode is None:
+                print("Terminating")
+                proc.terminate()
         self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()

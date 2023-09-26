@@ -14,8 +14,9 @@ from _utils_internal import (
     check_rollout_consistency_multikey_env,
     decorate_thread_sub_func,
     generate_seeds,
+    get_default_devices,
     PENDULUM_VERSIONED,
-    PONG_VERSIONED,get_default_devices,
+    PONG_VERSIONED,
 )
 from mocking_classes import (
     ContinuousActionVecMockEnv,
@@ -1057,9 +1058,9 @@ def test_collector_output_keys(
 
     from torchrl.envs.libs.gym import gym_backend
 
-    if "gymnasium" in str(gym_backend()) or gym_backend().__version__ >= version.parse(
-        "0.26"
-    ):
+    if "gymnasium" in str(gym_backend()) or version.parse(
+        gym_backend().__version__
+    ) >= version.parse("0.26.0"):
         keys.add(("next", "terminated"))
         keys.add("terminated")
         keys.add(("next", "truncated"))
@@ -1390,6 +1391,8 @@ def test_reset_heterogeneous_envs():
     )
     for data in collector:  # noqa: B007
         break
+    collector.shutdown()
+    del collector
     assert (
         data[0]["next", "truncated"].squeeze()
         == torch.tensor([False, True]).repeat(250)[:500]
@@ -1398,8 +1401,6 @@ def test_reset_heterogeneous_envs():
         data[1]["next", "truncated"].squeeze()
         == torch.tensor([False, False, True]).repeat(168)[:500]
     ).all()
-    collector.shutdown()
-    del collector
 
 
 class TestNestedEnvsCollector:
@@ -1414,7 +1415,7 @@ class TestNestedEnvsCollector:
             policy=policy,
             frames_per_batch=20,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1427,13 +1428,14 @@ class TestNestedEnvsCollector:
         with pytest.raises(AssertionError):
             assert_allclose_td(c1, c2)
         ccollector.shutdown()
+        del ccollector
 
         ccollector = MultiSyncDataCollector(
             create_env_fn=[env_fn],
             policy=policy,
             frames_per_batch=20,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
         for i, d in enumerate(ccollector):
             if i == 0:
@@ -1473,7 +1475,7 @@ class TestNestedEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
 
         for _td in ccollector:
@@ -1495,7 +1497,7 @@ class TestNestedEnvsCollector:
             policy=policy,
             frames_per_batch=frames_per_batch,
             total_frames=100,
-            device="cpu",
+            device=get_default_devices()[0],
         )
 
         for _td in ccollector:

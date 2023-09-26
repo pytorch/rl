@@ -803,9 +803,10 @@ def test_actorcritic(device):
 @pytest.mark.skipif(not _has_transformers, reason="missing dependencies")
 @pytest.mark.parametrize("device", get_default_devices())
 def test_lmhead_actorvalueoperator(device):
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, GPT2Config
 
-    base_model = AutoModelForCausalLM.from_pretrained("gpt2", return_dict=False)
+    config = GPT2Config(return_dict=False)
+    base_model = AutoModelForCausalLM.from_config(config).eval()
     aco = LMHeadActorValueOperator(base_model).to(device)
 
     # check common
