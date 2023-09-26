@@ -25,8 +25,6 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.utils import (
-    _complete_done_at_reset,
-    _complete_done_at_step,
     _replace_last,
     get_available_libraries,
     step_mdp,
@@ -1320,6 +1318,61 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict.set("next", next_tensordict)
         return tensordict
 
+    @classmethod
+    def _complete_done(cls, done_spec: CompositeSpec, data: TensorDictBase) -> TensorDictBase:
+        """Completes the data structure at step time to put missing done keys."""
+        # by default, if a done key is missing, it is assumed that it is False
+        # except in 2 cases: (1) there is a "done" but no "terminated" or (2)
+        # there is a "terminated" but no "done".
+        if done_spec.ndim:
+            leading_dim = data.shape[: -done_spec.ndim]
+        else:
+            leading_dim = data.shape
+        data_keys = set(data.keys())
+        done_spec_keys = set(done_spec.keys())
+        for key, item in list(done_spec.items()):
+            val = data.get(key, None)
+            if isinstance(item, CompositeSpec):
+                cls._complete_done(item, val)
+                continue
+            shape = (*leading_dim, *item.shape)
+            if (
+                key == "done"
+                and "done" in data_keys
+                and "terminated" in done_spec_keys
+                and "terminated" not in data_keys
+            ):
+                if "truncated" in data.keys():
+                    raise RuntimeError(
+                        "Cannot infer the value of terminated when only done and truncated are present."
+                    )
+                data.set("terminated", data.get("done").clone().reshape(shape))
+            elif (
+                key == "terminated"
+                and "terminated" in data_keys
+                and "done" in done_spec_keys
+                and "done" not in data_keys
+            ):
+                if "truncated" in data.keys():
+                    data.set(
+                        "done",
+                        torch.reshape(
+                            data.get("terminated") | data.get("truncated"),
+                            shape
+                            )
+                        )
+                else:
+                    data.set(
+                        "done",
+                        data.get("terminated").clone().reshape(shape)
+                        )
+            elif val is None:
+                # in this case, just fill with 0s
+                data.set(key, item.zero(leading_dim))
+            elif val.shape != shape:
+                data.set(key, val.reshape(shape))
+        return data
+
     def _step_proc_data(self, next_tensordict_out):
         # TODO: Refactor this using reward spec
         # unsqueeze rewards if needed
@@ -1345,7 +1398,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 reward = reward.view(expected_reward_shape)
                 next_tensordict_out.set(reward_key, reward)
 
-        _complete_done_at_step(self.full_done_spec, next_tensordict_out)
+        self._complete_done(self.full_done_spec, next_tensordict_out)
 
         if self.run_type_checks:
             for key, spec in self.observation_spec.items():
@@ -1433,7 +1486,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             raise RuntimeError(
                 f"env._reset returned an object of type {type(tensordict_reset)} but a TensorDict was expected."
             )
-        _complete_done_at_reset(self.full_done_spec, tensordict_reset)
+
+        self._complete_done(self.full_done_spec, tensordict_reset)
 
         if not self._allow_done_after_reset:
             # we iterate over (reset_key, (done_key, truncated_key)) and check that all

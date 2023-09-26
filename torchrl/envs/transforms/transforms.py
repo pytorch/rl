@@ -40,8 +40,7 @@ from torchrl.data.tensor_specs import (
 from torchrl.envs.common import _EnvPostInit, EnvBase, make_tensordict
 from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.utils import check_finite
-from torchrl.envs.utils import _sort_keys, step_mdp, _complete_done_at_reset, \
-    _complete_done_at_step
+from torchrl.envs.utils import _sort_keys, step_mdp
 from torchrl.objectives.value.functional import reward2go
 
 try:
@@ -654,7 +653,7 @@ but got an object of type {type(transform)}."""
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
         next_tensordict = self.base_env._step(tensordict_in)
-        _complete_done_at_step(self.full_done_spec, next_tensordict)
+        self.base_env._complete_done(self.base_env.full_done_spec, next_tensordict)
         # we want the input entries to remain unchanged
         next_tensordict = self.transform._step(tensordict, next_tensordict)
         return next_tensordict
@@ -677,8 +676,7 @@ but got an object of type {type(transform)}."""
                 *self.reset_keys, *self.state_spec.keys(True, True), strict=False
             )
         out_tensordict = self.base_env._reset(tensordict=tensordict, **kwargs)
-        # TODO: figure out how to call this only once
-        _complete_done_at_reset(self.full_done_spec, out_tensordict)
+        self.base_env._complete_done(self.base_env.full_done_spec, out_tensordict)
         if tensordict is not None:
             # the transform may need to read previous info during reset.
             # For instance, we may need to pass the step_count for partial resets.
@@ -692,6 +690,10 @@ but got an object of type {type(transform)}."""
         out_tensordict = self.transform._call(out_tensordict)
         self.set_missing_tolerance(mt_mode)
         return out_tensordict
+
+    def _complete_done(cls, done_spec: CompositeSpec, data: TensorDictBase) -> TensorDictBase:
+        # This step has already been completed. We assume the transform module do their job correctly.
+        return data
 
     def state_dict(self, *args, **kwargs) -> OrderedDict:
         state_dict = self.transform.state_dict(*args, **kwargs)
@@ -4475,10 +4477,10 @@ class StepCounter(Transform):
                     done = self.parent.output_spec["full_done_spec", entry_name].zero()
                 reset = torch.ones_like(done)
             if step_count is None:
-                step_count = torch.zeros_like(reset, dtype=torch.int64)
+                step_count = self.container.observation_spec[step_count_key].zero()
 
             # zero the step count if reset is needed
-            step_count = torch.where(~reset, step_count, 0)
+            step_count = torch.where(~expand_as_right(reset, step_count), step_count, 0)
             tensordict.set(step_count_key, step_count)
             if self.max_steps is not None:
                 truncated = step_count >= self.max_steps

@@ -1521,6 +1521,7 @@ class TestStepCounter(TransformBase):
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
+        td.set("step_count", torch.zeros(*batch, 1, dtype=torch.int))
         step_counter[0]._step_count_keys = ["step_count"]
         step_counter[0]._terminated_keys = ["completed"]
         step_counter[0]._truncated_keys = ["truncated"]
@@ -1547,8 +1548,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset.unsqueeze(-1)) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset.unsqueeze(-1)) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
@@ -1579,6 +1580,7 @@ class TestStepCounter(TransformBase):
             td.set("_reset", _reset)
             td.set("done", _reset)
             td.set(("next", "done"), done)
+        td.set("step_count", torch.zeros(*batch, 1, dtype=torch.int))
         step_counter._step_count_keys = ["step_count"]
         step_counter._done_keys = ["done"]
         step_counter._truncated_keys = ["truncated"]
@@ -1605,8 +1607,8 @@ class TestStepCounter(TransformBase):
             assert torch.all(td.get("truncated"))
         td = step_counter.reset(td)
         if reset_workers:
-            assert torch.all(torch.masked_select(td.get("step_count"), _reset) == 0)
-            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset) == i)
+            assert torch.all(torch.masked_select(td.get("step_count"), _reset.unsqueeze(-1)) == 0)
+            assert torch.all(torch.masked_select(td.get("step_count"), ~_reset.unsqueeze(-1)) == i)
         else:
             assert torch.all(td.get("step_count") == 0)
 
