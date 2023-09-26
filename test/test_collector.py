@@ -1778,6 +1778,7 @@ class TestUpdateParams:
             col.shutdown()
             del col
 
+
 class TestBringReset:
     def test_bring_reset_to_root(self):
         # simple

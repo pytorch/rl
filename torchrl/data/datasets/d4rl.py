@@ -188,9 +188,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if "timeouts" in dataset.keys():
             dataset.rename_key("timeouts", "truncated")
         if self.use_truncated_as_done:
-            done = dataset.get("terminated") | dataset.get(
-                "truncated", False
-            )
+            done = dataset.get("terminated") | dataset.get("truncated", False)
             dataset.set("done", done)
         else:
             dataset.set("done", dataset.get("terminated"))
@@ -261,8 +259,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if self.use_truncated_as_done:
             dataset.set(
                 "done",
-                dataset.get("terminated")
-                | dataset.get("truncated", False),
+                dataset.get("terminated") | dataset.get("truncated", False),
             )
         else:
             dataset.set("done", dataset.get("terminated"))

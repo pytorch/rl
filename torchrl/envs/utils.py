@@ -735,8 +735,7 @@ def terminated_or_truncated(
     key: str = "_reset",
     write_full_false: bool = False,
 ) -> bool:
-    """Reads the done / terminated / truncated keys within a tensordict, and
-    writes a new tensor where the values of both signals are aggregated.
+    """Reads the done / terminated / truncated keys within a tensordict, and writes a new tensor where the values of both signals are aggregated.
 
     The modification occurs in-place within the TensorDict instance provided.
     This function can be used to compute the `"_reset"` signals in batched

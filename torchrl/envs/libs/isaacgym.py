@@ -123,7 +123,7 @@ class IsaacGymWrapper(GymWrapper):
             truncated = truncated.bool()
         if done is not None:
             done = done.bool()
-        return completed, truncated, completed, completed.any()
+        return terminated, truncated, done, done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.

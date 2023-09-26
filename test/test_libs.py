@@ -1794,7 +1794,9 @@ class TestD4RL:
         )
         keys = set(data_from_env._storage._storage.keys(True, True))
         keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert data_true._storage._storage.shape == data_from_env._storage._storage.shape
+        assert (
+            data_true._storage._storage.shape == data_from_env._storage._storage.shape
+        )
         assert_allclose_td(
             data_true._storage._storage.select(*keys),
             data_from_env._storage._storage.select(*keys),

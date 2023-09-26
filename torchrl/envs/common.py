@@ -1317,6 +1317,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             next_tensordict.update(next_preset)
         tensordict.set("next", next_tensordict)
         return tensordict
+
     @classmethod
     def _complete_done(
         cls, done_spec: CompositeSpec, data: TensorDictBase
@@ -1331,7 +1332,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             leading_dim = data.shape
         vals = {}
         i = -1
-        for i, (key, item) in enumerate(done_spec.items()):
+        for i, (key, item) in enumerate(done_spec.items()):  # noqa: B007
             val = data.get(key, None)
             if isinstance(item, CompositeSpec):
                 cls._complete_done(item, val)

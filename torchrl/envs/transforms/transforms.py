@@ -648,6 +648,7 @@ but got an object of type {type(transform)}."""
         else:
             input_spec = self.__dict__.get("_input_spec", None)
         return input_spec
+
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
         tensordict_in = self.transform.inv(tensordict)
