@@ -206,6 +206,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["done"] = dataset["done"].bool()
 
         dataset["done"] = dataset["done"].unsqueeze(-1)
+        if "terminated" in dataset.keys():
+            dataset["terminated"] = dataset["terminated"].unsqueeze(-1)
+        if "truncated" in dataset.keys():
+            dataset["truncated"] = dataset["truncated"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset["next"].update(
@@ -278,6 +282,10 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["done"] = dataset["done"].bool()
 
         dataset["done"] = dataset["done"].unsqueeze(-1)
+        if "terminated" in dataset.keys():
+            dataset["terminated"] = dataset["terminated"].unsqueeze(-1)
+        if "truncated" in dataset.keys():
+            dataset["truncated"] = dataset["truncated"].unsqueeze(-1)
         # dataset.rename_key("next_observations", "next/observation")
         dataset["reward"] = dataset["reward"].unsqueeze(-1)
         dataset = dataset[:-1].set(
