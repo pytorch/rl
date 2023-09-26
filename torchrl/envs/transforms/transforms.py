@@ -5807,7 +5807,7 @@ class VecGymEnvTransform(Transform):
         if keys is None:
             keys = self.parent.done_keys
             self._done_keys = keys
-            expected_done_keys = {"done", "truncated", "stop", "terminated"}
+            expected_done_keys = {"done", "truncated", "terminated"}
             # put this check for now. We can consider relaxing that later
             # and allow nested values, though they will still need to be unique.
             for done_key in keys:
