@@ -106,7 +106,7 @@ DEFAULT_Y = 1.0
 # * the environment specs.
 #
 # Let us first describe the problem at hand: we would like to model a simple
-# pendulum, over which we can control the torque applied on its fixed point.
+# pendulum, over which we can control the togque applied on its fixed point.
 # Our goal is to place the pendulum in upward position (angular position at 0
 # by convention) and having it standing still in that position.
 # To design our dynamic system, we need to define two equations: the motion
