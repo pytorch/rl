@@ -57,7 +57,7 @@ class _RoboHiveBuild(_AsyncMeta):
         return instance
 
 
-class RoboHiveEnv(GymEnv, _RoboHiveBuild):
+class RoboHiveEnv(GymEnv, metaclass=_RoboHiveBuild):
     """A wrapper for RoboHive gym environments.
 
     RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.

@@ -1773,7 +1773,7 @@ class TestD4RL:
     def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
 
         with pytest.warns(
-            UserWarning, match="This is a warning message"
+            UserWarning, match="Using terminate_on_end=True with from_env=False"
         ) if use_truncated_as_done else nullcontext():
             data_true = D4RLExperienceReplay(
                 task,
@@ -1798,15 +1798,19 @@ class TestD4RL:
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,
         )
-        keys = set(data_from_env._storage._storage.keys(True, True))
-        keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert (
-            data_true._storage._storage.shape == data_from_env._storage._storage.shape
-        )
-        assert_allclose_td(
-            data_true._storage._storage.select(*keys),
-            data_from_env._storage._storage.select(*keys),
-        )
+        if not use_truncated_as_done:
+            keys = set(data_from_env._storage._storage.keys(True, True))
+            keys = keys.intersection(data_true._storage._storage.keys(True, True))
+            assert (
+                data_true._storage._storage.shape == data_from_env._storage._storage.shape
+            )
+            assert_allclose_td(
+                data_true._storage._storage.select(*keys),
+                data_from_env._storage._storage.select(*keys),
+            )
+        else:
+            assert "truncated" in data_from_env.keys()
+            assert "truncated" not in data_true.keys()
 
     @pytest.mark.parametrize(
         "task",
