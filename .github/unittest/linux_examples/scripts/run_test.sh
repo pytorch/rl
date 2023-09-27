@@ -31,19 +31,19 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_te
 # ==================================================================================== #
 # ================================ gym 0.23 ========================================== #
 
-## With batched environments
-#python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
-#  optim.pretrain_gradient_steps=55 \
-#  optim.updates_per_episode=3 \
-#  optim.warmup_steps=10 \
-#  optim.device=cuda:0 \
-#  logger.backend=
-#python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
-#  optim.pretrain_gradient_steps=55 \
-#  optim.updates_per_episode=3 \
-#  optim.warmup_steps=10 \
-#  optim.device=cuda:0 \
-#  logger.backend=
+# With batched environments
+python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/dt.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10 \
+  optim.device=cuda:0 \
+  logger.backend=
+python .github/unittest/helpers/coverage_run_parallel.py examples/decision_transformer/online_dt.py \
+  optim.pretrain_gradient_steps=55 \
+  optim.updates_per_episode=3 \
+  optim.warmup_steps=10 \
+  optim.device=cuda:0 \
+  logger.backend=
 
 # ==================================================================================== #
 # ================================ Gymnasium ========================================= #
