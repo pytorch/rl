@@ -25,6 +25,7 @@ from .libs import (
     PettingZooEnv,
     PettingZooWrapper,
     RoboHiveEnv,
+    set_gym_backend,
     SMACv2Env,
     SMACv2Wrapper,
     VmasEnv,
