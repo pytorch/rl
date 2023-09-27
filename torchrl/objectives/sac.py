@@ -536,7 +536,7 @@ class SACLoss(LossModule):
         loss_actor, metadata_actor = self._actor_loss(tensordict_reshape)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
         tensordict_reshape.set(self.tensor_keys.priority, value_metadata["td_error"])
-        if (loss_actor.shape != loss_qvalue.sum(0).shape) or (
+        if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
         ):
             raise RuntimeError(
@@ -547,8 +547,7 @@ class SACLoss(LossModule):
         entropy = -metadata_actor["log_prob"].mean()
         out = {
             "loss_actor": loss_actor.mean(),
-            "loss_qvalue1": loss_qvalue[0].mean(),
-            "loss_qvalue2": loss_qvalue[1].mean(),
+            "loss_qvalue": loss_qvalue.mean(),
             "loss_alpha": loss_alpha.mean(),
             "alpha": self._alpha,
             "entropy": entropy,
@@ -703,7 +702,7 @@ class SACLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        )
+        ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 

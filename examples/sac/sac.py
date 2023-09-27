@@ -75,8 +75,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create optimizers
     (
         optimizer_actor,
-        optimizer_critic1,
-        optimizer_critic2,
+        optimizer_critic,
         optimizer_alpha,
     ) = make_sac_optimizer(cfg, loss_module)
 
@@ -128,8 +127,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 loss_td = loss_module(sampled_tensordict)
 
                 actor_loss = loss_td["loss_actor"]
-                q1_loss = loss_td["loss_qvalue1"]
-                q2_loss = loss_td["loss_qvalue2"]
+                q_loss = loss_td["loss_qvalue"]
                 alpha_loss = loss_td["loss_alpha"]
 
                 # Update actor
@@ -138,13 +136,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optimizer_actor.step()
 
                 # Update critic
-                optimizer_critic1.zero_grad()
-                q1_loss.backward(retain_graph=True)
-                optimizer_critic1.step()
-
-                optimizer_critic2.zero_grad()
-                q2_loss.backward()
-                optimizer_critic2.step()
+                optimizer_critic.zero_grad()
+                q_loss.backward()
+                optimizer_critic.step()
 
                 # Update alpha
                 optimizer_alpha.zero_grad()
@@ -152,7 +146,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 optimizer_alpha.step()
 
                 losses[i] = loss_td.select(
-                    "loss_actor", "loss_qvalue1", "loss_qvalue2", "loss_alpha"
+                    "loss_actor", "loss_qvalue", "loss_alpha"
                 ).detach()
 
                 # Update qnet_target params
@@ -179,8 +173,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 episode_length
             )
         if collected_frames >= init_random_frames:
-            metrics_to_log["train/q1_loss"] = losses.get("loss_qvalue1").mean().item()
-            metrics_to_log["train/q2_loss"] = losses.get("loss_qvalue2").mean().item()
+            metrics_to_log["train/q_loss"] = losses.get("loss_qvalue").mean().item()
             metrics_to_log["train/actor_loss"] = losses.get("loss_actor").mean().item()
             metrics_to_log["train/alpha_loss"] = losses.get("loss_alpha").mean().item()
             metrics_to_log["train/alpha"] = loss_td["alpha"].item()
