@@ -389,17 +389,10 @@ def _is_from_pixels(env):
 class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
-        gym_backend = instance.get_library_name(instance._env)
-        if gym_backend == "gym":  # check gym against gymnasium
-            import gym
 
-            if version.parse(gym.__version__) < version.parse("0.26.0"):
-                # Add a truncated info reader
-                instance.set_info_dict_reader(
-                    truncated_info_reader(instance.output_spec)
-                )
         # before gym 0.22, there was no final_observation
         if instance._is_batched:
+            gym_backend = instance.get_library_name(instance._env)
             from torchrl.envs.transforms.transforms import (
                 TransformedEnv,
                 VecGymEnvTransform,
@@ -757,6 +750,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
                 "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
             },
             shape=self.batch_size,
         )
@@ -816,8 +815,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # The variable naming follows torchrl's convention here.
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
-        terminated = done
-        truncated = None
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(truncated, bool):
+            truncated = np.array(truncated)
+        terminated = done and not truncated
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
@@ -826,8 +827,10 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # The variable naming follows torchrl's convention here.
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(truncated, bool):
+            truncated = np.array(truncated)
         terminated = done
-        truncated = None
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)
@@ -1146,47 +1149,6 @@ class terminal_obs_reader(BaseInfoDictReader):
                 for i, obs in enumerate(terminal_obs):
                     self._read_obs(obs, key[-1], final_obs, index=i)
             tensordict.set(key, final_obs)
-        return tensordict
-
-
-class truncated_info_reader(BaseInfoDictReader):
-    """A ''truncated'' info reader.
-
-    Gym versions < 0.26 were writing the truncation key in the info dict when a TimeLimit
-    wrapper was used.
-    This info reader writes this entry in the output tensordict.
-
-    """
-
-    def __init__(self, output_spec: CompositeSpec):
-        locked = output_spec.locked
-        output_spec.unlock_()
-        output_spec["full_done_spec", "truncated"] = output_spec[
-            "full_done_spec", "done"
-        ].clone()
-        if locked:
-            output_spec.lock_()
-        # since we modify the done spec, the info spec must be empty
-        self._info_spec = CompositeSpec(
-            shape=output_spec.shape, device=output_spec.device
-        )
-
-    @property
-    def info_spec(self):
-        return self._info_spec
-
-    def __call__(self, info_dict, tensordict):
-        truncated = info_dict.get(
-            "TimeLimit.truncated",
-            torch.zeros(
-                (*tensordict.batch_size, 1), device=tensordict.device, dtype=torch.bool
-            ),
-        )
-        if not isinstance(truncated, torch.Tensor):
-            truncated = torch.tensor(
-                truncated, dtype=torch.bool, device=tensordict.device
-            ).reshape((*tensordict.shape, 1))
-        tensordict.set("truncated", truncated)
         return tensordict
 
 

@@ -51,7 +51,7 @@ do
 
   echo "Testing gym version: ${GYM_VERSION}"
   # handling https://github.com/openai/gym/issues/3202
-  pip install setuptools == 66
+  pip install setuptools==66
   pip3 install gym==$GYM_VERSION
   $DIR/run_test.sh
 
