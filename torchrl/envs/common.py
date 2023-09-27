@@ -693,15 +693,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         By default, there will only be one key named "reward".
         """
-        result = self.__dict__.get("_reward_keys", None)
-        if result is not None:
-            return result
-        # caching this is risky, because the full_reward_spec can be modified by
-        # transforms without acknowledging the output_spec or the env.
-        # TransformedEnv will erase this value when computing a new output_spec though
-        # so we should be fine.
         result = list(self.full_reward_spec.keys(True, True))
-        self.__dict__["_reward_keys"] = result
         return result
 
     @property
@@ -904,15 +896,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         By default, there will only be one key named "done".
         """
-        result = self.__dict__.get("_done_keys", None)
-        if result is not None:
-            return result
-        # caching this is risky, because the full_done_spec can be modified by
-        # transforms without acknowledging the output_spec or the env.
-        # TransformedEnv will erase this value when computing a new output_spec though
-        # so we should be fine.
         result = list(self.full_done_spec.keys(True, True))
-        self.__dict__["_done_keys"] = result
         return result
 
     @property

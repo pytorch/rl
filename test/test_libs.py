@@ -1855,6 +1855,9 @@ class TestD4RL:
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
+            if "truncated" in key:
+                # truncated is missing from static datasets
+                continue
             sim = rollout[key]
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
