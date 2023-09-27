@@ -496,7 +496,7 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" not in env.done_keys
-        assert "terminated" not in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -562,7 +562,7 @@ class TestGym:
         penv = ParallelEnv(2, make_fun)
         rollout = penv.rollout(2)
         if old_api:
-            assert "terminated" not in rollout.keys()
+            assert "terminated" in rollout.keys()
             assert "truncated" not in rollout.keys()
         else:
             assert "terminated" in rollout.keys()
