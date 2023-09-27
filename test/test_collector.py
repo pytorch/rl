@@ -34,7 +34,6 @@ from mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from packaging import version
 from tensordict.nn import TensorDictModule
 from tensordict.tensordict import assert_allclose_td, TensorDict
 
