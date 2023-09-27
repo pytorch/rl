@@ -528,9 +528,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
+    @implement_for("gym", None, "0.27")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
+
+    @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
+    def _get_batch_size(self, env):  # noqa: F811
+        if hasattr(env, "num_envs"):
+            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
