@@ -252,7 +252,6 @@ def split_critic_params(critic_params):
 
 def make_sac_optimizer(cfg, loss_module):
     critic_params = list(loss_module.qvalue_network_params.flatten_keys().values())
-    critic1_params, critic2_params = split_critic_params(critic_params)
     actor_params = list(loss_module.actor_network_params.flatten_keys().values())
 
     optimizer_actor = optim.Adam(
@@ -261,23 +260,17 @@ def make_sac_optimizer(cfg, loss_module):
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
     )
-    optimizer_critic1 = optim.Adam(
-        critic1_params,
-        lr=cfg.optim.lr,
-        weight_decay=cfg.optim.weight_decay,
-        eps=cfg.optim.adam_eps,
-    )
-    optimizer_critic2 = optim.Adam(
-        critic2_params,
+    optimizer_critic = optim.Adam(
+        critic_params,
         lr=cfg.optim.lr,
         weight_decay=cfg.optim.weight_decay,
         eps=cfg.optim.adam_eps,
     )
     optimizer_alpha = optim.Adam(
         [loss_module.log_alpha],
-        lr=cfg.optim.lr,
+        lr=3.0e-4,
     )
-    return optimizer_actor, optimizer_critic1, optimizer_critic2, optimizer_alpha
+    return optimizer_actor, optimizer_critic, optimizer_alpha
 
 
 # ====================================================================

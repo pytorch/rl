@@ -750,7 +750,7 @@ class SACLoss(LossModule):
 
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
-            alpha_loss = -self.log_alpha * (log_prob + self.target_entropy)
+            alpha_loss = -self.log_alpha.exp() * (log_prob + self.target_entropy)
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)

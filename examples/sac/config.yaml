@@ -5,7 +5,7 @@ env:
   exp_name: "Hopper-SAC"
   library: gym
   frame_skip: 1
-  max_episode_steps: 1001
+  max_episode_steps: 1000
   seed: 1
 
 # collector
@@ -17,7 +17,7 @@ collector:
   init_env_steps: 1000
   collector_device: cpu
   env_per_collector: 1
-  reset_at_each_iter: true
+  reset_at_each_iter: False
 
 # replay buffer
 replay_buffer:
