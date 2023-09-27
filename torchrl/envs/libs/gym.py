@@ -816,12 +816,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
         truncated = info.pop("TimeLimit.truncated", False)
-        if not isinstance(done, bool):
+        if not isinstance(done, bool) and isinstance(truncated, bool):
             # if bool is an array, make truncated an array
-            if isinstance(truncated, bool):
-                truncated = [truncated] * len(bool)
+            truncated = [truncated] * len(done)
             truncated = np.array(truncated)
         terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
@@ -831,12 +834,15 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
         truncated = info.pop("TimeLimit.truncated", False)
-        if not isinstance(done, bool):
+        if not isinstance(done, bool) and isinstance(truncated, bool):
             # if bool is an array, make truncated an array
-            if isinstance(truncated, bool):
-                truncated = [truncated] * len(bool)
+            truncated = [truncated] * len(done)
             truncated = np.array(truncated)
         terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
         return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)

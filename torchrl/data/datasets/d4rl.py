@@ -209,8 +209,7 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         dataset["reward"] = dataset["reward"].to(env.reward_spec.dtype)
 
         # format done etc
-        dataset["done"] = dataset["done"].bool()
-        dataset["done"] = dataset["done"].unsqueeze(-1)
+        dataset["done"] = dataset["done"].bool().unsqueeze(-1)
         dataset["terminated"] = dataset["terminated"].bool().unsqueeze(-1)
         if "truncated" in dataset.keys():
             dataset["truncated"] = dataset["truncated"].bool().unsqueeze(-1)
