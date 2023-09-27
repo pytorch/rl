@@ -1809,8 +1809,12 @@ class TestD4RL:
                 data_from_env._storage._storage.select(*keys),
             )
         else:
-            assert "truncated" in data_from_env.keys()
-            assert "truncated" not in data_true.keys()
+            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = [name[-1] if isinstance(name, tuple) else name for name in leaf_names]
+            assert "truncated" in leaf_names
+            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = [name[-1] if isinstance(name, tuple) else name for name in leaf_names]
+            assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize(
         "task",
