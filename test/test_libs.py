@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+from contextlib import nullcontext
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
@@ -1768,18 +1769,23 @@ class TestVmas:
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("use_truncated_as_done", [True, False])
-    def test_terminate_on_end(self, task, use_truncated_as_done):
-        data_true = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=True,
-            batch_size=2,
-            use_truncated_as_done=use_truncated_as_done,
-        )
+    @pytest.mark.parametrize("split_trajs", [True, False])
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+
+        with pytest.warns(
+            UserWarning, match="This is a warning message"
+        ) if use_truncated_as_done else nullcontext():
+            data_true = D4RLExperienceReplay(
+                task,
+                split_trajs=split_trajs,
+                from_env=False,
+                terminate_on_end=True,
+                batch_size=2,
+                use_truncated_as_done=use_truncated_as_done,
+            )
         _ = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=False,
             terminate_on_end=False,
             batch_size=2,
@@ -1787,7 +1793,7 @@ class TestD4RL:
         )
         data_from_env = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=True,
             batch_size=2,
             use_truncated_as_done=use_truncated_as_done,

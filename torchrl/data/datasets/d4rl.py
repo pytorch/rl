@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import warnings
 from typing import Callable, Optional
 
 import numpy as np
@@ -130,6 +130,12 @@ class D4RLExperienceReplay(TensorDictReplayBuffer):
         if from_env:
             dataset = self._get_dataset_from_env(name, env_kwargs)
         else:
+            if self.use_truncated_as_done:
+                warnings.warn(
+                    "Using terminate_on_end=True with from_env=False "
+                    "may not have the intended effect as the timeouts (truncation) "
+                    "can be absent from the static dataset."
+                )
             dataset = self._get_dataset_direct(name, env_kwargs)
         # Fill unknown next states with 0
         dataset["next", "observation"][dataset["next", "done"].squeeze()] = 0

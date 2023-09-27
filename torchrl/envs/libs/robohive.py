@@ -54,9 +54,10 @@ class _RoboHiveBuild(_AsyncMeta):
     def __call__(self, *args, **kwargs):
         instance: RoboHiveEnv = super().__call__(*args, **kwargs)
         instance._refine_specs()
+        return instance
 
 
-class RoboHiveEnv(GymEnv):
+class RoboHiveEnv(GymEnv, _RoboHiveBuild):
     """A wrapper for RoboHive gym environments.
 
     RoboHive is a collection of environments/tasks simulated with the MuJoCo physics engine exposed using the OpenAI-Gym API.

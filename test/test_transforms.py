@@ -1192,7 +1192,7 @@ class TestR3M(TransformBase):
         transformed_env = TransformedEnv(base_env, r3m)
         td = transformed_env.reset()
         assert td.device == device
-        expected_keys = {"vec", "done", "pixels_orig"}
+        expected_keys = {"vec", "done", "pixels_orig", "terminated"}
         if tensor_pixels_key:
             expected_keys.add(tensor_pixels_key[0])
         assert set(td.keys()) == expected_keys, set(td.keys()) - expected_keys
@@ -1252,12 +1252,12 @@ class TestR3M(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         if stack_images:
-            expected_keys = {"pixels_orig", "done", "vec"}
+            expected_keys = {"pixels_orig", "done", "vec", "terminated"}
             # assert td["vec"].shape[0] == 2
             assert td["vec"].ndimension() == 1 + parallel
             assert set(td.keys()) == expected_keys
         else:
-            expected_keys = {"pixels_orig", "done", "vec", "vec2"}
+            expected_keys = {"pixels_orig", "done", "vec", "vec2", "terminated"}
             assert td["vec"].shape[0 + parallel] != 2
             assert td["vec"].ndimension() == 1 + parallel
             assert td["vec2"].shape[0 + parallel] != 2
@@ -1296,7 +1296,7 @@ class TestR3M(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        expected_keys = {"vec", "done", "pixels_orig"}
+        expected_keys = {"vec", "done", "pixels_orig", "terminated"}
         if tensor_pixels_key:
             expected_keys.add(tensor_pixels_key)
         assert set(td.keys(True)) == expected_keys
@@ -6515,7 +6515,7 @@ class TestVIP(TransformBase):
         transformed_env = TransformedEnv(base_env, vip)
         td = transformed_env.reset()
         assert td.device == device
-        expected_keys = {"vec", "done", "pixels_orig"}
+        expected_keys = {"vec", "done", "pixels_orig", "terminated"}
         if tensor_pixels_key:
             expected_keys.add(tensor_pixels_key[0])
         assert set(td.keys()) == expected_keys, set(td.keys()) - expected_keys
@@ -6569,12 +6569,12 @@ class TestVIP(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         if stack_images:
-            expected_keys = {"pixels_orig", "done", "vec"}
+            expected_keys = {"pixels_orig", "done", "vec", "terminated"}
             # assert td["vec"].shape[0] == 2
             assert td["vec"].ndimension() == 1 + parallel
             assert set(td.keys()) == expected_keys
         else:
-            expected_keys = {"pixels_orig", "done", "vec", "vec2"}
+            expected_keys = {"pixels_orig", "done", "vec", "vec2", "terminated"}
             assert td["vec"].shape[0 + parallel] != 2
             assert td["vec"].ndimension() == 1 + parallel
             assert td["vec2"].shape[0 + parallel] != 2
@@ -6613,7 +6613,7 @@ class TestVIP(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        expected_keys = {"vec", "done", "pixels_orig"}
+        expected_keys = {"vec", "done", "pixels_orig", "terminated"}
         if tensor_pixels_key:
             expected_keys.add(tensor_pixels_key)
         assert set(td.keys()) == expected_keys
@@ -6672,6 +6672,7 @@ class TestVIP(TransformBase):
             "pixels_orig",
             "goal_embedding",
             "goal_image",
+            "terminated",
         }
         if tensor_pixels_key:
             expected_keys.add(tensor_pixels_key)
@@ -6963,7 +6964,7 @@ class TestVC1(TransformBase):
         transformed_env = TransformedEnv(base_env, vc1)
         td = transformed_env.reset()
         assert td.device == device
-        expected_keys = {"nested", "done", "pixels_orig"}
+        expected_keys = {"nested", "done", "pixels_orig", "terminated"}
         if not del_keys:
             expected_keys.add("pixels")
         assert set(td.keys()) == expected_keys, set(td.keys()) - expected_keys
@@ -7003,7 +7004,7 @@ class TestVC1(TransformBase):
         td = transformed_env.reset()
         assert td.device == device
         assert td.batch_size == torch.Size([4])
-        expected_keys = {"nested", "done", "pixels_orig"}
+        expected_keys = {"nested", "done", "pixels_orig", "terminated"}
         if not del_keys:
             expected_keys.add("pixels")
         assert set(td.keys()) == expected_keys
