@@ -294,12 +294,12 @@ def test_set_gym_backend_types():
 
 
 # we check that the order where these funs are defined won't affect which is called
-@implement_for("torch", "1.0", "2.0")
+@implement_for("torch", "1.0", "1.8")
 def torch_foo():
     return 0
 
 
-@implement_for("torch", "2.0", None)
+@implement_for("torch", "1.8", None)
 def torch_foo():  # noqa: F811
     return 1
 

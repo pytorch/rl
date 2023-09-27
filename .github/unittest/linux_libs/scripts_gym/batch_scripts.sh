@@ -51,7 +51,7 @@ do
 
   echo "Testing gym version: ${GYM_VERSION}"
   # handling https://github.com/openai/gym/issues/3202
-  pip install setuptools==66
+  pip install wheel==0.38.4
   pip3 install gym==$GYM_VERSION
   $DIR/run_test.sh
 
@@ -69,7 +69,6 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip install setuptools -U
   pip3 install 'gym[atari]'==$GYM_VERSION
   pip3 install ale-py==0.7
   $DIR/run_test.sh
@@ -87,6 +86,7 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
+  pip install wheel -U
   pip3 install 'gym[atari]'==$GYM_VERSION
   $DIR/run_test.sh
 

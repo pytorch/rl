@@ -1056,15 +1056,10 @@ def test_collector_output_keys(
     if split_trajs:
         keys.add(("collector", "mask"))
 
-    from torchrl.envs.libs.gym import gym_backend
-
-    if "gymnasium" in str(gym_backend()) or version.parse(
-        gym_backend().__version__
-    ) >= version.parse("0.26.0"):
-        keys.add(("next", "terminated"))
-        keys.add("terminated")
-        keys.add(("next", "truncated"))
-        keys.add("truncated")
+    keys.add(("next", "terminated"))
+    keys.add("terminated")
+    keys.add(("next", "truncated"))
+    keys.add("truncated")
     b = next(iter(collector))
 
     assert set(b.keys(True)) == keys
