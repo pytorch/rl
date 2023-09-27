@@ -12,6 +12,7 @@ from .libs import (
     BraxWrapper,
     DMControlEnv,
     DMControlWrapper,
+    gym_backend,
     GymEnv,
     GymWrapper,
     HabitatEnv,
