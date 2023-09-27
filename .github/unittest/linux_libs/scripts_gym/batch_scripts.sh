@@ -86,7 +86,6 @@ do
   conda activate ./cloned_env
 
   echo "Testing gym version: ${GYM_VERSION}"
-  pip install wheel -U
   pip3 install 'gym[atari]'==$GYM_VERSION
   $DIR/run_test.sh
 
