@@ -25,3 +25,4 @@ memory_profiler
 pyrender
 pytest
 vmas==1.2.11
+GitPython
