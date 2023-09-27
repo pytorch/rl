@@ -42,6 +42,7 @@ author = "Torch Contributors"
 #
 if os.environ.get("TORCHRL_STABLE_DOCS", None):
     version = release = ".".join(torchrl.__version__.split(".")[:2])
+    print(f'Building with stable version {version}.')
 else:
     import git
 

@@ -81,7 +81,7 @@ jobs:
         cd ./docs
         # check if there is a release tag
         export TORCHRL_STABLE_DOCS=${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Release') }}
-        echo $TORCHRL_STABLE_DOCS
+        echo "TORCHRL_STABLE_DOCS is ${{ TORCHRL_STABLE_DOCS }}"
         # timeout 7m bash -ic "MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         bash -ic "PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build" || code=$?; if [[ $code -ne 124 && $code -ne 0 ]]; then exit $code; fi
         # PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
