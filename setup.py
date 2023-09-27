@@ -235,14 +235,14 @@ def _main(argv):
             "checkpointing": [
                 "torchsnapshot",
             ],
-            "marl": ["vmas"],
+            "marl": ["vmas>=1.2.10", "pettingzoo>=1.24.1"],
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
+            "Programming Language :: Python :: 3.11",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
             "Development Status :: 4 - Beta",

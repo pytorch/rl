@@ -30,23 +30,24 @@ from torch.utils.data import IterableDataset
 
 from torchrl._utils import (
     _check_for_faulty_process,
+    _ProcessNoWarn,
     accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
     VERBOSE,
 )
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data.tensor_specs import TensorSpec
+from torchrl.data.tensor_specs import CompositeSpec, TensorSpec
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _convert_exploration_type,
+    _replace_last,
     ExplorationType,
     set_exploration_type,
     step_mdp,
 )
-from torchrl.envs.vec_env import _BatchedEnv
 
 _TIMEOUT = 1.0
 _MIN_TIMEOUT = 1e-3  # should be several orders of magnitude inferior wrt time spent collecting a trajectory
@@ -78,7 +79,10 @@ class RandomPolicy:
         self.action_key = action_key
 
     def __call__(self, td: TensorDictBase) -> TensorDictBase:
-        return td.set(self.action_key, self.action_spec.rand())
+        if isinstance(self.action_spec, CompositeSpec):
+            return td.update(self.action_spec.rand())
+        else:
+            return td.set(self.action_key, self.action_spec.rand())
 
 
 class _Interruptor:
@@ -210,7 +214,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                 raise ValueError(
                     "env must be provided to _get_policy_and_device if policy is None"
                 )
-            policy = RandomPolicy(self.env.action_spec, self.env.action_key)
+            policy = RandomPolicy(self.env.input_spec["full_action_spec"])
         elif isinstance(policy, nn.Module):
             # TODO: revisit these checks when we have determined whether arbitrary
             # callables should be supported as policies.
@@ -245,7 +249,7 @@ class DataCollectorBase(IterableDataset, metaclass=abc.ABCMeta):
                     if not hasattr(self, "env") or self.env is None:
                         out_keys = ["action"]
                     else:
-                        out_keys = [self.env.action_key]
+                        out_keys = self.env.action_keys
                     output = policy(**next_observation)
 
                     if isinstance(output, tuple):
@@ -419,9 +423,6 @@ class SyncDataCollector(DataCollectorBase):
             The _Interruptor class has methods ´start_collection´ and ´stop_collection´, which allow to implement
             strategies such as preeptively stopping rollout collection.
             Default is ``False``.
-        reset_when_done (bool, optional): if ``True`` (default), an environment
-            that return a ``True`` value in its ``"done"`` or ``"truncated"``
-            entry will be reset at the corresponding indices.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -508,6 +509,8 @@ class SyncDataCollector(DataCollectorBase):
         reset_when_done: bool = True,
         interruptor=None,
     ):
+        from torchrl.envs.batched_envs import _BatchedEnv
+
         self.closed = True
 
         exploration_type = _convert_exploration_type(
@@ -542,6 +545,8 @@ class SyncDataCollector(DataCollectorBase):
         self.storing_device = torch.device(storing_device)
         self.env: EnvBase = env
         self.closed = False
+        if not reset_when_done:
+            raise ValueError("reset_when_done is deprectated.")
         self.reset_when_done = reset_when_done
         self.n_env = self.env.batch_size.numel()
 
@@ -687,13 +692,11 @@ class SyncDataCollector(DataCollectorBase):
 
         if split_trajs is None:
             split_trajs = False
-        elif not self.reset_when_done and split_trajs:
-            raise RuntimeError(
-                "Cannot split trajectories when reset_when_done is False."
-            )
         self.split_trajs = split_trajs
         self._exclude_private_keys = True
         self.interruptor = interruptor
+        self._frames = 0
+        self._iter = -1
 
     # for RPC
     def next(self):
@@ -744,11 +747,9 @@ class SyncDataCollector(DataCollectorBase):
             stream = None
         with torch.cuda.stream(stream):
             total_frames = self.total_frames
-            i = -1
-            self._frames = 0
-            while True:
-                i += 1
-                self._iter = i
+
+            while self._frames < self.total_frames:
+                self._iter += 1
                 tensordict_out = self.rollout()
                 self._frames += tensordict_out.numel()
                 if self._frames >= total_frames:
@@ -787,54 +788,66 @@ class SyncDataCollector(DataCollectorBase):
                     # >>> assert data0["done"] is not data1["done"]
                     yield tensordict_out.clone()
 
-                if self._frames >= self.total_frames:
-                    break
-
     def _step_and_maybe_reset(self) -> None:
-        done = self._tensordict.get(("next", self.env.done_key))
-        truncated = self._tensordict.get(("next", "truncated"), None)
+
+        any_done = False
+        done_map = {}
+        for done_key in self.env.done_keys:
+            done = self._tensordict.get(("next", done_key))
+            truncated = self._tensordict.get(
+                ("next", _replace_last(done_key, "truncated")),
+                None,
+            )
+            done = (done | truncated) if truncated is not None else done
+            any_sub_done = done.any().item()
+            if any_sub_done and self.reset_when_done:
+                # Add this done to the map, we will need it to reset
+                done_map.update({done_key: done.clone()})
+            any_done += any_sub_done
 
         self._tensordict = step_mdp(
             self._tensordict,
-            reward_key=self.env.reward_key,
-            done_key=self.env.done_key,
-            action_key=self.env.action_key,
+            reward_keys=self.env.reward_keys,
+            done_keys=self.env.done_keys,
+            action_keys=self.env.action_keys,
         )
 
         if not self.reset_when_done:
             return
 
-        done_or_terminated = (
-            (done | truncated) if truncated is not None else done.clone()
-        )
-        if done_or_terminated.any():
+        if any_done:
             traj_ids = self._tensordict.get(("collector", "traj_ids"))
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            _reset = done_or_terminated
-            td_reset = self._tensordict.select().set("_reset", _reset)
+            td_reset = self._tensordict.select(*done_map.keys())
+            for done_key, done in done_map.items():
+                td_reset.set(_replace_last(done_key, "_reset"), done)
+                del td_reset[done_key]
             td_reset = self.env.reset(td_reset)
-            td_reset.del_("_reset")
-            traj_done_or_terminated = done_or_terminated.sum(
-                tuple(range(self._tensordict.batch_dims, done_or_terminated.ndim)),
-                dtype=torch.bool,
-            )
+            for done_key in done_map.keys():
+                del td_reset[_replace_last(done_key, "_reset")]
+
+            traj_done_or_terminated = torch.stack(
+                [
+                    done.sum(
+                        tuple(range(self._tensordict.batch_dims, done.ndim)),
+                        dtype=torch.bool,
+                    )
+                    for done in done_map.values()
+                ],
+                dim=0,
+            ).any(0)
+
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
-                # cloning is necessary to avoid modifying dones in-place
-                self._tensordict = self._tensordict.clone()
-                self._tensordict[traj_done_or_terminated] = td_reset[
-                    traj_done_or_terminated
-                ]
+                # cloning is necessary to avoid modifying entries in-place
+                self._tensordict = torch.where(
+                    traj_done_or_terminated, td_reset, self._tensordict
+                )
             else:
                 self._tensordict.update(td_reset)
 
-            done = self._tensordict.get(self.env.done_key)
-            if done.any():
-                raise RuntimeError(
-                    f"Env {self.env} was done after reset on specified '_reset' dimensions. This is (currently) not allowed."
-                )
             traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
                 1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
             )
@@ -902,7 +915,7 @@ class SyncDataCollector(DataCollectorBase):
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         # metadata
-        md = self._tensordict["collector"].clone()
+        md = self._tensordict.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -914,7 +927,7 @@ class SyncDataCollector(DataCollectorBase):
             )
             _reset[index] = 1
             self._tensordict[index].zero_()
-            self._tensordict["_reset"] = _reset
+            self._tensordict.set("_reset", _reset)
         else:
             _reset = None
             self._tensordict.zero_()
@@ -951,6 +964,8 @@ class SyncDataCollector(DataCollectorBase):
             `"env_state_dict"`.
 
         """
+        from torchrl.envs.batched_envs import _BatchedEnv
+
         if isinstance(self.env, TransformedEnv):
             env_state_dict = self.env.transform.state_dict()
         elif isinstance(self.env, _BatchedEnv):
@@ -967,6 +982,8 @@ class SyncDataCollector(DataCollectorBase):
         else:
             state_dict = OrderedDict(env_state_dict=env_state_dict)
 
+        state_dict.update({"frames": self._frames, "iter": self._iter})
+
         return state_dict
 
     def load_state_dict(self, state_dict: OrderedDict, **kwargs) -> None:
@@ -982,6 +999,8 @@ class SyncDataCollector(DataCollectorBase):
             self.env.load_state_dict(state_dict["env_state_dict"], **kwargs)
         if strict or "policy_state_dict" in state_dict:
             self.policy.load_state_dict(state_dict["policy_state_dict"], **kwargs)
+        self._frames = state_dict["frames"]
+        self._iter = state_dict["iter"]
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.env}", 4 * " ")
@@ -1079,6 +1098,14 @@ class _MultiDataCollector(DataCollectorBase):
             Defaults to ``False``.
         preemptive_threshold (float, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
             that will be allowed to finished collecting their rollout before the rest are forced to end early.
+        num_threads (int, optional): number of threads for this process.
+            Defaults to the number of workers.
+        num_sub_threads (int, optional): number of threads of the subprocesses.
+            Should be equal to one plus the number of processes launched within
+            each subprocess (or one if a single process is launched).
+            Defaults to 1 for safety: if none is indicated, launching multiple
+            workers may charge the cpu load too much and harm performance.
+
     """
 
     def __init__(
@@ -1108,11 +1135,17 @@ class _MultiDataCollector(DataCollectorBase):
         update_at_each_batch: bool = False,
         devices=None,
         storing_devices=None,
+        num_threads: int = None,
+        num_sub_threads: int = 1,
     ):
         exploration_type = _convert_exploration_type(
             exploration_mode=exploration_mode, exploration_type=exploration_type
         )
         self.closed = True
+        if num_threads is None:
+            num_threads = len(create_env_fn) + 1  # 1 more thread for this proc
+        self.num_sub_threads = num_sub_threads
+        self.num_threads = num_threads
         self.create_env_fn = create_env_fn
         self.num_workers = len(create_env_fn)
         self.create_env_kwargs = (
@@ -1266,6 +1299,8 @@ class _MultiDataCollector(DataCollectorBase):
             self.interruptor = None
         self._run_processes()
         self._exclude_private_keys = True
+        self._frames = 0
+        self._iter = -1
 
     @property
     def frames_per_batch_worker(self):
@@ -1287,6 +1322,7 @@ class _MultiDataCollector(DataCollectorBase):
         raise NotImplementedError
 
     def _run_processes(self) -> None:
+        torch.set_num_threads(self.num_threads)
         queue_out = mp.Queue(self._queue_len)  # sends data from proc to main
         self.procs = []
         self.pipes = []
@@ -1318,7 +1354,11 @@ class _MultiDataCollector(DataCollectorBase):
                 "idx": i,
                 "interruptor": self.interruptor,
             }
-            proc = mp.Process(target=_main_async_collector, kwargs=kwargs)
+            proc = _ProcessNoWarn(
+                target=_main_async_collector,
+                num_threads=self.num_sub_threads,
+                kwargs=kwargs,
+            )
             # proc.daemon can't be set as daemonic processes may be launched by the process itself
             try:
                 proc.start()
@@ -1336,6 +1376,7 @@ also that the state dict is synchronised across processes if needed."""
             pipe_child.close()
             self.procs.append(proc)
             self.pipes.append(pipe_parent)
+        for pipe_parent in self.pipes:
             msg = pipe_parent.recv()
             if msg != "instantiated":
                 raise RuntimeError(msg)
@@ -1452,6 +1493,7 @@ also that the state dict is synchronised across processes if needed."""
             if msg != "state_dict":
                 raise RuntimeError(f"Expected msg='state_dict', got {msg}")
             state_dict[f"worker{idx}"] = _state_dict
+        state_dict.update({"frames": self._frames, "iter": self._iter})
 
         return state_dict
 
@@ -1469,6 +1511,8 @@ also that the state dict is synchronised across processes if needed."""
             _, msg = self.pipes[idx].recv()
             if msg != "loaded":
                 raise RuntimeError(f"Expected msg='loaded', got {msg}")
+        self._frames = state_dict["frames"]
+        self._iter = state_dict["iter"]
 
 
 @accept_remote_rref_udf_invocation
@@ -1620,27 +1664,26 @@ class MultiSyncDataCollector(_MultiDataCollector):
         return self.num_workers
 
     def iterator(self) -> Iterator[TensorDictBase]:
-        i = -1
-        frames = 0
+
         self.buffers = {}
         dones = [False for _ in range(self.num_workers)]
         workers_frames = [0 for _ in range(self.num_workers)]
         same_device = None
         self.out_buffer = None
 
-        while not all(dones) and frames < self.total_frames:
+        while not all(dones) and self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
             if self.update_at_each_batch:
                 self.update_policy_weights_()
 
             for idx in range(self.num_workers):
-                if frames < self.init_random_frames:
+                if self._frames < self.init_random_frames:
                     msg = "continue_random"
                 else:
                     msg = "continue"
                 self.pipes[idx].send((None, msg))
 
-            i += 1
+            self._iter += 1
             max_traj_idx = None
 
             if self.interruptor is not None and self.preemptive_threshold < 1.0:
@@ -1695,10 +1738,10 @@ class MultiSyncDataCollector(_MultiDataCollector):
 
             if self.split_trajs:
                 out = split_trajectories(self.out_buffer, prefix="collector")
-                frames += out.get(("collector", "mask")).sum().item()
+                self._frames += out.get(("collector", "mask")).sum().item()
             else:
                 out = self.out_buffer.clone()
-                frames += prod(out.shape)
+                self._frames += prod(out.shape)
             if self.postprocs:
                 self.postprocs = self.postprocs.to(out.device)
                 out = self.postprocs(out)
@@ -1875,13 +1918,11 @@ class MultiaSyncDataCollector(_MultiDataCollector):
             else:
                 self.pipes[i].send((None, "continue"))
         self.running = True
-        i = -1
-        self._frames = 0
 
         workers_frames = [0 for _ in range(self.num_workers)]
         while self._frames < self.total_frames:
             _check_for_faulty_process(self.procs)
-            i += 1
+            self._iter += 1
             idx, j, out = self._get_from_queue()
 
             worker_frames = out.numel()

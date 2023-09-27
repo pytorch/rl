@@ -2,19 +2,18 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import abc
 import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List
+from typing import Dict, List, Optional
 from warnings import warn
 
+import numpy as np
 import torch
 
-try:
-    from torch.utils._contextlib import _DecoratorContextManager
-except ModuleNotFoundError:
-    from torchrl._utils import _DecoratorContextManager
+from tensordict import TensorDictBase
 
 from torchrl._utils import implement_for
 from torchrl.data.tensor_specs import (
@@ -29,9 +28,20 @@ from torchrl.data.tensor_specs import (
     UnboundedContinuousTensorSpec,
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
+from torchrl.envs.batched_envs import CloudpickleWrapper
 
-from torchrl.envs.gym_like import default_info_dict_reader, GymLikeEnv
+from torchrl.envs.gym_like import (
+    BaseInfoDictReader,
+    default_info_dict_reader,
+    GymLikeEnv,
+)
+
 from torchrl.envs.utils import _classproperty
+
+try:
+    from torch.utils._contextlib import _DecoratorContextManager
+except ModuleNotFoundError:
+    from torchrl._utils import _DecoratorContextManager
 
 DEFAULT_GYM = None
 IMPORT_ERROR = None
@@ -41,6 +51,7 @@ if not _has_gym:
     _has_gym = importlib.util.find_spec("gymnasium") is not None
 
 _has_mo = importlib.util.find_spec("mo_gymnasium") is not None
+_has_sb3 = importlib.util.find_spec("stable_baselines3") is not None
 
 
 class set_gym_backend(_DecoratorContextManager):
@@ -198,7 +209,18 @@ def _gym_to_torchrl_spec_transform(
     """
     gym = gym_backend()
     if isinstance(spec, gym.spaces.tuple.Tuple):
-        raise NotImplementedError("gym.spaces.tuple.Tuple mapping not yet implemented")
+        return torch.stack(
+            [
+                _gym_to_torchrl_spec_transform(
+                    s,
+                    device=device,
+                    categorical_action_encoding=categorical_action_encoding,
+                    remap_state_to_observation=remap_state_to_observation,
+                )
+                for s in spec
+            ],
+            0,
+        )
     if isinstance(spec, gym.spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
@@ -216,15 +238,32 @@ def _gym_to_torchrl_spec_transform(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
     elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
-        dtype = (
-            numpy_to_torch_dtype_dict[spec.dtype]
-            if categorical_action_encoding
-            else torch.long
-        )
-        return (
-            MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
-            if categorical_action_encoding
-            else MultiOneHotDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+        if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
+            dtype = (
+                numpy_to_torch_dtype_dict[spec.dtype]
+                if categorical_action_encoding
+                else torch.long
+            )
+
+            return (
+                MultiDiscreteTensorSpec(spec.nvec, device=device, dtype=dtype)
+                if categorical_action_encoding
+                else MultiOneHotDiscreteTensorSpec(
+                    spec.nvec, device=device, dtype=dtype
+                )
+            )
+
+        return torch.stack(
+            [
+                _gym_to_torchrl_spec_transform(
+                    spec[i],
+                    device=device,
+                    categorical_action_encoding=categorical_action_encoding,
+                    remap_state_to_observation=remap_state_to_observation,
+                )
+                for i in range(len(spec.nvec))
+            ],
+            0,
         )
     elif isinstance(spec, gym.spaces.Box):
         shape = spec.shape
@@ -281,6 +320,8 @@ def _gym_to_torchrl_spec_transform(
 
 
 def _get_envs(to_dict=False) -> List:
+    if not _has_gym:
+        raise ImportError("Gym(nasium) could not be found in your virtual environment.")
     envs = _get_gym_envs()
     envs = list(envs)
     envs = sorted(envs)
@@ -340,7 +381,32 @@ def _is_from_pixels(env):
     return False
 
 
-class GymWrapper(GymLikeEnv):
+class _AsyncMeta(abc.ABCMeta):
+    def __call__(cls, *args, **kwargs):
+        instance: GymWrapper = super().__call__(*args, **kwargs)
+        if instance._is_batched:
+            from torchrl.envs.transforms.transforms import (
+                TransformedEnv,
+                VecGymEnvTransform,
+            )
+
+            if _has_sb3:
+                from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+
+                if isinstance(instance._env, VecEnv):
+                    backend = "sb3"
+                else:
+                    backend = "gym"
+            else:
+                backend = "gym"
+            instance.set_info_dict_reader(
+                terminal_obs_reader(instance.observation_spec, backend=backend)
+            )
+            return TransformedEnv(instance, VecGymEnvTransform())
+        return instance
+
+
+class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     """OpenAI Gym environment wrapper.
 
     Examples:
@@ -372,7 +438,7 @@ class GymWrapper(GymLikeEnv):
                 return gymnasium
         except ImportError:
             pass
-        raise RuntimeError(
+        raise ImportError(
             f"Could not find the library of env {env}. Please file an issue on torchrl github repo."
         )
 
@@ -387,6 +453,25 @@ class GymWrapper(GymLikeEnv):
         else:
             super().__init__(**kwargs)
 
+    @property
+    def _is_batched(self):
+        if _has_sb3:
+            from stable_baselines3.common.vec_env.base_vec_env import VecEnv
+
+            tuple_of_classes = (VecEnv,)
+        else:
+            tuple_of_classes = ()
+        return isinstance(
+            self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
+        )
+
+    def _get_batch_size(self, env):
+        if hasattr(env, "num_envs"):
+            batch_size = torch.Size([env.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
+
     def _check_kwargs(self, kwargs: Dict):
         if "env" not in kwargs:
             raise TypeError("Could not find environment key 'env' in kwargs.")
@@ -400,6 +485,8 @@ class GymWrapper(GymLikeEnv):
         from_pixels: bool = False,
         pixels_only: bool = False,
     ) -> "gym.core.Env":  # noqa: F821
+        self.batch_size = self._get_batch_size(env)
+
         env_from_pixels = _is_from_pixels(env)
         from_pixels = from_pixels or env_from_pixels
         self.from_pixels = from_pixels
@@ -418,6 +505,16 @@ class GymWrapper(GymLikeEnv):
                 pass
             env = self._build_gym_env(env, pixels_only)
         return env
+
+    def read_action(self, action):
+        action = super().read_action(action)
+        if (
+            isinstance(self.action_spec, (OneHotDiscreteTensorSpec, DiscreteTensorSpec))
+            and action.size == 1
+        ):
+            # some envs require an integer for indexing
+            action = int(action)
+        return action
 
     @implement_for("gym", None, "0.19.0")
     def _build_gym_env(self, env, pixels_only):  # noqa: F811
@@ -479,8 +576,10 @@ class GymWrapper(GymLikeEnv):
         return LegacyPixelObservationWrapper(env, pixels_only=pixels_only)
 
     @_classproperty
-    def available_envs(cls) -> List[str]:
-        return _get_envs()
+    def available_envs(cls):
+        if not _has_gym:
+            return
+        yield from _get_envs()
 
     @property
     def lib(self) -> ModuleType:
@@ -541,9 +640,16 @@ class GymWrapper(GymLikeEnv):
         )
         if not isinstance(observation_spec, CompositeSpec):
             if self.from_pixels:
-                observation_spec = CompositeSpec(pixels=observation_spec)
+                observation_spec = CompositeSpec(
+                    pixels=observation_spec, shape=self.batch_size
+                )
             else:
-                observation_spec = CompositeSpec(observation=observation_spec)
+                observation_spec = CompositeSpec(
+                    observation=observation_spec, shape=self.batch_size
+                )
+        elif observation_spec.shape[: len(self.batch_size)] != self.batch_size:
+            observation_spec.shape = self.batch_size
+
         if hasattr(env, "reward_space") and env.reward_space is not None:
             reward_spec = _gym_to_torchrl_spec_transform(
                 env.reward_space,
@@ -562,7 +668,10 @@ class GymWrapper(GymLikeEnv):
                 *batch_size, *observation_spec.shape
             )
         self.action_spec = action_spec
-        self.reward_spec = reward_spec
+        if reward_spec.shape[: len(self.batch_size)] != self.batch_size:
+            self.reward_spec = reward_spec.expand(*self.batch_size, *reward_spec.shape)
+        else:
+            self.reward_spec = reward_spec
         self.observation_spec = observation_spec
 
     def _init_env(self):
@@ -580,13 +689,29 @@ class GymWrapper(GymLikeEnv):
 
     @property
     def info_dict_reader(self):
-        if self._info_dict_reader is None:
-            self._info_dict_reader = default_info_dict_reader()
+        if not self._info_dict_reader:
+            self._info_dict_reader.append(default_info_dict_reader())
         return self._info_dict_reader
 
     @info_dict_reader.setter
     def info_dict_reader(self, value: callable):
         self._info_dict_reader = value
+
+    def _reset(
+        self, tensordict: Optional[TensorDictBase] = None, **kwargs
+    ) -> TensorDictBase:
+        if self._is_batched:
+            # batched (aka 'vectorized') env reset is a bit special: envs are
+            # automatically reset. What we do here is just to check if _reset
+            # is present. If it is not, we just reset. Otherwise we just skip.
+            if tensordict is None:
+                return super()._reset(tensordict)
+            reset = tensordict.get("_reset", None)
+            if reset is None:
+                return super()._reset(tensordict)
+            elif reset is not None:
+                return tensordict.clone(False)
+        return super()._reset(tensordict, **kwargs)
 
 
 ACCEPTED_TYPE_ERRORS = {
@@ -633,6 +758,9 @@ class GymEnv(GymWrapper):
     ) -> None:
         kwargs.setdefault("disable_env_checker", True)
 
+    def _async_env(self, *args, **kwargs):
+        return gym_backend("vector").AsyncVectorEnv(*args, **kwargs)
+
     def _build_env(
         self,
         env_name: str,
@@ -644,13 +772,10 @@ class GymEnv(GymWrapper):
                 f"Consider downloading and installing gym from"
                 f" {self.git_url}"
             )
-        from_pixels = kwargs.get("from_pixels", False)
+        from_pixels = kwargs.pop("from_pixels", False)
         self._set_gym_default(kwargs, from_pixels)
-        if "from_pixels" in kwargs:
-            del kwargs["from_pixels"]
-        pixels_only = kwargs.get("pixels_only", True)
-        if "pixels_only" in kwargs:
-            del kwargs["pixels_only"]
+        pixels_only = kwargs.pop("pixels_only", True)
+        num_envs = kwargs.pop("num_envs", 0)
         made_env = False
         kwargs["frameskip"] = self.frame_skip
         self.wrapper_frame_skip = 1
@@ -677,7 +802,11 @@ class GymEnv(GymWrapper):
                     kwargs.pop("render_mode")
                 else:
                     raise err
-        return super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+        env = super()._build_env(env, pixels_only=pixels_only, from_pixels=from_pixels)
+        if num_envs > 0:
+            env = self._async_env([CloudpickleWrapper(lambda: env)] * num_envs)
+            self.batch_size = torch.Size([num_envs, *self.batch_size])
+        return env
 
     @implement_for("gym", None, "0.25.1")
     def _set_gym_default(self, kwargs, from_pixels: bool) -> None:  # noqa: F811
@@ -751,3 +880,88 @@ class MOGymEnv(GymEnv):
                 raise ImportError("MO-gymnasium not found, check installation") from err
 
     _make_specs = set_gym_backend("gymnasium")(GymEnv._make_specs)
+
+
+class terminal_obs_reader(BaseInfoDictReader):
+    """Terminal observation reader for 'vectorized' gym environments.
+
+    When running envs in parallel, Gym(nasium) writes the result of the true call
+    to `step` in `"final_observation"` entry within the `info` dictionary.
+
+    This breaks the natural flow and makes single-processed and multiprocessed envs
+    incompatible.
+
+    This class reads the info obs, removes the `"final_observation"` from
+    the env and writes its content in the data.
+
+    Next, a :class:`torchrl.envs.VecGymEnvTransform` transform will reorganise the
+    data by caching the result of the (implicit) reset and swap the true next
+    observation with the reset one. At reset time, the true reset data will be
+    replaced.
+
+    Args:
+        observation_spec (CompositeSpec): The observation spec of the gym env.
+        backend (str, optional): the backend of the env. One of `"sb3"` for
+            stable-baselines3 or `"gym"` for gym/gymnasium.
+
+    .. note:: In general, this class should not be handled directly. It is
+        created whenever a vectorized environment is placed within a :class:`GymWrapper`.
+
+    """
+
+    backend_key = {
+        "sb3": "terminal_observation",
+        "gym": "final_observation",
+    }
+
+    def __init__(self, observation_spec: CompositeSpec, backend, name="final"):
+        self.name = name
+        self._info_spec = CompositeSpec(
+            {(self.name, key): item.clone() for key, item in observation_spec.items()},
+            shape=observation_spec.shape,
+        )
+        self.backend = backend
+
+    @property
+    def info_spec(self):
+        return self._info_spec
+
+    def _read_obs(self, obs, key, tensor, index):
+        if obs is None:
+            return
+        if isinstance(obs, np.ndarray):
+            # Simplest case: there is one observation,
+            # presented as a np.ndarray. The key should be pixels or observation.
+            # We just write that value at its location in the tensor
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        elif isinstance(obs, dict):
+            if key not in obs:
+                raise KeyError(
+                    f"The observation {key} could not be found in the final observation dict."
+                )
+            subobs = obs[key]
+            if subobs is not None:
+                # if the obs is a dict, we expect that the key points also to
+                # a value in the obs. We retrieve this value and write it in the
+                # tensor
+                tensor[index] = torch.as_tensor(subobs, device=tensor.device)
+
+        elif isinstance(obs, (list, tuple)):
+            # tuples are stacked along the first dimension when passing gym spaces
+            # to torchrl specs. As such, we can simply stack the tuple and set it
+            # at the relevant index (assuming stacking can be achieved)
+            tensor[index] = torch.as_tensor(obs, device=tensor.device)
+        else:
+            raise NotImplementedError(
+                f"Observations of type {type(obs)} are not supported yet."
+            )
+
+    def __call__(self, info_dict, tensordict):
+        terminal_obs = info_dict.get(self.backend_key[self.backend], None)
+        for key, item in self.info_spec.items(True, True):
+            final_obs = item.zero()
+            if terminal_obs is not None:
+                for i, obs in enumerate(terminal_obs):
+                    self._read_obs(obs, key[-1], final_obs, index=i)
+            tensordict.set(key, final_obs)
+        return tensordict

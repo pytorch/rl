@@ -6,14 +6,14 @@ import importlib.util
 
 import itertools
 import warnings
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Union
 
 import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs import make_composite_from_td
 from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -34,6 +34,12 @@ class IsaacGymWrapper(GymWrapper):
         has GPUs available and the required setup for IsaacGym (eg, Ubuntu 20.04).
 
     """
+
+    @property
+    def lib(self):
+        import isaacgym
+
+        return isaacgym
 
     def __init__(
         self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821
@@ -64,7 +70,7 @@ class IsaacGymWrapper(GymWrapper):
         obs_spec.unlock_()
         obs_spec.update(specs)
         obs_spec.lock_()
-        self.__dict__["_observation_spec"] = obs_spec
+        self.__dict__["full_observation_spec"] = obs_spec
 
     @classmethod
     def _make_envs(cls, *, task, num_envs, device, seed=None, headless=True, **kwargs):
@@ -154,11 +160,14 @@ class IsaacGymEnv(IsaacGymWrapper):
 
     """
 
-    @property
-    def available_envs(cls) -> List[str]:
+    @_classproperty
+    def available_envs(cls):
+        if not _has_isaac:
+            return
+
         import isaacgymenvs  # noqa
 
-        return list(isaacgymenvs.tasks.isaacgym_task_map.keys())
+        yield from isaacgymenvs.tasks.isaacgym_task_map.keys()
 
     def __init__(self, task=None, *, env=None, num_envs, device, **kwargs):
         if env is not None and task is not None:
