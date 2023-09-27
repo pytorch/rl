@@ -815,8 +815,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # The variable naming follows torchrl's convention here.
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
-        truncated = info.pop("TimeLimit.truncated", [False] * self.batch_size.numel())
-        truncated = np.array(truncated)
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool):
+            # if bool is an array, make truncated an array
+            if isinstance(truncated, bool):
+                truncated = [truncated] * len(bool)
+            truncated = np.array(truncated)
         terminated = done & ~truncated
         return (observations, reward, terminated, truncated, done, info)
 
@@ -826,8 +830,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         # The variable naming follows torchrl's convention here.
         # A done is interpreted the union of terminated and truncated.
         # (as in earlier versions of gym).
-        truncated = info.pop("TimeLimit.truncated", [False] * self.batch_size.numel())
-        truncated = np.array(truncated)
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool):
+            # if bool is an array, make truncated an array
+            if isinstance(truncated, bool):
+                truncated = [truncated] * len(bool)
+            truncated = np.array(truncated)
         terminated = done & ~truncated
         return (observations, reward, terminated, truncated, done, info)
 

@@ -330,29 +330,29 @@ def test_set_gym_nested():
 
     with set_gym_backend(gym):
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend(gymnasium):
             GymWrapper._output_transform(
-                MockGym, (1, 2, 3, 4, 5)
+                MockGym, (1, 2, True, True, {})
             )  # would break with gym
             assert torch_foo() == 1
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
     with set_gym_backend("gym"):
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend("gymnasium"):
             GymWrapper._output_transform(
-                MockGym, (1, 2, 3, 4, 5)
+                MockGym, (1, 2, True, True, {})
             )  # would break with gym
             assert torch_foo() == 1
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
 
 
