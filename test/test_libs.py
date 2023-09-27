@@ -1804,7 +1804,8 @@ class TestD4RL:
             keys = set(data_from_env._storage._storage.keys(True, True))
             keys = keys.intersection(data_true._storage._storage.keys(True, True))
             assert (
-                data_true._storage._storage.shape == data_from_env._storage._storage.shape
+                data_true._storage._storage.shape
+                == data_from_env._storage._storage.shape
             )
             assert_allclose_td(
                 data_true._storage._storage.select(*keys),
@@ -1812,10 +1813,14 @@ class TestD4RL:
             )
         else:
             leaf_names = data_from_env._storage._storage.keys(True)
-            leaf_names = [name[-1] if isinstance(name, tuple) else name for name in leaf_names]
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
             assert "truncated" in leaf_names
             leaf_names = data_true._storage._storage.keys(True)
-            leaf_names = [name[-1] if isinstance(name, tuple) else name for name in leaf_names]
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
             assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize(

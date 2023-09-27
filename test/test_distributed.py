@@ -88,7 +88,7 @@ class DistributedCollectorBase:
         cls._start_worker()
         env = ContinuousActionVecMockEnv
         policy = RandomPolicy(env().action_spec)
-        print('creating collector')
+        print("creating collector")
         collector = cls.distributed_class()(
             [env] * 2,
             policy,
@@ -294,13 +294,7 @@ class DistributedCollectorBase:
             MultiaSyncDataCollector,
         ],
     )
-    @pytest.mark.parametrize(
-        "sync",
-        [
-            False,
-            True
-        ]
-    )
+    @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_updatepolicy(self, collector_class, sync):
         """Testing various collector classes to be used in nodes."""
         queue = mp.Queue(1)
@@ -514,13 +508,7 @@ class TestRayCollector(DistributedCollectorBase):
             MultiaSyncDataCollector,
         ],
     )
-    @pytest.mark.parametrize(
-        "sync",
-        [
-            False,
-            True
-        ]
-    )
+    @pytest.mark.parametrize("sync", [False, True])
     def test_distributed_collector_updatepolicy(self, collector_class, sync):
         frames_per_batch = 50
         total_frames = 300

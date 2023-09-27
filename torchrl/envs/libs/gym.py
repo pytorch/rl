@@ -392,11 +392,12 @@ class _AsyncMeta(_EnvPostInit):
         gym_backend = instance.get_library_name(instance._env)
         if gym_backend == "gym":  # check gym against gymnasium
             import gym
+
             if version.parse(gym.__version__) < version.parse("0.26.0"):
                 # Add a truncated info reader
                 instance.set_info_dict_reader(
                     truncated_info_reader(instance.output_spec)
-                    )
+                )
         # before gym 0.22, there was no final_observation
         if instance._is_batched:
             from torchrl.envs.transforms.transforms import (
@@ -419,6 +420,7 @@ class _AsyncMeta(_EnvPostInit):
             add_info_dict = True
             if backend == "gym" and gym_backend == "gym":  # check gym against gymnasium
                 import gym
+
                 if version.parse(gym.__version__) < version.parse("0.22.0"):
                     warn(
                         "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
@@ -426,7 +428,7 @@ class _AsyncMeta(_EnvPostInit):
                         "and discards the true next observation to return the result of the step). "
                         "This isn't compatible with TorchRL API and should be used with caution.",
                         category=UserWarning,
-                        )
+                    )
                     add_info_dict = False
             if add_info_dict:
                 instance.set_info_dict_reader(
@@ -1146,6 +1148,7 @@ class terminal_obs_reader(BaseInfoDictReader):
             tensordict.set(key, final_obs)
         return tensordict
 
+
 class truncated_info_reader(BaseInfoDictReader):
     """A ''truncated'' info reader.
 
@@ -1158,22 +1161,34 @@ class truncated_info_reader(BaseInfoDictReader):
     def __init__(self, output_spec: CompositeSpec):
         locked = output_spec.locked
         output_spec.unlock_()
-        output_spec["full_done_spec", "truncated"] = output_spec["full_done_spec", "done"].clone()
+        output_spec["full_done_spec", "truncated"] = output_spec[
+            "full_done_spec", "done"
+        ].clone()
         if locked:
             output_spec.lock_()
         # since we modify the done spec, the info spec must be empty
-        self._info_spec = CompositeSpec(shape=output_spec.shape, device=output_spec.device)
+        self._info_spec = CompositeSpec(
+            shape=output_spec.shape, device=output_spec.device
+        )
 
     @property
     def info_spec(self):
         return self._info_spec
 
     def __call__(self, info_dict, tensordict):
-        truncated = info_dict.get('TimeLimit.truncated', torch.zeros((*tensordict.batch_size, 1), device=tensordict.device, dtype=torch.bool))
+        truncated = info_dict.get(
+            "TimeLimit.truncated",
+            torch.zeros(
+                (*tensordict.batch_size, 1), device=tensordict.device, dtype=torch.bool
+            ),
+        )
         if not isinstance(truncated, torch.Tensor):
-            truncated = torch.tensor(truncated, dtype=torch.bool, device=tensordict.device).reshape((*tensordict.shape, 1))
+            truncated = torch.tensor(
+                truncated, dtype=torch.bool, device=tensordict.device
+            ).reshape((*tensordict.shape, 1))
         tensordict.set("truncated", truncated)
         return tensordict
+
 
 def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
     # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
