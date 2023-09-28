@@ -338,7 +338,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones},
+            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -378,7 +378,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones, "terminated": dones},
+            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
             batch_size=self.batch_size,
             device=self.device,
         )

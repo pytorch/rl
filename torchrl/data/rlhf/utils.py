@@ -180,7 +180,7 @@ class RolloutFromModel:
                 "input_ids": rollout_generated[:, 1:].clone(),
                 "attention_mask": rollout_attention_mask[:, 1:].clone(),
                 "done": done,
-                "terminated": done,
+                "terminated": done.clone(),
                 "reward": reward,
                 "reward_raw": reward_raw,
                 "reward_kl": reward_kl,
