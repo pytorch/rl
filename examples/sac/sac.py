@@ -93,8 +93,8 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
-    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
-    eval_rollout_steps = cfg.collector.max_frames_per_traj // frame_skip
+    frames_per_batch = cfg.collector.frames_per_batch
+    eval_rollout_steps = cfg.collector.max_frames_per_traj
 
     sampling_start = time.time()
     for i, tensordict in enumerate(collector):
@@ -183,7 +183,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
+        if abs(collected_frames % eval_iter) < frames_per_batch:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(
