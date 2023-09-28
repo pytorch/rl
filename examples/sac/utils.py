@@ -32,7 +32,7 @@ def env_maker(
         return GymEnv(
             task,
             device=device,
-            frame_skip=frame_skip,
+            # frame_skip=frame_skip,
             from_pixels=from_pixels,
             max_episode_steps=max_episode_steps,
         )
