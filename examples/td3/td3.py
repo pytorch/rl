@@ -88,7 +88,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     delayed_updates = cfg.optim.policy_update_delay
     prb = cfg.replay_buffer.prb
-    eval_rollout_steps = cfg.collector.max_frames_per_traj // cfg.env.frame_skip
+    eval_rollout_steps = cfg.env.max_episode_steps // cfg.env.frame_skip
     eval_iter = cfg.logger.eval_iter
     frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
     update_counter = 0
@@ -126,19 +126,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 sampled_tensordict = replay_buffer.sample().clone()
 
                 # Compute loss
-                loss_td = loss_module(sampled_tensordict)
-
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_qvalue"]
+                q_loss, *_ = loss_module.value_loss(sampled_tensordict)
 
                 # Update critic
                 optimizer_critic.zero_grad()
-                q_loss.backward(retain_graph=update_actor)
+                q_loss.backward()
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
                 # Update actor
                 if update_actor:
+                    actor_loss, *_ = loss_module.actor_loss(sampled_tensordict)
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()

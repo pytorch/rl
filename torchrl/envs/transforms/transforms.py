@@ -2830,11 +2830,18 @@ class DTypeCastTransform(Transform):
                 self._keys_inv_unset = False
             self._container.empty_cache()
 
+    def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if self._keys_unset:
+            self._set_in_keys()
+        return super().reset(tensordict)
+
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
         if self._keys_unset:
             self._set_in_keys()
+        # if still no update
+        if self._keys_unset:
             for in_key, data in tensordict.items(True, True):
                 if data.dtype == self.dtype_in:
                     out_key = in_key

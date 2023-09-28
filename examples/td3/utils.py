@@ -18,6 +18,7 @@ from torchrl.envs import (
     InitTracker,
     ParallelEnv,
     RewardSum,
+    StepCounter,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
@@ -41,27 +42,26 @@ from torchrl.objectives.td3 import TD3Loss
 # -----------------
 
 
-def env_maker(
-    task, device="cpu", max_episode_steps=1000
-):
+def env_maker(task, device="cpu"):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
-            max_episode_steps=max_episode_steps,
         )
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(env, max_episode_steps, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
+            StepCounter(max_steps=max_episode_steps),
             InitTracker(),
-            RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat("observation"),
-            RewardSum(),
+            DoubleToFloat(),
         ),
     )
+    if reward_scaling != 1.0:
+        transformed_env.append_transform(RewardScaling(loc=0.0, scale=reward_scaling))
+    transformed_env.append_transform(RewardSum())
     return transformed_env
 
 
@@ -69,26 +69,18 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(
-            lambda task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps: env_maker(
-                task=task, max_episode_steps=max_episode_steps
-            )
-        ),
+        EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(
+        parallel_env, max_episode_steps=cfg.env.max_episode_steps
+    )
 
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(
-                lambda
-                    task=cfg.env.name,
-                    max_episode_steps=cfg.env.max_episode_steps: env_maker(
-                    task=task, max_episode_steps=max_episode_steps
-                )
-            ),
+            EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
         ),
         train_env.transform.clone(),
     )
