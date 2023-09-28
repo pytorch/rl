@@ -1,12 +1,11 @@
 # environment and task
 env:
-  name: Hopper-v3
+  name: HalfCheetah-v3
   task: ""
-  exp_name: "Hopper-DDPG"
+  exp_name: ${env.name}_DDPG
   library: gym
-  frame_skip: 1
-  max_episode_steps: 1000
-  seed: 1
+  max_episode_steps: 5000
+  seed: 6
 
 # collector
 collector:
@@ -24,13 +23,14 @@ collector:
 replay_buffer:
   size: 1000000
   prb: 0 # use prioritized experience replay
+  scratch_dir: ${env.exp_name}_${env.seed}
 
 # optimization
 optim:
   utd_ratio: 1.0
   gamma: 0.99
   loss_function: l2
-  lr: 3e-4
+  lr: 1.0e-3
   weight_decay: 0.0
   batch_size: 256
   target_update_polyak: 0.995
