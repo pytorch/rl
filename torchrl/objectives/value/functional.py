@@ -1079,14 +1079,19 @@ def vec_td_lambda_return_estimate(
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = (~done).int()
-    not_terminated = (~terminated).int()
-    next_state_value = next_state_value * not_terminated.view_as(next_state_value)
+    not_terminated = (~terminated).int().transpose(-2, -1).unsqueeze(-2)
+    if len(batch):
+        not_terminated = not_terminated.flatten(0, len(batch))
+    next_state_value = next_state_value * not_terminated
 
     if rolling_gamma is None:
         rolling_gamma = True
     gammas = _make_gammas_tensor(
         gamma * not_done if rolling_gamma else gamma, T, rolling_gamma
     )
+    not_done = not_done.transpose(-2, -1).unsqueeze(-2)
+    if len(batch):
+        not_done = not_done.flatten(0, len(batch))
     if not rolling_gamma:
         terminated_follows_terminated = terminated[..., 1:, :][
             terminated[..., :-1, :]
@@ -1118,9 +1123,6 @@ def vec_td_lambda_return_estimate(
             gammas = gammas[:, :1]
         if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
             lambdas = lambdas[:, :1]
-        not_done = not_done.transpose(-2, -1).unsqueeze(-2)
-        if len(batch):
-            not_done = not_done.flatten(0, len(batch))
         v3 = (gammas * lambdas).squeeze(-1) * next_state_value * not_done
         v3[..., :-1] = 0
         out = _custom_conv1d(
