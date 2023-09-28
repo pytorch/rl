@@ -27,7 +27,7 @@ from torchrl.envs import (
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import CQLLoss, SoftUpdate
+from torchrl.objectives import IQLLoss, SoftUpdate
 
 from torchrl.trainers.helpers.models import ACTIVATIONS
 
@@ -49,7 +49,7 @@ def apply_env_transforms(env, reward_scaling=1.0):
         env,
         Compose(
             RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat("observation"),
+            DoubleToFloat(in_keys=["observation"], in_keys_inv=[]),
             RewardSum(),
         ),
     )
@@ -88,8 +88,8 @@ def make_collector(cfg, train_env, actor_model_explore):
     collector = SyncDataCollector(
         train_env,
         actor_model_explore,
-        init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
+        init_random_frames=cfg.collector.init_random_frames,
         max_frames_per_traj=cfg.collector.max_frames_per_traj,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
@@ -141,7 +141,12 @@ def make_offline_replay_buffer(rb_cfg):
         sampler=SamplerWithoutReplacement(drop_last=False),
     )
 
-    data.append_transform(DoubleToFloat())
+    data.append_transform(
+        DoubleToFloat(
+            in_keys=["observation", ("next", "observation")],
+            in_keys_inv=[],
+        )
+    )
 
     return data
 
@@ -156,12 +161,12 @@ def make_offline_replay_buffer(rb_cfg):
 #
 
 
-def make_cql_model(cfg, train_env, eval_env, device="cpu"):
+def make_iql_model(cfg, train_env, eval_env, device="cpu"):
     model_cfg = cfg.model
 
     action_spec = train_env.action_spec
 
-    actor_net, q_net = make_cql_modules_state(model_cfg, eval_env)
+    actor_net, q_net, value_net = make_iql_modules_state(model_cfg, eval_env)
     in_keys = ["observation"]
     out_keys = ["loc", "scale"]
 
@@ -176,8 +181,8 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         spec=action_spec,
         distribution_class=TanhNormal,
         distribution_kwargs={
-            "min": action_spec.space.low,
-            "max": action_spec.space.high,
+            "min": action_spec.space.minimum,
+            "max": action_spec.space.maximum,
             "tanh_loc": False,
         },
         default_interaction_type=ExplorationType.RANDOM,
@@ -191,8 +196,14 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
         out_keys=out_keys,
         module=q_net,
     )
-
-    model = torch.nn.ModuleList([actor, qvalue]).to(device)
+    in_keys = ["observation"]
+    out_keys = ["state_value"]
+    value_net = ValueOperator(
+        in_keys=in_keys,
+        out_keys=out_keys,
+        module=value_net,
+    )
+    model = torch.nn.ModuleList([actor, qvalue, value_net]).to(device)
     # init nets
     with torch.no_grad(), set_exploration_type(ExplorationType.RANDOM):
         td = eval_env.reset()
@@ -205,7 +216,7 @@ def make_cql_model(cfg, train_env, eval_env, device="cpu"):
     return model
 
 
-def make_cql_modules_state(model_cfg, proof_environment):
+def make_iql_modules_state(model_cfg, proof_environment):
     action_spec = proof_environment.action_spec
 
     actor_net_kwargs = {
@@ -228,26 +239,30 @@ def make_cql_modules_state(model_cfg, proof_environment):
 
     q_net = MLP(**qvalue_net_kwargs)
 
-    return actor_net, q_net
+    # Define Value Network
+    value_net_kwargs = {
+        "num_cells": model_cfg.hidden_sizes,
+        "out_features": 1,
+        "activation_class": ACTIVATIONS[model_cfg.activation],
+    }
+    value_net = MLP(**value_net_kwargs)
+
+    return actor_net, q_net, value_net
 
 
 # ====================================================================
-# CQL Loss
+# IQL Loss
 # ---------
 
 
 def make_loss(loss_cfg, model):
-    loss_module = CQLLoss(
+    loss_module = IQLLoss(
         model[0],
         model[1],
+        value_network=model[2],
         loss_function=loss_cfg.loss_function,
         temperature=loss_cfg.temperature,
-        min_q_weight=loss_cfg.min_q_weight,
-        max_q_backup=loss_cfg.max_q_backup,
-        deterministic_backup=loss_cfg.deterministic_backup,
-        num_random=loss_cfg.num_random,
-        with_lagrange=loss_cfg.with_lagrange,
-        lagrange_thresh=loss_cfg.lagrange_thresh,
+        expectile=loss_cfg.expectile,
     )
     loss_module.make_value_estimator(gamma=loss_cfg.gamma)
     target_net_updater = SoftUpdate(loss_module, tau=loss_cfg.tau)
@@ -255,32 +270,13 @@ def make_loss(loss_cfg, model):
     return loss_module, target_net_updater
 
 
-def make_cql_optimizer(optim_cfg, loss_module):
-    critic_params = loss_module.qvalue_network_params.flatten_keys().values()
-    actor_params = loss_module.actor_network_params.flatten_keys().values()
-    actor_optim = torch.optim.Adam(
-        actor_params,
-        lr=optim_cfg.actor_lr,
+def make_iql_optimizer(optim_cfg, loss_module):
+    optim = torch.optim.Adam(
+        loss_module.parameters(),
+        lr=optim_cfg.lr,
         weight_decay=optim_cfg.weight_decay,
     )
-    critic_optim = torch.optim.Adam(
-        critic_params,
-        lr=optim_cfg.critic_lr,
-        weight_decay=optim_cfg.weight_decay,
-    )
-    alpha_optim = torch.optim.Adam(
-        [loss_module.log_alpha],
-        lr=optim_cfg.actor_lr,
-        weight_decay=optim_cfg.weight_decay,
-    )
-    if loss_module.with_lagrange:
-        alpha_prime_optim = torch.optim.Adam(
-            [loss_module.log_alpha_prime],
-            lr=optim_cfg.critic_lr,
-        )
-    else:
-        alpha_prime_optim = None
-    return actor_optim, critic_optim, alpha_optim, alpha_prime_optim
+    return optim
 
 
 # ====================================================================

@@ -331,7 +331,6 @@ class DistributionalDQNLoss(LossModule):
         value_network (DistributionalQValueActor or nn.Module): the distributional Q
             value operator.
         gamma (scalar): a discount factor for return computation.
-
             .. note::
               Unlike :class:`DQNLoss`, this class does not currently support
               custom value functions. The next value estimation is always
