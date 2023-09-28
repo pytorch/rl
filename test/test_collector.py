@@ -1829,7 +1829,7 @@ class TestAggregateReset:
             },
             [1, 2],
         )
-        assert _aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)
+        assert (_aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)).all()
         # with a stack
         td0 = TensorDict(
             {

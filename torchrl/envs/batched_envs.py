@@ -603,7 +603,7 @@ class SerialEnv(_BatchedEnv):
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
-                needs_resetting = needs_resetting.expand(self.batch_size)
+                needs_resetting = needs_resetting.expand((self.num_workers,))
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
@@ -645,8 +645,7 @@ class SerialEnv(_BatchedEnv):
             )
             for key in self._selected_reset_keys:
                 key = unravel_keys(key)
-                if key not in self.reset_keys:
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
@@ -842,7 +841,7 @@ class ParallelEnv(_BatchedEnv):
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
-                needs_resetting = needs_resetting.expand(self.batch_size)
+                needs_resetting = needs_resetting.expand((self.num_workers,))
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
@@ -890,8 +889,7 @@ class ParallelEnv(_BatchedEnv):
             )
             for key in self._selected_reset_keys:
                 key = unravel_keys(key)
-                if key not in self.reset_keys:
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
