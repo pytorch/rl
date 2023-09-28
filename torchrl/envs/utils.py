@@ -851,7 +851,7 @@ def terminated_or_truncated(
 PARTIAL_MISSING_ERR = "Some reset keys were present but not all. Either all the `'_reset'` entries must be present, or none."
 
 
-def _bring_reset_to_root(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
+def _aggregate_resets(data: TensorDictBase, reset_keys=None) -> torch.Tensor:
     # goes through the tensordict and brings the _reset information to
     # a boolean tensor of the shape of the tensordict.
     batch_size = data.batch_size

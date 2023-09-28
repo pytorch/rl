@@ -87,7 +87,7 @@ function.
 .. note::
   In general, all TorchRL environment have a ``"done"`` and ``"terminated"``
   entry in their output tensordict. If they are not present by design,
-  the :class:`~.EnvBase` metaclass will ensure that every done or truncated
+  the :class:`~.EnvBase` metaclass will ensure that every done or terminated
   is flanked with its dual.
   In TorchRL, ``"done"`` strictly refers to the union of all the end-of-trajectory
   signals and should be interpreted as "the last step of a trajectory" or

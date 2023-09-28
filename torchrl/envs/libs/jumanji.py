@@ -310,6 +310,7 @@ class JumanjiWrapper(GymLikeEnv):
         )
         tensordict_out.set("reward", reward)
         tensordict_out.set("done", done)
+        tensordict_out.set("terminated", done)
         # tensordict_out.set("terminated", done)
         tensordict_out["state"] = state_dict
 
@@ -343,7 +344,6 @@ class JumanjiWrapper(GymLikeEnv):
             device=self.device,
         )
         tensordict_out.update(done_td)
-        print("done_td", done_td)
         tensordict_out["state"] = state_dict
 
         return tensordict_out
