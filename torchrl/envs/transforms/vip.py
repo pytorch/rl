@@ -380,8 +380,8 @@ class VIPRewardTransform(VIPTransform):
         cur_embedding = next_tensordict.get(self.out_keys[0])
         if last_embedding is not None:
             goal_embedding = tensordict["goal_embedding"]
-            reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
-                -torch.norm(last_embedding - goal_embedding, dim=-1)
+            reward = -torch.linalg.norm(cur_embedding - goal_embedding, dim=-1) - (
+                -torch.linalg.norm(last_embedding - goal_embedding, dim=-1)
             )
             next_tensordict.set("reward", reward)
         return next_tensordict
