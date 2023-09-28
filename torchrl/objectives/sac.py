@@ -575,7 +575,8 @@ class SACLoss(LossModule):
         td_q = tensordict.select(*self.qvalue_network.in_keys)
         td_q.set(self.tensor_keys.action, a_reparm)
         td_q = self._vmap_qnetworkN0(
-            td_q, self._cached_detached_qvalue_params  # should we clone?
+            td_q,
+            self._cached_detached_qvalue_params,  # should we clone?
         )
         min_q_logprob = (
             td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
@@ -701,7 +702,7 @@ class SACLoss(LossModule):
             pred_val,
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
-        ).mean(0)
+        ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
