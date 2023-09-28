@@ -6,6 +6,7 @@ env:
   library: gym
   frame_skip: 1
   seed: 42
+  max_episode_steps: 1_000_000
 
 # collector
 collector:
@@ -14,7 +15,6 @@ collector:
   init_env_steps: 1000
   frames_per_batch: 1000
   max_frames_per_traj: 1000
-  async_collection: 1
   collector_device: cpu
   env_per_collector: 1
   num_workers: 1

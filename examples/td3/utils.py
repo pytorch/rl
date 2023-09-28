@@ -41,9 +41,15 @@ from torchrl.objectives.td3 import TD3Loss
 # -----------------
 
 
-def env_maker(task, device="cpu"):
+def env_maker(
+    task, device="cpu", max_episode_steps=1000
+):
     with set_gym_backend("gym"):
-        return GymEnv(task, device=device)
+        return GymEnv(
+            task,
+            device=device,
+            max_episode_steps=max_episode_steps,
+        )
 
 
 def apply_env_transforms(env, reward_scaling=1.0):
@@ -63,7 +69,11 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
+        EnvCreator(
+            lambda task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps: env_maker(
+                task=task, max_episode_steps=max_episode_steps
+            )
+        ),
     )
     parallel_env.set_seed(cfg.env.seed)
 
@@ -72,7 +82,13 @@ def make_environment(cfg):
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
+            EnvCreator(
+                lambda
+                    task=cfg.env.name,
+                    max_episode_steps=cfg.env.max_episode_steps: env_maker(
+                    task=task, max_episode_steps=max_episode_steps
+                )
+            ),
         ),
         train_env.transform.clone(),
     )

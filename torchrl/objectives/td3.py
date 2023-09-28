@@ -362,7 +362,7 @@ class TD3Loss(LossModule):
         state_action_value_actor = (
             self._vmap_qvalue_network00(
                 actor_loss_td,
-                self.qvalue_network_params,
+                self._cached_detach_qvalue_network_params,
             )
             .get(self.tensor_keys.state_action_value)
             .squeeze(-1)
@@ -446,8 +446,8 @@ class TD3Loss(LossModule):
         )
         metadata = {
             "td_error": td_error,
-            "pred_value": current_qvalue.mean().detach(),
             "next_state_value": next_target_qvalue.mean().detach(),
+            "pred_value": current_qvalue.mean().detach(),
             "target_value": target_value.mean().detach(),
         }
 
@@ -456,8 +456,8 @@ class TD3Loss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict_save = tensordict
-        loss_qval, metadata_value = self.value_loss(tensordict)
         loss_actor, metadata_actor = self.actor_loss(tensordict)
+        loss_qval, metadata_value = self.value_loss(tensordict_save)
         tensordict_save.set(
             self.tensor_keys.priority, metadata_value.pop("td_error").detach().max(0)[0]
         )
