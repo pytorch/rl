@@ -8724,22 +8724,24 @@ class TestValues:
     @pytest.mark.parametrize("N", [(1,), (3,), (7, 3)])
     @pytest.mark.parametrize("T", [200, 5, 3])
     @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-    @pytest.mark.parametrize("has_done", [True, False])
+    @pytest.mark.parametrize("has_done", [False, True])
     def test_gae(self, device, gamma, lmbda, N, T, dtype, has_done):
         torch.manual_seed(0)
 
         done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
         if has_done:
-            done = done.bernoulli_(0.1)
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
         reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
         state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
         next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
 
         r1 = vec_generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done
+            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
         )
         r2 = generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done
+            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
         )
 
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
@@ -8764,8 +8766,10 @@ class TestValues:
         T = 200
 
         done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        terminated = done.clone()
         if has_done:
-            done = done.bernoulli_(0.1)
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
         reward = torch.randn(*N, T, 1, device=device, dtype=dtype)
         state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
         next_state_value = torch.randn(*N, T, 1, device=device, dtype=dtype)
@@ -8785,10 +8789,10 @@ class TestValues:
             lmbda_vec = lmbda
 
         r1 = vec_generalized_advantage_estimate(
-            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done
+            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done=done, terminated=terminated,
         )
         r2 = generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done
+            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated,
         )
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
@@ -8809,8 +8813,10 @@ class TestValues:
         torch.manual_seed(0)
 
         done = torch.zeros(*N, T, *D, device=device, dtype=torch.bool)
+        terminated = done.clone()
         if has_done:
-            done = done.bernoulli_(0.1)
+            terminated = terminated.bernoulli_(0.1)
+            done = done.bernoulli_(0.1) | terminated
         reward = torch.randn(*N, T, *D, device=device, dtype=dtype)
         state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
         next_state_value = torch.randn(*N, T, *D, device=device, dtype=dtype)
@@ -8821,7 +8827,7 @@ class TestValues:
             state_value,
             next_state_value,
             reward,
-            done,
+            done=done, terminated=terminated,
             time_dim=time_dim,
         )
         r2 = generalized_advantage_estimate(
@@ -8830,7 +8836,7 @@ class TestValues:
             state_value,
             next_state_value,
             reward,
-            done,
+            done=done, terminated=terminated,
             time_dim=time_dim,
         )
         if len(D) == 2:
@@ -8841,7 +8847,8 @@ class TestValues:
                     state_value[..., i : i + 1, j],
                     next_state_value[..., i : i + 1, j],
                     reward[..., i : i + 1, j],
-                    done[..., i : i + 1, j],
+                    done=done[..., i : i + 1, j],
+                    terminated=terminated[..., i : i + 1, j],
                     time_dim=-2,
                 )
                 for i in range(D[0])
@@ -8854,7 +8861,8 @@ class TestValues:
                     state_value[..., i : i + 1, j],
                     next_state_value[..., i : i + 1, j],
                     reward[..., i : i + 1, j],
-                    done[..., i : i + 1, j],
+                    terminated=terminated[..., i : i + 1, j],
+                    done=done[..., i : i + 1, j],
                     time_dim=-2,
                 )
                 for i in range(D[0])
@@ -8868,7 +8876,8 @@ class TestValues:
                     state_value[..., i : i + 1],
                     next_state_value[..., i : i + 1],
                     reward[..., i : i + 1],
-                    done[..., i : i + 1],
+                    done=done[..., i : i + 1],
+                    terminated=terminated[..., i : i + 1],
                     time_dim=-2,
                 )
                 for i in range(D[0])
@@ -8880,7 +8889,8 @@ class TestValues:
                     state_value[..., i : i + 1],
                     next_state_value[..., i : i + 1],
                     reward[..., i : i + 1],
-                    done[..., i : i + 1],
+                    done=done[..., i : i + 1],
+                    terminated=terminated[..., i : i + 1],
                     time_dim=-2,
                 )
                 for i in range(D[0])
