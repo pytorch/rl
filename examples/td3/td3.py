@@ -69,6 +69,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         batch_size=cfg.optim.batch_size,
         prb=cfg.replay_buffer.prb,
         buffer_size=cfg.replay_buffer.size,
+        buffer_scratch_dir="/tmp/" + cfg.replay_buffer.scratch_dir,
         device=device,
     )
 
@@ -88,9 +89,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     )
     delayed_updates = cfg.optim.policy_update_delay
     prb = cfg.replay_buffer.prb
-    eval_rollout_steps = cfg.collector.max_frames_per_traj // cfg.env.frame_skip
+    eval_rollout_steps = cfg.collector.max_frames_per_traj
     eval_iter = cfg.logger.eval_iter
-    frames_per_batch, frame_skip = cfg.collector.frames_per_batch, cfg.env.frame_skip
+    frames_per_batch = cfg.collector.frames_per_batch
     update_counter = 0
 
     sampling_start = time.time()
@@ -177,7 +178,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
             metrics_to_log["train/training_time"] = training_time
 
         # Evaluation
-        if abs(collected_frames % eval_iter) < frames_per_batch * frame_skip:
+        if abs(collected_frames % eval_iter) < frames_per_batch:
             with set_exploration_type(ExplorationType.MODE), torch.no_grad():
                 eval_start = time.time()
                 eval_rollout = eval_env.rollout(

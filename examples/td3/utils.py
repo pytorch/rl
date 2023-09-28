@@ -39,14 +39,11 @@ from torchrl.objectives.td3 import TD3Loss
 # -----------------
 
 
-def env_maker(
-    task, frame_skip=1, device="cpu", from_pixels=False, max_episode_steps=1000
-):
+def env_maker(task, device="cpu", from_pixels=False, max_episode_steps=1000):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
-            frame_skip=frame_skip,
             from_pixels=from_pixels,
             max_episode_steps=max_episode_steps,
         )
