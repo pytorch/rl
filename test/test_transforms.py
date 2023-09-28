@@ -1534,10 +1534,12 @@ class TestStepCounter(TransformBase):
             _reset = torch.randn(done.shape, device=device) < 0
             td.set("_reset", _reset)
             td.set("done", _reset)
+            td.set("terminated", _reset)
+            td.set(("next", "terminated"), done)
             td.set(("next", "done"), done)
         td.set("step_count", torch.zeros(*batch, 1, dtype=torch.int))
         step_counter[0]._step_count_keys = ["step_count"]
-        step_counter[0]._terminated_keys = ["completed"]
+        step_counter[0]._terminated_keys = ["terminated"]
         step_counter[0]._truncated_keys = ["truncated"]
         step_counter[0]._reset_keys = ["_reset"]
         step_counter[0]._done_keys = ["done"]
@@ -1554,6 +1556,7 @@ class TestStepCounter(TransformBase):
             )
             td = step_mdp(td)
             td["next", "done"] = done
+            td["next", "terminated"] = done
             if max_steps is None:
                 break
 
@@ -1592,11 +1595,14 @@ class TestStepCounter(TransformBase):
         while not _reset.any() and reset_workers:
             _reset = torch.randn(done.shape, device=device) < 0
             td.set("_reset", _reset)
+            td.set("terminated", _reset)
+            td.set(("next", "terminated"), done)
             td.set("done", _reset)
             td.set(("next", "done"), done)
         td.set("step_count", torch.zeros(*batch, 1, dtype=torch.int))
         step_counter._step_count_keys = ["step_count"]
         step_counter._done_keys = ["done"]
+        step_counter._terminated_keys = ["terminated"]
         step_counter._truncated_keys = ["truncated"]
         step_counter._reset_keys = ["_reset"]
         step_counter._completed_keys = ["completed"]
@@ -1613,6 +1619,7 @@ class TestStepCounter(TransformBase):
             )
             td = step_mdp(td)
             td["next", "done"] = done
+            td["next", "terminated"] = done
             if max_steps is None:
                 break
 

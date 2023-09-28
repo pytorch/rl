@@ -85,22 +85,17 @@ delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
 function.
 
 .. note::
-
-  The Gym(nasium) API recently shifted to a splitting of the ``"done"`` state
-  into a ``termination`` (the env is done and results should not be trusted)
-  and ``truncation`` (an external limit on the number of steps is reached) flags.
-  In TorchRL, ``"done"`` strictly refers to ``termination | truncation``.
+  In general, all TorchRL environment have a ``"done"`` and ``"terminated"``
+  entry in their output tensordict. If they are not present by design,
+  the :class:`~.EnvBase` metaclass will ensure that every done or truncated
+  is flanked with its dual.
+  In TorchRL, ``"done"`` strictly refers to the union of all the end-of-trajectory
+  signals and should be interpreted as "the last step of a trajectory" or
+  equivalently "a signal indicating the need to reset".
   If the environment provides it (eg, Gymnasium), the truncation entry is also
   written in the :meth:`EnvBase.step` output under a ``"truncated"`` entry.
-  If the environment carries a single value, it will interpreted as a ``"done"``
+  If the environment carries a single value, it will interpreted as a ``"terminated"``
   signal by default.
-  Some classes in TorchRL may require a ``"terminated"`` signal (eg, value functions).
-  If none is available, they will fall back on ``"done"`` instead.
-  The caveat of this choice is that adding a truncation transform (eg, :class:`.StepCounter`)
-  will override the content of the ``"done"`` signal. If this is a problem
-  a :class:`~.RenameTransform` should be used to move or copy the ``"done"``
-  entry (for instance to ``"terminated"``).
-
   By default, TorchRL's collectors and rollout methods will be looking for the ``"done"``
   entry to assess if the environment should be reset.
 

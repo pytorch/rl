@@ -653,7 +653,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.input_spec.lock_()
 
     @property
-    def full_action_spec(self):
+    def full_action_spec(self) -> CompositeSpec:
         """The full action spec.
 
         ``full_action_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
@@ -677,6 +677,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.input_spec["full_action_spec"]
+
+    @full_action_spec.setter
+    def full_action_spec(self, spec: CompositeSpec) -> None:
+        self.action_spec = spec
 
     # Reward spec
     def _get_reward_keys(self):
@@ -846,7 +850,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.output_spec.lock_()
 
     @property
-    def full_reward_spec(self):
+    def full_reward_spec(self) -> CompositeSpec:
         """The full reward spec.
 
         ``full_reward_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
@@ -871,6 +875,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.output_spec["full_reward_spec"]
+
+    @full_reward_spec.setter
+    def full_reward_spec(self, spec: CompositeSpec) -> None:
+        self.reward_spec = spec
 
     # done spec
     def _get_done_keys(self):
@@ -914,7 +922,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return self.done_keys[0]
 
     @property
-    def full_done_spec(self):
+    def full_done_spec(self) -> CompositeSpec:
         """The full done spec.
 
         ``full_done_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
@@ -943,6 +951,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.output_spec["full_done_spec"]
+
+    @full_done_spec.setter
+    def full_done_spec(self, spec: CompositeSpec) -> None:
+        self.done_spec = spec
 
     # Done spec: done specs belong to output_spec
     @property
@@ -1177,7 +1189,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         finally:
             self.output_spec.lock_()
 
-    full_observation_spec = observation_spec
+    @property
+    def full_observation_spec(self) -> CompositeSpec:
+        return self.observation_spec
+
+    @full_observation_spec.setter
+    def full_observation_spec(self, spec: CompositeSpec):
+        self.observation_spec = spec
 
     # state spec: state specs belong to input_spec
     @property
@@ -1246,7 +1264,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             self.input_spec.lock_()
 
     @property
-    def full_state_spec(self):
+    def full_state_spec(self) -> CompositeSpec:
         """The full state spec.
 
         ``full_state_spec`` is a :class:`~torchrl.data.CompositeSpec`` instance
@@ -1271,6 +1289,10 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         """
         return self.state_spec
+
+    @full_state_spec.setter
+    def full_state_spec(self, spec: CompositeSpec) -> None:
+        self.state_spec = spec
 
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
@@ -1770,6 +1792,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordicts.append(tensordict.clone(False))
 
             if i == max_steps - 1:
+                # we don't truncated as one could potentially continue the run
                 break
             tensordict = step_mdp(
                 tensordict,
@@ -1810,6 +1833,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         settings. They are structured as ``(*prefix, "_reset")`` where ``prefix`` is
         a (possibly empty) tuple of strings pointing to a tensordict location
         where a done state can be found.
+
+        The value of reset_keys is cached.
         """
         reset_keys = self.__dict__.get("_reset_keys", None)
         if reset_keys is not None:
@@ -1843,6 +1868,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         This is a list of lists. The outer list has the length of reset keys, the
         inner lists contain the done keys (eg, done and truncated) that can
         be read to determine a reset when it is absent.
+
+        The value of ``done_keys_groups`` is cached.
 
         """
         done_keys_sorted = self.__dict__.get("_done_keys_groups", None)

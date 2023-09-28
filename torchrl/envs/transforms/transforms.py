@@ -4425,6 +4425,21 @@ class StepCounter(Transform):
         return done_keys
 
     @property
+    def terminated_keys(self):
+        terminated_keys = self.__dict__.get("_terminated_keys", None)
+        if terminated_keys is None:
+            # make the default terminated keys
+            terminated_keys = []
+            for (terminated_key, *_) in self.parent.done_keys_groups:
+                if isinstance(terminated_key, str):
+                    key = "terminated"
+                else:
+                    key = (*terminated_key[:-1], "terminated")
+                terminated_keys.append(key)
+        self.__dict__["_terminated_keys"] = terminated_keys
+        return terminated_keys
+
+    @property
     def step_count_keys(self):
         step_count_keys = self.__dict__.get("_step_count_keys", None)
         if step_count_keys is None:
@@ -4495,11 +4510,11 @@ class StepCounter(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
-        for step_count_key, truncated_key, done_key, done_list_sorted in zip(
+        for step_count_key, truncated_key, done_key, terminated_key in zip(
             self.step_count_keys,
             self.truncated_keys,
             self.done_keys,
-            self.done_keys_groups,
+            self.terminated_keys,
         ):
             step_count = tensordict.get(step_count_key)
             next_step_count = step_count + 1
@@ -4508,10 +4523,9 @@ class StepCounter(Transform):
                 truncated = next_step_count >= self.max_steps
                 if self.update_done:
                     done = next_tensordict.get(done_key, None)
-                    if done is None:
-                        done = False
-                        for done in done_list_sorted:
-                            done = done | next_tensordict.get(done_key, default=False)
+                    terminated = next_tensordict.get(terminated_key, None)
+                    if terminated is not None:
+                        truncated = truncated & ~terminated
                     done = truncated | done  # we assume no done after reset
                     next_tensordict.set(done_key, done)
                 next_tensordict.set(truncated_key, truncated)
@@ -5734,8 +5748,8 @@ class VecGymEnvTransform(Transform):
     ) -> TensorDictBase:
         # save the final info
         done = False
-        # TODO: check if there's a done, and if there is, get it
         for done_key in self.done_keys:
+            # we assume dones can be broadcast
             done = done | next_tensordict.get(done_key)
         if done is False:
             raise RuntimeError(
@@ -5808,16 +5822,16 @@ class VecGymEnvTransform(Transform):
         keys = self.__dict__.get("_done_keys", None)
         if keys is None:
             keys = self.parent.done_keys
-            self._done_keys = keys
-            expected_done_keys = {"done", "truncated", "terminated"}
-            # put this check for now. We can consider relaxing that later
-            # and allow nested values, though they will still need to be unique.
-            for done_key in keys:
-                if done_key not in expected_done_keys:
-                    raise RuntimeError(
-                        f"VecGymEnvTransform only supports the following "
-                        f"done keys: {expected_done_keys}, but it got {done_key}."
-                    )
+            # we just want the "done" key
+            _done_keys = []
+            for key in keys:
+                if not isinstance(key, tuple):
+                    key = (key,)
+                if key[-1] == "done":
+                    _done_keys.append(unravel_key(key))
+            if not len(_done_keys):
+                raise RuntimeError("Could not find a 'done' key in the env specs.")
+            self._done_keys = _done_keys
         return keys
 
     @property

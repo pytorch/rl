@@ -135,7 +135,7 @@ class GymLikeEnv(_EnvWrapper):
 
     def read_done(
         self,
-        terminated: bool,
+        terminated: bool | None = None,
         truncated: bool | None = None,
         done: bool | None = None,
     ) -> Tuple[bool | np.ndarray, bool | np.ndarray, bool | np.ndarray, bool]:
@@ -143,15 +143,15 @@ class GymLikeEnv(_EnvWrapper):
 
         In torchrl, a `"done"` signal means that a trajectory has reach its end,
         either because it has been interrupted or because it is terminated.
-        Truncated means the trajectory has been interrupted early.
-        Terminated means the task is finished.
+        Truncated means the episode has been interrupted early.
+        Terminated means the task is finished, the episode is completed.
 
         Args:
-            terminated (np.ndarray, boolean or other format): completion state obtained
-                from the environment.
-                ``"terminated"`` equates to ``"termination"`` in gymnasium: the signal that
-                the environment has reached the end of the game, any data coming
-                after this should be considered as nonsensical.
+            terminated (np.ndarray, boolean or other format): completion state
+                obtained from the environment.
+                ``"terminated"`` equates to ``"termination"`` in gymnasium:
+                the signal that the environment has reached the end of the
+                episode, any data coming after this should be considered as nonsensical.
                 Defaults to ``None``.
             truncated (bool or None): early truncation signal.
                 Defaults to ``None``.
@@ -315,8 +315,8 @@ class GymLikeEnv(_EnvWrapper):
         """A method to read the output of the env step.
 
         Must return a tuple: (obs, reward, terminated, truncated, done, info).
-        If only one end-of-trajectory is passed, it is interpreted as ``"done"``
-        (unspecified end-of-traj).
+        If only one end-of-trajectory is passed, it is interpreted as ``"truncated"``.
+        An attempt to retrieve ``"truncated"`` from the info dict is also undertaken.
         If 2 are passed (like in gymnasium), we interpret them as ``"terminated",
         "truncated"`` (``"truncated"`` meaning that the trajectory has been
         interrupted early), and ``"done"`` is the union of the two,
@@ -324,17 +324,16 @@ class GymLikeEnv(_EnvWrapper):
 
         These three concepts have different usage:
 
-          - ``"terminated"`` means that one should not pay attention to the
+          - ``"terminated"`` indicated the final stage of a Markov Decision
+            Process. It means that one should not pay attention to the
             upcoming observations (eg., in value functions) as they should be
             regarded as not valid.
-            This is a "game-over" situation, the result of the action is the
-            end of the game (win or loose).
           - ``"truncated"`` means that the environment has reached a stage where
             we decided to stop the collection for some reason but the next
             observation should not be discarded. If it were not for this
             arbitrary decision, the collection could have proceeded further.
           - ``"done"`` is either one or the other. It is to be interpreted as
-            "a reset should be called at the next step".
+            "a reset should be called before the next step is undertaken".
 
         """
         ...
