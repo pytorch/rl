@@ -2,6 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
+import warnings
 
 import math
 from functools import wraps
@@ -10,7 +13,6 @@ from typing import Optional, Tuple, Union
 import torch
 
 from tensordict import MemmapTensor
-from torch import Tensor
 
 __all__ = [
     "generalized_advantage_estimate",
@@ -119,7 +121,7 @@ def generalized_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    terminated: torch.Tensor,
+    terminated: torch.Tensor | None=None,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generalized advantage estimate of a trajectory.
@@ -134,7 +136,8 @@ def generalized_advantage_estimate(
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of trajectory.
-        terminated (Tensor): boolean flag for the end of episode.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -262,7 +265,7 @@ def vec_generalized_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    terminated: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Vectorized Generalized advantage estimate of a trajectory.
@@ -277,7 +280,8 @@ def vec_generalized_advantage_estimate(
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
         done (Tensor): boolean flag for end of trajectory.
-        terminated (Tensor): boolean flag for the end of episode.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         time_dim (int): dimension where the time is unrolled. Defaults to -2.
 
     All tensors (values, reward and done) must have shape
@@ -371,6 +375,7 @@ def td0_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) advantage estimate of a trajectory.
 
@@ -381,18 +386,19 @@ def td0_advantage_estimate(
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
-        truncated (Tensor, optional): boolean flag for last step of a (possibly)
-            unfinished episode. Defaults to ``None`` (only ``done`` matters).
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
-    returns = td0_return_estimate(gamma, next_state_value, reward, done)
+    returns = td0_return_estimate(gamma, next_state_value, reward, terminated)
     advantage = returns - state_value
     return advantage
 
@@ -401,7 +407,9 @@ def td0_return_estimate(
     gamma: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    done: torch.Tensor,
+    terminated: torch.Tensor,
+    *,
+    done: torch.Tensor=None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) discounted return estimate of a trajectory.
 
@@ -413,19 +421,19 @@ def td0_return_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
-        truncated (Tensor, optional): boolean flag for last step of a (possibly)
-            unfinished episode. Defaults to ``None`` (only ``done`` matters).
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == reward.shape == done.shape):
+    if done is not None:
+        warnings.warn("done for td0_return_estimate is deprecated. Pass ``terminated`` instead.")
+    if not (next_state_value.shape == reward.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
-    not_done = (~done).int()
-    advantage = reward + gamma * not_done * next_state_value
+    not_terminated = (~terminated).int()
+    advantage = reward + gamma * not_terminated * next_state_value
     return advantage
 
 
@@ -440,6 +448,7 @@ def td1_return_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -449,8 +458,9 @@ def td1_return_estimate(
         gamma (scalar): exponential mean discount.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -478,9 +488,12 @@ def td1_return_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_done = (~done).int()
+    not_terminated = (~terminated).int()
 
     returns = torch.empty_like(next_state_value)
 
@@ -498,19 +511,25 @@ def td1_return_estimate(
             "rolling_gamma=False is expected only with time-sensitive gamma values"
         )
 
+    done_but_not_terminated = (done & ~terminated).int()
     if rolling_gamma:
-        gamma = gamma * not_done
+        gamma = gamma * not_terminated
         g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
-            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * g
+            # if not done and not terminated, get the bootstrapped value
+            # if done but not terminated, get nex_val
+            # if terminated, take nothing (gamma = 0)
+            dnt = done_but_not_terminated[..., i, :]
+            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * ((1-dnt) * g + dnt * next_state_value[..., i, :])
     else:
         for k in range(T):
-            g = next_state_value[..., -1, :]
+            g = 0
             _gamma = gamma[..., k, :]
-            nd = not_done
+            nd = not_terminated
             _gamma = _gamma.unsqueeze(-2) * nd
             for i in reversed(range(k, T)):
-                g = reward[..., i, :] + _gamma[..., i, :] * g
+                dnt = done_but_not_terminated[..., i, :]
+                g = reward[..., i, :] + _gamma[..., i, :] * ((1-dnt) * g + dnt * next_state_value[..., i, :])
             returns[..., k, :] = g
     return returns
 
@@ -520,7 +539,7 @@ def td1_advantage_estimate(
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    done: torch.Tensor,
+    done: torch.Tensor,    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -531,8 +550,9 @@ def td1_advantage_estimate(
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -560,12 +580,14 @@ def td1_advantage_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td1_return_estimate(
-        gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+        gamma, next_state_value, reward, done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
     )
     advantage = returns - state_value
     return advantage
@@ -576,7 +598,7 @@ def vec_td1_return_estimate(
     gamma,
     next_state_value,
     reward,
-    done: torch.Tensor,
+    done: torch.Tensor,    terminated: torch.Tensor | None = None,
     rolling_gamma: Optional[bool] = None,
     time_dim: int = -2,
 ):
@@ -586,8 +608,9 @@ def vec_td1_return_estimate(
         gamma (scalar, Tensor): exponential mean discount. If tensor-valued,
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -619,7 +642,7 @@ def vec_td1_return_estimate(
         gamma=gamma,
         next_state_value=next_state_value,
         reward=reward,
-        done=done,
+        done=done, terminated=terminated,
         rolling_gamma=rolling_gamma,
         lmbda=1,
         time_dim=time_dim,
@@ -631,7 +654,7 @@ def vec_td1_advantage_estimate(
     state_value,
     next_state_value,
     reward,
-    done: torch.Tensor,
+    done: torch.Tensor,    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ):
@@ -642,8 +665,9 @@ def vec_td1_advantage_estimate(
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -671,11 +695,13 @@ def vec_td1_advantage_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     return (
         vec_td1_return_estimate(
-            gamma, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+            gamma, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
         )
         - state_value
     )
@@ -692,7 +718,7 @@ def td_lambda_return_estimate(
     lmbda: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    done: torch.Tensor,
+    done: torch.Tensor,    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -703,8 +729,9 @@ def td_lambda_return_estimate(
         lmbda (scalar): trajectory discount.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -732,23 +759,26 @@ def td_lambda_return_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
-    not_done = (~done).int()
+    not_terminated = (~terminated).int()
 
     returns = torch.empty_like(next_state_value)
+    next_state_value = next_state_value * not_terminated
 
     *batch, T, lastdim = returns.shape
 
     # if gamma is not a tensor of the same shape as other inputs, we use rolling_gamma = True
     single_gamma = False
-    if not (isinstance(gamma, torch.Tensor) and gamma.shape == not_done.shape):
+    if not (isinstance(gamma, torch.Tensor) and gamma.shape == done.shape):
         single_gamma = True
         gamma = torch.full_like(next_state_value, gamma)
 
     single_lambda = False
-    if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == not_done.shape):
+    if not (isinstance(lmbda, torch.Tensor) and lmbda.shape == done.shape):
         single_lambda = True
         lmbda = torch.full_like(next_state_value, lmbda)
 
@@ -758,25 +788,29 @@ def td_lambda_return_estimate(
         raise RuntimeError(
             "rolling_gamma=False is expected only with time-sensitive gamma or lambda values"
         )
-
     if rolling_gamma:
-        gamma = gamma * not_done
         g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
+            dn = done[..., i, :].int()
+            nv = next_state_value[..., i, :]
+            lmd = lmbda[..., i, :]
+            g = g * (1-dn) + nv * dn
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
-                (1 - lmbda[..., i, :]) * next_state_value[..., i, :]
-                + lmbda[..., i, :] * g
+                (1 - lmd) * nv + lmd * g
             )
     else:
         for k in range(T):
             g = next_state_value[..., -1, :]
             _gamma = gamma[..., k, :]
             _lambda = lmbda[..., k, :]
-            nd = not_done
+            nd = not_terminated
             _gamma = _gamma.unsqueeze(-2) * nd
             for i in reversed(range(k, T)):
+                dn = done[..., i, :].int()
+                nv = next_state_value[..., i, :]
+                g = g * (1 - dn) + nv * dn
                 g = reward[..., i, :] + _gamma[..., i, :] * (
-                    (1 - _lambda) * next_state_value[..., i, :] + _lambda * g
+                    (1 - _lambda) * nv + _lambda * g
                 )
             returns[..., k, :] = g
 
@@ -790,6 +824,7 @@ def td_lambda_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -801,8 +836,9 @@ def td_lambda_advantage_estimate(
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -830,12 +866,14 @@ def td_lambda_advantage_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
-        gamma, lmbda, next_state_value, reward, done, rolling_gamma, time_dim=time_dim
+        gamma, lmbda, next_state_value, reward, done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
     )
     advantage = returns - state_value
     return advantage
@@ -847,6 +885,7 @@ def _fast_td_lambda_return_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
+    terminated: torch.Tensor,
     thr: float = 1e-7,
 ):
     """Fast vectorized TD lambda return estimate.
@@ -859,8 +898,8 @@ def _fast_td_lambda_return_estimate(
         lmbda (scalar): the lambda decay (exponential mean discount)
         next_state_value (torch.Tensor): a [*B, T, F] tensor containing next state values (value function)
         reward (torch.Tensor): a [*B, T, F] tensor containing rewards
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for end of episode.
         thr (float): threshold for the filter. Below this limit, components will ignored.
             Defaults to 1e-7.
 
@@ -870,22 +909,26 @@ def _fast_td_lambda_return_estimate(
     """
     device = reward.device
     done = done.transpose(-2, -1)
+    terminated = terminated.transpose(-2, -1)
     reward = reward.transpose(-2, -1)
     next_state_value = next_state_value.transpose(-2, -1)
+
+    # the only valid next states are those where the trajectory does not terminate
+    next_state_value = (~terminated).int() * next_state_value
 
     gamma_tensor = torch.tensor([gamma], device=device)
     gammalmbda = gamma_tensor * lmbda
 
-    not_done = (~done).int()
     num_per_traj = _get_num_per_traj(done)
-    nvalue_ndone = not_done * next_state_value
 
-    t = nvalue_ndone * gamma_tensor * (1 - lmbda) + reward
-    v3 = torch.zeros_like(t, device=device)
-    v3[..., -1] = nvalue_ndone[..., -1].clone()
+    done = done.clone()
+    done[..., -1] = 1
+    not_done = (~done).int()
+
+    t = reward + next_state_value * gamma_tensor * (1 - not_done * lmbda)
 
     t_flat, mask = _split_and_pad_sequence(
-        t + v3 * gammalmbda, num_per_traj, return_mask=True
+        t , num_per_traj, return_mask=True
     )
 
     gammalmbdas = _geom_series_like(t_flat[0], gammalmbda, thr=thr)
@@ -903,6 +946,7 @@ def vec_td_lambda_return_estimate(
     next_state_value,
     reward,
     done,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: Optional[bool] = None,
     time_dim: int = -2,
 ):
@@ -916,8 +960,9 @@ def vec_td_lambda_return_estimate(
             must be a [Batch x TimeSteps x 1] tensor
         reward (Tensor): reward of taking actions in the environment.
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -945,7 +990,9 @@ def vec_td_lambda_return_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
 
     gamma_thr = 1e-7
@@ -964,7 +1011,7 @@ def vec_td_lambda_return_estimate(
             lmbda=lmbda,
             next_state_value=next_state_value,
             reward=reward,
-            done=done,
+            done=done,terminated=terminated,
             thr=gamma_thr,
         )
 
@@ -979,6 +1026,8 @@ def vec_td_lambda_return_estimate(
     """Vectorized version of td_lambda_advantage_estimate"""
     device = reward.device
     not_done = (~done).int()
+    not_terminated = (~terminated).int()
+    next_state_value = next_state_value * not_terminated.view_as(next_state_value)
 
     if rolling_gamma is None:
         rolling_gamma = True
@@ -987,8 +1036,8 @@ def vec_td_lambda_return_estimate(
     gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
 
     if not rolling_gamma:
-        done_follows_done = done[..., 1:, :][done[..., :-1, :]].all()
-        if not done_follows_done:
+        terminated_follows_terminated = terminated[..., 1:, :][terminated[..., :-1, :]].all()
+        if not terminated_follows_terminated:
             raise NotImplementedError(
                 "When using rolling_gamma=False and vectorized TD(lambda) with time-dependent gamma, "
                 "make sure that conseducitve trajectories are separated as different batch "
@@ -1015,10 +1064,10 @@ def vec_td_lambda_return_estimate(
             gammas = gammas[:, :1]
         if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
             lambdas = lambdas[:, :1]
-        v3 = (gammas * lambdas).squeeze(-1) * next_state_value
-        v3[..., :-1] = 0
+        # v3 = (gammas * lambdas).squeeze(-1) * next_state_value
+        # v3[..., :-1] = 0
         out = _custom_conv1d(
-            reward + (gammas * (1 - lambdas)).squeeze(-1) * next_state_value + v3, dec
+            reward + gammas * (next_state_value * (1 + lambdas * (done.view(-1, 1, T, 1).int() - 1))).squeeze(-1), dec
         )
         return out.view(*batch, lastdim, T).transpose(-2, -1)
     else:
@@ -1030,10 +1079,10 @@ def vec_td_lambda_return_estimate(
             lambdas = lambdas[:, :, :1].transpose(1, 2)
 
         v2 = _custom_conv1d(
-            next_state_value * not_done.view_as(next_state_value),
+            next_state_value,
             dec * (gammas * (1 - lambdas)).transpose(1, 2),
         )
-        v3 = next_state_value * not_done.view_as(next_state_value)
+        v3 = next_state_value
         v3[..., :-1] = 0
         v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
         return (v1 + v2 + v3).view(*batch, lastdim, T).transpose(-2, -1)
@@ -1046,6 +1095,7 @@ def vec_td_lambda_advantage_estimate(
     next_state_value,
     reward,
     done,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ):
@@ -1057,8 +1107,9 @@ def vec_td_lambda_advantage_estimate(
         state_value (Tensor): value function result with old_state input.
         next_state_value (Tensor): value function result with new_state input.
         reward (Tensor): reward of taking actions in the environment.
-        done (Tensor): boolean flag for end of episode. Differs from
-            truncated, where the episode did not end but was interrupted.
+        done (Tensor): boolean flag for end of trajectory.
+        terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
+            if not provided.
         rolling_gamma (bool, optional): if ``True``, it is assumed that each gamma
             if a gamma tensor is tied to a single event:
               gamma = [g1, g2, g3, g4]
@@ -1086,7 +1137,9 @@ def vec_td_lambda_advantage_estimate(
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
 
     """
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape):
+    if terminated is None:
+        terminated = done
+    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     return (
         vec_td_lambda_return_estimate(
@@ -1094,8 +1147,8 @@ def vec_td_lambda_advantage_estimate(
             lmbda,
             next_state_value,
             reward,
-            done,
-            rolling_gamma,
+            done=done, terminated=terminated,
+            rolling_gamma=rolling_gamma,
             time_dim=time_dim,
         )
         - state_value
