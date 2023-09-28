@@ -4,9 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import warnings
-
 import math
+
+import warnings
 from functools import wraps
 from typing import Optional, Tuple, Union
 
@@ -121,7 +121,7 @@ def generalized_advantage_estimate(
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
     done: torch.Tensor,
-    terminated: torch.Tensor | None=None,
+    terminated: torch.Tensor | None = None,
     time_dim: int = -2,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generalized advantage estimate of a trajectory.
@@ -396,7 +396,13 @@ def td0_advantage_estimate(
     """
     if terminated is None:
         terminated = done
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
+    if not (
+        next_state_value.shape
+        == state_value.shape
+        == reward.shape
+        == done.shape
+        == terminated.shape
+    ):
         raise RuntimeError(SHAPE_ERR)
     returns = td0_return_estimate(gamma, next_state_value, reward, terminated)
     advantage = returns - state_value
@@ -409,7 +415,7 @@ def td0_return_estimate(
     reward: torch.Tensor,
     terminated: torch.Tensor,
     *,
-    done: torch.Tensor=None,
+    done: torch.Tensor = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) discounted return estimate of a trajectory.
 
@@ -429,7 +435,9 @@ def td0_return_estimate(
 
     """
     if done is not None:
-        warnings.warn("done for td0_return_estimate is deprecated. Pass ``terminated`` instead.")
+        warnings.warn(
+            "done for td0_return_estimate is deprecated. Pass ``terminated`` instead."
+        )
     if not (next_state_value.shape == reward.shape == terminated.shape):
         raise RuntimeError(SHAPE_ERR)
     not_terminated = (~terminated).int()
@@ -520,7 +528,9 @@ def td1_return_estimate(
             # if done but not terminated, get nex_val
             # if terminated, take nothing (gamma = 0)
             dnt = done_but_not_terminated[..., i, :]
-            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * ((1-dnt) * g + dnt * next_state_value[..., i, :])
+            g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
+                (1 - dnt) * g + dnt * next_state_value[..., i, :]
+            )
     else:
         for k in range(T):
             g = 0
@@ -529,7 +539,9 @@ def td1_return_estimate(
             _gamma = _gamma.unsqueeze(-2) * nd
             for i in reversed(range(k, T)):
                 dnt = done_but_not_terminated[..., i, :]
-                g = reward[..., i, :] + _gamma[..., i, :] * ((1-dnt) * g + dnt * next_state_value[..., i, :])
+                g = reward[..., i, :] + _gamma[..., i, :] * (
+                    (1 - dnt) * g + dnt * next_state_value[..., i, :]
+                )
             returns[..., k, :] = g
     return returns
 
@@ -539,7 +551,8 @@ def td1_advantage_estimate(
     state_value: torch.Tensor,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    done: torch.Tensor,    terminated: torch.Tensor | None = None,
+    done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -582,12 +595,24 @@ def td1_advantage_estimate(
     """
     if terminated is None:
         terminated = done
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
+    if not (
+        next_state_value.shape
+        == state_value.shape
+        == reward.shape
+        == done.shape
+        == terminated.shape
+    ):
         raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td1_return_estimate(
-        gamma, next_state_value, reward, done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
+        gamma,
+        next_state_value,
+        reward,
+        done,
+        terminated=terminated,
+        rolling_gamma=rolling_gamma,
+        time_dim=time_dim,
     )
     advantage = returns - state_value
     return advantage
@@ -598,7 +623,8 @@ def vec_td1_return_estimate(
     gamma,
     next_state_value,
     reward,
-    done: torch.Tensor,    terminated: torch.Tensor | None = None,
+    done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: Optional[bool] = None,
     time_dim: int = -2,
 ):
@@ -642,7 +668,8 @@ def vec_td1_return_estimate(
         gamma=gamma,
         next_state_value=next_state_value,
         reward=reward,
-        done=done, terminated=terminated,
+        done=done,
+        terminated=terminated,
         rolling_gamma=rolling_gamma,
         lmbda=1,
         time_dim=time_dim,
@@ -654,7 +681,8 @@ def vec_td1_advantage_estimate(
     state_value,
     next_state_value,
     reward,
-    done: torch.Tensor,    terminated: torch.Tensor | None = None,
+    done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ):
@@ -697,11 +725,23 @@ def vec_td1_advantage_estimate(
     """
     if terminated is None:
         terminated = done
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
+    if not (
+        next_state_value.shape
+        == state_value.shape
+        == reward.shape
+        == done.shape
+        == terminated.shape
+    ):
         raise RuntimeError(SHAPE_ERR)
     return (
         vec_td1_return_estimate(
-            gamma, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
+            gamma,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
+            time_dim=time_dim,
         )
         - state_value
     )
@@ -718,7 +758,8 @@ def td_lambda_return_estimate(
     lmbda: float,
     next_state_value: torch.Tensor,
     reward: torch.Tensor,
-    done: torch.Tensor,    terminated: torch.Tensor | None = None,
+    done: torch.Tensor,
+    terminated: torch.Tensor | None = None,
     rolling_gamma: bool = None,
     time_dim: int = -2,
 ) -> torch.Tensor:
@@ -794,7 +835,7 @@ def td_lambda_return_estimate(
             dn = done[..., i, :].int()
             nv = next_state_value[..., i, :]
             lmd = lmbda[..., i, :]
-            g = g * (1-dn) + nv * dn
+            g = g * (1 - dn) + nv * dn
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
                 (1 - lmd) * nv + lmd * g
             )
@@ -868,12 +909,25 @@ def td_lambda_advantage_estimate(
     """
     if terminated is None:
         terminated = done
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
+    if not (
+        next_state_value.shape
+        == state_value.shape
+        == reward.shape
+        == done.shape
+        == terminated.shape
+    ):
         raise RuntimeError(SHAPE_ERR)
     if not state_value.shape == next_state_value.shape:
         raise RuntimeError("shape of state_value and next_state_value must match")
     returns = td_lambda_return_estimate(
-        gamma, lmbda, next_state_value, reward, done, terminated=terminated, rolling_gamma=rolling_gamma, time_dim=time_dim
+        gamma,
+        lmbda,
+        next_state_value,
+        reward,
+        done,
+        terminated=terminated,
+        rolling_gamma=rolling_gamma,
+        time_dim=time_dim,
     )
     advantage = returns - state_value
     return advantage
@@ -927,9 +981,7 @@ def _fast_td_lambda_return_estimate(
 
     t = reward + next_state_value * gamma_tensor * (1 - not_done * lmbda)
 
-    t_flat, mask = _split_and_pad_sequence(
-        t , num_per_traj, return_mask=True
-    )
+    t_flat, mask = _split_and_pad_sequence(t, num_per_traj, return_mask=True)
 
     gammalmbdas = _geom_series_like(t_flat[0], gammalmbda, thr=thr)
 
@@ -1011,7 +1063,8 @@ def vec_td_lambda_return_estimate(
             lmbda=lmbda,
             next_state_value=next_state_value,
             reward=reward,
-            done=done,terminated=terminated,
+            done=done,
+            terminated=terminated,
             thr=gamma_thr,
         )
 
@@ -1031,9 +1084,13 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    gammas = _make_gammas_tensor(gamma * not_done if rolling_gamma else gamma, T, rolling_gamma)
+    gammas = _make_gammas_tensor(
+        gamma * not_done if rolling_gamma else gamma, T, rolling_gamma
+    )
     if not rolling_gamma:
-        terminated_follows_terminated = terminated[..., 1:, :][terminated[..., :-1, :]].all()
+        terminated_follows_terminated = terminated[..., 1:, :][
+            terminated[..., :-1, :]
+        ].all()
         if not terminated_follows_terminated:
             raise NotImplementedError(
                 "When using rolling_gamma=False and vectorized TD(lambda) with time-dependent gamma, "
@@ -1061,10 +1118,18 @@ def vec_td_lambda_return_estimate(
             gammas = gammas[:, :1]
         if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
             lambdas = lambdas[:, :1]
-        v3 = (gammas * lambdas).squeeze(-1) * next_state_value
+        not_done = not_done.transpose(-2, -1).unsqueeze(-2)
+        if len(batch):
+            not_done = not_done.flatten(0, len(batch))
+        v3 = (gammas * lambdas).squeeze(-1) * next_state_value * not_done
         v3[..., :-1] = 0
         out = _custom_conv1d(
-            reward + gammas.squeeze(-1) * next_state_value * (1 + lambdas.squeeze(-1) * (done.view(-1, 1, T).int() - 1)) + v3, dec
+            reward
+            + gammas.squeeze(-1)
+            * next_state_value
+            * (1 + lambdas.squeeze(-1) * (done.view(-1, 1, T).int() - 1))
+            + v3,
+            dec,
         )
 
         # out = _custom_conv1d(
@@ -1141,7 +1206,13 @@ def vec_td_lambda_advantage_estimate(
     """
     if terminated is None:
         terminated = done
-    if not (next_state_value.shape == state_value.shape == reward.shape == done.shape == terminated.shape):
+    if not (
+        next_state_value.shape
+        == state_value.shape
+        == reward.shape
+        == done.shape
+        == terminated.shape
+    ):
         raise RuntimeError(SHAPE_ERR)
     return (
         vec_td_lambda_return_estimate(
@@ -1149,7 +1220,8 @@ def vec_td_lambda_advantage_estimate(
             lmbda,
             next_state_value,
             reward,
-            done=done, terminated=terminated,
+            done=done,
+            terminated=terminated,
             rolling_gamma=rolling_gamma,
             time_dim=time_dim,
         )

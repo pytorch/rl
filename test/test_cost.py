@@ -8468,15 +8468,37 @@ class TestValues:
         if random_gamma:
             gamma = torch.rand_like(reward) * gamma
 
-        next_state_value = torch.cat([state_value[..., 1:, :], torch.randn_like(state_value[..., -1:, :])], -2)
+        next_state_value = torch.cat(
+            [state_value[..., 1:, :], torch.randn_like(state_value[..., -1:, :])], -2
+        )
         r1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma,
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         r2 = td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma,
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         r3, *_ = vec_generalized_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated,
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         torch.testing.assert_close(r3, r2, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
@@ -8485,14 +8507,26 @@ class TestValues:
         # test when v' is not v from next step (not working with gae)
         next_state_value = torch.randn_like(next_state_value)
         r1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma,
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         r2 = td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
-
-
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.99])
@@ -8633,10 +8667,22 @@ class TestValues:
             gamma = torch.rand_like(reward) * gamma
 
         r1 = vec_td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         r2 = td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done=done, terminated=terminated, rolling_gamma=rolling_gamma
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            rolling_gamma=rolling_gamma,
         )
         torch.testing.assert_close(r1, r2, rtol=1e-4, atol=1e-4)
 
@@ -8993,12 +9039,26 @@ class TestValues:
         next_state_value = torch.randn(*N, T, 1, device=device)
 
         gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
-
+        # if len(N) == 2:
+        #     print(terminated[4, 0, -10:])
+        #     print(done[4, 0, -10:])
         v1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9009,10 +9069,22 @@ class TestValues:
         gamma_tensor[..., -1, :] = 0.0
 
         v1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9037,8 +9109,8 @@ class TestValues:
         """
         torch.manual_seed(0)
 
-        done = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
-        terminated = torch.zeros(*N, T, 1, device=device, dtype=torch.bool)
+        done = torch.zeros(*N, T, F, device=device, dtype=torch.bool)
+        terminated = torch.zeros(*N, T, F, device=device, dtype=torch.bool)
         if has_done:
             terminated = terminated.bernoulli_(0.1)
             done = done.bernoulli_(0.1) | terminated
@@ -9059,10 +9131,22 @@ class TestValues:
             lmbda_vec = lmbda
 
         v1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_vec,
+            lmbda_vec,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9072,10 +9156,22 @@ class TestValues:
         terminated[..., -1, :] = True  # terminating trajectory
 
         v1 = vec_td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_vec, lmbda_vec, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_vec,
+            lmbda_vec,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9104,10 +9200,20 @@ class TestValues:
         gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
 
         v1 = vec_td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td1_advantage_estimate(
-            gamma_tensor, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9118,10 +9224,20 @@ class TestValues:
         gamma_tensor[..., -1, :] = 0.0
 
         v1 = vec_td1_advantage_estimate(
-            gamma, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td1_advantage_estimate(
-            gamma_tensor, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9154,10 +9270,22 @@ class TestValues:
         gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
 
         v1 = td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9168,10 +9296,22 @@ class TestValues:
         gamma_tensor[..., -1, :] = 0.0
 
         v1 = td_lambda_advantage_estimate(
-            gamma, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
         v2 = vec_td_lambda_advantage_estimate(
-            gamma_tensor, lmbda, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            lmbda,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9202,9 +9342,21 @@ class TestValues:
 
         gamma_tensor = torch.full((*N, T, 1), gamma, device=device)
 
-        v1 = td1_advantage_estimate(gamma, state_value, next_state_value, reward, done=done, terminated=terminated)
+        v1 = td1_advantage_estimate(
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
         v2 = vec_td1_advantage_estimate(
-            gamma_tensor, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9214,9 +9366,21 @@ class TestValues:
         terminated[..., -1, :] = True  # terminating trajectory
         gamma_tensor[..., -1, :] = 0.0
 
-        v1 = td1_advantage_estimate(gamma, state_value, next_state_value, reward, done=done, terminated=terminated)
+        v1 = td1_advantage_estimate(
+            gamma,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
+        )
         v2 = vec_td1_advantage_estimate(
-            gamma_tensor, state_value, next_state_value, reward, done=done, terminated=terminated
+            gamma_tensor,
+            state_value,
+            next_state_value,
+            reward,
+            done=done,
+            terminated=terminated,
         )
 
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
@@ -9323,7 +9487,10 @@ class TestValues:
             terminated=terminated,
             rolling_gamma=rolling_gamma,
         )
-        if rolling_gamma is False and not terminated[..., 1:, :][terminated[..., :-1, :]].all():
+        if (
+            rolling_gamma is False
+            and not terminated[..., 1:, :][terminated[..., :-1, :]].all()
+        ):
             # if a not-done follows a done, then rolling_gamma=False cannot be used
             with pytest.raises(
                 NotImplementedError, match="When using rolling_gamma=False"
@@ -9496,12 +9663,7 @@ class TestValues:
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("N", [(3,), (3, 7)])
     @pytest.mark.parametrize("T", [3, 5, 200])
-    def test_successive_traj_tdadv(
-        self,
-        device,
-        N,
-        T
-    ):
+    def test_successive_traj_tdadv(self, device, N, T):
         """Tests td_lambda_advantage_estimate against vec_td_lambda_advantage_estimate
         with gamma being a random tensor
 
@@ -9541,8 +9703,8 @@ class TestValues:
             state_value[..., T // 2 :, :],
             next_state_value[..., T // 2 :, :],
             reward[..., T // 2 :, :],
-            done=done[..., T // 2:, :],
-            terminated=terminated[..., T // 2:, :],
+            done=done[..., T // 2 :, :],
+            terminated=terminated[..., T // 2 :, :],
         )
         torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
 
@@ -9599,8 +9761,8 @@ class TestValues:
             state_value[..., T // 2 :, :],
             next_state_value[..., T // 2 :, :],
             reward[..., T // 2 :, :],
-            done=done[..., T // 2:, :],
-            terminated=terminated[..., T // 2:, :],
+            done=done[..., T // 2 :, :],
+            terminated=terminated[..., T // 2 :, :],
         )[0]
         torch.testing.assert_close(v1, torch.cat([v1a, v1b], -2), rtol=1e-4, atol=1e-4)
 
@@ -9628,8 +9790,8 @@ class TestValues:
             state_value[..., T // 2 :, :],
             next_state_value[..., T // 2 :, :],
             reward[..., T // 2 :, :],
-            done=done[..., T // 2:, :],
-            terminated=terminated[..., T // 2:, :],
+            done=done[..., T // 2 :, :],
+            terminated=terminated[..., T // 2 :, :],
         )[0]
         torch.testing.assert_close(v1, v2, rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(v2, torch.cat([v2a, v2b], -2), rtol=1e-4, atol=1e-4)
