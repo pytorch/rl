@@ -42,7 +42,7 @@ from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
-    _bring_reset_to_root,
+    _aggregate_resets,
     _convert_exploration_type,
     ExplorationType,
     set_exploration_type,
@@ -811,7 +811,7 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            traj_sop = _bring_reset_to_root(td_reset)
+            traj_sop = _aggregate_resets(td_reset)
             td_reset = self.env.reset(td_reset)
 
             if td_reset.batch_dims:

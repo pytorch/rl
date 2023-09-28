@@ -1060,6 +1060,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             return
 
         def check_local_done(spec):
+            shape = None
             for key, item in list(
                 spec.items()
             ):  # list to avoid error due to in-loop changes
@@ -1070,7 +1071,17 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     spec["done"] = item.clone()
                 elif isinstance(item, CompositeSpec):
                     check_local_done(item)
-            # if the spec is empty, we need to add a done and truncated manually
+                else:
+                    if shape is None:
+                        shape = item.shape
+                        continue
+                    # checks that all shape match
+                    if shape != item.shape:
+                        raise ValueError(
+                            f"All shapes should match in done_spec {spec} (shape={shape}, key={key})."
+                        )
+
+            # if the spec is empty, we need to add a done and terminated manually
             if spec.is_empty():
                 spec["done"] = DiscreteTensorSpec(
                     n=2, shape=(*spec.shape, 1), dtype=torch.bool, device=self.device
