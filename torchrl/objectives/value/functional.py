@@ -1031,10 +1031,7 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    if rolling_gamma:
-        gamma = gamma * not_done
-    gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
-
+    gammas = _make_gammas_tensor(gamma * not_done if rolling_gamma else gamma, T, rolling_gamma)
     if not rolling_gamma:
         terminated_follows_terminated = terminated[..., 1:, :][terminated[..., :-1, :]].all()
         if not terminated_follows_terminated:
@@ -1048,27 +1045,32 @@ def vec_td_lambda_return_estimate(
             )
         else:
             gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
-
     gammas_cp = torch.cumprod(gammas, -2)
+    gammas = gammas[..., 1:, :]
 
     lambdas = torch.ones(T + 1, 1, device=device)
     lambdas[1:] = lmbda
     lambdas_cp = torch.cumprod(lambdas, -2)
-
-    gammas = gammas[..., 1:, :]
     lambdas = lambdas[1:]
 
     dec = gammas_cp * lambdas_cp
     if rolling_gamma in (None, True):
+        gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
+        gammas = gammas[..., 1:, :]
         if gammas.ndimension() == 4 and gammas.shape[1] > 1:
             gammas = gammas[:, :1]
         if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
             lambdas = lambdas[:, :1]
-        # v3 = (gammas * lambdas).squeeze(-1) * next_state_value
-        # v3[..., :-1] = 0
+        v3 = (gammas * lambdas).squeeze(-1) * next_state_value
+        v3[..., :-1] = 0
         out = _custom_conv1d(
-            reward + gammas * (next_state_value * (1 + lambdas * (done.view(-1, 1, T, 1).int() - 1))).squeeze(-1), dec
+            reward + gammas.squeeze(-1) * next_state_value * (1 + lambdas.squeeze(-1) * (done.view(-1, 1, T).int() - 1)) + v3, dec
         )
+
+        # out = _custom_conv1d(
+        #     reward + (gammas * (1 - lambdas)).squeeze(-1) * next_state_value + v3, dec
+        # )
+
         return out.view(*batch, lastdim, T).transpose(-2, -1)
     else:
         v1 = _custom_conv1d(reward, dec)

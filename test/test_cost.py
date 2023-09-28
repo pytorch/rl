@@ -8974,7 +8974,7 @@ class TestValues:
     @pytest.mark.parametrize("gamma", [0.5, 0.99, 0.1])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("N", [(3,), (7, 3)])
-    @pytest.mark.parametrize("T", [3, 5, 200])
+    @pytest.mark.parametrize("T", [200, 5, 3])
     @pytest.mark.parametrize("has_done", [True, False])
     def test_tdlambda_tensor_gamma(self, device, gamma, lmbda, N, T, has_done):
         """Tests vec_td_lambda_advantage_estimate against itself with
