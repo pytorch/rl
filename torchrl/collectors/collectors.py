@@ -44,10 +44,10 @@ from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.utils import (
     _bring_reset_to_root,
     _convert_exploration_type,
-    done_or_truncated,
     ExplorationType,
     set_exploration_type,
     step_mdp,
+    terminated_or_truncated,
 )
 
 _TIMEOUT = 1.0
@@ -800,7 +800,7 @@ class SyncDataCollector(DataCollectorBase):
         if not self.reset_when_done:
             return
         td_reset = self._tensordict.clone(False)
-        any_done = done_or_truncated(
+        any_done = terminated_or_truncated(
             td_reset,
             full_done_spec=self.env.output_spec["full_done_spec"],
             key="_reset",
@@ -811,20 +811,18 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            traj_done_or_terminated = _bring_reset_to_root(td_reset)
+            traj_sop = _bring_reset_to_root(td_reset)
             td_reset = self.env.reset(td_reset)
 
             if td_reset.batch_dims:
                 # better cloning here than when passing the td for stacking
                 # cloning is necessary to avoid modifying entries in-place
-                self._tensordict = torch.where(
-                    traj_done_or_terminated, td_reset, self._tensordict
-                )
+                self._tensordict = torch.where(traj_sop, td_reset, self._tensordict)
             else:
                 self._tensordict.update(td_reset)
 
-            traj_ids[traj_done_or_terminated] = traj_ids.max() + torch.arange(
-                1, traj_done_or_terminated.sum() + 1, device=traj_ids.device
+            traj_ids[traj_sop] = traj_ids.max() + torch.arange(
+                1, traj_sop.sum() + 1, device=traj_ids.device
             )
             self._tensordict.set(("collector", "traj_ids"), traj_ids)
 
@@ -885,12 +883,6 @@ class SyncDataCollector(DataCollectorBase):
                             self._tensordict_out.ndim - 1,
                             out=self._tensordict_out,
                         )
-                except KeyError:
-                    print("\n\n err during stack")
-                    print("tensordict list", tensordicts)
-                    print("dest", self._tensordict_out)
-                    print("env", self.env)
-                    raise
         return self._tensordict_out
 
     def reset(self, index=None, **kwargs) -> None:
@@ -1399,7 +1391,9 @@ also that the state dict is synchronised across processes if needed."""
                 continue
 
         for proc in self.procs:
-            proc.join(10.0)
+            exitcode = proc.join(1.0)
+            if exitcode is None:
+                proc.terminate()
         self.queue_out.close()
         for pipe in self.pipes:
             pipe.close()

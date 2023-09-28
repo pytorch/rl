@@ -381,10 +381,11 @@ class TestOrnsteinUhlenbeckProcessWrapper:
             device=device,
         )
         for _td in collector:
-            assert (
-                _td[_replace_last(env.done_key, is_init_key)].shape
-                == _td[env.done_key].shape
-            )
+            for done_key in env.done_keys:
+                assert (
+                    _td[_replace_last(done_key, is_init_key)].shape
+                    == _td[done_key].shape
+                )
             break
 
         return

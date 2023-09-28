@@ -59,13 +59,19 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
-        self.done_spec = self.done_spec.squeeze(-1)
+        self.full_done_spec = {
+            key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
+        }
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
         data = self.rollout(3).get("next")[..., 0]
         del data[self.reward_key]
-        del data[self.done_key]
+        for done_key in self.done_keys:
+            try:
+                del data[done_key]
+            except KeyError:
+                continue
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
@@ -107,11 +113,17 @@ class IsaacGymWrapper(GymWrapper):
 
     def read_done(
         self,
-        gym_done: bool,
-        termination: bool | None = None,
-        truncation: bool | None = None,
+        terminated: bool = None,
+        truncated: bool | None = None,
+        done: bool | None = None,
     ) -> Tuple[bool, bool, bool]:
-        return gym_done.bool(), None, gym_done.any()
+        if terminated is not None:
+            terminated = terminated.bool()
+        if truncated is not None:
+            truncated = truncated.bool()
+        if done is not None:
+            done = done.bool()
+        return terminated, truncated, done, done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.

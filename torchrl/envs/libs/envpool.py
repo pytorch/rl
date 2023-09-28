@@ -198,7 +198,7 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         obs = self.obs.clone(False)
-        obs.update({self.done_key: self.done_spec.zero()})
+        obs.update(self.full_done_spec.zero())
         return obs
 
     def _transform_step_output(
@@ -208,7 +208,9 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         obs, reward, done, *_ = envpool_output
 
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        obs.update({self.reward_key: torch.tensor(reward), self.done_key: done})
+        reward_and_done = {self.reward_key: torch.tensor(reward)}
+        reward_and_done.update({done_key: done for done_key in self.done_keys})
+        obs.update(reward_and_done)
         self.obs = tensordict_out = TensorDict(
             obs,
             batch_size=self.batch_size,

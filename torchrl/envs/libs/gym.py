@@ -212,8 +212,8 @@ def _gym_to_torchrl_spec_transform(
         remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
-    gym = gym_backend()
-    if isinstance(spec, gym.spaces.tuple.Tuple):
+    gym_spaces = gym_backend("spaces")
+    if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
             [
                 _gym_to_torchrl_spec_transform(
@@ -226,7 +226,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    if isinstance(spec, gym.spaces.discrete.Discrete):
+    if isinstance(spec, gym_spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
             if categorical_action_encoding
@@ -238,11 +238,11 @@ def _gym_to_torchrl_spec_transform(
             else torch.long
         )
         return action_space_cls(spec.n, device=device, dtype=dtype)
-    elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
+    elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
-    elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
+    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
         if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
             dtype = (
                 numpy_to_torch_dtype_dict[spec.dtype]
@@ -270,7 +270,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    elif isinstance(spec, gym.spaces.Box):
+    elif isinstance(spec, gym_spaces.Box):
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
@@ -311,7 +311,7 @@ def _gym_to_torchrl_spec_transform(
                 remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
-    elif isinstance(spec, gym.spaces.dict.Dict):
+    elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
@@ -389,8 +389,10 @@ def _is_from_pixels(env):
 class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
+
         # before gym 0.22, there was no final_observation
         if instance._is_batched:
+            gym_backend = instance.get_library_name(instance._env)
             from torchrl.envs.transforms.transforms import (
                 TransformedEnv,
                 VecGymEnvTransform,
@@ -409,20 +411,18 @@ class _AsyncMeta(_EnvPostInit):
             # we need 3 checks: the backend is not sb3 (if so, gymnasium is used),
             # it is gym and not gymnasium and the version is before 0.22.0
             add_info_dict = True
-            if backend == "gym":
-                gym_backend = instance.get_library_name(instance._env)
-                if gym_backend == "gym":  # check gym against gymnasium
-                    import gym
+            if backend == "gym" and gym_backend == "gym":  # check gym against gymnasium
+                import gym
 
-                    if version.parse(gym.__version__) < version.parse("0.22.0"):
-                        warn(
-                            "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
-                            "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
-                            "and discards the true next observation to return the result of the step). "
-                            "This isn't compatible with TorchRL API and should be used with caution.",
-                            category=UserWarning,
-                        )
-                        add_info_dict = False
+                if version.parse(gym.__version__) < version.parse("0.22.0"):
+                    warn(
+                        "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
+                        "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
+                        "and discards the true next observation to return the result of the step). "
+                        "This isn't compatible with TorchRL API and should be used with caution.",
+                        category=UserWarning,
+                    )
+                    add_info_dict = False
             if add_info_dict:
                 instance.set_info_dict_reader(
                     terminal_obs_reader(instance.observation_spec, backend=backend)
@@ -528,9 +528,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
+    @implement_for("gym", None, "0.27")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
+
+    @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
+    def _get_batch_size(self, env):  # noqa: F811
+        if hasattr(env, "num_envs"):
+            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -749,7 +758,13 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             {
                 "done": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
-                )
+                ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
             },
             shape=self.batch_size,
         )
@@ -759,6 +774,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return CompositeSpec(
             {
                 "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -773,6 +791,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         return CompositeSpec(
             {
                 "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
                     2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
                 ),
                 "truncated": DiscreteTensorSpec(
@@ -800,34 +821,62 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         if self._is_batched:
             # info needs to be flipped
             info = _flip_info_tuple(info)
-        return (observations, reward, None, None, done, info)
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool) and isinstance(truncated, bool):
+            # if bool is an array, make truncated an array
+            truncated = [truncated] * len(done)
+            truncated = np.array(truncated)
+        terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
+        return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.24", "0.26")
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
         observations, reward, done, info = step_outputs_tuple
-        return (observations, reward, None, None, done, info)
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool) and isinstance(truncated, bool):
+            # if bool is an array, make truncated an array
+            truncated = [truncated] * len(done)
+            truncated = np.array(truncated)
+        terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
+        return (observations, reward, terminated, truncated, done, info)
 
     @implement_for("gym", "0.26", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, termination, truncation, info = step_outputs_tuple
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            termination,
-            truncation,
-            termination | truncation,
+            terminated,
+            truncated,
+            terminated | truncated,
             info,
         )
 
     @implement_for("gymnasium", "0.27", None)
     def _output_transform(self, step_outputs_tuple):  # noqa: F811
-        observations, reward, termination, truncation, info = step_outputs_tuple
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
         return (
             observations,
             reward,
-            termination,
-            truncation,
-            termination | truncation,
+            terminated,
+            truncated,
+            terminated | truncated,
             info,
         )
 

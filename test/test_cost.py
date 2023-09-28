@@ -1206,20 +1206,20 @@ class TestDDPG(LossModuleTestBase):
         return actor.to(device)
 
     def _create_mock_value(
-        self, batch=2, obs_dim=3, action_dim=4, device="cpu", out_keys=None
+        self, batch=2, obs_dim=3, action_dim=4, state_dim=8, device="cpu", out_keys=None
     ):
         # Actor
         class ValueClass(nn.Module):
             def __init__(self):
                 super().__init__()
-                self.linear = nn.Linear(obs_dim + action_dim, 1)
+                self.linear = nn.Linear(obs_dim + action_dim + state_dim, 1)
 
-            def forward(self, obs, act):
-                return self.linear(torch.cat([obs, act], -1))
+            def forward(self, obs, state, act):
+                return self.linear(torch.cat([obs, state, act], -1))
 
         module = ValueClass()
         value = ValueOperator(
-            module=module, in_keys=["observation", "action"], out_keys=out_keys
+            module=module, in_keys=["observation", "state", "action"], out_keys=out_keys
         )
         return value.to(device)
 
@@ -1278,6 +1278,7 @@ class TestDDPG(LossModuleTestBase):
         batch=8,
         obs_dim=3,
         action_dim=4,
+        state_dim=8,
         atoms=None,
         device="cpu",
         reward_key="reward",
@@ -1291,13 +1292,16 @@ class TestDDPG(LossModuleTestBase):
         else:
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
+        state = torch.randn(batch, state_dim, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
                 "observation": obs,
+                "state": state,
                 "next": {
                     "observation": next_obs,
+                    "state": state,
                     done_key: done,
                     reward_key: reward,
                 },
@@ -1313,6 +1317,7 @@ class TestDDPG(LossModuleTestBase):
         T=4,
         obs_dim=3,
         action_dim=4,
+        state_dim=8,
         atoms=None,
         device="cpu",
         reward_key="reward",
@@ -1320,8 +1325,11 @@ class TestDDPG(LossModuleTestBase):
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
+        total_state = torch.randn(batch, T + 1, state_dim, device=device)
         obs = total_obs[:, :T]
         next_obs = total_obs[:, 1:]
+        state = total_state[:, :T]
+        next_state = total_state[:, 1:]
         if atoms:
             action = torch.randn(batch, T, atoms, action_dim, device=device).clamp(
                 -1, 1
@@ -1329,14 +1337,17 @@ class TestDDPG(LossModuleTestBase):
         else:
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
+
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
             source={
                 "observation": obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                "state": state.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
+                    "state": next_state.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     done_key: done,
                     reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
@@ -1715,6 +1726,8 @@ class TestDDPG(LossModuleTestBase):
             "next_done": td.get(("next", "done")),
             "next_observation": td.get(("next", "observation")),
             "action": td.get("action"),
+            "state": td.get("state"),
+            "next_state": td.get(("next", "state")),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
 

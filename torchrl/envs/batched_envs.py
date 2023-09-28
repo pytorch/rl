@@ -564,7 +564,7 @@ class SerialEnv(_BatchedEnv):
             # shared_tensordicts are locked, and we need to select the keys since we update in-place.
             # There may be unexpected keys, such as "_reset", that we should comfortably ignore here.
             out_td = self._envs[i]._step(tensordict_in[i])
-            next_td[i].update_(out_td.select(*self._env_output_keys))
+            next_td[i].update_(out_td.select(*self._env_output_keys, strict=False))
         # We must pass a clone of the tensordict, as the values of this tensordict
         # will be modified in-place at further steps
         if self._single_task:
@@ -1011,7 +1011,6 @@ def _run_worker_pipe_shared_mem(
     has_lazy_inputs: bool = False,
     verbose: bool = False,
 ) -> None:
-    print(f"single env has {torch.get_num_threads()} threads")
     if device is None:
         device = torch.device("cpu")
     if device.type == "cuda":
@@ -1036,12 +1035,6 @@ def _run_worker_pipe_shared_mem(
     initialized = False
 
     child_pipe.send("started")
-
-    # _excluded_reset_keys = {
-    #     _unravel_key_to_tuple(env.reward_key),
-    #     # _unravel_key_to_tuple(env.done_key),
-    #     _unravel_key_to_tuple(env.action_key),
-    # }
 
     while True:
         try:

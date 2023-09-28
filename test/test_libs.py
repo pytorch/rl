@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import importlib
+from contextlib import nullcontext
 
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.modules import MaskedCategorical
@@ -367,12 +368,12 @@ class TestGym:
         return
 
     @implement_for("gymnasium", "0.27.0", None)
-    # this env has Dict-based observation which is a nice thing to test
     @pytest.mark.parametrize(
         "envname",
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):
         import gymnasium
 
@@ -399,6 +400,7 @@ class TestGym:
         ["HalfCheetah-v4", "CartPole-v1", "ALE/Pong-v5"]
         + (["FetchReach-v2"] if _has_gym_robotics else []),
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):
         from _utils_internal import rollout_consistency_assertion
 
@@ -419,6 +421,7 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_wrapper(self, envname):  # noqa: F811
         import gym
 
@@ -444,6 +447,7 @@ class TestGym:
         "envname",
         ["CartPole-v1", "HalfCheetah-v4"],
     )
+    @pytest.mark.flaky(reruns=3, reruns_delay=1)
     def test_vecenvs_env(self, envname):  # noqa: F811
         with set_gym_backend("gym"):
             env = GymEnv(envname, num_envs=2, from_pixels=False)
@@ -491,7 +495,9 @@ class TestGym:
         else:
             with set_gym_backend("gym"):
                 env = GymEnv(PENDULUM_VERSIONED)
-        assert "truncated" not in env.done_keys
+        # truncated is read from the info
+        assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -507,6 +513,7 @@ class TestGym:
             with set_gym_backend("gym"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -532,6 +539,7 @@ class TestGym:
             with set_gym_backend("gymnasium"):
                 env = GymEnv(PENDULUM_VERSIONED)
         assert "truncated" in env.done_keys
+        assert "terminated" in env.done_keys
         assert "done" in env.done_keys
         check_env_specs(env)
 
@@ -555,14 +563,16 @@ class TestGym:
         penv = ParallelEnv(2, make_fun)
         rollout = penv.rollout(2)
         if old_api:
-            assert "truncated" not in rollout.keys()
+            assert "terminated" in rollout.keys()
+            # truncated is read from info
+            assert "truncated" in rollout.keys()
         else:
+            assert "terminated" in rollout.keys()
             assert "truncated" in rollout.keys()
         check_env_specs(penv)
 
     @implement_for("gym", None, "0.22.0")
     def test_vecenvs_nan(self):  # noqa: F811
-        print("here")
         # old versions of gym must return nan for next values when there is a done state
         torch.manual_seed(0)
         env = GymEnv("CartPole-v0", num_envs=2)
@@ -1618,10 +1628,11 @@ class TestVmas:
             .all()
         )
 
-        tensordict = env.reset(
-            TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
+        td_reset = TensorDict(
+            rand_reset(env), batch_size=env.batch_size, device=env.device
         )
-        reset = tensordict["_reset"]
+        reset = td_reset["_reset"]
+        tensordict = env.reset(td_reset)
         assert not tensordict["done"][reset].all().item()
         # vmas resets all the agent dimension if only one of the agents needs resetting
         # thus, here we check that where we did not reset any agent, all agents are still done
@@ -1712,13 +1723,14 @@ class TestVmas:
             n_observations_per_agent,
         )
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
 
-    def test_collector_hetero(self, n_envs=10, frames_per_batch=20):
+    def test_collector_heterogeneous(self, n_envs=10, frames_per_batch=20):
         env = VmasEnv(
             scenario="simple_tag",
             num_envs=n_envs,
@@ -1747,8 +1759,9 @@ class TestVmas:
         assert _td["next", "agents"].shape == agents_td_batch
         assert _td["collector"].shape == td_batch
         assert _td["next", env.reward_key].shape == agents_td_batch + (1,)
-        assert _td[env.done_key].shape == td_batch + (1,)
-        assert _td["next", env.done_key].shape == td_batch + (1,)
+        for done_key in env.done_keys:
+            assert _td[done_key].shape == td_batch + (1,)
+            assert _td["next", done_key].shape == td_batch + (1,)
 
         assert env.reward_key not in _td.keys(True, True)
         assert env.action_key not in _td["next"].keys(True, True)
@@ -1757,37 +1770,58 @@ class TestVmas:
 @pytest.mark.skipif(not _has_d4rl, reason="D4RL not found")
 class TestD4RL:
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
-    def test_terminate_on_end(self, task):
-        t0 = time.time()
-        data_true = D4RLExperienceReplay(
-            task,
-            split_trajs=True,
-            from_env=False,
-            terminate_on_end=True,
-            batch_size=2,
-            use_timeout_as_done=False,
-        )
+    @pytest.mark.parametrize("use_truncated_as_done", [True, False])
+    @pytest.mark.parametrize("split_trajs", [True, False])
+    def test_terminate_on_end(self, task, use_truncated_as_done, split_trajs):
+
+        with pytest.warns(
+            UserWarning, match="Using terminate_on_end=True with from_env=False"
+        ) if use_truncated_as_done else nullcontext():
+            data_true = D4RLExperienceReplay(
+                task,
+                split_trajs=split_trajs,
+                from_env=False,
+                terminate_on_end=True,
+                batch_size=2,
+                use_truncated_as_done=use_truncated_as_done,
+            )
         _ = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=False,
             terminate_on_end=False,
             batch_size=2,
-            use_timeout_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
         data_from_env = D4RLExperienceReplay(
             task,
-            split_trajs=True,
+            split_trajs=split_trajs,
             from_env=True,
             batch_size=2,
-            use_timeout_as_done=False,
+            use_truncated_as_done=use_truncated_as_done,
         )
-        keys = set(data_from_env._storage._storage.keys(True, True))
-        keys = keys.intersection(data_true._storage._storage.keys(True, True))
-        assert_allclose_td(
-            data_true._storage._storage.select(*keys),
-            data_from_env._storage._storage.select(*keys),
-        )
+        if not use_truncated_as_done:
+            keys = set(data_from_env._storage._storage.keys(True, True))
+            keys = keys.intersection(data_true._storage._storage.keys(True, True))
+            assert (
+                data_true._storage._storage.shape
+                == data_from_env._storage._storage.shape
+            )
+            assert_allclose_td(
+                data_true._storage._storage.select(*keys),
+                data_from_env._storage._storage.select(*keys),
+            )
+        else:
+            leaf_names = data_from_env._storage._storage.keys(True)
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
+            assert "truncated" in leaf_names
+            leaf_names = data_true._storage._storage.keys(True)
+            leaf_names = [
+                name[-1] if isinstance(name, tuple) else name for name in leaf_names
+            ]
+            assert "truncated" not in leaf_names
 
     @pytest.mark.parametrize(
         "task",
@@ -1807,7 +1841,7 @@ class TestD4RL:
     def test_d4rl_dummy(self, task):
         t0 = time.time()
         _ = D4RLExperienceReplay(task, split_trajs=True, from_env=True, batch_size=2)
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1821,11 +1855,14 @@ class TestD4RL:
         env = GymWrapper(gym.make(task))
         rollout = env.rollout(2)
         for key in rollout.keys(True, True):
+            if "truncated" in key:
+                # truncated is missing from static datasets
+                continue
             sim = rollout[key]
             offline = sample[key]
             assert sim.dtype == offline.dtype, key
             assert sim.shape[-1] == offline.shape[-1], key
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
     @pytest.mark.parametrize("task", ["walker2d-medium-replay-v2"])
     @pytest.mark.parametrize("split_trajs", [True, False])
@@ -1844,7 +1881,7 @@ class TestD4RL:
         for sample in data:  # noqa: B007
             i += 1
         assert len(data) // i == batch_size
-        print(f"completed test after {time.time()-t0}s")
+        print(f"terminated test after {time.time()-t0}s")
 
 
 @pytest.mark.skipif(not _has_sklearn, reason="Scikit-learn not found")

@@ -294,12 +294,12 @@ def test_set_gym_backend_types():
 
 
 # we check that the order where these funs are defined won't affect which is called
-@implement_for("torch", "1.0", "1.5")
+@implement_for("torch", "1.0", "1.8")
 def torch_foo():
     return 0
 
 
-@implement_for("torch", "2.0")
+@implement_for("torch", "1.8", None)
 def torch_foo():  # noqa: F811
     return 1
 
@@ -330,29 +330,29 @@ def test_set_gym_nested():
 
     with set_gym_backend(gym):
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend(gymnasium):
             GymWrapper._output_transform(
-                MockGym, (1, 2, 3, 4, 5)
+                MockGym, (1, 2, True, True, {})
             )  # would break with gym
             assert torch_foo() == 1
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
     with set_gym_backend("gym"):
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
         assert torch_foo() == 1
         with set_gym_backend("gymnasium"):
             GymWrapper._output_transform(
-                MockGym, (1, 2, 3, 4, 5)
+                MockGym, (1, 2, True, True, {})
             )  # would break with gym
             assert torch_foo() == 1
         GymWrapper._output_transform(
-            MockGym, (1, 2, 3, 4)
+            MockGym, (1, 2, True, {})
         )  # would break with gymnasium
 
 
