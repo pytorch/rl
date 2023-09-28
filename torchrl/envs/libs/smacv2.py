@@ -405,7 +405,7 @@ class SMACv2Wrapper(_EnvWrapper):
                 "info": info,
                 "reward": reward,
                 "done": done,
-                "terminated": done,
+                "terminated": done.clone(),
             },
             batch_size=(),
             device=self.device,

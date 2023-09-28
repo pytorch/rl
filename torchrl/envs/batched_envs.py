@@ -603,7 +603,7 @@ class SerialEnv(_BatchedEnv):
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
-                needs_resetting = needs_resetting.expand(self.batch_size)
+                needs_resetting = needs_resetting.expand((self.num_workers,))
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
@@ -638,19 +638,20 @@ class SerialEnv(_BatchedEnv):
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_reset_keys, strict=False)
             )
+        selected_output_keys = {
+            unravel_keys(key) for key in self._selected_reset_keys
+        } - set(self.reset_keys)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
-            for key in self._selected_reset_keys:
-                key = unravel_keys(key)
-                if key not in self.reset_keys:
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+            for key in selected_output_keys:
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys,
+                *selected_output_keys,
                 strict=False,
             ).clone()
 
@@ -842,7 +843,7 @@ class ParallelEnv(_BatchedEnv):
             if needs_resetting.ndim > 1:
                 needs_resetting = needs_resetting.any(-1)
             elif not needs_resetting.ndim:
-                needs_resetting = needs_resetting.expand(self.batch_size)
+                needs_resetting = needs_resetting.expand((self.num_workers,))
         else:
             needs_resetting = torch.ones(
                 (self.num_workers,), device=self.device, dtype=torch.bool
@@ -883,19 +884,20 @@ class ParallelEnv(_BatchedEnv):
             event.wait()
             event.clear()
 
+        selected_output_keys = {
+            unravel_keys(key) for key in self._selected_reset_keys
+        } - set(self.reset_keys)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
-            for key in self._selected_reset_keys:
-                key = unravel_keys(key)
-                if key not in self.reset_keys:
-                    _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
+            for key in selected_output_keys:
+                _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys,
+                *selected_output_keys,
                 strict=False,
             ).clone()
 

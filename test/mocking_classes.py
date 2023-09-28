@@ -214,7 +214,12 @@ class MockSerialEnv(EnvBase):
         done = self.counter >= self.max_val
         done = torch.tensor([done], dtype=torch.bool, device=self.device)
         return TensorDict(
-            {"reward": n, "done": done, "terminated": done, "observation": n.clone()},
+            {
+                "reward": n,
+                "done": done,
+                "terminated": done.clone(),
+                "observation": n.clone(),
+            },
             batch_size=[],
         )
 
@@ -347,7 +352,7 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {"reward": n, "done": done, "terminated": done, "observation": n},
+            {"reward": n, "done": done, "terminated": done.clone(), "observation": n},
             batch_size=tensordict.batch_size,
             device=self.device,
         )
@@ -380,7 +385,7 @@ class MockBatchedLockedEnv(EnvBase):
             device=self.device,
         )
         return TensorDict(
-            {"done": done, "terminated": done, "observation": n},
+            {"done": done, "terminated": done.clone(), "observation": n},
             [
                 *leading_batch_size,
                 *batch_size,

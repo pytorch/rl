@@ -1825,11 +1825,11 @@ class TestAggregateReset:
         td = TensorDict(
             {
                 "_reset": torch.tensor([True, False]).view(1, 2),
-                "a": {"_reset": torch.ones((1, 2), dtype=torch.bool)},
+                "a": {"_reset": torch.zeros((1, 2), dtype=torch.bool)},
             },
             [1, 2],
         )
-        assert _aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)
+        assert (_aggregate_resets(td) == torch.tensor([True, False]).view(1, 2)).all()
         # with a stack
         td0 = TensorDict(
             {

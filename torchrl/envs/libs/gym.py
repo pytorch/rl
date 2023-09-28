@@ -829,6 +829,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if bool is an array, make truncated an array
             truncated = [truncated] * len(done)
             truncated = np.array(truncated)
+        elif not isinstance(truncated, bool):
+            # make sure it's a boolean np.array
+            truncated = np.array(truncated, dtype=np.dtype("bool"))
         terminated = done & ~truncated
         if not isinstance(terminated, np.ndarray):
             # if it's not a ndarray, we must return bool
@@ -847,6 +850,9 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             # if bool is an array, make truncated an array
             truncated = [truncated] * len(done)
             truncated = np.array(truncated)
+        elif not isinstance(truncated, bool):
+            # make sure it's a boolean np.array
+            truncated = np.array(truncated, dtype=np.dtype("bool"))
         terminated = done & ~truncated
         if not isinstance(terminated, np.ndarray):
             # if it's not a ndarray, we must return bool
@@ -1176,8 +1182,10 @@ class terminal_obs_reader(BaseInfoDictReader):
 def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
     # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
     # We patch this by flipping the tuple -> dict order.
-    info_example = info[0]
+    info_example = set(info[0])
+    for item in info[1:]:
+        info_example = info_example.union(item)
     result = {}
     for key in info_example:
-        result[key] = tuple(_info[key] for _info in info)
+        result[key] = tuple(_info.get(key, None) for _info in info)
     return result
