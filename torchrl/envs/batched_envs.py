@@ -638,18 +638,20 @@ class SerialEnv(_BatchedEnv):
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_reset_keys, strict=False)
             )
+        selected_output_keys = {
+            unravel_keys(key) for key in self._selected_reset_keys
+        } - set(self.reset_keys)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
-            for key in self._selected_reset_keys:
-                key = unravel_keys(key)
+            for key in selected_output_keys:
                 _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys,
+                *selected_output_keys,
                 strict=False,
             ).clone()
 
@@ -882,18 +884,20 @@ class ParallelEnv(_BatchedEnv):
             event.wait()
             event.clear()
 
+        selected_output_keys = {
+            unravel_keys(key) for key in self._selected_reset_keys
+        } - set(self.reset_keys)
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
                 {}, batch_size=self.shared_tensordict_parent.shape, device=self.device
             )
-            for key in self._selected_reset_keys:
-                key = unravel_keys(key)
+            for key in selected_output_keys:
                 _set_single_key(self.shared_tensordict_parent, out, key, clone=True)
             return out
         else:
             return self.shared_tensordict_parent.select(
-                *self._selected_reset_keys,
+                *selected_output_keys,
                 strict=False,
             ).clone()
 
