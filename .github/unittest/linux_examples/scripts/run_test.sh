@@ -66,13 +66,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/ppo/ppo_atari.
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=4 \
   collector.env_per_collector=2 \
   collector.collector_device=cuda:0 \
   network.device=cuda:0 \
-  optimization.utd_ratio=1 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
@@ -183,13 +182,12 @@ python .github/unittest/helpers/coverage_run_parallel.py examples/dreamer/dreame
 python .github/unittest/helpers/coverage_run_parallel.py examples/ddpg/ddpg.py \
   collector.total_frames=48 \
   collector.init_random_frames=10 \
-  optimization.batch_size=10 \
+  optim.batch_size=10 \
   collector.frames_per_batch=16 \
-  collector.num_workers=2 \
   collector.env_per_collector=1 \
   collector.collector_device=cuda:0 \
   network.device=cuda:0 \
-  optimization.utd_ratio=1 \
+  optim.utd_ratio=1 \
   replay_buffer.size=120 \
   env.name=Pendulum-v1 \
   logger.backend=
