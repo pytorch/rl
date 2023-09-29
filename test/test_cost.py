@@ -351,6 +351,7 @@ class TestDQN(LossModuleTestBase):
             action = torch.argmax(action, -1, keepdim=False)
         reward = torch.randn(batch, 1)
         done = torch.zeros(batch, 1, dtype=torch.bool)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -358,6 +359,7 @@ class TestDQN(LossModuleTestBase):
                 "next": {
                     "observation": next_obs,
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward,
                 },
                 action_key: action,
@@ -395,6 +397,7 @@ class TestDQN(LossModuleTestBase):
         # action_value = action_value.unsqueeze(-1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         if action_spec_type == "categorical":
             action_value = torch.max(action_value, -1, keepdim=True)[0]
@@ -409,6 +412,7 @@ class TestDQN(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -555,6 +559,7 @@ class TestDQN(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
@@ -565,6 +570,7 @@ class TestDQN(LossModuleTestBase):
             "value_target": ("value_target", ("value_target", "nested")),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -671,7 +677,8 @@ class TestDQN(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
-    def test_dqn_notensordict(self, observation_key, reward_key, done_key):
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_dqn_notensordict(self, observation_key, reward_key, done_key, terminated_key):
         n_obs = 3
         n_action = 4
         action_spec = OneHotDiscreteTensorSpec(n_action)
@@ -683,18 +690,20 @@ class TestDQN(LossModuleTestBase):
             in_keys=[observation_key],
         )
         dqn_loss = DQNLoss(actor)
-        dqn_loss.set_keys(reward=reward_key, done=done_key)
+        dqn_loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
         # define data
         observation = torch.randn(n_obs)
         next_observation = torch.randn(n_obs)
         action = action_spec.rand()
         next_reward = torch.randn(1)
         next_done = torch.zeros(1, dtype=torch.bool)
+        next_terminated = torch.zeros(1, dtype=torch.bool)
         kwargs = {
             observation_key: observation,
             f"next_{observation_key}": next_observation,
             f"next_{reward_key}": next_reward,
             f"next_{done_key}": next_done,
+            f"next_{terminated_key}": next_terminated,
             "action": action,
         }
         td = TensorDict(kwargs, []).unflatten_keys("_")
@@ -719,6 +728,7 @@ class TestDQN(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
             "steps_to_next_obs": "steps_to_next_obs",
         }
 
@@ -851,6 +861,7 @@ class TestQMixer(LossModuleTestBase):
 
         reward = torch.randn(*batch, 1, device=device)
         done = torch.zeros(*batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(*batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             {
                 "agents": TensorDict(
@@ -872,6 +883,7 @@ class TestQMixer(LossModuleTestBase):
                         "state": next_state,
                         "reward": reward,
                         "done": done,
+                        "terminated": terminated,
                     },
                     batch_size=batch,
                     device=device,
@@ -1050,6 +1062,7 @@ class TestQMixer(LossModuleTestBase):
             "action": ("agents", "action"),
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
@@ -1060,6 +1073,7 @@ class TestQMixer(LossModuleTestBase):
             "value_target": ("value_target", ("value_target", "nested")),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -1153,6 +1167,7 @@ class TestQMixer(LossModuleTestBase):
                         "state": torch.zeros(32, 64, 64, 3),
                         "reward": torch.zeros(32, 1),
                         "done": torch.zeros(32, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(32, 1, dtype=torch.bool),
                     },
                     [32],
                 ),
@@ -1255,10 +1270,12 @@ class TestDDPG(LossModuleTestBase):
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -1283,6 +1300,7 @@ class TestDDPG(LossModuleTestBase):
         device="cpu",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -1294,6 +1312,7 @@ class TestDDPG(LossModuleTestBase):
         reward = torch.randn(batch, 1, device=device)
         state = torch.randn(batch, state_dim, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -1303,6 +1322,7 @@ class TestDDPG(LossModuleTestBase):
                     "observation": next_obs,
                     "state": state,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 "action": action,
@@ -1322,6 +1342,7 @@ class TestDDPG(LossModuleTestBase):
         device="cpu",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -1339,6 +1360,7 @@ class TestDDPG(LossModuleTestBase):
         reward = torch.randn(batch, T, 1, device=device)
 
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -1349,6 +1371,7 @@ class TestDDPG(LossModuleTestBase):
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "state": next_state.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -1656,6 +1679,7 @@ class TestDDPG(LossModuleTestBase):
         default_keys = {
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
             "state_action_value": "state_action_value",
             "priority": "td_error",
         }
@@ -1676,6 +1700,7 @@ class TestDDPG(LossModuleTestBase):
             "state_action_value": ("value", "state_action_value_test"),
             "reward": ("reward", "reward2"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -1691,12 +1716,14 @@ class TestDDPG(LossModuleTestBase):
             "priority": "td_error_test",
             "reward": "reward_test",
             "done": ("done", "test"),
+            "terminated": ("terminated", "test"),
         }
 
         actor = self._create_mock_actor()
         value = self._create_mock_value(out_keys=[tensor_keys["state_action_value"]])
         td = self._create_mock_data_ddpg(
-            reward_key="reward_test", done_key=("done", "test")
+            reward_key="reward_test", done_key=("done", "test"),
+            terminated_key=("terminated", "test"),
         )
         loss_fn = DDPGLoss(
             actor,
@@ -1724,6 +1751,7 @@ class TestDDPG(LossModuleTestBase):
             "observation": td.get("observation"),
             "next_reward": td.get(("next", "reward")),
             "next_done": td.get(("next", "done")),
+            "next_terminated": td.get(("next", "terminated")),
             "next_observation": td.get(("next", "observation")),
             "action": td.get("action"),
             "state": td.get("state"),
@@ -1835,10 +1863,12 @@ class TestTD3(LossModuleTestBase):
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -1872,6 +1902,7 @@ class TestTD3(LossModuleTestBase):
         observation_key="observation",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -1882,6 +1913,7 @@ class TestTD3(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -1889,6 +1921,7 @@ class TestTD3(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -1912,6 +1945,7 @@ class TestTD3(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -1921,6 +1955,7 @@ class TestTD3(LossModuleTestBase):
                     "observation": next_obs * mask.to(obs.dtype),
                     "reward": reward * mask.to(obs.dtype),
                     "done": done,
+                    "terminated": terminated,
                 },
                 "collector": {"mask": mask},
                 "action": action * mask.to(obs.dtype),
@@ -2293,6 +2328,7 @@ class TestTD3(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -2311,6 +2347,7 @@ class TestTD3(LossModuleTestBase):
             "state_action_value": ("value", "state_action_value_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -2344,22 +2381,24 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
-    def test_td3_notensordict(self, observation_key, reward_key, done_key):
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_td3_notensordict(self, observation_key, reward_key, done_key, terminated_key):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(in_keys=[observation_key])
         qvalue = self._create_mock_value(
             observation_key=observation_key, out_keys=["state_action_value"]
         )
         td = self._create_mock_data_td3(
-            observation_key=observation_key, reward_key=reward_key, done_key=done_key
+            observation_key=observation_key, reward_key=reward_key, done_key=done_key, terminated_key=terminated_key,
         )
         loss = TD3Loss(actor, qvalue, action_spec=actor.spec)
-        loss.set_keys(reward=reward_key, done=done_key)
+        loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
             "action": td.get("action"),
         }
@@ -2492,10 +2531,12 @@ class TestSAC(LossModuleTestBase):
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -2532,6 +2573,7 @@ class TestSAC(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         done_key="done",
+        terminated_key="terminated",
         reward_key="reward",
     ):
         # create a tensordict
@@ -2543,6 +2585,7 @@ class TestSAC(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -2550,6 +2593,7 @@ class TestSAC(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -2573,6 +2617,7 @@ class TestSAC(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -2581,6 +2626,7 @@ class TestSAC(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -3090,6 +3136,7 @@ class TestSAC(LossModuleTestBase):
             "log_prob": "_log_prob",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -3109,6 +3156,7 @@ class TestSAC(LossModuleTestBase):
             "value": ("value", "state_value_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -3116,8 +3164,9 @@ class TestSAC(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     def test_sac_notensordict(
-        self, action_key, observation_key, reward_key, done_key, version
+        self, action_key, observation_key, reward_key, done_key, terminated_key, version
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(
@@ -3125,6 +3174,7 @@ class TestSAC(LossModuleTestBase):
             observation_key=observation_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(
@@ -3145,13 +3195,14 @@ class TestSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             value_network=value,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             action_key: td.get(action_key),
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -3259,6 +3310,7 @@ class TestDiscreteSAC(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         done_key="done",
+        terminated_key="terminated",
         reward_key="reward",
     ):
         # create a tensordict
@@ -3276,6 +3328,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             action = (action_value == action_value.max(-1, True)[0]).to(torch.long)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -3283,6 +3336,7 @@ class TestDiscreteSAC(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -3311,6 +3365,7 @@ class TestDiscreteSAC(LossModuleTestBase):
 
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -3319,6 +3374,7 @@ class TestDiscreteSAC(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -3632,6 +3688,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -3651,6 +3708,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             "value": ("value", "state_value_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -3658,8 +3716,9 @@ class TestDiscreteSAC(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     def test_discrete_sac_notensordict(
-        self, action_key, observation_key, reward_key, done_key
+        self, action_key, observation_key, reward_key, done_key, terminated_key
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_sac(
@@ -3667,6 +3726,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             observation_key=observation_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(
@@ -3681,13 +3741,14 @@ class TestDiscreteSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             num_actions=actor.spec[action_key].space.n,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             action_key: td.get(action_key),
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -3801,10 +3862,12 @@ class TestREDQ(LossModuleTestBase):
                 "obs": torch.randn(*batch, n_obs),
                 "action": torch.randn(*batch, n_act),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -3881,6 +3944,7 @@ class TestREDQ(LossModuleTestBase):
         action_key="action",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
     ):
         # create a tensordict
         obs = torch.randn(batch, obs_dim, device=device)
@@ -3891,6 +3955,7 @@ class TestREDQ(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -3898,6 +3963,7 @@ class TestREDQ(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -3921,6 +3987,7 @@ class TestREDQ(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -3929,6 +3996,7 @@ class TestREDQ(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -4497,6 +4565,7 @@ class TestREDQ(LossModuleTestBase):
             "state_action_value": "state_action_value",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -4515,6 +4584,7 @@ class TestREDQ(LossModuleTestBase):
             "value": ("value", "state_value_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -4522,9 +4592,10 @@ class TestREDQ(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     @pytest.mark.parametrize("deprec", [True, False])
     def test_redq_notensordict(
-        self, action_key, observation_key, reward_key, done_key, deprec
+        self, action_key, observation_key, reward_key, done_key, terminated_key, deprec
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_redq(
@@ -4532,6 +4603,7 @@ class TestREDQ(LossModuleTestBase):
             observation_key=observation_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(
@@ -4552,13 +4624,14 @@ class TestREDQ(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             action_key: td.get(action_key),
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -4657,6 +4730,7 @@ class TestCQL(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -4664,6 +4738,7 @@ class TestCQL(LossModuleTestBase):
                 "next": {
                     "observation": next_obs,
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward,
                 },
                 "action": action,
@@ -4687,6 +4762,7 @@ class TestCQL(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -4695,6 +4771,7 @@ class TestCQL(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -5129,6 +5206,7 @@ class TestPPO(LossModuleTestBase):
         action_key="action",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
         sample_log_prob_key="sample_log_prob",
     ):
         # create a tensordict
@@ -5140,6 +5218,7 @@ class TestPPO(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -5147,6 +5226,7 @@ class TestPPO(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -5179,6 +5259,7 @@ class TestPPO(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
@@ -5189,6 +5270,7 @@ class TestPPO(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -5522,6 +5604,7 @@ class TestPPO(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -5540,6 +5623,7 @@ class TestPPO(LossModuleTestBase):
             "value": ("value", value_key),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -5644,6 +5728,7 @@ class TestPPO(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     def test_ppo_notensordict(
         self,
         loss_class,
@@ -5652,6 +5737,7 @@ class TestPPO(LossModuleTestBase):
         observation_key,
         reward_key,
         done_key,
+        terminated_key,
     ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_ppo(
@@ -5660,6 +5746,7 @@ class TestPPO(LossModuleTestBase):
             sample_log_prob_key=sample_log_prob_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(observation_key=observation_key)
@@ -5670,6 +5757,7 @@ class TestPPO(LossModuleTestBase):
             action=action_key,
             reward=reward_key,
             done=done_key,
+            terminated=terminated_key,
             sample_log_prob=sample_log_prob_key,
         )
 
@@ -5679,6 +5767,7 @@ class TestPPO(LossModuleTestBase):
             sample_log_prob_key: td.get(sample_log_prob_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size, names=["time"]).unflatten_keys("_")
@@ -5781,10 +5870,12 @@ class TestA2C(LossModuleTestBase):
                 "action": torch.randn(*batch, n_act),
                 "sample_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -5820,6 +5911,7 @@ class TestA2C(LossModuleTestBase):
         observation_key="observation",
         reward_key="reward",
         done_key="done",
+        terminated_key="terminated",
     ):
         # create a tensordict
         total_obs = torch.randn(batch, T + 1, obs_dim, device=device)
@@ -5833,6 +5925,7 @@ class TestA2C(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = ~torch.zeros(batch, T, dtype=torch.bool, device=device)
         params_mean = torch.randn_like(action) / 10
         params_scale = torch.rand_like(action) / 10
@@ -5843,6 +5936,7 @@ class TestA2C(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -6080,6 +6174,7 @@ class TestA2C(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -6098,6 +6193,7 @@ class TestA2C(LossModuleTestBase):
             "value": ("value", "value_state_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -6112,12 +6208,14 @@ class TestA2C(LossModuleTestBase):
         action_key = "action_test"
         reward_key = "reward_test"
         done_key = ("done", "test")
+        terminated_key = ("terminated", "test")
 
         td = self._create_seq_mock_data_a2c(
             device=device,
             action_key=action_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(device=device)
@@ -6134,6 +6232,7 @@ class TestA2C(LossModuleTestBase):
             value=value_key,
             reward=reward_key,
             done=done_key,
+            terminated=terminated_key,
         )
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
         loss_fn.set_keys(
@@ -6143,6 +6242,7 @@ class TestA2C(LossModuleTestBase):
             action=action_key,
             reward=reward_key,
             done=done_key,
+            terminated=done_key,
         )
 
         advantage(td)
@@ -6179,7 +6279,8 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
-    def test_a2c_notensordict(self, action_key, observation_key, reward_key, done_key):
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_a2c_notensordict(self, action_key, observation_key, reward_key, done_key, terminated_key):
         torch.manual_seed(self.seed)
 
         actor = self._create_mock_actor(observation_key=observation_key)
@@ -6189,16 +6290,18 @@ class TestA2C(LossModuleTestBase):
             observation_key=observation_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         loss = A2CLoss(actor, value)
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             observation_key: td.get(observation_key),
             f"next_{observation_key}": td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             action_key: td.get(action_key),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -6289,6 +6392,7 @@ class TestReinforce(LossModuleTestBase):
                     "observation": torch.randn(batch, n_obs),
                     "reward": torch.randn(batch, 1),
                     "done": torch.zeros(batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(batch, 1, dtype=torch.bool),
                 },
                 "action": torch.randn(batch, n_act),
             },
@@ -6372,6 +6476,7 @@ class TestReinforce(LossModuleTestBase):
             "sample_log_prob": "sample_log_prob",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -6395,6 +6500,7 @@ class TestReinforce(LossModuleTestBase):
             "value": ("value", "state_value_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "terminated": ("terminated", ("terminated", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
@@ -6427,10 +6533,12 @@ class TestReinforce(LossModuleTestBase):
                 "action": torch.randn(*batch, n_act),
                 "sample_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -6527,8 +6635,9 @@ class TestReinforce(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
     def test_reinforce_notensordict(
-        self, action_key, observation_key, reward_key, done_key
+        self, action_key, observation_key, reward_key, done_key, terminated_key
     ):
         torch.manual_seed(self.seed)
         n_obs = 3
@@ -6547,19 +6656,21 @@ class TestReinforce(LossModuleTestBase):
             spec=UnboundedContinuousTensorSpec(n_act),
         )
         loss = ReinforceLoss(actor=actor_net, critic=value_net)
-        loss.set_keys(reward=reward_key, done=done_key, action=action_key)
+        loss.set_keys(reward=reward_key, done=done_key, action=action_key, terminated=terminated_key)
 
         observation = torch.randn(batch, n_obs)
         action = torch.randn(batch, n_act)
         next_reward = torch.randn(batch, 1)
         next_observation = torch.randn(batch, n_obs)
         next_done = torch.zeros(batch, 1, dtype=torch.bool)
+        next_terminated = torch.zeros(batch, 1, dtype=torch.bool)
 
         kwargs = {
             action_key: action,
             observation_key: observation,
             f"next_{reward_key}": next_reward,
             f"next_{done_key}": next_done,
+            f"next_{terminated_key}": next_terminated,
             f"next_{observation_key}": next_observation,
         }
         td = TensorDict(kwargs, [batch]).unflatten_keys("_")
@@ -6600,6 +6711,7 @@ class TestDreamer(LossModuleTestBase):
                     ),
                     "reward": torch.randn(batch_size, temporal_length, 1),
                     "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
+                    "terminated": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
                 },
                 "action": torch.randn(batch_size, temporal_length, 64),
             },
@@ -7024,6 +7136,7 @@ class TestDreamer(LossModuleTestBase):
             "reward": "reward",
             "value": "state_value",
             "done": "done",
+            "terminated": "terminated",
         }
         self.tensordict_keys_test(
             loss_fn,
@@ -7529,10 +7642,12 @@ class TestIQL(LossModuleTestBase):
                 "action": torch.randn(*batch, n_act),
                 "sample_log_prob": torch.randn(*batch),
                 "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 "next": {
                     "obs": torch.randn(*batch, n_obs),
                     "reward": torch.randn(*batch, 1),
                     "done": torch.zeros(*batch, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(*batch, 1, dtype=torch.bool),
                 },
             },
             batch,
@@ -7579,6 +7694,7 @@ class TestIQL(LossModuleTestBase):
         observation_key="observation",
         action_key="action",
         done_key="done",
+        terminated_key="terminated",
         reward_key="reward",
     ):
         # create a tensordict
@@ -7590,6 +7706,7 @@ class TestIQL(LossModuleTestBase):
             action = torch.randn(batch, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, 1, device=device)
         done = torch.zeros(batch, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, 1, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch,),
             source={
@@ -7597,6 +7714,7 @@ class TestIQL(LossModuleTestBase):
                 "next": {
                     observation_key: next_obs,
                     done_key: done,
+                    terminated_key: terminated,
                     reward_key: reward,
                 },
                 action_key: action,
@@ -7620,6 +7738,7 @@ class TestIQL(LossModuleTestBase):
             action = torch.randn(batch, T, action_dim, device=device).clamp(-1, 1)
         reward = torch.randn(batch, T, 1, device=device)
         done = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
+        terminated = torch.zeros(batch, T, 1, dtype=torch.bool, device=device)
         mask = torch.ones(batch, T, dtype=torch.bool, device=device)
         td = TensorDict(
             batch_size=(batch, T),
@@ -7628,6 +7747,7 @@ class TestIQL(LossModuleTestBase):
                 "next": {
                     "observation": next_obs.masked_fill_(~mask.unsqueeze(-1), 0.0),
                     "done": done,
+                    "terminated": terminated,
                     "reward": reward.masked_fill_(~mask.unsqueeze(-1), 0.0),
                 },
                 "collector": {"mask": mask},
@@ -8085,6 +8205,7 @@ class TestIQL(LossModuleTestBase):
             "value": "state_value",
             "reward": "reward",
             "done": "done",
+            "terminated": "terminated",
         }
 
         self.tensordict_keys_test(
@@ -8104,6 +8225,7 @@ class TestIQL(LossModuleTestBase):
         key_mapping = {
             "value": ("value", "value_test"),
             "done": ("done", "done_test"),
+            "terminated": ("terminated", "terminated_test"),
             "reward": ("reward", ("reward", "test")),
         }
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
@@ -8112,13 +8234,15 @@ class TestIQL(LossModuleTestBase):
     @pytest.mark.parametrize("observation_key", ["observation", "observation2"])
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
-    def test_iql_notensordict(self, action_key, observation_key, reward_key, done_key):
+    @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
+    def test_iql_notensordict(self, action_key, observation_key, reward_key, done_key, terminated_key):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(
             action_key=action_key,
             observation_key=observation_key,
             reward_key=reward_key,
             done_key=done_key,
+            terminated_key=terminated_key,
         )
 
         actor = self._create_mock_actor(observation_key=observation_key)
@@ -8130,13 +8254,14 @@ class TestIQL(LossModuleTestBase):
         value = self._create_mock_value(observation_key=observation_key)
 
         loss = IQLLoss(actor_network=actor, qvalue_network=qvalue, value_network=value)
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key)
+        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
 
         kwargs = {
             action_key: td.get(action_key),
             observation_key: td.get(observation_key),
             f"next_{reward_key}": td.get(("next", reward_key)),
             f"next_{done_key}": td.get(("next", done_key)),
+            f"next_{terminated_key}": td.get(("next", terminated_key)),
             f"next_{observation_key}": td.get(("next", observation_key)),
         }
         td = TensorDict(kwargs, td.batch_size).unflatten_keys("_")
@@ -9439,6 +9564,21 @@ class TestValues:
                     rolling_gamma=rolling_gamma,
                 )
             return
+        elif rolling_gamma is False:
+            with pytest.raises(
+                NotImplementedError, match=r"The vectorized version of TD"
+            ):
+                vec_td_lambda_advantage_estimate(
+                    gamma_tensor,
+                    lmbda,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done=done,
+                    terminated=terminated,
+                    rolling_gamma=rolling_gamma,
+                )
+            return
         v2 = vec_td_lambda_advantage_estimate(
             gamma_tensor,
             lmbda,
@@ -9494,6 +9634,20 @@ class TestValues:
             # if a not-done follows a done, then rolling_gamma=False cannot be used
             with pytest.raises(
                 NotImplementedError, match="When using rolling_gamma=False"
+            ):
+                vec_td1_advantage_estimate(
+                    gamma_tensor,
+                    state_value,
+                    next_state_value,
+                    reward,
+                    done=done,
+                    terminated=terminated,
+                    rolling_gamma=rolling_gamma,
+                )
+            return
+        elif rolling_gamma is False:
+            with pytest.raises(
+                NotImplementedError, match="The vectorized version of TD"
             ):
                 vec_td1_advantage_estimate(
                     gamma_tensor,

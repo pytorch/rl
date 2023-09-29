@@ -415,7 +415,7 @@ def td0_return_estimate(
     reward: torch.Tensor,
     terminated: torch.Tensor,
     *,
-    done: torch.Tensor = None,
+    done: torch.Tensor | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """TD(0) discounted return estimate of a trajectory.
 
@@ -429,6 +429,9 @@ def td0_return_estimate(
             must be a [Batch x TimeSteps x 1] or [Batch x TimeSteps] tensor
         terminated (Tensor): boolean flag for the end of episode. Defaults to ``done``
             if not provided.
+
+    Keyword Args:
+        done (Tensor): Deprecated. Use ``terminated`` instead.
 
     All tensors (values, reward and done) must have shape
     ``[*Batch x TimeSteps x *F]``, with ``*F`` feature dimensions.
@@ -844,15 +847,11 @@ def td_lambda_return_estimate(
             g = next_state_value[..., -1, :]
             _gamma = gamma[..., k, :]
             _lambda = lmbda[..., k, :]
-            nd = not_terminated
-            _gamma = _gamma.unsqueeze(-2) * nd
             for i in reversed(range(k, T)):
                 dn = done[..., i, :].int()
                 nv = next_state_value[..., i, :]
                 g = g * (1 - dn) + nv * dn
-                g = reward[..., i, :] + _gamma[..., i, :] * (
-                    (1 - _lambda) * nv + _lambda * g
-                )
+                g = reward[..., i, :] + _gamma * ((1 - _lambda) * nv + _lambda * g)
             returns[..., k, :] = g
 
     return returns
@@ -1086,12 +1085,6 @@ def vec_td_lambda_return_estimate(
 
     if rolling_gamma is None:
         rolling_gamma = True
-    gammas = _make_gammas_tensor(
-        gamma * not_done if rolling_gamma else gamma, T, rolling_gamma
-    )
-    not_done = not_done.transpose(-2, -1).unsqueeze(-2)
-    if len(batch):
-        not_done = not_done.flatten(0, len(batch))
     if not rolling_gamma:
         terminated_follows_terminated = terminated[..., 1:, :][
             terminated[..., :-1, :]
@@ -1105,56 +1098,47 @@ def vec_td_lambda_return_estimate(
                 "consider using the non-vectorized version of the return computation or splitting "
                 "your trajectories."
             )
-        else:
-            gammas[..., 1:, :] = gammas[..., 1:, :] * not_done.view(-1, 1, T, 1)
-    gammas_cp = torch.cumprod(gammas, -2)
-    gammas = gammas[..., 1:, :]
 
-    lambdas = torch.ones(T + 1, 1, device=device)
-    lambdas[1:] = lmbda
-    lambdas_cp = torch.cumprod(lambdas, -2)
-    lambdas = lambdas[1:]
+    if rolling_gamma:
+        # Make the coefficient table
+        gammas = _make_gammas_tensor(gamma * not_done, T, rolling_gamma)
+        gammas_cp = torch.cumprod(gammas, -2)
+        lambdas = torch.ones(T + 1, 1, device=device)
+        lambdas[1:] = lmbda
+        lambdas_cp = torch.cumprod(lambdas, -2)
+        lambdas = lambdas[1:]
+        dec = gammas_cp * lambdas_cp
 
-    dec = gammas_cp * lambdas_cp
-    if rolling_gamma in (None, True):
         gammas = _make_gammas_tensor(gamma, T, rolling_gamma)
         gammas = gammas[..., 1:, :]
         if gammas.ndimension() == 4 and gammas.shape[1] > 1:
             gammas = gammas[:, :1]
         if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
             lambdas = lambdas[:, :1]
+
+        not_done = not_done.transpose(-2, -1).unsqueeze(-2)
+        if len(batch):
+            not_done = not_done.flatten(0, len(batch))
+        # lambdas = lambdas * not_done
+
         v3 = (gammas * lambdas).squeeze(-1) * next_state_value * not_done
         v3[..., :-1] = 0
         out = _custom_conv1d(
             reward
             + gammas.squeeze(-1)
             * next_state_value
-            * (1 + lambdas.squeeze(-1) * (done.view(-1, 1, T).int() - 1))
+            * (1 - lambdas.squeeze(-1) * not_done)
             + v3,
             dec,
         )
 
-        # out = _custom_conv1d(
-        #     reward + (gammas * (1 - lambdas)).squeeze(-1) * next_state_value + v3, dec
-        # )
-
         return out.view(*batch, lastdim, T).transpose(-2, -1)
     else:
-        v1 = _custom_conv1d(reward, dec)
-
-        if gammas.ndimension() == 4 and gammas.shape[1] > 1:
-            gammas = gammas[:, :, :1].transpose(1, 2)
-        if lambdas.ndimension() == 4 and lambdas.shape[1] > 1:
-            lambdas = lambdas[:, :, :1].transpose(1, 2)
-
-        v2 = _custom_conv1d(
-            next_state_value,
-            dec * (gammas * (1 - lambdas)).transpose(1, 2),
+        raise NotImplementedError(
+            "The vectorized version of TD(lambda) with rolling_gamma=False is currently not available. "
+            "To use this feature, use the non-vectorized version of TD(lambda). You can expect "
+            "good speed improvements by decorating the function with torch.compile!"
         )
-        v3 = next_state_value
-        v3[..., :-1] = 0
-        v3 = _custom_conv1d(v3, dec * (gammas * lambdas).transpose(1, 2))
-        return (v1 + v2 + v3).view(*batch, lastdim, T).transpose(-2, -1)
 
 
 def vec_td_lambda_advantage_estimate(
