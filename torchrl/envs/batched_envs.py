@@ -171,7 +171,8 @@ class _BatchedEnv(EnvBase):
         super().__init__(device=None)
         self.is_closed = True
         if num_threads is None:
-            num_threads = num_workers + 1  # 1 more thread for this proc
+            num_threads = 2 * num_workers + 1  # 1 more thread for this proc
+            num_sub_threads = (96 - num_threads) // num_workers
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self._cache_in_keys = None
