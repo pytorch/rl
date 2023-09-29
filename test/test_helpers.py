@@ -136,6 +136,7 @@ def test_dqn_maker(
 
         expected_keys = [
             "done",
+            "terminated",
             "action",
             "action_value",
             "step_count",
@@ -212,6 +213,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
             actor(td)
         expected_keys = [
             "done",
+            "terminated",
             "action",
             "sample_log_prob",
             "loc",
@@ -247,6 +249,7 @@ def test_redq_make(device, from_pixels, gsde, exploration):
         qvalue(td)
         expected_keys = [
             "done",
+            "terminated",
             "action",
             "sample_log_prob",
             "state_action_value",
@@ -322,7 +325,9 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
+            "terminated",
             ("next", "done"),
+            ("next", "terminated"),
             ("next", "reward"),
             ("next", "belief"),
             ("next", "encoded_latents"),
@@ -346,7 +351,9 @@ def test_dreamer_make(device, tanh_loc, exploration, dreamer_constructor_fixture
             "action",
             "belief",
             "done",
+            "terminated",
             ("next", "done"),
+            ("next", "terminated"),
             ("next", "reward"),
             ("next", "belief"),
             ("next", "state"),

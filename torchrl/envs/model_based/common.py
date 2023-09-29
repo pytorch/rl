@@ -16,7 +16,7 @@ from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs.common import EnvBase
 
 
-class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
+class ModelBasedEnvBase(EnvBase):
     """Basic environnement for Model Based RL algorithms.
 
     Wrapper around the model of the MBRL algorithm.
@@ -160,14 +160,13 @@ class ModelBasedEnvBase(EnvBase, metaclass=abc.ABCMeta):
             )
         else:
             tensordict_out = self.world_model(tensordict_out)
-        # Step requires a done flag. No sense for MBRL so we set it to False
-        if "done" not in self.world_model.out_keys:
-            tensordict_out["done"] = torch.zeros(
-                tensordict_out.shape,
-                dtype=torch.bool,
-                device=tensordict_out.device,
-            )
-        return tensordict_out.select(*self.observation_spec.keys(), "reward", "done")
+        # done can be missing, it will be filled by `step`
+        return tensordict_out.select(
+            *self.observation_spec.keys(),
+            *self.full_done_spec.keys(),
+            *self.full_reward_spec.keys(),
+            strict=False,
+        )
 
     @abc.abstractmethod
     def _reset(self, tensordict: TensorDict, **kwargs) -> TensorDict:
