@@ -678,7 +678,9 @@ class TestDQN(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    def test_dqn_notensordict(self, observation_key, reward_key, done_key, terminated_key):
+    def test_dqn_notensordict(
+        self, observation_key, reward_key, done_key, terminated_key
+    ):
         n_obs = 3
         n_action = 4
         action_spec = OneHotDiscreteTensorSpec(n_action)
@@ -1722,7 +1724,8 @@ class TestDDPG(LossModuleTestBase):
         actor = self._create_mock_actor()
         value = self._create_mock_value(out_keys=[tensor_keys["state_action_value"]])
         td = self._create_mock_data_ddpg(
-            reward_key="reward_test", done_key=("done", "test"),
+            reward_key="reward_test",
+            done_key=("done", "test"),
             terminated_key=("terminated", "test"),
         )
         loss_fn = DDPGLoss(
@@ -2382,14 +2385,19 @@ class TestTD3(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    def test_td3_notensordict(self, observation_key, reward_key, done_key, terminated_key):
+    def test_td3_notensordict(
+        self, observation_key, reward_key, done_key, terminated_key
+    ):
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(in_keys=[observation_key])
         qvalue = self._create_mock_value(
             observation_key=observation_key, out_keys=["state_action_value"]
         )
         td = self._create_mock_data_td3(
-            observation_key=observation_key, reward_key=reward_key, done_key=done_key, terminated_key=terminated_key,
+            observation_key=observation_key,
+            reward_key=reward_key,
+            done_key=done_key,
+            terminated_key=terminated_key,
         )
         loss = TD3Loss(actor, qvalue, action_spec=actor.spec)
         loss.set_keys(reward=reward_key, done=done_key, terminated=terminated_key)
@@ -3195,7 +3203,12 @@ class TestSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             value_network=value,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
 
         kwargs = {
             action_key: td.get(action_key),
@@ -3741,7 +3754,12 @@ class TestDiscreteSAC(LossModuleTestBase):
             qvalue_network=qvalue,
             num_actions=actor.spec[action_key].space.n,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
 
         kwargs = {
             action_key: td.get(action_key),
@@ -4624,7 +4642,12 @@ class TestREDQ(LossModuleTestBase):
             actor_network=actor,
             qvalue_network=qvalue,
         )
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
 
         kwargs = {
             action_key: td.get(action_key),
@@ -6280,7 +6303,9 @@ class TestA2C(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    def test_a2c_notensordict(self, action_key, observation_key, reward_key, done_key, terminated_key):
+    def test_a2c_notensordict(
+        self, action_key, observation_key, reward_key, done_key, terminated_key
+    ):
         torch.manual_seed(self.seed)
 
         actor = self._create_mock_actor(observation_key=observation_key)
@@ -6294,7 +6319,12 @@ class TestA2C(LossModuleTestBase):
         )
 
         loss = A2CLoss(actor, value)
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
 
         kwargs = {
             observation_key: td.get(observation_key),
@@ -6656,7 +6686,12 @@ class TestReinforce(LossModuleTestBase):
             spec=UnboundedContinuousTensorSpec(n_act),
         )
         loss = ReinforceLoss(actor=actor_net, critic=value_net)
-        loss.set_keys(reward=reward_key, done=done_key, action=action_key, terminated=terminated_key)
+        loss.set_keys(
+            reward=reward_key,
+            done=done_key,
+            action=action_key,
+            terminated=terminated_key,
+        )
 
         observation = torch.randn(batch, n_obs)
         action = torch.randn(batch, n_act)
@@ -6711,7 +6746,9 @@ class TestDreamer(LossModuleTestBase):
                     ),
                     "reward": torch.randn(batch_size, temporal_length, 1),
                     "done": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
-                    "terminated": torch.zeros(batch_size, temporal_length, dtype=torch.bool),
+                    "terminated": torch.zeros(
+                        batch_size, temporal_length, dtype=torch.bool
+                    ),
                 },
                 "action": torch.randn(batch_size, temporal_length, 64),
             },
@@ -8235,7 +8272,9 @@ class TestIQL(LossModuleTestBase):
     @pytest.mark.parametrize("reward_key", ["reward", "reward2"])
     @pytest.mark.parametrize("done_key", ["done", "done2"])
     @pytest.mark.parametrize("terminated_key", ["terminated", "terminated2"])
-    def test_iql_notensordict(self, action_key, observation_key, reward_key, done_key, terminated_key):
+    def test_iql_notensordict(
+        self, action_key, observation_key, reward_key, done_key, terminated_key
+    ):
         torch.manual_seed(self.seed)
         td = self._create_mock_data_iql(
             action_key=action_key,
@@ -8254,7 +8293,12 @@ class TestIQL(LossModuleTestBase):
         value = self._create_mock_value(observation_key=observation_key)
 
         loss = IQLLoss(actor_network=actor, qvalue_network=qvalue, value_network=value)
-        loss.set_keys(action=action_key, reward=reward_key, done=done_key, terminated=terminated_key)
+        loss.set_keys(
+            action=action_key,
+            reward=reward_key,
+            done=done_key,
+            terminated=terminated_key,
+        )
 
         kwargs = {
             action_key: td.get(action_key),

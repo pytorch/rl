@@ -607,7 +607,11 @@ class TD0Estimator(ValueEstimatorBase):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         value_target = td0_return_estimate(
-            gamma=gamma, next_state_value=next_value, reward=reward, done=done, terminated=terminated,
+            gamma=gamma,
+            next_state_value=next_value,
+            reward=reward,
+            done=done,
+            terminated=terminated,
         )
         return value_target
 
@@ -804,7 +808,12 @@ class TD1Estimator(ValueEstimatorBase):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         value_target = vec_td1_return_estimate(
-            gamma, next_value, reward, done=done, terminated=terminated, time_dim=tensordict.ndim - 1
+            gamma,
+            next_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=tensordict.ndim - 1,
         )
         return value_target
 
@@ -1011,11 +1020,23 @@ class TDLambdaEstimator(ValueEstimatorBase):
         terminated = tensordict.get(("next", self.tensor_keys.done), default=done)
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
-                gamma, lmbda, next_value, reward, done=done, terminated=terminated, time_dim=tensordict.ndim - 1
+                gamma,
+                lmbda,
+                next_value,
+                reward,
+                done=done,
+                terminated=terminated,
+                time_dim=tensordict.ndim - 1,
             )
         else:
             val = td_lambda_return_estimate(
-                gamma, lmbda, next_value, reward, done=done, terminated=terminated, time_dim=tensordict.ndim - 1
+                gamma,
+                lmbda,
+                next_value,
+                reward,
+                done=done,
+                terminated=terminated,
+                time_dim=tensordict.ndim - 1,
             )
         return val
 
@@ -1292,7 +1313,14 @@ class GAE(ValueEstimatorBase):
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         _, value_target = vec_generalized_advantage_estimate(
-            gamma, lmbda, value, next_value, reward, done=done, terminated=terminated, time_dim=tensordict.ndim - 1
+            gamma,
+            lmbda,
+            value,
+            next_value,
+            reward,
+            done=done,
+            terminated=terminated,
+            time_dim=tensordict.ndim - 1,
         )
         return value_target
 
