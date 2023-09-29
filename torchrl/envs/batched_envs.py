@@ -397,6 +397,10 @@ class _BatchedEnv(EnvBase):
             _unravel_key_to_tuple(key)
             for key in self._env_obs_keys + self.done_keys + reset_keys
         }
+        # output keys after reset, filtered
+        self._selected_reset_keys_filt = {
+            unravel_keys(key) for key in self._env_obs_keys + self.done_keys
+        }
         # output keys after step
         self._selected_step_keys = {
             _unravel_key_to_tuple(key) for key in self._env_output_keys
@@ -638,9 +642,7 @@ class SerialEnv(_BatchedEnv):
             self.shared_tensordicts[i].update_(
                 _td.select(*self._selected_reset_keys, strict=False)
             )
-        selected_output_keys = {
-            unravel_keys(key) for key in self._selected_reset_keys
-        } - set(self.reset_keys)
+        selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
@@ -884,9 +886,7 @@ class ParallelEnv(_BatchedEnv):
             event.wait()
             event.clear()
 
-        selected_output_keys = {
-            unravel_keys(key) for key in self._selected_reset_keys
-        } - set(self.reset_keys)
+        selected_output_keys = self._selected_reset_keys_filt
         if self._single_task:
             # select + clone creates 2 tds, but we can create one only
             out = TensorDict(
