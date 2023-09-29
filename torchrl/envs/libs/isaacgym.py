@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import itertools
 import warnings
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -57,13 +59,19 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
-        self.done_spec = self.done_spec.squeeze(-1)
+        self.full_done_spec = {
+            key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
+        }
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
         data = self.rollout(3).get("next")[..., 0]
         del data[self.reward_key]
-        del data[self.done_key]
+        for done_key in self.done_keys:
+            try:
+                del data[done_key]
+            except KeyError:
+                continue
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
@@ -103,18 +111,19 @@ class IsaacGymWrapper(GymWrapper):
         """
         return action
 
-    def read_done(self, done):
-        """Done state reader.
-
-        Reads a done state and returns a tuple containing:
-        - a done state to be set in the environment
-        - a boolean value indicating whether the frame_skip loop should be broken
-
-        Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
-
-        """
-        return done.bool(), done.any()
+    def read_done(
+        self,
+        terminated: bool = None,
+        truncated: bool | None = None,
+        done: bool | None = None,
+    ) -> Tuple[bool, bool, bool]:
+        if terminated is not None:
+            terminated = terminated.bool()
+        if truncated is not None:
+            truncated = truncated.bool()
+        if done is not None:
+            done = done.bool()
+        return terminated, truncated, done, done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
