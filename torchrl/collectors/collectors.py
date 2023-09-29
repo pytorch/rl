@@ -811,7 +811,7 @@ class SyncDataCollector(DataCollectorBase):
             traj_ids = traj_ids.clone()
             # collectors do not support passing other tensors than `"_reset"`
             # to `reset()`.
-            traj_sop = _aggregate_resets(td_reset)
+            traj_sop = _aggregate_resets(td_reset, reset_keys=self.env.reset_keys)
             td_reset = self.env.reset(td_reset)
 
             if td_reset.batch_dims:
