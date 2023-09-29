@@ -264,16 +264,16 @@ class GymLikeEnv(_EnvWrapper):
 
         tensordict_out = TensorDict(obs_dict, batch_size=tensordict.batch_size)
 
-        if self.info_dict_reader and info is not None:
-            if not isinstance(info, dict):
-                warnings.warn(
-                    f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}."
-                )
-            else:
-                for info_dict_reader in self.info_dict_reader:
-                    out = info_dict_reader(info, tensordict_out)
-                    if out is not None:
-                        tensordict_out = out
+        # if self.info_dict_reader and info is not None:
+        #     if not isinstance(info, dict):
+        #         warnings.warn(
+        #             f"Expected info to be a dictionary but got a {type(info)} with values {str(info)[:100]}."
+        #         )
+        #     else:
+        #         for info_dict_reader in self.info_dict_reader:
+        #             out = info_dict_reader(info, tensordict_out)
+        #             if out is not None:
+        #                 tensordict_out = out
         # tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
