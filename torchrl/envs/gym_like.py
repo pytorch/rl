@@ -274,7 +274,7 @@ class GymLikeEnv(_EnvWrapper):
                     out = info_dict_reader(info, tensordict_out)
                     if out is not None:
                         tensordict_out = out
-        tensordict_out = tensordict_out.to(self.device, non_blocking=True)
+        # tensordict_out = tensordict_out.to(self.device, non_blocking=True)
         return tensordict_out
 
     def _reset(
