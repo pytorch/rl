@@ -159,11 +159,18 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
         )
 
     def _get_done_spec(self) -> TensorSpec:
-        return DiscreteTensorSpec(
+        spec = DiscreteTensorSpec(
             2,
             device=self.device,
             shape=self.batch_size,
             dtype=torch.bool,
+        )
+        return CompositeSpec(
+            done=spec,
+            truncated=spec.clone(),
+            terminated=spec.clone(),
+            shape=self.batch_size,
+            device=self.device,
         )
 
     def __repr__(self) -> str:
@@ -198,17 +205,31 @@ class MultiThreadedEnvWrapper(_EnvWrapper):
             )
 
         obs = self.obs.clone(False)
-        obs.update({self.done_key: self.done_spec.zero()})
+        obs.update(self.full_done_spec.zero())
         return obs
 
     def _transform_step_output(
         self, envpool_output: Tuple[Any, Any, Any, ...]
     ) -> TensorDict:
         """Process output of envpool env.step."""
-        obs, reward, done, *_ = envpool_output
-
+        out = envpool_output
+        if len(out) == 4:
+            obs, reward, done, info = out
+            terminated = done
+            truncated = info.get("TimeLimit.truncated", done * 0)
+        elif len(out) == 5:
+            obs, reward, terminated, truncated, info = out
+            done = terminated | truncated
+        else:
+            raise TypeError(
+                f"The output of step was had {len(out)} elements, but only 4 or 5 are supported."
+            )
         obs = self._treevalue_or_numpy_to_tensor_or_dict(obs)
-        obs.update({self.reward_key: torch.tensor(reward), self.done_key: done})
+        reward_and_done = {self.reward_key: torch.tensor(reward)}
+        reward_and_done["done"] = done
+        reward_and_done["terminated"] = terminated
+        reward_and_done["truncated"] = truncated
+        obs.update(reward_and_done)
         self.obs = tensordict_out = TensorDict(
             obs,
             batch_size=self.batch_size,

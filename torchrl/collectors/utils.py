@@ -58,10 +58,6 @@ def split_trajectories(
 
     traj_ids = rollout_tensordict.get(traj_ids_key, None)
     done = rollout_tensordict.get(("next", "done"))
-    truncated = rollout_tensordict.get(
-        ("next", "truncated"), torch.zeros((), device=done.device, dtype=torch.bool)
-    )
-    done = done | truncated
     if traj_ids is None:
         idx = (slice(None),) * (rollout_tensordict.ndim - 1) + (slice(None, -1),)
         done_sel = done[idx]
