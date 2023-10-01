@@ -124,10 +124,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 }
             )
 
-        # Apply episodic end of life
-        data["done"].copy_(data["end_of_life"])
-        data["next", "done"].copy_(data["next", "end_of_life"])
-
         losses = TensorDict({}, batch_size=[num_mini_batches])
         training_start = time.time()
 
