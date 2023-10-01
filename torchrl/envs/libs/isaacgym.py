@@ -2,18 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
+
 import importlib.util
 
 import itertools
 import warnings
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
 
 from tensordict import TensorDictBase
-from torchrl.envs import make_composite_from_td
 from torchrl.envs.libs.gym import GymWrapper
+from torchrl.envs.utils import _classproperty, make_composite_from_td
 
 _has_isaac = importlib.util.find_spec("isaacgym") is not None
 
@@ -35,6 +37,12 @@ class IsaacGymWrapper(GymWrapper):
 
     """
 
+    @property
+    def lib(self):
+        import isaacgym
+
+        return isaacgym
+
     def __init__(
         self, env: "isaacgymenvs.tasks.base.vec_task.Env", **kwargs  # noqa: F821
     ):
@@ -51,13 +59,19 @@ class IsaacGymWrapper(GymWrapper):
 
     def _make_specs(self, env: "gym.Env") -> None:  # noqa: F821
         super()._make_specs(env, batch_size=self.batch_size)
-        self.done_spec = self.done_spec.squeeze(-1)
+        self.full_done_spec = {
+            key: spec.squeeze(-1) for key, spec in self.full_done_spec.items(True, True)
+        }
         self.observation_spec["obs"] = self.observation_spec["observation"]
         del self.observation_spec["observation"]
 
         data = self.rollout(3).get("next")[..., 0]
         del data[self.reward_key]
-        del data[self.done_key]
+        for done_key in self.done_keys:
+            try:
+                del data[done_key]
+            except KeyError:
+                continue
         specs = make_composite_from_td(data)
 
         obs_spec = self.observation_spec
@@ -97,18 +111,19 @@ class IsaacGymWrapper(GymWrapper):
         """
         return action
 
-    def read_done(self, done):
-        """Done state reader.
-
-        Reads a done state and returns a tuple containing:
-        - a done state to be set in the environment
-        - a boolean value indicating whether the frame_skip loop should be broken
-
-        Args:
-            done (np.ndarray, boolean or other format): done state obtained from the environment
-
-        """
-        return done.bool(), done.any()
+    def read_done(
+        self,
+        terminated: bool = None,
+        truncated: bool | None = None,
+        done: bool | None = None,
+    ) -> Tuple[bool, bool, bool]:
+        if terminated is not None:
+            terminated = terminated.bool()
+        if truncated is not None:
+            truncated = truncated.bool()
+        if done is not None:
+            done = done.bool()
+        return terminated, truncated, done, done.any()
 
     def read_reward(self, total_reward, step_reward):
         """Reads a reward and the total reward so far (in the frame skip loop) and returns a sum of the two.
@@ -154,11 +169,14 @@ class IsaacGymEnv(IsaacGymWrapper):
 
     """
 
-    @property
-    def available_envs(cls) -> List[str]:
+    @_classproperty
+    def available_envs(cls):
+        if not _has_isaac:
+            return
+
         import isaacgymenvs  # noqa
 
-        return list(isaacgymenvs.tasks.isaacgym_task_map.keys())
+        yield from isaacgymenvs.tasks.isaacgym_task_map.keys()
 
     def __init__(self, task=None, *, env=None, num_envs, device, **kwargs):
         if env is not None and task is not None:

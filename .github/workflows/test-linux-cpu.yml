@@ -34,9 +34,10 @@ jobs:
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
+        export TORCH_VERSION=nightly
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .github/unittest/linux/scripts/run_all.sh

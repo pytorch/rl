@@ -89,17 +89,7 @@ def test_unbounded(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.float64, None])
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [],
-        torch.Size(
-            [
-                3,
-            ]
-        ),
-    ],
-)
+@pytest.mark.parametrize("shape", [[], torch.Size([3])])
 def test_ndbounded(dtype, shape):
     torch.manual_seed(0)
     np.random.seed(0)
@@ -122,7 +112,14 @@ def test_ndbounded(dtype, shape):
         assert ts.is_in(r)
         ts.encode(lb + torch.rand(10) * (ub - lb))
         ts.encode((lb + torch.rand(10) * (ub - lb)).numpy())
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
+
         with pytest.raises(AssertionError), set_global_var(
             torchrl.data.tensor_specs, "_CHECK_SPEC_ENCODE", True
         ):
@@ -172,7 +169,12 @@ def test_ndunbounded(dtype, n, shape):
         ts.to_numpy(r)
         assert ts.is_in(r)
         assert r.dtype is dtype
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
 
 @pytest.mark.parametrize("n", range(3, 10))
@@ -202,8 +204,12 @@ def test_binary(n, shape):
         )
         assert ts.is_in(r)
         assert ((r == 0) | (r == 1)).all()
-        assert (ts.encode(r.numpy()) == r).all()
-        assert (ts.encode(ts.to_numpy(r)) == r).all()
+        if not shape:
+            assert (ts.encode(ts.to_numpy(r)) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="Shape mismatch"):
+                ts.encode(ts.to_numpy(r))
+            assert (ts.expand(*shape, *ts.shape).encode(ts.to_numpy(r)) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -247,7 +253,13 @@ def test_mult_onehot(shape, ns):
             assert _r.shape[-1] == _n
         categorical = ts.to_categorical(r)
         assert not ts.is_in(categorical)
-        assert (ts.encode(categorical) == r).all()
+        # assert (ts.encode(categorical) == r).all()
+        if not shape:
+            assert (ts.encode(categorical) == r).all()
+        else:
+            with pytest.raises(RuntimeError, match="is invalid for input of size"):
+                ts.encode(categorical)
+            assert (ts.expand(*shape, *ts.shape).encode(categorical) == r).all()
 
 
 @pytest.mark.parametrize(
@@ -260,15 +272,7 @@ def test_mult_onehot(shape, ns):
         [[[2, 4], [3, 5]], [[4, 5], [2, 3]], [[2, 3], [3, 2]]],
     ],
 )
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("dtype", [torch.float, torch.int, torch.long])
 def test_multi_discrete(shape, ns, dtype):
     torch.manual_seed(0)
@@ -305,27 +309,9 @@ def test_multi_discrete(shape, ns, dtype):
     assert not ts.is_in(projection)
 
 
-@pytest.mark.parametrize(
-    "n",
-    [
-        1,
-        4,
-        7,
-        99,
-    ],
-)
+@pytest.mark.parametrize("n", [1, 4, 7, 99])
 @pytest.mark.parametrize("device", get_default_devices())
-@pytest.mark.parametrize(
-    "shape",
-    [
-        None,
-        [],
-        [
-            1,
-        ],
-        [1, 2],
-    ],
-)
+@pytest.mark.parametrize("shape", [None, [], [1], [1, 2]])
 def test_discrete_conversion(n, device, shape):
     categorical = DiscreteTensorSpec(n, device=device, shape=shape)
     shape_one_hot = [n] if not shape else [*shape, n]
@@ -339,23 +325,8 @@ def test_discrete_conversion(n, device, shape):
     assert one_hot.is_in(categorical.to_one_hot(categorical.rand(shape)))
 
 
-@pytest.mark.parametrize(
-    "ns",
-    [
-        [
-            5,
-        ],
-        [5, 2, 3],
-        [4, 5, 1, 3],
-    ],
-)
-@pytest.mark.parametrize(
-    "shape",
-    [
-        torch.Size([3]),
-        torch.Size([4, 5]),
-    ],
-)
+@pytest.mark.parametrize("ns", [[5], [5, 2, 3], [4, 5, 1, 3]])
+@pytest.mark.parametrize("shape", [torch.Size([3]), torch.Size([4, 5])])
 @pytest.mark.parametrize("device", get_default_devices())
 def test_multi_discrete_conversion(ns, shape, device):
     categorical = MultiDiscreteTensorSpec(ns, device=device)
@@ -849,32 +820,30 @@ class TestEquality:
         device = "cpu"
         dtype = torch.float16
 
-        ts = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
-        )
+        ts = BoundedTensorSpec(low=minimum, high=maximum, device=device, dtype=dtype)
 
         ts_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=dtype
+            low=minimum, high=maximum, device=device, dtype=dtype
         )
         assert ts == ts_same
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum + 1, maximum=maximum, device=device, dtype=dtype
+            low=minimum + 1, high=maximum, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device="cpu:0", dtype=dtype
+            low=minimum, high=maximum, device="cpu:0", dtype=dtype
         )
         assert ts != ts_other
 
         ts_other = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum, device=device, dtype=torch.float64
+            low=minimum, high=maximum, device=device, dtype=torch.float64
         )
         assert ts != ts_other
 
@@ -1064,14 +1033,12 @@ class TestEquality:
         bounded_other = BoundedTensorSpec(0, 2, torch.Size((1,)), device, dtype)
 
         nd = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
         nd_same = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 1, device=device, dtype=dtype
+            low=minimum, high=maximum + 1, device=device, dtype=dtype
         )
-        _ = BoundedTensorSpec(
-            minimum=minimum, maximum=maximum + 3, device=device, dtype=dtype
-        )
+        _ = BoundedTensorSpec(low=minimum, high=maximum + 3, device=device, dtype=dtype)
 
         # Equality tests
         ts = CompositeSpec(ts1=bounded)
@@ -1168,7 +1135,7 @@ class TestSpec:
 
         sample = action_spec.rand((100000,))
 
-        sample_list = sample.argmax(-1)
+        sample_list = sample.long().argmax(-1)
         sample_list = [sum(sample_list == i).item() for i in range(10)]
         assert chisquare(sample_list).pvalue > 0.1
 
@@ -1248,14 +1215,7 @@ class TestSpec:
 
 
 class TestExpand:
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (4,),
-            (5, 4),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (4,), (5, 4)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_binary(self, shape1, shape2):
         spec = BinaryDiscreteTensorSpec(
@@ -1377,14 +1337,7 @@ class TestExpand:
             assert new_spec["spec7"].shape == torch.Size([4, *batch_size, 9])
             assert new_spec["spec8"].shape == torch.Size([4, *batch_size, 9])
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_discrete(self, shape1, shape2):
         spec = DiscreteTensorSpec(n=4, shape=shape1, device="cpu", dtype=torch.long)
@@ -1406,14 +1359,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_multidiscrete(self, shape1, shape2):
         if shape1 is None:
@@ -1441,14 +1387,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_multionehot(self, shape1, shape2):
         if shape1 is None:
@@ -1476,14 +1415,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_onehot(self, shape1, shape2):
         if shape1 is None:
@@ -1511,14 +1443,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_unbounded(self, shape1, shape2):
         if shape1 is None:
@@ -1546,14 +1471,7 @@ class TestExpand:
         assert spec2.rand().shape == spec2.shape
         assert spec2.zero().shape == spec2.shape
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     @pytest.mark.parametrize("shape2", [(), (10,)])
     def test_unboundeddiscrete(self, shape1, shape2):
         if shape1 is None:
@@ -1671,14 +1589,7 @@ class TestClone:
             assert item == spec_clone[key], key
         assert spec == spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_discrete(
         self,
         shape1,
@@ -1687,14 +1598,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_multidiscrete(
         self,
         shape1,
@@ -1709,14 +1613,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_multionehot(
         self,
         shape1,
@@ -1731,14 +1628,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_onehot(
         self,
         shape1,
@@ -1753,14 +1643,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_unbounded(
         self,
         shape1,
@@ -1775,14 +1658,7 @@ class TestClone:
         assert spec == spec.clone()
         assert spec is not spec.clone()
 
-    @pytest.mark.parametrize(
-        "shape1",
-        [
-            None,
-            (),
-            (5,),
-        ],
-    )
+    @pytest.mark.parametrize("shape1", [None, (), (5,)])
     def test_unboundeddiscrete(
         self,
         shape1,
@@ -1794,6 +1670,172 @@ class TestClone:
         spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
         assert spec == spec.clone()
         assert spec is not spec.clone()
+
+
+class TestUnbind:
+    @pytest.mark.parametrize("shape1", [(5, 4)])
+    def test_binary(self, shape1):
+        spec = BinaryDiscreteTensorSpec(
+            n=4, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        with pytest.raises(ValueError):
+            spec.unbind(-1)
+
+    @pytest.mark.parametrize(
+        "shape1,mini,maxi",
+        [
+            [(10,), -torch.ones([]), torch.ones([])],
+            [None, -torch.ones([10]), torch.ones([])],
+            [None, -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([]), torch.ones([10])],
+            [(10,), -torch.ones([10]), torch.ones([])],
+            [(10,), -torch.ones([10]), torch.ones([10])],
+        ],
+    )
+    def test_bounded(self, shape1, mini, maxi):
+        spec = BoundedTensorSpec(
+            mini, maxi, shape=shape1, device="cpu", dtype=torch.bool
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        with pytest.raises(ValueError):
+            spec.unbind(-1)
+
+    def test_composite(self):
+        batch_size = (5,)
+        spec1 = BoundedTensorSpec(
+            -torch.ones([*batch_size, 10]),
+            torch.ones([*batch_size, 10]),
+            shape=(
+                *batch_size,
+                10,
+            ),
+            device="cpu",
+            dtype=torch.bool,
+        )
+        spec2 = BinaryDiscreteTensorSpec(
+            n=4, shape=(*batch_size, 4), device="cpu", dtype=torch.bool
+        )
+        spec3 = DiscreteTensorSpec(
+            n=4, shape=batch_size, device="cpu", dtype=torch.long
+        )
+        spec4 = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 3), device="cpu", dtype=torch.long
+        )
+        spec5 = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec6 = OneHotDiscreteTensorSpec(
+            n=15, shape=(*batch_size, 15), device="cpu", dtype=torch.long
+        )
+        spec7 = UnboundedContinuousTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.float64,
+        )
+        spec8 = UnboundedDiscreteTensorSpec(
+            shape=(*batch_size, 9),
+            device="cpu",
+            dtype=torch.long,
+        )
+        spec = CompositeSpec(
+            spec1=spec1,
+            spec2=spec2,
+            spec3=spec3,
+            spec4=spec4,
+            spec5=spec5,
+            spec6=spec6,
+            spec7=spec7,
+            spec8=spec8,
+            shape=batch_size,
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        assert spec == torch.stack(spec.unbind(-1), -1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_discrete(
+        self,
+        shape1,
+    ):
+        spec = DiscreteTensorSpec(n=4, shape=shape1, device="cpu", dtype=torch.long)
+        assert spec == torch.stack(spec.unbind(0), 0)
+        assert spec == torch.stack(spec.unbind(-1), -1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multidiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (3,)
+        else:
+            shape1 = (*shape1, 3)
+        spec = MultiDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        with pytest.raises(ValueError):
+            spec.unbind(-1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_multionehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = MultiOneHotDiscreteTensorSpec(
+            nvec=(4, 5, 6), shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        with pytest.raises(ValueError):
+            spec.unbind(-1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_onehot(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = OneHotDiscreteTensorSpec(
+            n=15, shape=shape1, device="cpu", dtype=torch.long
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        with pytest.raises(ValueError):
+            spec.unbind(-1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_unbounded(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedContinuousTensorSpec(
+            shape=shape1, device="cpu", dtype=torch.float64
+        )
+        assert spec == torch.stack(spec.unbind(0), 0)
+        assert spec == torch.stack(spec.unbind(-1), -1)
+
+    @pytest.mark.parametrize("shape1", [(5,), (5, 6)])
+    def test_unboundeddiscrete(
+        self,
+        shape1,
+    ):
+        if shape1 is None:
+            shape1 = (15,)
+        else:
+            shape1 = (*shape1, 15)
+        spec = UnboundedDiscreteTensorSpec(shape=shape1, device="cpu", dtype=torch.long)
+        assert spec == torch.stack(spec.unbind(0), 0)
+        assert spec == torch.stack(spec.unbind(-1), -1)
 
 
 @pytest.mark.parametrize(
@@ -2206,7 +2248,7 @@ class TestLazyStackedCompositeSpecs:
         batch_size=(),
         stack_dim: int = 0,
     ):
-        shared = BoundedTensorSpec(minimum=0, maximum=1, shape=(*batch_size, 32, 32, 3))
+        shared = BoundedTensorSpec(low=0, high=1, shape=(*batch_size, 32, 32, 3))
         hetero_3d = UnboundedContinuousTensorSpec(
             shape=(
                 *batch_size,
@@ -2220,8 +2262,8 @@ class TestLazyStackedCompositeSpecs:
             )
         )
         lidar = BoundedTensorSpec(
-            minimum=0,
-            maximum=5,
+            low=0,
+            high=5,
             shape=(
                 *batch_size,
                 20,
@@ -2243,7 +2285,7 @@ class TestLazyStackedCompositeSpecs:
         individual_1_obs = CompositeSpec(
             {
                 "individual_1_obs_0": BoundedTensorSpec(
-                    minimum=0, maximum=3, shape=(*batch_size, 3, 1, 2)
+                    low=0, high=3, shape=(*batch_size, 3, 1, 2)
                 )
             },
             shape=(*batch_size, 3),
@@ -2593,7 +2635,7 @@ class TestLazyStackedCompositeSpecs:
         assert not c == c2 and c != c2
 
         c2 = self._get_het_specs(batch_size=batch_size)
-        c2[0]["lidar"].space.minimum += 1
+        c2[0]["lidar"].space.low += 1
         assert not c == c2 and c != c2
 
     @pytest.mark.parametrize("batch_size", [(), (4,), (4, 2)])
@@ -2708,8 +2750,8 @@ class TestLazyStackedCompositeSpecs:
         shared: BoundedTensorSpec(
             shape=torch.Size([3, 32, 32, 3]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([3, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
@@ -2718,8 +2760,8 @@ class TestLazyStackedCompositeSpecs:
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
@@ -2734,8 +2776,8 @@ class TestLazyStackedCompositeSpecs:
             lidar: BoundedTensorSpec(
                 shape=torch.Size([20]),
                 space=ContinuousBox(
-                    minimum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
-                    maximum=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                    low=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True),
+                    high=Tensor(shape=torch.Size([20]), device=cpu, dtype=torch.float32, contiguous=True)),
                 device=cpu,
                 dtype=torch.float32,
                 domain=continuous),
@@ -2743,8 +2785,8 @@ class TestLazyStackedCompositeSpecs:
                 individual_1_obs_0: BoundedTensorSpec(
                     shape=torch.Size([3, 1, 2]),
                     space=ContinuousBox(
-                        minimum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
-                        maximum=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
+                        low=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True),
+                        high=Tensor(shape=torch.Size([3, 1, 2]), device=cpu, dtype=torch.float32, contiguous=True)),
                     device=cpu,
                     dtype=torch.float32,
                     domain=continuous), device=cpu, shape=torch.Size([3])),
@@ -2771,16 +2813,16 @@ class TestLazyStackedCompositeSpecs:
         lidar: BoundedTensorSpec(
             shape=torch.Size([2, 20]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([2, 20]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous),
         shared: BoundedTensorSpec(
             shape=torch.Size([2, 32, 32, 3]),
             space=ContinuousBox(
-                minimum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
-                maximum=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
+                low=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True),
+                high=Tensor(shape=torch.Size([2, 32, 32, 3]), device=cpu, dtype=torch.float32, contiguous=True)),
             device=cpu,
             dtype=torch.float32,
             domain=continuous)}},
@@ -2871,13 +2913,11 @@ class TestLazyStackedCompositeSpecs:
         spec.update(spec2)
         assert spec["hetero"].shape == (3, *batch_size, -1, 1)
 
-        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum += 1
-        assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
-        )
+        spec2[1]["individual_1_obs"]["individual_1_obs_0"].space.low += 1
+        assert spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         spec.update(spec2)
         assert (
-            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.minimum.sum() == 0
+            spec[1]["individual_1_obs"]["individual_1_obs_0"].space.low.sum() == 0
         )  # Only non exclusive keys will be updated
 
         new = torch.stack(
@@ -3167,6 +3207,126 @@ def get_all_keys(spec: TensorSpec, include_exclusive: bool):
                 keys.add((key,) + _unravel_key_to_tuple(inner_key))
 
     return keys
+
+
+@pytest.mark.parametrize("shape", ((), (1,), (2, 3), (2, 3, 4)))
+@pytest.mark.parametrize(
+    "spectype", ["one_hot", "categorical", "mult_one_hot", "mult_discrete"]
+)
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("rand_shape", ((), (2,), (2, 3)))
+class TestSpecMasking:
+    def _make_mask(self, shape):
+        torch.manual_seed(0)
+        mask = torch.zeros(shape, dtype=torch.bool).bernoulli_()
+        if len(shape) == 1:
+            while not mask.any() or mask.all():
+                mask = torch.zeros(shape, dtype=torch.bool).bernoulli_()
+            return mask
+        mask_view = mask.view(-1, shape[-1])
+        for i in range(mask_view.shape[0]):
+            t = mask_view[i]
+            while not t.any() or t.all():
+                t.copy_(torch.zeros_like(t).bernoulli_())
+        return mask
+
+    def _one_hot_spec(self, shape, device, n):
+        shape = torch.Size([*shape, n])
+        mask = self._make_mask(shape).to(device)
+        return OneHotDiscreteTensorSpec(n, shape, device, mask=mask)
+
+    def _mult_one_hot_spec(self, shape, device, n):
+        shape = torch.Size([*shape, n + n + 2])
+        mask = torch.cat(
+            [
+                self._make_mask(shape[:-1] + (n,)).to(device),
+                self._make_mask(shape[:-1] + (n + 2,)).to(device),
+            ],
+            -1,
+        )
+        return MultiOneHotDiscreteTensorSpec([n, n + 2], shape, device, mask=mask)
+
+    def _discrete_spec(self, shape, device, n):
+        mask = self._make_mask(torch.Size([*shape, n])).to(device)
+        return DiscreteTensorSpec(n, shape, device, mask=mask)
+
+    def _mult_discrete_spec(self, shape, device, n):
+        shape = torch.Size([*shape, 2])
+        mask = torch.cat(
+            [
+                self._make_mask(shape[:-1] + (n,)).to(device),
+                self._make_mask(shape[:-1] + (n + 2,)).to(device),
+            ],
+            -1,
+        )
+        return MultiDiscreteTensorSpec([n, n + 2], shape, device, mask=mask)
+
+    def test_equal(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        spec_clone = spec.clone()
+        assert spec == spec_clone
+        assert spec.unsqueeze(0).squeeze(0) == spec
+        spec.update_mask(~spec.mask)
+        assert (spec.mask != spec_clone.mask).any()
+        assert spec != spec_clone
+
+    def test_is_in(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        rand_shape = torch.Size(rand_shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        s = spec.rand(rand_shape)
+        assert spec.is_in(s)
+        spec.update_mask(~spec.mask)
+        assert not spec.is_in(s)
+
+    def test_project(self, shape, device, spectype, rand_shape, n=5):
+        shape = torch.Size(shape)
+        rand_shape = torch.Size(rand_shape)
+        spec = (
+            self._one_hot_spec(shape, device, n=n)
+            if spectype == "one_hot"
+            else self._discrete_spec(shape, device, n=n)
+            if spectype == "categorical"
+            else self._mult_one_hot_spec(shape, device, n=n)
+            if spectype == "mult_one_hot"
+            else self._mult_discrete_spec(shape, device, n=n)
+            if spectype == "mult_discrete"
+            else None
+        )
+        s = spec.rand(rand_shape)
+        assert (spec.project(s) == s).all()
+        spec.update_mask(~spec.mask)
+        sp = spec.project(s)
+        assert sp.shape == s.shape
+        if spectype == "one_hot":
+            assert (sp != s).any(-1).all()
+            assert (sp.any(-1)).all()
+        elif spectype == "mult_one_hot":
+            assert (sp != s).any(-1).all()
+            assert (sp.sum(-1) == 2).all()
+        else:
+            assert (sp != s).all()
 
 
 if __name__ == "__main__":

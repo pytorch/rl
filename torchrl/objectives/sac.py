@@ -10,15 +10,14 @@ from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
+
 from tensordict.nn import dispatch, make_functional, TensorDictModule
 from tensordict.tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import Tensor
-
 from torchrl.data import CompositeSpec, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-
 from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
@@ -401,8 +400,19 @@ class SACLoss(LossModule):
                     )
                 if not isinstance(action_spec, CompositeSpec):
                     action_spec = CompositeSpec({self.tensor_keys.action: action_spec})
+                if (
+                    isinstance(self.tensor_keys.action, tuple)
+                    and len(self.tensor_keys.action) > 1
+                ):
+                    action_container_shape = action_spec[
+                        self.tensor_keys.action[:-1]
+                    ].shape
+                else:
+                    action_container_shape = action_spec.shape
                 target_entropy = -float(
-                    np.prod(action_spec[self.tensor_keys.action].shape)
+                    action_spec[self.tensor_keys.action]
+                    .shape[len(action_container_shape) :]
+                    .numel()
                 )
             self.register_buffer(
                 "target_entropy_buffer", torch.tensor(target_entropy, device=device)
@@ -609,24 +619,23 @@ class SACLoss(LossModule):
                 f"Batch size={tensordict.shape} is incompatible "
                 f"with num_qvqlue_nets={self.num_qvalue_nets}."
             )
-        tensordict_chunks = torch.stack(
-            tensordict.chunk(self.num_qvalue_nets, dim=0), 0
+        tensordict_chunks = tensordict.reshape(
+            self.num_qvalue_nets, -1, *tensordict.shape[1:]
         )
-        target_chunks = torch.stack(target_value.chunk(self.num_qvalue_nets, dim=0), 0)
+        target_chunks = target_value.reshape(
+            self.num_qvalue_nets, -1, *target_value.shape[1:]
+        )
 
         # if vmap=True, it is assumed that the input tensordict must be cast to the param shape
         tensordict_chunks = self._vmap_qnetwork00(
             tensordict_chunks, self.qvalue_network_params
         )
-        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value).squeeze(
-            -1
-        )
+        pred_val = tensordict_chunks.get(self.tensor_keys.state_action_value)
+        pred_val = pred_val.squeeze(-1)
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        metadata = {
-            "td_error": torch.cat((pred_val - target_chunks).pow(2).unbind(0), 0)
-        }
+        metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
 
