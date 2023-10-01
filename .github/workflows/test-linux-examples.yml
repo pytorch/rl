@@ -46,4 +46,4 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux_examples/scripts/run_all.sh
+        bash .github/unittest/linux_examples/scripts/run_all.sh

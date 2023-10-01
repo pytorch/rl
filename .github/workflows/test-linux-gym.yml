@@ -33,6 +33,6 @@ jobs:
         export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/work/mujoco-py/mujoco_py/binaries/linux/mujoco210/bin"
         export TAR_OPTIONS="--no-same-owner"
 
-        ./.circleci/unittest/linux_libs/scripts_gym/setup_env.sh
-        ./.circleci/unittest/linux_libs/scripts_gym/batch_scripts.sh
-        ./.circleci/unittest/linux_libs/scripts_gym/post_process.sh
+        ./.github/unittest/linux_libs/scripts_gym/setup_env.sh
+        ./.github/unittest/linux_libs/scripts_gym/batch_scripts.sh
+        ./.github/unittest/linux_libs/scripts_gym/post_process.sh
