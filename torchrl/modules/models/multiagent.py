@@ -434,13 +434,13 @@ class MultiAgentConvNet(nn.Module):
                 )
         else:
             output = self.agent_networks[0](inputs)
+            print(output.shape)
             if self.centralised:
                 # If the parameters are shared, and it is centralised all agents will have the same output.
                 # We expand it to maintain the agent dimension, but values will be the same for all agents
                 n_agent_outputs = output.shape[-1]
-                output = output.view(*output.shape[:-1], n_agent_outputs)
                 output = output.unsqueeze(-2)
-                output = output.expand(*output.shape[:-1], self.n_agents, n_agent_outputs)
+                output = output.expand(*output.shape[:-2], self.n_agents, n_agent_outputs)
         return output
 
 
