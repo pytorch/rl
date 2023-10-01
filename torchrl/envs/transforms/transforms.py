@@ -164,13 +164,13 @@ class Transform(nn.Module):
 
         self.in_keys = in_keys
         if out_keys is None:
-            out_keys = copy(self.in_keys)
+            out_keys = copy(in_keys)
         self.out_keys = out_keys
         if in_keys_inv is None:
             in_keys_inv = []
         self.in_keys_inv = in_keys_inv
         if out_keys_inv is None:
-            out_keys_inv = copy(self.in_keys_inv)
+            out_keys_inv = copy(in_keys_inv)
         self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
         self.__dict__["_container"] = None
@@ -191,7 +191,7 @@ class Transform(nn.Module):
 
         """
         raise NotImplementedError(
-            f"{self.__class__.__name__}_apply_transform is not coded. If the transform is coded in "
+            f"{self.__class__.__name__}._apply_transform is not coded. If the transform is coded in "
             "transform._call, make sure that this method is called instead of"
             "transform.forward, which is reserved for usage inside nn.Modules"
             "or appended to a replay buffer."
@@ -4120,6 +4120,9 @@ class RewardSum(Transform):
             If no ``in_keys`` are specified, this transform assumes ``"reward"`` to be the input key.
             However, multiple rewards (e.g. ``"reward1"`` and ``"reward2""``) can also be specified.
         out_keys (list of NestedKeys, optional): The output sum keys, should be one per each input key.
+        reset_keys (list of NestedKeys, optional): the list of reset_keys to be
+            used, if the parent environment cannot be found. If provided, this
+            value will prevail over the environment ``reset_keys``.
 
     Examples:
         >>> from torchrl.envs.transforms import RewardSum, TransformedEnv
@@ -4138,45 +4141,107 @@ class RewardSum(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[NestedKey]] = None,
-        done_keys: Optional[Sequence[NestedKey]] = None,
         out_keys: Optional[Sequence[NestedKey]] = None,
+        reset_keys: Optional[Sequence[NestedKey]] = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
-        if in_keys is None:
-            in_keys = ["reward"]
-        if out_keys is None:
+        # if in_keys is None:
+        #     in_keys = ["reward"]
+        # if out_keys is None:
+        #     out_keys = [
+        #         _replace_last(in_key, f"episode_{_unravel_key_to_tuple(in_key)[-1]}")
+        #         for in_key in in_keys
+        #     ]
+        # if len(in_keys) != len(out_keys):
+        #     raise ValueError(
+        #         "RewardSum expects the same number of input and output keys"
+        #     )
+        # if done_keys is None:
+        #     # The default if done_keys is not provided is that we expect
+        #     # to find the dones in the same tensordicts as the in_keys
+        #     self._done_keys = [_replace_last(in_key, "done") for in_key in in_keys]
+        # elif isinstance(done_keys, list) and len(done_keys) == 1:
+        #     # If there is one done key than it is used for all rewards
+        #     self._done_keys = done_keys * len(in_keys)
+        # elif isinstance(done_keys, list) and len(done_keys) == len(in_keys):
+        #     # The full list of done_keys has been provided
+        #     self._done_keys = done_keys
+        # else:
+        #     raise ValueError(
+        #         f"Provided done_keys should be a list of length 1 or length equals to the number of in_keys, got {done_keys}"
+        #     )
+        #
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
+        self._reset_keys = reset_keys
+
+    @property
+    def in_keys(self):
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys in (None, []):
+            # retrieve rewards from parent env
+            parent = self.parent
+            if parent is None:
+                # fall back on in_keys = ["reward"]
+                in_keys = ["reward"]
+                # or this?
+                # raise TypeError("in_keys not provided but parent env not found. "
+                #                 "Make sure that the in_keys (reward) are provided during "
+                #                 "construction if the transform does not have a container env.")
+            else:
+                in_keys = copy(parent.reward_keys)
+            self._in_keys = in_keys
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value):
+        self._in_keys = value
+
+    @property
+    def out_keys(self):
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys in (None, []):
             out_keys = [
                 _replace_last(in_key, f"episode_{_unravel_key_to_tuple(in_key)[-1]}")
-                for in_key in in_keys
+                for in_key in self.in_keys
             ]
-        if len(in_keys) != len(out_keys):
+            self._out_keys = out_keys
+        return out_keys
+
+    @out_keys.setter
+    def out_keys(self, out_keys):
+        # we must access the private attribute because this check occurs before
+        # the parent env is defined
+        if len(self._in_keys) != len(out_keys):
             raise ValueError(
                 "RewardSum expects the same number of input and output keys"
             )
-        if done_keys is None:
-            # The default if done_keys is not provided is that we expect
-            # to find the dones in the same tensordicts as the in_keys
-            self._done_keys = [_replace_last(in_key, "done") for in_key in in_keys]
-        elif isinstance(done_keys, list) and len(done_keys) == 1:
-            # If there is one done key than it is used for all rewards
-            self._done_keys = done_keys * len(in_keys)
-        elif isinstance(done_keys, list) and len(done_keys) == len(in_keys):
-            # The full list of done_keys has been provided
-            self._done_keys = done_keys
-        else:
-            raise ValueError(
-                f"Provided done_keys should be a list of length 1 or length equals to the number of in_keys, got {done_keys}"
-            )
+        self._out_keys = out_keys
 
-        super().__init__(in_keys=in_keys, out_keys=out_keys)
+    @property
+    def reset_keys(self):
+        reset_keys = self.__dict__.get("_reset_keys", None)
+        if reset_keys is None:
+            parent = self.parent
+            if parent is None:
+                raise TypeError(
+                    "reset_keys not provided but parent env not found. "
+                    "Make sure that the reset_keys are provided during "
+                    "construction if the transform does not have a container env."
+                )
+            reset_keys = copy(parent.reset_keys)
+            self._reset_keys = reset_keys
+        return reset_keys
+
+    @reset_keys.setter
+    def reset_keys(self, value):
+        self._reset_keys = value
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets episode rewards."""
-        for in_key, done_key, out_key in zip(
-            self.in_keys, self._done_keys, self.out_keys
+        for in_key, reset_key, out_key in zip(
+            self.in_keys, self.reset_keys, self.out_keys
         ):
-            done_key = _unravel_key_to_tuple(done_key)
-            _reset = tensordict.get(_replace_last(done_key, "_reset"), None)
+            _reset = tensordict.get(reset_key, None)
 
             if _reset is None or _reset.any():
                 if out_key in tensordict.keys(True, True):
@@ -4193,7 +4258,7 @@ class RewardSum(Transform):
                     # with zeros entirely (regardless of the _reset mask)
                     tensordict.set(
                         out_key,
-                        self.parent.output_spec["full_reward_spec"][in_key].zero(),
+                        self.parent.full_reward_spec[in_key].zero(),
                     )
 
         return tensordict
@@ -4222,7 +4287,7 @@ class RewardSum(Transform):
 
     def _generate_episode_reward_spec(self) -> CompositeSpec:
         episode_reward_spec = CompositeSpec()
-        reward_spec = self.parent.output_spec["full_reward_spec"]
+        reward_spec = self.parent.full_reward_spec
         reward_spec_keys = self.parent.reward_keys
         # Define episode specs for all out_keys
         for in_key, out_key in zip(self.in_keys, self.out_keys):

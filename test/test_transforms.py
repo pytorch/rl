@@ -4533,12 +4533,20 @@ class TestRewardSum(TransformBase):
         r = env.rollout(4)
         assert r["next", "episode_reward"].unique().numel() > 1
 
-    def test_trans_multi_key(self, n_workers=2, batch_size=(3, 2), max_steps=5):
+    @pytest.mark.parametrize("has_in_keys,", [True, False])
+    def test_trans_multi_key(
+        self, has_in_keys, n_workers=2, batch_size=(3, 2), max_steps=5
+    ):
         torch.manual_seed(0)
         env_fun = lambda: MultiKeyCountingEnv(batch_size=batch_size)
+        base_env = SerialEnv(n_workers, env_fun)
+        if has_in_keys:
+            t = RewardSum(in_keys=base_env.reward_keys, reset_keys=base_env.reset_keys)
+        else:
+            t = RewardSum()
         env = TransformedEnv(
-            SerialEnv(n_workers, env_fun),
-            Compose(RewardSum(in_keys=env_fun().reward_keys)),
+            base_env,
+            Compose(RewardSum()),
         )
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
@@ -4578,7 +4586,8 @@ class TestRewardSum(TransformBase):
     def test_transform_compose(
         self,
     ):
-        t = Compose(RewardSum())
+        # reset keys should not be needed for offline run
+        t = Compose(RewardSum(in_keys=["reward"], out_keys=["episode_reward"]))
         reward = torch.randn(10)
         td = TensorDict({("next", "reward"): reward}, [])
         with pytest.raises(
@@ -4677,6 +4686,9 @@ class TestRewardSum(TransformBase):
 
         # reset environments
         td.set("_reset", torch.ones(batch, dtype=torch.bool, device=device))
+        with pytest.raises(TypeError, match="reset_keys not provided but parent"):
+            rs.reset(td)
+        rs._reset_keys = ["_reset"]
         rs.reset(td)
 
         # apply a third time, episode_reward should be equal to reward again
