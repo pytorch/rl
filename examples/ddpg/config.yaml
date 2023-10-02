@@ -12,7 +12,6 @@ collector:
   total_frames: 1_000_000
   init_random_frames: 25_000
   frames_per_batch: 1000
-  max_frames_per_traj: 1000
   init_env_steps: 1000
   reset_at_each_iter: False
   collector_device: cpu

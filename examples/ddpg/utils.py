@@ -15,6 +15,7 @@ from torchrl.envs import (
     InitTracker,
     ParallelEnv,
     RewardSum,
+    StepCounter,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
@@ -39,21 +40,21 @@ from torchrl.objectives.ddpg import DDPGLoss
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False, max_episode_steps=1000):
+def env_maker(task, device="cpu", from_pixels=False):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
             from_pixels=from_pixels,
-            max_episode_steps=max_episode_steps,
         )
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(env, reward_scaling=1.0, max_episode_steps=1000):
     transformed_env = TransformedEnv(
         env,
         Compose(
             InitTracker(),
+            StepCounter(max_episode_steps),
             RewardScaling(loc=0.0, scale=reward_scaling),
             DoubleToFloat("observation"),
             RewardSum(),
@@ -66,24 +67,18 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(
-            lambda: env_maker(
-                task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-            )
-        ),
+        EnvCreator(lambda: env_maker(task=cfg.env.name)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(
+        parallel_env, max_episode_steps=cfg.env.max_episode_steps
+    )
 
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(
-                lambda: env_maker(
-                    task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-                )
-            ),
+            EnvCreator(lambda: env_maker(task=cfg.env.name)),
         ),
         train_env.transform.clone(),
     )
@@ -102,7 +97,6 @@ def make_collector(cfg, train_env, actor_model_explore):
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
         init_random_frames=cfg.collector.init_random_frames,
-        max_frames_per_traj=cfg.collector.max_frames_per_traj,
         reset_at_each_iter=cfg.collector.reset_at_each_iter,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
