@@ -7291,7 +7291,7 @@ class TestVecNorm:
             env_t.close()
         self.SEED = 0
 
-    def test_pickable(self, rb_type, sampler, writer, storage, size):
+    def test_pickable(self):
 
         transform = VecNorm()
         serialized = pickle.dumps(transform)
