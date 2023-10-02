@@ -238,7 +238,7 @@ class RolloutFromModel:
         rollout_generated = self._get_rollout_generated(generated, batch)
         rollout_attention_mask = (rollout_generated != self.EOS_TOKEN_ID).bool()
 
-        done = self._get_done_status(generated, batch)
+        done, terminated = self._get_done_status(generated, batch)
         action = self._get_action(generated, batch)
         end_scores, end_scores_labels = self._get_end_scores(
             rollout_generated, rollout_attention_mask, batch
@@ -261,7 +261,7 @@ class RolloutFromModel:
                 "input_ids": rollout_generated[:, 1:].clone(),
                 "attention_mask": rollout_attention_mask[:, 1:].clone(),
                 "done": done,
-                "terminated": done.clone(),
+                "terminated": terminated,
                 "reward": reward,
                 "reward_raw": reward_raw,
                 "reward_kl": reward_kl,
@@ -286,18 +286,11 @@ class RolloutFromModel:
     def _get_done_status(self, generated, batch):
         # done is True when we either first sample an EOS token or reach the maximum number
         # of generated tokens
-        # TODO: differentiate truncated and terminal here
-        done_idx = torch.minimum(
-            (generated != self.EOS_TOKEN_ID).sum(dim=-1) - batch.prompt_rindex,
-            torch.tensor(self.max_new_tokens) - 1,
-        )
-        done = torch.zeros(
-            done_idx.numel(),
-            self.max_new_tokens,
-            dtype=torch.bool,
-            device=generated.device,
-        )
-        return done.scatter(-1, done_idx.unsqueeze(-1), 1).unsqueeze(-1)
+        terminated = generated == self.EOS_TOKEN_ID
+        terminated = terminated.int().cumsum(-1).bool()
+        done = terminated.clone()
+        done[..., self.max_new_tokens-1] = 1
+        return done, terminated
 
     def _get_action(self, generated, batch):
         # the sequence of actions for each trajectory is just the generated token ids
