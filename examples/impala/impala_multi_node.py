@@ -39,7 +39,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Extract other config parameters
     batch_size = cfg.loss.batch_size  # Number of rollouts per batch
-    num_workers = cfg.collector.num_workers # Number of parallel workers collecting rollouts
+    num_workers = (
+        cfg.collector.num_workers
+    )  # Number of parallel workers collecting rollouts
     lr = cfg.optim.lr
     anneal_lr = cfg.optim.anneal_lr
     sgd_updates = cfg.loss.sgd_updates
@@ -56,12 +58,11 @@ def main(cfg: "DictConfig"):  # noqa: F821
     # Create collector
     remote_config = {
         "num_cpus": 1,
-        "num_gpus": 1.0 // num_workers,
+        "num_gpus": 1.0,
         "memory": 2 * 1024**3,
     }
     collector = RayCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)]
-        * num_workers,
+        create_env_fn=[make_env(cfg.env.env_name, device)] * 1,
         policy=actor,
         collector_class=SyncDataCollector,
         frames_per_batch=frames_per_batch,

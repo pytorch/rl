@@ -5730,12 +5730,12 @@ class TestA2C(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(
-            self,
-            batch=2,
-            obs_dim=3,
-            action_dim=4,
-            device="cpu",
-            observation_key="observation",
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        observation_key="observation",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -5754,13 +5754,13 @@ class TestA2C(LossModuleTestBase):
         return actor.to(device)
 
     def _create_mock_value(
-            self,
-            batch=2,
-            obs_dim=3,
-            action_dim=4,
-            device="cpu",
-            out_keys=None,
-            observation_key="observation",
+        self,
+        batch=2,
+        obs_dim=3,
+        action_dim=4,
+        device="cpu",
+        out_keys=None,
+        observation_key="observation",
     ):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
@@ -5796,7 +5796,7 @@ class TestA2C(LossModuleTestBase):
         return actor.to(device), value.to(device)
 
     def _create_mock_actor_value_shared(
-            self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+        self, batch=2, obs_dim=3, action_dim=4, device="cpu"
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -5823,7 +5823,7 @@ class TestA2C(LossModuleTestBase):
         return model, model.get_policy_operator(), model.get_value_operator()
 
     def _create_mock_distributional_actor(
-            self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
+        self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
     ):
         raise NotImplementedError
 

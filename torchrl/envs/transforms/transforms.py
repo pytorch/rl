@@ -11,7 +11,7 @@ import warnings
 from copy import copy
 from functools import wraps
 from textwrap import indent
-from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, OrderedDict, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -4336,6 +4336,20 @@ class VecNorm(Transform):
             f"{self.__class__.__name__}(decay={self.decay:4.4f},"
             f"eps={self.eps:4.4f}, keys={self.in_keys})"
         )
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+        _lock = state.pop("lock", None)
+        if _lock is not None:
+            state["lock_placeholder"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]):
+        if "lock_placeholder" in state:
+            state.pop("lock_placeholder")
+            _lock = mp.Lock()
+            state["lock"] = _lock
+        self.__dict__.update(state)
 
 
 class RewardSum(Transform):

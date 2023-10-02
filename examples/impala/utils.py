@@ -11,12 +11,10 @@ from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
     DoubleToFloat,
-    EnvCreator,
     ExplorationType,
     GrayScale,
+    GymEnv,
     NoopResetEnv,
-    VecNorm,
-    ParallelEnv,
     Resize,
     RewardClipping,
     RewardSum,
@@ -24,7 +22,7 @@ from torchrl.envs import (
     ToTensorImage,
     Transform,
     TransformedEnv,
-    GymEnv
+    VecNorm,
 )
 from torchrl.modules import (
     ActorValueOperator,
@@ -84,7 +82,7 @@ def make_env(env_name, device, is_test=False):
     env.append_transform(RewardSum())
     env.append_transform(StepCounter(max_steps=4500))
     env.append_transform(DoubleToFloat())
-    # env.append_transform(VecNorm(in_keys=["pixels"]))
+    env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 
