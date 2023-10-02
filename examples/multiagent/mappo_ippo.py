@@ -24,6 +24,7 @@ from torchrl.objectives import ClipPPOLoss, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
 from utils.utils import DoneTransform
 
+
 def rendering_callback(env, td):
     env.frames.append(env.render(mode="rgb_array", agent_index_focus=None))
 
@@ -146,8 +147,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
     loss_module.set_keys(
         reward=env.reward_key,
         action=env.action_key,
-        done="done_expand",
-        terminated="terminated_expand",
+        done=("agents", "done"),
+        terminated=("agents", "terminated"),
     )
     loss_module.make_value_estimator(
         ValueEstimators.GAE, gamma=cfg.loss.gamma, lmbda=cfg.loss.lmbda

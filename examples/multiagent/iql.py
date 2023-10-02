@@ -112,15 +112,13 @@ def train(cfg: "DictConfig"):  # noqa: F821
         storing_device=cfg.train.device,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        postproc=DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys),
     )
 
     replay_buffer = TensorDictReplayBuffer(
         storage=LazyTensorStorage(cfg.buffer.memory_size, device=cfg.train.device),
         sampler=SamplerWithoutReplacement(),
         batch_size=cfg.train.minibatch_size,
-    )
-    replay_buffer.append_transform(
-        DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys)
     )
 
     loss_module = DQNLoss(qnet, delay_value=True)
@@ -129,8 +127,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
         action=env.action_key,
         value=("agents", "chosen_action_value"),
         reward=env.reward_key,
-        done="done_expand",
-        terminated="terminated_expand",
+        done=("agents", "done"),
+        terminated=("agents", "terminated"),
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
     target_net_updater = SoftUpdate(loss_module, eps=1 - cfg.loss.tau)
