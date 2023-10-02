@@ -2262,12 +2262,6 @@ class TestDoubleToFloat(TransformBase):
             )
             action_spec = double2float.transform_input_spec(input_spec)
             assert action_spec.dtype == torch.float
-
-        elif len(keys) == 1:
-            observation_spec = BoundedTensorSpec(0, 1, (1, 3, 3), dtype=torch.double)
-            observation_spec = double2float.transform_observation_spec(observation_spec)
-            assert observation_spec.dtype == torch.float
-
         else:
             observation_spec = CompositeSpec(
                 {
@@ -2277,7 +2271,7 @@ class TestDoubleToFloat(TransformBase):
             )
             observation_spec = double2float.transform_observation_spec(observation_spec)
             for key in keys:
-                assert observation_spec[key].dtype == torch.float
+                assert observation_spec[key].dtype == torch.float, key
 
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize(
@@ -2329,6 +2323,7 @@ class TestDoubleToFloat(TransformBase):
             base_env.state_spec[key] = spec.to(torch.float64)
         if base_env.action_spec.dtype == torch.float32:
             base_env.action_spec = base_env.action_spec.to(torch.float64)
+        check_env_specs(base_env)
         env = TransformedEnv(
             base_env,
             DoubleToFloat(),
@@ -2338,6 +2333,8 @@ class TestDoubleToFloat(TransformBase):
         for spec in env.state_spec.values(True, True):
             assert spec.dtype == torch.float32
         assert env.action_spec.dtype != torch.float64
+        assert env.transform.in_keys == env.transform.out_keys
+        assert env.transform.in_keys_inv == env.transform.out_keys_inv
         check_env_specs(env)
 
     def test_single_trans_env_check(self, dtype_fixture):  # noqa: F811
