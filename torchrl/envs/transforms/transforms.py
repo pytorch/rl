@@ -8,7 +8,7 @@ from __future__ import annotations
 import collections
 import multiprocessing as mp
 import warnings
-from copy import copy, deepcopy
+from copy import copy
 from functools import wraps
 from textwrap import indent
 from typing import Any, List, Optional, OrderedDict, Sequence, Tuple, Union
@@ -74,14 +74,8 @@ def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
-
             in_keys = self.in_keys
-            if in_keys is None:
-                in_keys = []
             out_keys = self.out_keys
-            if out_keys is None:
-                out_keys = []
-
             for in_key, out_key in zip(in_keys, out_keys):
                 if in_key in observation_spec.keys(True, True):
                     d[out_key] = function(self, observation_spec[in_key].clone())
@@ -165,22 +159,9 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
-        if isinstance(in_keys, (str, tuple)):
-            in_keys = [in_keys]
-        if isinstance(out_keys, (str, tuple)):
-            out_keys = [out_keys]
-        if isinstance(in_keys_inv, (str, tuple)):
-            in_keys_inv = [in_keys_inv]
-        if isinstance(out_keys_inv, (str, tuple)):
-            out_keys_inv = [out_keys_inv]
-
         self.in_keys = in_keys
-        if out_keys is None:
-            out_keys = copy(in_keys)
         self.out_keys = out_keys
         self.in_keys_inv = in_keys_inv
-        if out_keys_inv is None:
-            out_keys_inv = copy(in_keys_inv)
         self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
         self.__dict__["_container"] = None
@@ -195,6 +176,10 @@ class Transform(nn.Module):
 
     @in_keys.setter
     def in_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._in_keys = value
 
     @property
@@ -206,6 +191,10 @@ class Transform(nn.Module):
 
     @out_keys.setter
     def out_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._out_keys = value
 
     @property
@@ -217,6 +206,10 @@ class Transform(nn.Module):
 
     @in_keys_inv.setter
     def in_keys_inv(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._in_keys_inv = value
 
     @property
@@ -228,6 +221,10 @@ class Transform(nn.Module):
 
     @out_keys_inv.setter
     def out_keys_inv(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._out_keys_inv = value
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -914,7 +911,7 @@ class Compose(Transform):
     """
 
     def __init__(self, *transforms: Transform):
-        super().__init__(in_keys=[])
+        super().__init__()
         self.transforms = nn.ModuleList(transforms)
         for t in transforms:
             t.set_container(self)
@@ -1134,6 +1131,8 @@ class ToTensorImage(ObservationTransform):
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.from_int = from_int
         self.unsqueeze = unsqueeze
@@ -1222,6 +1221,12 @@ class ClipTransform(Transform):
     ):
         if in_keys is None:
             in_keys = []
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
         super().__init__(in_keys, out_keys, in_keys_inv, out_keys_inv)
         if low is None and high is None:
             raise TypeError("Either one or both of `high` and `low` must be provided.")
@@ -1481,6 +1486,8 @@ class RewardClipping(Transform):
     ):
         if in_keys is None:
             in_keys = ["reward"]
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         clamp_min_tensor = (
             clamp_min if isinstance(clamp_min, Tensor) else torch.tensor(clamp_min)
@@ -1535,6 +1542,8 @@ class BinarizeReward(Transform):
     ):
         if in_keys is None:
             in_keys = ["reward"]
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
 
     def _apply_transform(self, reward: torch.Tensor) -> torch.Tensor:
@@ -1576,6 +1585,8 @@ class Resize(ObservationTransform):
             )
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = int(w)
         self.h = int(h)
@@ -1644,6 +1655,8 @@ class CenterCrop(ObservationTransform):
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.w = w
         self.h = h if h else w
@@ -1698,6 +1711,8 @@ class FlattenObservation(ObservationTransform):
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not allow_positive_dim and first_dim >= 0:
             raise ValueError(
@@ -1784,6 +1799,12 @@ class UnsqueezeTransform(Transform):
     ):
         if in_keys is None:
             in_keys = []  # default
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []  # default
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -1958,6 +1979,15 @@ class PermuteTransform(Transform):
         in_keys_inv=None,
         out_keys_inv=None,
     ):
+        if in_keys is None:
+            in_keys = []
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
+
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -2141,10 +2171,23 @@ class ObservationNorm(ObservationTransform):
         standard_normal: bool = False,
     ):
         if in_keys is None:
+            warnings.warn(
+                "Not passing in_keys to ObservationNorm will soon be deprecated. "
+                "Ensure you specify the entries to be normalized",
+                category=DeprecationWarning,
+            )
             in_keys = [
                 "observation",
                 "pixels",
             ]
+
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        if in_keys_inv is None:
+            in_keys_inv = []
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
+
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -2449,6 +2492,8 @@ class CatFrames(ObservationTransform):
     ):
         if in_keys is None:
             in_keys = IMAGE_KEYS
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self.N = N
         if dim >= 0:
@@ -2704,7 +2749,7 @@ class RewardScaling(Transform):
         if in_keys is None:
             in_keys = ["reward"]
         if out_keys is None:
-            out_keys = in_keys
+            out_keys = copy(in_keys)
 
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if not isinstance(standard_normal, torch.Tensor):
@@ -2922,7 +2967,10 @@ class DTypeCastTransform(Transform):
 
     @property
     def out_keys(self):
-        return self.__dict__.get("_out_keys", None)
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is None:
+            out_keys = self._out_keys = copy(self.in_keys)
+        return out_keys
 
     @out_keys.setter
     def out_keys(self, value):
@@ -2962,7 +3010,10 @@ class DTypeCastTransform(Transform):
 
     @property
     def out_keys_inv(self):
-        return self.__dict__.get("_out_keys_inv", None)
+        out_keys_inv = self.__dict__.get("_out_keys_inv", None)
+        if out_keys_inv is None:
+            out_keys_inv = self._out_keys_inv = copy(self.in_keys_inv)
+        return out_keys_inv
 
     @out_keys_inv.setter
     def out_keys_inv(self, value):
@@ -3269,7 +3320,7 @@ class DeviceCastTransform(Transform):
         self.orig_device = (
             torch.device(orig_device) if orig_device is not None else orig_device
         )
-        super().__init__(in_keys=[])
+        super().__init__()
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         if self.orig_device is None:
@@ -3379,7 +3430,6 @@ class CatTensors(Transform):
             in_keys = sorted(in_keys, key=_sort_keys)
         if not isinstance(out_key, (str, tuple)):
             raise Exception("CatTensors requires out_key to be of type NestedKey")
-        # super().__init__(in_keys=in_keys)
         super(CatTensors, self).__init__(in_keys=in_keys, out_keys=[out_key])
         self.dim = dim
         self._del_keys = del_keys
@@ -3541,11 +3591,13 @@ class DiscreteActionProjection(Transform):
             in_keys = in_keys_inv
         else:
             in_keys = []
+        if in_keys_inv is None:
+            in_keys_inv = []
         super().__init__(
             in_keys=in_keys,
-            out_keys=in_keys,
+            out_keys=copy(in_keys),
             in_keys_inv=in_keys_inv,
-            out_keys_inv=in_keys_inv,
+            out_keys_inv=copy(in_keys_inv),
         )
         self.num_actions_effective = num_actions_effective
         self.max_actions = max_actions
@@ -3613,7 +3665,7 @@ class FrameSkipTransform(Transform):
     """
 
     def __init__(self, frame_skip: int = 1):
-        super().__init__([])
+        super().__init__()
         if frame_skip < 1:
             raise ValueError("frame_skip should have a value greater or equal to one.")
         self.frame_skip = frame_skip
@@ -3658,7 +3710,7 @@ class NoopResetEnv(Transform):
 
     def __init__(self, noops: int = 30, random: bool = True):
         """Sample initial states by taking random number of no-ops on reset."""
-        super().__init__([])
+        super().__init__()
         self.noops = noops
         self.random = random
 
@@ -3821,7 +3873,7 @@ class TensorDictPrimer(Transform):
                     "The values of the primers must be a subtype of the TensorSpec class. "
                     f"Got {type(spec)} instead."
                 )
-        super().__init__([])
+        super().__init__()
 
     @property
     def device(self):
@@ -3926,7 +3978,7 @@ class PinMemoryTransform(Transform):
     """Calls pin_memory on the tensordict to facilitate writing on CUDA devices."""
 
     def __init__(self):
-        super().__init__([])
+        super().__init__()
 
     def _call(self, tensordict: TensorDictBase) -> TensorDictBase:
         return tensordict.pin_memory()
@@ -3983,6 +4035,8 @@ class VecNorm(Transform):
     Args:
         in_keys (sequence of NestedKey, optional): keys to be updated.
             default: ["observation", "reward"]
+        out_keys (sequence of NestedKey, optional): destination keys.
+            Defaults to ``in_keys``.
         shared_td (TensorDictBase, optional): A shared tensordict containing the
             keys of the transform.
         decay (number, optional): decay rate of the moving average.
@@ -4019,6 +4073,7 @@ class VecNorm(Transform):
     def __init__(
         self,
         in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         shared_td: Optional[TensorDictBase] = None,
         lock: mp.Lock = None,
         decay: float = 0.9999,
@@ -4029,7 +4084,9 @@ class VecNorm(Transform):
             lock = mp.Lock()
         if in_keys is None:
             in_keys = ["observation", "reward"]
-        super().__init__(in_keys)
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._td = shared_td
         if shared_td is not None and not (
             shared_td.is_shared() or shared_td.is_memmap()
@@ -4550,7 +4607,7 @@ class StepCounter(Transform):
         self.truncated_key = truncated_key
         self.step_count_key = step_count_key
         self.update_done = update_done
-        super().__init__([])
+        super().__init__()
 
     @property
     def truncated_keys(self):
@@ -4880,7 +4937,7 @@ class ExcludeTransform(Transform):
     """
 
     def __init__(self, *excluded_keys):
-        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        super().__init__()
         try:
             excluded_keys = unravel_key_list(excluded_keys)
         except TypeError:
@@ -4962,7 +5019,7 @@ class SelectTransform(Transform):
     """
 
     def __init__(self, *selected_keys, keep_rewards=True, keep_dones=True):
-        super().__init__(in_keys=[], in_keys_inv=[], out_keys=[], out_keys_inv=[])
+        super().__init__()
         try:
             selected_keys = unravel_key_list(selected_keys)
         except TypeError:
@@ -5075,6 +5132,8 @@ class TimeMaxPool(Transform):
     ):
         if in_keys is None:
             in_keys = ["observation"]
+        if out_keys is None:
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         if T < 1:
             raise ValueError(
@@ -5215,7 +5274,7 @@ class RandomCropTensorDict(Transform):
             )
         self.sample_dim = sample_dim
         self.mask_key = mask_key
-        super().__init__([])
+        super().__init__()
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         shape = tensordict.shape
@@ -5295,7 +5354,7 @@ class InitTracker(Transform):
             raise ValueError("init_key can only be of type str.")
         self.init_key = init_key
         self.reset_key = "_reset"
-        super().__init__(in_keys=[], out_keys=[])
+        super().__init__()
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:
         self._init_keys = None
@@ -5713,7 +5772,7 @@ class Reward2GoTransform(Transform):
         if in_keys is None:
             in_keys = [("next", "reward")]
         if out_keys is None:
-            out_keys = deepcopy(in_keys)
+            out_keys = copy(in_keys)
         # out_keys = ["reward_to_go"]
         super().__init__(
             in_keys=in_keys,
@@ -5907,7 +5966,7 @@ class VecGymEnvTransform(Transform):
 
     def __init__(self, final_name="final"):
         self.final_name = final_name
-        super().__init__(in_keys=[])
+        super().__init__()
         self._memo = {}
 
     def set_container(self, container: Union[Transform, EnvBase]) -> None:

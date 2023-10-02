@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from copy import deepcopy
+from copy import copy, deepcopy
 
 import torch
 from tensordict import TensorDictBase, unravel_key
@@ -93,24 +93,22 @@ class KLRewardTransform(Transform):
         if in_keys is None:
             in_keys = self.DEFAULT_IN_KEYS
         if out_keys is None:
-            out_keys = in_keys
-        if not isinstance(in_keys, list):
-            in_keys = [in_keys]
-        if not isinstance(out_keys, list):
-            out_keys = [out_keys]
-        if not is_seq_of_nested_key(in_keys) or not is_seq_of_nested_key(out_keys):
-            raise ValueError(
-                f"invalid in_keys / out_keys:\nin_keys={in_keys} \nout_keys={out_keys}"
-            )
-        if len(in_keys) != 1 or len(out_keys) != 1:
-            raise ValueError(
-                f"Only one in_key/out_key is allowed, got in_keys={in_keys}, out_keys={out_keys}."
-            )
+            out_keys = copy(in_keys)
         super().__init__(in_keys=in_keys, out_keys=out_keys)
+        if not is_seq_of_nested_key(self.in_keys) or not is_seq_of_nested_key(
+            self.out_keys
+        ):
+            raise ValueError(
+                f"invalid in_keys / out_keys:\nin_keys={self.in_keys} \nout_keys={self.out_keys}"
+            )
+        if len(self.in_keys) != 1 or len(self.out_keys) != 1:
+            raise ValueError(
+                f"Only one in_key/out_key is allowed, got in_keys={self.in_keys}, out_keys={self.out_keys}."
+            )
         # for convenience, convert out_keys to tuples
-        self.out_keys = [
+        self._out_keys = [
             out_key if isinstance(out_key, tuple) else (out_key,)
-            for out_key in self.out_keys
+            for out_key in self._out_keys
         ]
 
         # update the in_keys for dispatch etc
