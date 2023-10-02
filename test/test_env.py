@@ -24,6 +24,7 @@ from _utils_internal import (
     HALFCHEETAH_VERSIONED,
     PENDULUM_VERSIONED,
     PONG_VERSIONED,
+    rand_reset,
 )
 from mocking_classes import (
     ActionObsMergeLinear,
@@ -56,6 +57,7 @@ from torch import nn
 from torchrl.collectors import MultiSyncDataCollector, SyncDataCollector
 from torchrl.data.tensor_specs import (
     CompositeSpec,
+    DiscreteTensorSpec,
     OneHotDiscreteTensorSpec,
     UnboundedContinuousTensorSpec,
 )
@@ -70,6 +72,7 @@ from torchrl.envs.utils import (
     make_composite_from_td,
     MarlGroupMapType,
     step_mdp,
+    terminated_or_truncated,
 )
 from torchrl.modules import Actor, ActorCriticOperator, MLP, SafeModule, ValueOperator
 from torchrl.modules.tensordict_module import WorldModelWrapper
@@ -230,20 +233,10 @@ def test_rollout_predictability(device):
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
-@pytest.mark.parametrize(
-    "env_name",
-    [
-        PENDULUM_VERSIONED,
-    ],
-)
-@pytest.mark.parametrize(
-    "frame_skip",
-    [
-        1,
-    ],
-)
+@pytest.mark.parametrize("env_name", [PENDULUM_VERSIONED])
+@pytest.mark.parametrize("frame_skip", [1])
 @pytest.mark.parametrize("truncated_key", ["truncated", "done"])
-@pytest.mark.parametrize("parallel", [True, False])
+@pytest.mark.parametrize("parallel", [False, True])
 def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     envs = []
     for horizon in [20, 30, 40]:
@@ -258,7 +251,6 @@ def test_rollout_reset(env_name, frame_skip, parallel, truncated_key, seed=0):
     else:
         env = SerialEnv(3, envs)
     env.set_seed(100)
-    # out = env._single_rollout(100, break_when_any_done=False)
     out = env.rollout(100, break_when_any_done=False)
     assert out.names[-1] == "time"
     assert out.shape == torch.Size([3, 100])
@@ -300,7 +292,8 @@ class TestModelBasedEnvBase:
         check_env_specs(mb_env)
         rollout = mb_env.rollout(max_steps=100)
         expected_keys = {
-            ("next", key) for key in (*mb_env.observation_spec.keys(), "reward", "done")
+            ("next", key)
+            for key in (*mb_env.observation_spec.keys(), "reward", "done", "terminated")
         }
         expected_keys = expected_keys.union(
             set(mb_env.input_spec["full_action_spec"].keys())
@@ -308,7 +301,7 @@ class TestModelBasedEnvBase:
         expected_keys = expected_keys.union(
             set(mb_env.input_spec["full_state_spec"].keys())
         )
-        expected_keys = expected_keys.union({"done", "next"})
+        expected_keys = expected_keys.union({"done", "terminated", "next"})
         assert set(rollout.keys(True)) == expected_keys
         assert rollout[("next", "hidden_observation")].shape == (10, 100, 4)
 
@@ -484,12 +477,7 @@ class TestParallel:
             transformed_out=transformed_out,
             N=N,
         )
-        td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
-            batch_size=[
-                N,
-            ],
-        )
+        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -503,12 +491,7 @@ class TestParallel:
             )
             _ = env_parallel.step(td)
 
-        td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.rand()},
-            batch_size=[
-                N,
-            ],
-        )
+        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
         td = env_parallel.rollout(policy=None, max_steps=T)
@@ -560,12 +543,7 @@ class TestParallel:
             ),
         )
 
-        td = TensorDict(
-            source={"action": env0.action_spec.rand((N,))},
-            batch_size=[
-                N,
-            ],
-        )
+        td = TensorDict(source={"action": env0.action_spec.rand((N,))}, batch_size=[N])
         td1 = env_parallel.step(td)
         assert not td1.is_shared()
         assert ("next", "done") in td1.keys(True)
@@ -579,12 +557,7 @@ class TestParallel:
             )
             _ = env_parallel.step(td)
 
-        td_reset = TensorDict(
-            source={"_reset": env_parallel.done_spec.rand()},
-            batch_size=[
-                N,
-            ],
-        )
+        td_reset = TensorDict(source=rand_reset(env_parallel), batch_size=[N])
         env_parallel.reset(tensordict=td_reset)
 
         td = env_parallel.rollout(policy=policy, max_steps=T)
@@ -922,15 +895,7 @@ class TestParallel:
         env1.close()
         env2.close()
 
-    @pytest.mark.parametrize(
-        "batch_size",
-        [
-            (32, 5),
-            (4,),
-            (1,),
-            (),
-        ],
-    )
+    @pytest.mark.parametrize("batch_size", [(32, 5), (4,), (1,), ()])
     @pytest.mark.parametrize("n_workers", [2, 1])
     def test_parallel_env_reset_flag(self, batch_size, n_workers, max_steps=3):
         torch.manual_seed(1)
@@ -955,19 +920,17 @@ class TestParallel:
         assert (td["next", "done"] == 1).all()
         assert (td["next"]["observation"] == max_steps + 1).all()
 
-        _reset = env.done_spec.rand()
-        while not _reset.any():
-            _reset = env.done_spec.rand()
-
-        td_reset = env.reset(
-            TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
+        td_reset = TensorDict(
+            rand_reset(env), batch_size=env.batch_size, device=env.device
         )
+        reset = td_reset["_reset"]
+        td_reset = env.reset(td_reset)
         env.close()
 
-        assert (td_reset["done"][_reset] == 0).all()
-        assert (td_reset["observation"][_reset] == 0).all()
-        assert (td_reset["done"][~_reset] == 1).all()
-        assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+        assert (td_reset["done"][reset] == 0).all()
+        assert (td_reset["observation"][reset] == 0).all()
+        assert (td_reset["done"][~reset] == 1).all()
+        assert (td_reset["observation"][~reset] == max_steps + 1).all()
 
     @pytest.mark.parametrize("nested_obs_action", [True, False])
     @pytest.mark.parametrize("nested_done", [True, False])
@@ -1032,6 +995,7 @@ class TestParallel:
 
 @pytest.mark.parametrize("batch_size", [(), (2,), (32, 5)])
 def test_env_base_reset_flag(batch_size, max_steps=3):
+    torch.manual_seed(0)
     env = CountingEnv(max_steps=max_steps, batch_size=batch_size)
     env.set_seed(1)
 
@@ -1051,15 +1015,14 @@ def test_env_base_reset_flag(batch_size, max_steps=3):
     assert (td["next", "done"] == 1).all()
     assert (td["next", "observation"] == max_steps + 1).all()
 
-    _reset = env.done_spec.rand()
-    td_reset = env.reset(
-        TensorDict({"_reset": _reset}, batch_size=env.batch_size, device=env.device)
-    )
+    td_reset = TensorDict(rand_reset(env), batch_size=env.batch_size, device=env.device)
+    reset = td_reset["_reset"]
+    td_reset = env.reset(td_reset)
 
-    assert (td_reset["done"][_reset] == 0).all()
-    assert (td_reset["observation"][_reset] == 0).all()
-    assert (td_reset["done"][~_reset] == 1).all()
-    assert (td_reset["observation"][~_reset] == max_steps + 1).all()
+    assert (td_reset["done"][reset] == 0).all()
+    assert (td_reset["observation"][reset] == 0).all()
+    assert (td_reset["done"][~reset] == 1).all()
+    assert (td_reset["observation"][~reset] == max_steps + 1).all()
 
 
 @pytest.mark.skipif(not _has_gym, reason="no gym")
@@ -1857,12 +1820,12 @@ class TestNestedSpecs:
         else:
             raise NotImplementedError
         reset = env.reset()
-        assert not isinstance(env.done_spec, CompositeSpec)
         assert not isinstance(env.reward_spec, CompositeSpec)
-        assert (
-            env.done_spec
-            == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(env.done_key))]
-        )
+        for done_key in env.done_keys:
+            assert (
+                env.full_done_spec[done_key]
+                == env.output_spec[("full_done_spec", *_unravel_key_to_tuple(done_key))]
+            )
         assert (
             env.reward_spec
             == env.output_spec[
@@ -1870,12 +1833,14 @@ class TestNestedSpecs:
             ]
         )
         if envclass == "NestedCountingEnv":
-            assert env.done_key == ("data", "done")
+            for done_key in env.done_keys:
+                assert done_key in (("data", "done"), ("data", "terminated"))
             assert env.reward_key == ("data", "reward")
             assert ("data", "done") in reset.keys(True)
             assert ("data", "states") in reset.keys(True)
             assert ("data", "reward") not in reset.keys(True)
-        assert env.done_key in reset.keys(True)
+        for done_key in env.done_keys:
+            assert done_key in reset.keys(True)
         assert env.reward_key not in reset.keys(True)
 
         next_state = env.rand_step()
@@ -1883,7 +1848,8 @@ class TestNestedSpecs:
             assert ("next", "data", "done") in next_state.keys(True)
             assert ("next", "data", "states") in next_state.keys(True)
             assert ("next", "data", "reward") in next_state.keys(True)
-        assert ("next", *_unravel_key_to_tuple(env.done_key)) in next_state.keys(True)
+        for done_key in env.done_keys:
+            assert ("next", *_unravel_key_to_tuple(done_key)) in next_state.keys(True)
         assert ("next", *_unravel_key_to_tuple(env.reward_key)) in next_state.keys(True)
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 1)])
@@ -2089,6 +2055,137 @@ def test_mocking_envs(envclass):
     reset = env.reset()
     _ = env.rand_step(reset)
     check_env_specs(env, seed=100, return_contiguous=False)
+
+
+class TestTerminatedOrTruncated:
+    def test_terminated_or_truncated_nospec(self):
+        data = TensorDict({"done": torch.zeros(2, 1, dtype=torch.bool)}, [2])
+        assert not terminated_or_truncated(data, write_full_false=True)
+        assert data["_reset"].shape == (2, 1)
+        assert not terminated_or_truncated(data, write_full_false=False)
+        assert data.get("_reset", None) is None
+
+        data = TensorDict(
+            {
+                "done": torch.zeros(2, 1, dtype=torch.bool),
+                ("nested", "done"): torch.ones(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert terminated_or_truncated(data)
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+
+        data = TensorDict(
+            {
+                "done": torch.zeros(2, 1, dtype=torch.bool),
+                ("nested", "done"): torch.zeros(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert not terminated_or_truncated(data, write_full_false=False)
+        assert data.get("_reset", None) is None
+        assert data.get(("nested", "_reset"), None) is None
+        assert not terminated_or_truncated(data, write_full_false=True)
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+
+        data = TensorDict(
+            {
+                "terminated": torch.zeros(2, 1, dtype=torch.bool),
+                "truncated": torch.ones(2, 1, dtype=torch.bool),
+                ("nested", "terminated"): torch.zeros(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert terminated_or_truncated(data, write_full_false=False)
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].all()
+        assert not data["nested", "_reset"].any()
+
+    def test_terminated_or_truncated_spec(self):
+        spec = CompositeSpec(
+            done=DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
+            shape=[
+                2,
+            ],
+        )
+        data = TensorDict({"done": torch.zeros(2, 1, dtype=torch.bool)}, [2])
+        assert not terminated_or_truncated(
+            data, write_full_false=True, full_done_spec=spec
+        )
+        assert data["_reset"].shape == (2, 1)
+        assert not terminated_or_truncated(
+            data, write_full_false=False, full_done_spec=spec
+        )
+        assert data.get("_reset", None) is None
+
+        spec = CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
+                ("nested", "done"): DiscreteTensorSpec(
+                    2, shape=(2, 1), dtype=torch.bool
+                ),
+            },
+            shape=[
+                2,
+            ],
+        )
+        data = TensorDict(
+            {
+                "done": torch.zeros(2, 1, dtype=torch.bool),
+                ("nested", "done"): torch.ones(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert terminated_or_truncated(data, full_done_spec=spec)
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+
+        data = TensorDict(
+            {
+                "done": torch.zeros(2, 1, dtype=torch.bool),
+                ("nested", "done"): torch.zeros(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert not terminated_or_truncated(
+            data, write_full_false=False, full_done_spec=spec
+        )
+        assert data.get("_reset", None) is None
+        assert data.get(("nested", "_reset"), None) is None
+        assert not terminated_or_truncated(
+            data, write_full_false=True, full_done_spec=spec
+        )
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+
+        spec = CompositeSpec(
+            {
+                "truncated": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
+                "terminated": DiscreteTensorSpec(2, shape=(2, 1), dtype=torch.bool),
+                ("nested", "terminated"): DiscreteTensorSpec(
+                    2, shape=(2, 1), dtype=torch.bool
+                ),
+            },
+            shape=[2],
+        )
+        data = TensorDict(
+            {
+                "terminated": torch.zeros(2, 1, dtype=torch.bool),
+                "truncated": torch.ones(2, 1, dtype=torch.bool),
+                ("nested", "terminated"): torch.zeros(2, 1, dtype=torch.bool),
+            },
+            [2],
+        )
+        assert terminated_or_truncated(
+            data, write_full_false=False, full_done_spec=spec
+        )
+        assert data["_reset"].shape == (2, 1)
+        assert data["nested", "_reset"].shape == (2, 1)
+        assert data["_reset"].all()
+        assert not data["nested", "_reset"].any()
 
 
 @pytest.mark.skipif(

@@ -69,18 +69,9 @@ class VmasWrapper(_EnvWrapper):
         >>>  print(env.rollout(10))
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([32, 10, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
-                done: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-                info: TensorDict(
+                agents: TensorDict(
                     fields={
-                        agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-                    batch_size=torch.Size([32, 10, 5]),
-                    device=cpu,
-                    is_shared=False),
-                next: TensorDict(
-                    fields={
-                        done: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        action: Tensor(shape=torch.Size([32, 10, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
                         info: TensorDict(
                             fields={
                                 agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
@@ -88,17 +79,36 @@ class VmasWrapper(_EnvWrapper):
                             batch_size=torch.Size([32, 10, 5]),
                             device=cpu,
                             is_shared=False),
-                        observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 10, 5]),
+                    device=cpu,
+                    is_shared=False),
+                done: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        agents: TensorDict(
+                            fields={
+                                info: TensorDict(
+                                    fields={
+                                        agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                                        agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                    batch_size=torch.Size([32, 10, 5]),
+                                    device=cpu,
+                                    is_shared=False),
+                                observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
+                                reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([32, 10, 5]),
+                            device=cpu,
+                            is_shared=False),
+                        done: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
                     batch_size=torch.Size([32, 10]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
-                reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                terminated: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
             batch_size=torch.Size([32, 10]),
             device=cpu,
             is_shared=False)
-
     """
 
     git_url = "https://github.com/proroklab/VectorizedMultiAgentSimulator"
@@ -328,7 +338,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones},
+            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -368,7 +378,7 @@ class VmasWrapper(_EnvWrapper):
         if not self.het_specs:
             agent_tds = agent_tds.to_tensordict()
         tensordict_out = TensorDict(
-            source={"agents": agent_tds, "done": dones},
+            source={"agents": agent_tds, "done": dones, "terminated": dones.clone()},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -447,35 +457,44 @@ class VmasEnv(VmasWrapper):
         >>>  print(env.rollout(10))
         TensorDict(
             fields={
-                action: Tensor(torch.Size([5, 32, 10, 2]), dtype=torch.float64),
-                done: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.bool),
-                info: TensorDict(
+                agents: TensorDict(
                     fields={
-                        cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                        collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                        separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                        velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-                    batch_size=torch.Size([5, 32, 10]),
-                    device=cpu,
-                    is_shared=False),
-                next: TensorDict(
-                    fields={
+                        action: Tensor(shape=torch.Size([32, 10, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
                         info: TensorDict(
                             fields={
-                                cohesion_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                collision_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                separation_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32),
-                                velocity_rew: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-                            batch_size=torch.Size([5, 32, 10]),
+                                agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                                agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([32, 10, 5]),
                             device=cpu,
                             is_shared=False),
-                        observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32)},
-                    batch_size=torch.Size([5, 32, 10]),
+                        observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([32, 10, 5]),
                     device=cpu,
                     is_shared=False),
-                observation: Tensor(torch.Size([5, 32, 10, 18]), dtype=torch.float32),
-                reward: Tensor(torch.Size([5, 32, 10, 1]), dtype=torch.float32)},
-            batch_size=torch.Size([5, 32, 10]),
+                done: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                next: TensorDict(
+                    fields={
+                        agents: TensorDict(
+                            fields={
+                                info: TensorDict(
+                                    fields={
+                                        agent_collision_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                                        agent_distance_rew: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                                    batch_size=torch.Size([32, 10, 5]),
+                                    device=cpu,
+                                    is_shared=False),
+                                observation: Tensor(shape=torch.Size([32, 10, 5, 18]), device=cpu, dtype=torch.float32, is_shared=False),
+                                reward: Tensor(shape=torch.Size([32, 10, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                            batch_size=torch.Size([32, 10, 5]),
+                            device=cpu,
+                            is_shared=False),
+                        done: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                        terminated: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([32, 10]),
+                    device=cpu,
+                    is_shared=False),
+                terminated: Tensor(shape=torch.Size([32, 10, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+            batch_size=torch.Size([32, 10]),
             device=cpu,
             is_shared=False)
     """
