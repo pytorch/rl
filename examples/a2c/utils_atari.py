@@ -8,11 +8,10 @@ import numpy as np
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
-from torchrl.data import CompositeSpec
+from torchrl.data import CompositeSpec, UnboundedDiscreteTensorSpec
 from torchrl.data.tensor_specs import DiscreteBox
 from torchrl.envs import (
     CatFrames,
-    default_info_dict_reader,
     DoubleToFloat,
     EnvCreator,
     ExplorationType,
@@ -24,6 +23,7 @@ from torchrl.envs import (
     RewardSum,
     StepCounter,
     ToTensorImage,
+    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -43,43 +43,49 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env):
-        """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. It helps value estimation.
-        """
-        gym.Wrapper.__init__(self, env)
-        self.lives = 0
+class EndOfLifeTransform(Transform):
+    """Registers the end-of-life signal from a Gym env with a `lives` method.
 
-    def step(self, action):
-        obs, rew, done, truncate, info = self.env.step(action)
-        lives = self.env.unwrapped.ale.lives()
-        info["end_of_life"] = False
-        if (lives < self.lives) or done:
-            info["end_of_life"] = True
-        self.lives = lives
-        return obs, rew, done, truncate, info
+    Done by DeepMind for the DQN and co. It helps value estimation.
+    """
 
-    def reset(self, **kwargs):
-        reset_data = self.env.reset(**kwargs)
-        self.lives = self.env.unwrapped.ale.lives()
-        return reset_data
+    def _step(self, tensordict, next_tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = torch.tensor(
+            [tensordict["lives"] < lives], device=self.parent.device
+        )
+        end_of_life = end_of_life | next_tensordict.get("done")
+        next_tensordict.set("eol", end_of_life)
+        next_tensordict.set("lives", lives)
+        return next_tensordict
+
+    def reset(self, tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = False
+        tensordict.set("eol", [end_of_life])
+        tensordict.set("lives", lives)
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec):
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        observation_spec["eol"] = full_done_spec["done"].clone()
+        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
+            self.parent.batch_size, device=self.parent.device
+        )
+        return observation_spec
 
 
 def make_base_env(
     env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
     env = gym.make(env_name)
-    if not is_test:
-        env = EpisodicLifeEnv(env)
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        reader = default_info_dict_reader(["end_of_life"])
-        env.set_info_dict_reader(reader)
+        env = TransformedEnv(env, EndOfLifeTransform())
     return env
 
 

@@ -11,7 +11,6 @@ from torchrl.data import CompositeSpec
 from torchrl.data.tensor_specs import DiscreteBox, UnboundedDiscreteTensorSpec
 from torchrl.envs import (
     CatFrames,
-    default_info_dict_reader,
     DoubleToFloat,
     EnvCreator,
     ExplorationType,
@@ -82,11 +81,9 @@ def make_base_env(
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
-    env = TransformedEnv(env, EndOfLifeTransform())
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        reader = default_info_dict_reader(["end_of_life"])
-        env.set_info_dict_reader(reader)
+        env = TransformedEnv(env, EndOfLifeTransform())
     return env
 
 
