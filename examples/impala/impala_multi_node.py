@@ -10,7 +10,7 @@ results from Espeholt et al. 2018 for the on Atari Environments.
 import hydra
 
 
-@hydra.main(config_path=".", config_name="config", version_base="1.1")
+@hydra.main(config_path=".", config_name="config_multi_node", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
@@ -19,14 +19,15 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors.distributed import RPCDataCollector
+    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors.distributed import RayCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
     from torchrl.objectives import A2CLoss
     from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils import eval_model, make_parallel_env, make_ppo_models
+    from utils import eval_model, make_env, make_ppo_models
 
     device = "cpu" if not torch.cuda.device_count() else "cuda"
 
@@ -38,9 +39,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Extract other config parameters
     batch_size = cfg.loss.batch_size  # Number of rollouts per batch
-    num_workers = (
-        cfg.collector.num_workers
-    )  # Number of parallel workers collecting rollouts
+    num_workers = cfg.collector.num_workers # Number of parallel workers collecting rollouts
     lr = cfg.optim.lr
     anneal_lr = cfg.optim.anneal_lr
     sgd_updates = cfg.loss.sgd_updates
@@ -55,21 +54,24 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
-    collector = RPCDataCollector(
-        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)]
-        * 2,
+    remote_config = {
+        "num_cpus": 1,
+        "num_gpus": 1.0 // num_workers,
+        "memory": 1024**3,
+        "object_store_memory": 1024**3,
+    }
+    collector = RayCollector(
+        create_env_fn=[make_env(cfg.env.env_name, cfg.env.num_envs, device)]
+        * num_workers,
         policy=actor,
+        collector_class=SyncDataCollector,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        storing_device=device,
         max_frames_per_traj=-1,
+        remote_configs=remote_config,
+        num_collectors=1,
         sync=False,
-        slurm_kwargs={
-            "timeout_min": 10,
-            "slurm_partition": "1080",
-            "slurm_cpus_per_task": 1,
-            "slurm_gpus_per_node": 1,
-        }
+        update_after_each_batch=True,
     )
 
     # Create data buffer
@@ -94,7 +96,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
     )
-    loss_module.set_keys(done="eol", terminated="eol")
+    # loss_module.set_keys(done="eol", terminated="eol")
 
     # Create optimizer
     optim = torch.optim.RMSprop(
@@ -116,7 +118,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_env(cfg.env.env_name, 1, device, is_test=True)
     test_env.eval()
 
     # Main loop

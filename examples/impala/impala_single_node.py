@@ -26,7 +26,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     from torchrl.objectives import A2CLoss
     from torchrl.objectives.value import VTrace
     from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils import eval_model, make_parallel_env, make_ppo_models
+    from utils import eval_model, make_env, make_ppo_models
 
     device = "cpu" if not torch.cuda.device_count() else "cuda"
 
@@ -56,7 +56,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)]
+        create_env_fn=[make_env(cfg.env.env_name, cfg.env.num_envs, device)]
         * num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
@@ -111,7 +111,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_parallel_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_env(cfg.env.env_name, 1, device, is_test=True)
     test_env.eval()
 
     # Main loop
