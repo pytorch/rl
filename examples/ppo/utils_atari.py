@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gymnasium as gym
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -15,6 +14,7 @@ from torchrl.envs import (
     EnvCreator,
     ExplorationType,
     GrayScale,
+    GymEnv,
     NoopResetEnv,
     ParallelEnv,
     Resize,
@@ -26,7 +26,6 @@ from torchrl.envs import (
     TransformedEnv,
     VecNorm,
 )
-from torchrl.envs.libs.gym import GymWrapper
 from torchrl.modules import (
     ActorValueOperator,
     ConvNet,
@@ -77,9 +76,12 @@ class EndOfLifeTransform(Transform):
 def make_base_env(
     env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
-    env = gym.make(env_name)
-    env = GymWrapper(
-        env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
+    env = GymEnv(
+        env_name,
+        frame_skip=frame_skip,
+        from_pixels=True,
+        pixels_only=False,
+        device=device,
     )
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
