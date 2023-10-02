@@ -14,8 +14,8 @@ def swap_last(source, dest):
             return dest
         return dest[-1]
     if isinstance(dest, str):
-        return source[:-1] + (dest[-1],)
-    return source[:-1] + (dest,)
+        return source[:-1] + (dest,)
+    return source[:-1] + (dest[-1],)
 
 
 class DoneTransform(Transform):
