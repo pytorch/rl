@@ -2,16 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import abc
 import importlib
 import warnings
 from copy import copy
 from types import ModuleType
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from warnings import warn
 
 import numpy as np
 import torch
+from packaging import version
 
 from tensordict import TensorDictBase
 
@@ -29,6 +29,7 @@ from torchrl.data.tensor_specs import (
 )
 from torchrl.data.utils import numpy_to_torch_dtype_dict
 from torchrl.envs.batched_envs import CloudpickleWrapper
+from torchrl.envs.common import _EnvPostInit
 
 from torchrl.envs.gym_like import (
     BaseInfoDictReader,
@@ -101,12 +102,11 @@ class set_gym_backend(_DecoratorContextManager):
         self.backend = backend
 
     def _call(self):
+        """Sets the backend as default."""
         global DEFAULT_GYM
         DEFAULT_GYM = self.backend
-        # implement_for.reset()
-        setters = copy(implement_for._setters)
         found_setter = False
-        for setter in setters:
+        for setter in copy(implement_for._setters):
             check_module = (
                 callable(setter.module_name)
                 and setter.module_name.__name__ == self.backend.__name__
@@ -115,21 +115,26 @@ class set_gym_backend(_DecoratorContextManager):
                 self.backend.__version__, setter.from_version, setter.to_version
             )
             if check_module and check_version:
-                setter(setter.fn)
+                setter.module_set()
                 found_setter = True
+        # we keep only the setters we need. This is safe because a copy is saved under self._setters_saved
         if not found_setter:
             raise ImportError(
                 f"could not set anything related to gym backend "
-                f"{self.backend.__name__} with version={self.backend.__version__}."
+                f"{self.backend.__name__} with version={self.backend.__version__}. "
+                f"Check that the gym versions match!"
             )
 
     def __enter__(self):
-        self._setters = copy(implement_for._setters)
+        # we save a complete list of setters as well as whether they should be set.
+        # we want the full list becasue we want to be able to nest the calls to set_gym_backend.
+        # we also want to keep track of which ones are set to reproduce what was set before.
+        self._setters_saved = copy(implement_for._implementations)
         self._call()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        implement_for.reset(setters=self._setters)
-        delattr(self, "_setters")
+        implement_for.reset(setters_dict=self._setters_saved)
+        delattr(self, "_setters_saved")
 
     def clone(self):
         # override this method if your children class takes __init__ parameters
@@ -207,8 +212,8 @@ def _gym_to_torchrl_spec_transform(
         remap_state_to_observation: whether to rename the 'state' key of Dict specs to "observation". Default is true.
 
     """
-    gym = gym_backend()
-    if isinstance(spec, gym.spaces.tuple.Tuple):
+    gym_spaces = gym_backend("spaces")
+    if isinstance(spec, gym_spaces.tuple.Tuple):
         return torch.stack(
             [
                 _gym_to_torchrl_spec_transform(
@@ -221,7 +226,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    if isinstance(spec, gym.spaces.discrete.Discrete):
+    if isinstance(spec, gym_spaces.discrete.Discrete):
         action_space_cls = (
             DiscreteTensorSpec
             if categorical_action_encoding
@@ -233,11 +238,11 @@ def _gym_to_torchrl_spec_transform(
             else torch.long
         )
         return action_space_cls(spec.n, device=device, dtype=dtype)
-    elif isinstance(spec, gym.spaces.multi_binary.MultiBinary):
+    elif isinstance(spec, gym_spaces.multi_binary.MultiBinary):
         return BinaryDiscreteTensorSpec(
             spec.n, device=device, dtype=numpy_to_torch_dtype_dict[spec.dtype]
         )
-    elif isinstance(spec, gym.spaces.multi_discrete.MultiDiscrete):
+    elif isinstance(spec, gym_spaces.multi_discrete.MultiDiscrete):
         if len(spec.nvec.shape) == 1 and len(np.unique(spec.nvec)) > 1:
             dtype = (
                 numpy_to_torch_dtype_dict[spec.dtype]
@@ -265,7 +270,7 @@ def _gym_to_torchrl_spec_transform(
             ],
             0,
         )
-    elif isinstance(spec, gym.spaces.Box):
+    elif isinstance(spec, gym_spaces.Box):
         shape = spec.shape
         if not len(shape):
             shape = torch.Size([1])
@@ -306,7 +311,7 @@ def _gym_to_torchrl_spec_transform(
                 remap_state_to_observation=remap_state_to_observation,
             )
         return CompositeSpec(**spec_out)
-    elif isinstance(spec, gym.spaces.dict.Dict):
+    elif isinstance(spec, gym_spaces.dict.Dict):
         return _gym_to_torchrl_spec_transform(
             spec.spaces,
             device=device,
@@ -381,10 +386,13 @@ def _is_from_pixels(env):
     return False
 
 
-class _AsyncMeta(abc.ABCMeta):
+class _AsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         instance: GymWrapper = super().__call__(*args, **kwargs)
+
+        # before gym 0.22, there was no final_observation
         if instance._is_batched:
+            gym_backend = instance.get_library_name(instance._env)
             from torchrl.envs.transforms.transforms import (
                 TransformedEnv,
                 VecGymEnvTransform,
@@ -399,9 +407,26 @@ class _AsyncMeta(abc.ABCMeta):
                     backend = "gym"
             else:
                 backend = "gym"
-            instance.set_info_dict_reader(
-                terminal_obs_reader(instance.observation_spec, backend=backend)
-            )
+
+            # we need 3 checks: the backend is not sb3 (if so, gymnasium is used),
+            # it is gym and not gymnasium and the version is before 0.22.0
+            add_info_dict = True
+            if backend == "gym" and gym_backend == "gym":  # check gym against gymnasium
+                import gym
+
+                if version.parse(gym.__version__) < version.parse("0.22.0"):
+                    warn(
+                        "A batched gym environment is being wrapped in a GymWrapper with gym version < 0.22. "
+                        "This implies that the next-observation is wrongly tracked (as the batched environment auto-resets "
+                        "and discards the true next observation to return the result of the step). "
+                        "This isn't compatible with TorchRL API and should be used with caution.",
+                        category=UserWarning,
+                    )
+                    add_info_dict = False
+            if add_info_dict:
+                instance.set_info_dict_reader(
+                    terminal_obs_reader(instance.observation_spec, backend=backend)
+                )
             return TransformedEnv(instance, VecGymEnvTransform())
         return instance
 
@@ -422,20 +447,32 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
     libname = "gym"
 
     @staticmethod
-    def get_library_name(env):
-        # try gym
+    def get_library_name(env) -> str:
+        """Given a gym environment, returns the backend name (either gym or gymnasium).
+
+        This can be used to set the appropriate backend when needed:
+
+        Examples:
+            >>> env = gymnasium.make("Pendulum-v1")
+            >>> with set_gym_backend(env):
+            ...    env = GymWrapper(env)
+
+        :class:`~GymWrapper` and similar use this method to set their method
+        to the right backend during instantiation.
+
+        """
         try:
             import gym
 
             if isinstance(env.action_space, gym.spaces.space.Space):
-                return gym
+                return "gym"
         except ImportError:
             pass
         try:
             import gymnasium
 
             if isinstance(env.action_space, gymnasium.spaces.space.Space):
-                return gymnasium
+                return "gymnasium"
         except ImportError:
             pass
         raise ImportError(
@@ -448,10 +485,36 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if "env" in kwargs:
-            with set_gym_backend(self.get_library_name(kwargs["env"])):
+            if "EnvCompatibility" in str(
+                kwargs["env"]
+            ):  # a hacky way of knowing if EnvCompatibility is part of the wrappers of env
+                raise ValueError(
+                    "GymWrapper does not support the gym.wrapper.compatibility.EnvCompatibility wrapper. "
+                    "If this feature is needed, detail your use case in an issue of "
+                    "https://github.com/pytorch/rl/issues."
+                )
+            libname = self.get_library_name(kwargs["env"])
+            with set_gym_backend(libname):
                 super().__init__(**kwargs)
         else:
             super().__init__(**kwargs)
+        self._post_init()
+
+    def _post_init(self):
+        # writes the functions that are gym-version specific to the instance
+        # once and for all. This is aimed at avoiding the need of decorating code
+        # with set_gym_backend + allowing for parallel execution (which would
+        # be troublesome when both an old version of gym and recent gymnasium
+        # are present within the same virtual env).
+        #
+        # These calls seemingly do nothing but they actually get rid of the @implement_for decorator.
+        # We execute them within the set_gym_backend context manager to make sure we get
+        # the right implementation.
+        #
+        # This method is executed by the metaclass of GymWrapper.
+        with set_gym_backend(self.get_library_name(self._env)):
+            self._reset_output_transform = self._reset_output_transform
+            self._output_transform = self._output_transform
 
     @property
     def _is_batched(self):
@@ -465,9 +528,18 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             self._env, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
 
+    @implement_for("gym", None, "0.27")
     def _get_batch_size(self, env):
         if hasattr(env, "num_envs"):
             batch_size = torch.Size([env.num_envs, *self.batch_size])
+        else:
+            batch_size = self.batch_size
+        return batch_size
+
+    @implement_for("gymnasium", "0.27", None)  # gymnasium wants the unwrapped env
+    def _get_batch_size(self, env):  # noqa: F811
+        if hasattr(env, "num_envs"):
+            batch_size = torch.Size([env.unwrapped.num_envs, *self.batch_size])
         else:
             batch_size = self.batch_size
         return batch_size
@@ -596,7 +668,12 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
 
         return seed
 
-    @implement_for("gym", None, "0.19.0")
+    @implement_for("gym", None, "0.15.0")
+    def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
+        self._seed_calls_reset = False
+        self._env.seed(seed)
+
+    @implement_for("gym", "0.15.0", "0.19.0")
     def _set_seed_initial(self, seed: int) -> None:  # noqa: F811
         self._seed_calls_reset = False
         self._env.seed(seed=seed)
@@ -667,12 +744,147 @@ class GymWrapper(GymLikeEnv, metaclass=_AsyncMeta):
             observation_spec = observation_spec.expand(
                 *batch_size, *observation_spec.shape
             )
+        self.done_spec = self._make_done_spec()
         self.action_spec = action_spec
         if reward_spec.shape[: len(self.batch_size)] != self.batch_size:
             self.reward_spec = reward_spec.expand(*self.batch_size, *reward_spec.shape)
         else:
             self.reward_spec = reward_spec
         self.observation_spec = observation_spec
+
+    @implement_for("gym", None, "0.26")
+    def _make_done_spec(self):  # noqa: F811
+        return CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
+        )
+
+    @implement_for("gym", "0.26", None)
+    def _make_done_spec(self):  # noqa: F811
+        return CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
+        )
+
+    @implement_for("gymnasium", "0.27", None)
+    def _make_done_spec(self):  # noqa: F811
+        return CompositeSpec(
+            {
+                "done": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "terminated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+                "truncated": DiscreteTensorSpec(
+                    2, dtype=torch.bool, device=self.device, shape=(*self.batch_size, 1)
+                ),
+            },
+            shape=self.batch_size,
+        )
+
+    @implement_for("gym", None, "0.26")
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data, None
+
+    @implement_for("gym", "0.26", None)
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data
+
+    @implement_for("gymnasium", "0.27", None)
+    def _reset_output_transform(self, reset_data):  # noqa: F811
+        return reset_data
+
+    @implement_for("gym", None, "0.24")
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        observations, reward, done, info = step_outputs_tuple
+        if self._is_batched:
+            # info needs to be flipped
+            info = _flip_info_tuple(info)
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool) and isinstance(truncated, bool):
+            # if bool is an array, make truncated an array
+            truncated = [truncated] * len(done)
+            truncated = np.array(truncated)
+        elif not isinstance(truncated, bool):
+            # make sure it's a boolean np.array
+            truncated = np.array(truncated, dtype=np.dtype("bool"))
+        terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
+        return (observations, reward, terminated, truncated, done, info)
+
+    @implement_for("gym", "0.24", "0.26")
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        observations, reward, done, info = step_outputs_tuple
+        # The variable naming follows torchrl's convention here.
+        # A done is interpreted the union of terminated and truncated.
+        # (as in earlier versions of gym).
+        truncated = info.pop("TimeLimit.truncated", False)
+        if not isinstance(done, bool) and isinstance(truncated, bool):
+            # if bool is an array, make truncated an array
+            truncated = [truncated] * len(done)
+            truncated = np.array(truncated)
+        elif not isinstance(truncated, bool):
+            # make sure it's a boolean np.array
+            truncated = np.array(truncated, dtype=np.dtype("bool"))
+        terminated = done & ~truncated
+        if not isinstance(terminated, np.ndarray):
+            # if it's not a ndarray, we must return bool
+            # since it's not a bool, we make it so
+            terminated = bool(terminated)
+        return (observations, reward, terminated, truncated, done, info)
+
+    @implement_for("gym", "0.26", None)
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
+        return (
+            observations,
+            reward,
+            terminated,
+            truncated,
+            terminated | truncated,
+            info,
+        )
+
+    @implement_for("gymnasium", "0.27", None)
+    def _output_transform(self, step_outputs_tuple):  # noqa: F811
+        # The variable naming follows torchrl's convention here.
+        observations, reward, terminated, truncated, info = step_outputs_tuple
+        return (
+            observations,
+            reward,
+            terminated,
+            truncated,
+            terminated | truncated,
+            info,
+        )
 
     def _init_env(self):
         self.reset()
@@ -965,3 +1177,15 @@ class terminal_obs_reader(BaseInfoDictReader):
                     self._read_obs(obs, key[-1], final_obs, index=i)
             tensordict.set(key, final_obs)
         return tensordict
+
+
+def _flip_info_tuple(info: Tuple[Dict]) -> Dict[str, tuple]:
+    # In Gym < 0.24, batched envs returned tuples of dict, and not dict of tuples.
+    # We patch this by flipping the tuple -> dict order.
+    info_example = set(info[0])
+    for item in info[1:]:
+        info_example = info_example.union(item)
+    result = {}
+    for key in info_example:
+        result[key] = tuple(_info.get(key, None) for _info in info)
+    return result

@@ -350,6 +350,26 @@ def rollout_consistency_assertion(
     ).all(), (r_done[observation_key] - r_done_tp1[observation_key]).norm(dim=-1)
 
 
+def rand_reset(env):
+    """Generates a tensordict with reset keys that mimic the done spec.
+
+    Values are drawn at random until at least one reset is present.
+
+    """
+    full_done_spec = env.full_done_spec
+    result = {}
+    for reset_key, list_of_done in zip(env.reset_keys, env.done_keys_groups):
+        val = full_done_spec[list_of_done[0]].rand()
+        while not val.any():
+            val = full_done_spec[list_of_done[0]].rand()
+        result[reset_key] = val
+    # create a data structure that keeps the batch size of the nested specs
+    result = (
+        full_done_spec.zero().update(result).exclude(*full_done_spec.keys(True, True))
+    )
+    return result
+
+
 def check_rollout_consistency_multikey_env(td: TensorDict, max_steps: int):
     index_batch_size = (0,) * (len(td.batch_size) - 1)
 
