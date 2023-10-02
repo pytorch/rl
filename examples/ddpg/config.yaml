@@ -3,9 +3,9 @@ env:
   name: HalfCheetah-v3
   task: ""
   exp_name: ${env.name}_DDPG
-  library: gym
-  max_episode_steps: 5000
-  seed: 6
+  library: gymnasium
+  max_episode_steps: 1000
+  seed: 42
 
 # collector
 collector:
