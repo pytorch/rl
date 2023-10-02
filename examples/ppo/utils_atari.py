@@ -83,7 +83,7 @@ def make_base_env(
     )
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        env = TransformedEnv(env, EndOfLifeTransform())
+        env.append_transform(EndOfLifeTransform())
     return env
 
 
