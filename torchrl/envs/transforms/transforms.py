@@ -4387,12 +4387,7 @@ class RewardSum(Transform):
             # retrieve rewards from parent env
             parent = self.parent
             if parent is None:
-                # fall back on in_keys = ["reward"]
                 in_keys = ["reward"]
-                # or this?
-                # raise TypeError("in_keys not provided but parent env not found. "
-                #                 "Make sure that the in_keys (reward) are provided during "
-                #                 "construction if the transform does not have a container env.")
             else:
                 in_keys = copy(parent.reward_keys)
             self._in_keys = in_keys
