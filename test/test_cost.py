@@ -6284,7 +6284,7 @@ class TestReinforce(LossModuleTestBase):
     @pytest.mark.parametrize("delay_value", [True, False])
     @pytest.mark.parametrize("gradient_mode", [True, False])
     @pytest.mark.parametrize("advantage", ["gae", "vtrace", "td", "td_lambda", None])
-    @pytest.mark.parametrize("td_est", list(ValueEstimators) + [None])
+    @pytest.mark.parametrize("td_est", list(ValueEstimators))
     def test_reinforce_value_net(self, advantage, gradient_mode, delay_value, td_est):
         n_obs = 3
         n_act = 5

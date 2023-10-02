@@ -10,7 +10,7 @@ results from Espeholt et al. 2018 for the on Atari Environments.
 import hydra
 
 
-@hydra.main(config_path=".", config_name="config_single_node", version_base="1.1")
+@hydra.main(config_path=".", config_name="config", version_base="1.1")
 def main(cfg: "DictConfig"):  # noqa: F821
 
     import time
@@ -19,7 +19,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import MultiaSyncDataCollector
+    from torchrl.collectors.distributed import RPCDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -55,16 +55,21 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor, critic = actor.to(device), critic.to(device)
 
     # Create collector
-    collector = MultiaSyncDataCollector(
+    collector = RPCDataCollector(
         create_env_fn=[make_parallel_env(cfg.env.env_name, cfg.env.num_envs, device)]
-        * num_workers,
+        * 2,
         policy=actor,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        device=device,
         storing_device=device,
         max_frames_per_traj=-1,
-        update_at_each_batch=True,
+        sync=False,
+        slurm_kwargs={
+            "timeout_min": 10,
+            "slurm_partition": "1080",
+            "slurm_cpus_per_task": 1,
+            "slurm_gpus_per_node": 1,
+        }
     )
 
     # Create data buffer
