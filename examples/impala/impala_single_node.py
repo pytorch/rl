@@ -56,7 +56,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Create collector
     collector = MultiaSyncDataCollector(
-        create_env_fn=[make_env(cfg.env.env_name, cfg.env.num_envs, device)]
+        create_env_fn=[make_env(cfg.env.env_name, device)]
         * num_workers,
         policy=actor,
         frames_per_batch=frames_per_batch,
@@ -111,7 +111,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_env(cfg.env.env_name, device, is_test=True)
     test_env.eval()
 
     # Main loop

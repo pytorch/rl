@@ -57,11 +57,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
     remote_config = {
         "num_cpus": 1,
         "num_gpus": 1.0 // num_workers,
-        "memory": 1024**3,
-        "object_store_memory": 1024**3,
+        "memory": 2 * 1024**3,
     }
     collector = RayCollector(
-        create_env_fn=[make_env(cfg.env.env_name, cfg.env.num_envs, device)]
+        create_env_fn=[make_env(cfg.env.env_name, device)]
         * num_workers,
         policy=actor,
         collector_class=SyncDataCollector,
@@ -69,7 +68,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
         total_frames=total_frames,
         max_frames_per_traj=-1,
         remote_configs=remote_config,
-        num_collectors=1,
         sync=False,
         update_after_each_batch=True,
     )
@@ -118,7 +116,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         )
 
     # Create test environment
-    test_env = make_env(cfg.env.env_name, 1, device, is_test=True)
+    test_env = make_env(cfg.env.env_name, device, is_test=True)
     test_env.eval()
 
     # Main loop

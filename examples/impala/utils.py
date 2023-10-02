@@ -68,9 +68,9 @@ class EndOfLifeTransform(Transform):
         return observation_spec
 
 
-def make_env(env_name, device, frame_skip=4, is_test=False):
+def make_env(env_name, device, is_test=False):
     env = GymEnv(
-        env_name, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
+        env_name, frame_skip=4, from_pixels=True, pixels_only=False, device=device
     )
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
