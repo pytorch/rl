@@ -4425,7 +4425,7 @@ class RewardSum(Transform):
             if isinstance(value, (str, tuple)):
                 value = [value]
             value = [unravel_key(val) for val in value]
-        self._in_keys = value
+        self._out_keys = value
 
     @property
     def reset_keys(self):
