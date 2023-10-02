@@ -1,6 +1,6 @@
 # environment and task
 env:
-  name: Ant-v3
+  name: HalfCheetah-v3
   task: ""
   exp_name: ${env.name}_SAC
   library: gym
@@ -12,7 +12,6 @@ collector:
   total_frames: 1_000_000
   init_random_frames: 10000
   frames_per_batch: 1000
-  max_frames_per_traj: 1000
   init_env_steps: 1000
   collector_device: cpu
   env_per_collector: 1

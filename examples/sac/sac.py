@@ -94,7 +94,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
     prb = cfg.replay_buffer.prb
     eval_iter = cfg.logger.eval_iter
     frames_per_batch = cfg.collector.frames_per_batch
-    eval_rollout_steps = cfg.collector.max_frames_per_traj
+    eval_rollout_steps = cfg.env.max_episode_steps
 
     sampling_start = time.time()
     for i, tensordict in enumerate(collector):

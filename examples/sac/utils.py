@@ -12,7 +12,7 @@ from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuff
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage
 from torchrl.envs import Compose, DoubleToFloat, EnvCreator, ParallelEnv, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
-from torchrl.envs.transforms import RewardScaling, RewardSum
+from torchrl.envs.transforms import InitTracker, RewardSum
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MLP, ProbabilisticActor, ValueOperator
 from torchrl.modules.distributions import TanhNormal
@@ -25,21 +25,20 @@ from torchrl.objectives.sac import SACLoss
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False, max_episode_steps=1000):
+def env_maker(task, device="cpu", max_episode_steps=1000):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
-            from_pixels=from_pixels,
             max_episode_steps=max_episode_steps,
         )
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(env):
     transformed_env = TransformedEnv(
         env,
         Compose(
-            RewardScaling(loc=0.0, scale=reward_scaling),
+            InitTracker(),
             DoubleToFloat("observation"),
             RewardSum(),
         ),
@@ -87,7 +86,7 @@ def make_collector(cfg, train_env, actor_model_explore):
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
         frames_per_batch=cfg.collector.frames_per_batch,
-        max_frames_per_traj=cfg.collector.max_frames_per_traj,
+        max_frames_per_traj=cfg.env.max_episode_steps,
         total_frames=cfg.collector.total_frames,
         device=cfg.collector.collector_device,
     )
