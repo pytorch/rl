@@ -9,7 +9,7 @@ from .cql import CQLLoss
 from .ddpg import DDPGLoss
 from .decision_transformer import DTLoss, OnlineDTLoss
 from .dqn import DistributionalDQNLoss, DQNLoss
-from .dreamer import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
+from .dreamer import DreamerLoss
 from .iql import IQLLoss
 from .multiagent import QMixerLoss
 from .ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss

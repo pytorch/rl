@@ -24,11 +24,7 @@ from torchrl.modules.tensordict_module.exploration import (
     AdditiveGaussianWrapper,
     OrnsteinUhlenbeckProcessWrapper,
 )
-from torchrl.objectives.dreamer import (
-    DreamerActorLoss,
-    DreamerModelLoss,
-    DreamerValueLoss,
-)
+from torchrl.objectives.dreamer import DreamerLoss
 from torchrl.record.loggers import generate_exp_name, get_logger
 from torchrl.trainers.helpers.collectors import (
     make_collector_offpolicy,
@@ -141,14 +137,13 @@ def main(cfg: "DictConfig"):  # noqa: F821
         reward_normalizer = None
 
     # Losses
-    world_model_loss = DreamerModelLoss(world_model)
-    actor_loss = DreamerActorLoss(
+    dreamer_loss = DreamerLoss(
+        world_model,
         actor_model,
         value_model,
         model_based_env,
         imagination_horizon=cfg.imagination_horizon,
     )
-    value_loss = DreamerValueLoss(value_model)
 
     # Exploration noise to be added to the actions
     if cfg.exploration == "additive_gaussian":
@@ -216,9 +211,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
     actor_opt = torch.optim.Adam(actor_model.parameters(), lr=cfg.actor_value_lr)
     value_opt = torch.optim.Adam(value_model.parameters(), lr=cfg.actor_value_lr)
 
-    scaler1 = GradScaler()
-    scaler2 = GradScaler()
-    scaler3 = GradScaler()
+    scaler_world_model = GradScaler()
+    scaler_actor = GradScaler()
+    scaler_value = GradScaler()
 
     for i, tensordict in enumerate(collector):
         cmpt = 0
@@ -261,7 +256,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     )
                 # update world model
                 with autocast(dtype=torch.float16):
-                    model_loss_td, sampled_tensordict = world_model_loss(
+                    model_loss_td, sampled_tensordict = dreamer_loss.model_loss(
                         sampled_tensordict
                     )
                     loss_world_model = (
@@ -285,10 +280,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     else:
                         sampled_tensordict_save = None
 
-                    scaler1.scale(loss_world_model).backward()
-                    scaler1.unscale_(world_model_opt)
+                    scaler_world_model.scale(loss_world_model).backward()
+                    scaler_world_model.unscale_(world_model_opt)
                     clip_grad_norm_(world_model.parameters(), cfg.grad_clip)
-                    scaler1.step(world_model_opt)
+                    scaler_world_model.step(world_model_opt)
                     if j == cfg.optim_steps_per_batch - 1 and do_log:
                         logger.log_scalar(
                             "loss_world_model",
@@ -316,15 +311,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                             step=collected_frames,
                         )
                     world_model_opt.zero_grad()
-                    scaler1.update()
+                    scaler_world_model.update()
 
                 # update actor network
                 with autocast(dtype=torch.float16):
-                    actor_loss_td, sampled_tensordict = actor_loss(sampled_tensordict)
-                scaler2.scale(actor_loss_td["loss_actor"]).backward()
-                scaler2.unscale_(actor_opt)
+                    actor_loss_td, sampled_tensordict = dreamer_loss.actor_loss(
+                        sampled_tensordict
+                    )
+                scaler_actor.scale(actor_loss_td["loss_actor"]).backward()
+                scaler_actor.unscale_(actor_opt)
                 clip_grad_norm_(actor_model.parameters(), cfg.grad_clip)
-                scaler2.step(actor_opt)
+                scaler_actor.step(actor_opt)
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
                     logger.log_scalar(
                         "loss_actor",
@@ -337,15 +334,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         step=collected_frames,
                     )
                 actor_opt.zero_grad()
-                scaler2.update()
+                scaler_actor.update()
 
                 # update value network
                 with autocast(dtype=torch.float16):
-                    value_loss_td, sampled_tensordict = value_loss(sampled_tensordict)
-                scaler3.scale(value_loss_td["loss_value"]).backward()
-                scaler3.unscale_(value_opt)
+                    value_loss_td, sampled_tensordict = dreamer_loss.value_loss(
+                        sampled_tensordict
+                    )
+                scaler_value.scale(value_loss_td["loss_value"]).backward()
+                scaler_value.unscale_(value_opt)
                 clip_grad_norm_(value_model.parameters(), cfg.grad_clip)
-                scaler3.step(value_opt)
+                scaler_value.step(value_opt)
                 if j == cfg.optim_steps_per_batch - 1 and do_log:
                     logger.log_scalar(
                         "loss_value",
@@ -358,7 +357,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
                         step=collected_frames,
                     )
                 value_opt.zero_grad()
-                scaler3.update()
+                scaler_value.update()
                 if j == cfg.optim_steps_per_batch - 1:
                     do_log = False
 
