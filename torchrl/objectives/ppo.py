@@ -144,11 +144,11 @@ class PPOLoss(LossModule):
         >>> loss = PPOLoss(actor, value)
         >>> batch = [2, ]
         >>> action = spec.rand(batch)
-        >>> data = TensorDict({
-        ...         "observation": torch.randn(*batch, n_obs),
+        >>> data = TensorDict({"observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         "sample_log_prob": torch.randn_like(action[..., 1]),
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -166,7 +166,7 @@ class PPOLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "sample_log_prob", "next_reward", "next_done"]`` + in_keys of the actor and value network.
+    ``["action", "sample_log_prob", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and value network.
     The return value is a tuple of tensors in the following order:
     ``["loss_objective"]`` + ``["entropy", "loss_entropy"]`` if entropy_bonus is set
                            + ``"loss_critic"`` if critic_coef is not None.
@@ -204,6 +204,7 @@ class PPOLoss(LossModule):
         ...         action=action,
         ...         sampleLogProb=torch.randn_like(action[..., 1]) / 10,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_objective.backward()
@@ -233,6 +234,9 @@ class PPOLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -242,6 +246,7 @@ class PPOLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.GAE
@@ -304,6 +309,7 @@ class PPOLoss(LossModule):
             self.tensor_keys.sample_log_prob,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor.in_keys,
             *[("next", key) for key in self.actor.in_keys],
             *self.critic.in_keys,
@@ -343,6 +349,7 @@ class PPOLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -475,6 +482,7 @@ class PPOLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
 

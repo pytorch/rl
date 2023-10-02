@@ -5,6 +5,7 @@
 import argparse
 import os
 import sys
+from copy import copy
 from importlib import import_module
 from unittest import mock
 
@@ -13,7 +14,7 @@ import pytest
 
 from torchrl._utils import get_binary_env_var, implement_for
 
-from torchrl.envs.libs.gym import gym_backend, set_gym_backend
+from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 
 @pytest.mark.parametrize("value", ["True", "1", "true"])
@@ -136,24 +137,27 @@ def test_implement_for():
 
 
 def test_implement_for_missing_module():
-    msg = r"Supported version of 'missing_module' has not been found."
+    msg = r"Supported version of 'test_utils.implement_for_test_functions.missing_module' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_module()
 
 
 def test_implement_for_missing_version():
-    msg = r"Supported version of 'missing_version' has not been found."
+    msg = r"Supported version of 'test_utils.implement_for_test_functions.missing_version' has not been found."
     with pytest.raises(ModuleNotFoundError, match=msg):
         implement_for_test_functions.missing_version()
 
 
 def test_implement_for_reset():
     assert implement_for_test_functions.select_correct_version() == "0.3+"
-    _impl = implement_for._implementations
-    assert _impl is implement_for._implementations
-    implement_for.reset()
+    _impl = copy(implement_for._implementations)
+    name = implement_for.func_name(implement_for_test_functions.select_correct_version)
+    for setter in implement_for._setters:
+        if implement_for.func_name(setter.fn) == name and setter.fn() != "0.3+":
+            setter.module_set()
+    assert implement_for_test_functions.select_correct_version() != "0.3+"
+    implement_for.reset(_impl)
     assert implement_for_test_functions.select_correct_version() == "0.3+"
-    assert _impl is not implement_for._implementations
 
 
 @pytest.mark.parametrize(
@@ -235,13 +239,19 @@ def test_set_gym_environments(
                 expected_fn_gymnasium = impfor.fn
 
     with set_gym_backend(gymnasium):
-        assert _utils_internal._set_gym_environments == expected_fn_gymnasium
+        assert (
+            _utils_internal._set_gym_environments == expected_fn_gymnasium
+        ), expected_fn_gym
 
     with set_gym_backend(gym):
-        assert _utils_internal._set_gym_environments == expected_fn_gym
+        assert (
+            _utils_internal._set_gym_environments == expected_fn_gym
+        ), expected_fn_gymnasium
 
     with set_gym_backend(gymnasium):
-        assert _utils_internal._set_gym_environments == expected_fn_gymnasium
+        assert (
+            _utils_internal._set_gym_environments == expected_fn_gymnasium
+        ), expected_fn_gym
 
 
 def test_set_gym_environments_no_version_gymnasium_found():
@@ -254,10 +264,12 @@ def test_set_gym_environments_no_version_gymnasium_found():
 
     import gymnasium
 
+    assert gymnasium.__version__ == "0.26.0"
+
     # this version of gymnasium does not exist in implement_for
     # therefore, set_gym_backend will not set anything and raise an ImportError.
     msg = f"could not set anything related to gym backend {gymnasium_name} with version={gymnasium_version}."
-    with pytest.raises(ImportError, match=msg) as exc_info:
+    with pytest.raises(ImportError, match=msg):
         with set_gym_backend(gymnasium):
             _utils_internal._set_gym_environments()
 
@@ -279,6 +291,69 @@ def test_set_gym_backend_types():
         assert gym_backend() == gym
     with set_gym_backend(gym):
         assert gym_backend() == gym
+
+
+# we check that the order where these funs are defined won't affect which is called
+@implement_for("torch", "1.0", "1.8")
+def torch_foo():
+    return 0
+
+
+@implement_for("torch", "1.8", None)
+def torch_foo():  # noqa: F811
+    return 1
+
+
+@implement_for("torch", None, "1.0")
+def torch_foo():  # noqa: F811
+    return 1
+
+
+def test_set_gym_nested():
+    mock_gym = uncallable(mock.MagicMock())
+    mock_gym.__version__ = "0.21.0"
+    mock_gym.__name__ = "gym"
+    sys.modules["gym"] = mock_gym
+
+    mock_gymnasium = uncallable(mock.MagicMock())
+    mock_gymnasium.__version__ = "0.28.0"
+    mock_gymnasium.__name__ = "gymnasium"
+    sys.modules["gymnasium"] = mock_gymnasium
+
+    import gym
+    import gymnasium
+
+    assert torch_foo() == 1
+
+    class MockGym:
+        _is_batched = False
+
+    with set_gym_backend(gym):
+        GymWrapper._output_transform(
+            MockGym, (1, 2, True, {})
+        )  # would break with gymnasium
+        assert torch_foo() == 1
+        with set_gym_backend(gymnasium):
+            GymWrapper._output_transform(
+                MockGym, (1, 2, True, True, {})
+            )  # would break with gym
+            assert torch_foo() == 1
+        GymWrapper._output_transform(
+            MockGym, (1, 2, True, {})
+        )  # would break with gymnasium
+    with set_gym_backend("gym"):
+        GymWrapper._output_transform(
+            MockGym, (1, 2, True, {})
+        )  # would break with gymnasium
+        assert torch_foo() == 1
+        with set_gym_backend("gymnasium"):
+            GymWrapper._output_transform(
+                MockGym, (1, 2, True, True, {})
+            )  # would break with gym
+            assert torch_foo() == 1
+        GymWrapper._output_transform(
+            MockGym, (1, 2, True, {})
+        )  # would break with gymnasium
 
 
 if __name__ == "__main__":

@@ -4,12 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import gymnasium as gym
-import numpy as np
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
 from torchrl.data import CompositeSpec
-from torchrl.data.tensor_specs import DiscreteBox
+from torchrl.data.tensor_specs import DiscreteBox, UnboundedDiscreteTensorSpec
 from torchrl.envs import (
     CatFrames,
     default_info_dict_reader,
@@ -24,6 +23,7 @@ from torchrl.envs import (
     RewardSum,
     StepCounter,
     ToTensorImage,
+    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -43,39 +43,46 @@ from torchrl.modules import (
 # --------------------------------------------------------------------
 
 
-class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env):
-        """Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. It helps value estimation.
-        """
-        gym.Wrapper.__init__(self, env)
-        self.lives = 0
+class EndOfLifeTransform(Transform):
+    """Registers the end-of-life signal from a Gym env with a `lives` method.
 
-    def step(self, action):
-        obs, rew, done, truncated, info = self.env.step(action)
-        lives = self.env.unwrapped.ale.lives()
-        info["end_of_life"] = False
-        if (lives < self.lives) or done:
-            info["end_of_life"] = True
-        self.lives = lives
-        return obs, rew, done, truncated, info
+    Done by DeepMind for the DQN and co. It helps value estimation.
+    """
 
-    def reset(self, **kwargs):
-        reset_data = self.env.reset(**kwargs)
-        self.lives = self.env.unwrapped.ale.lives()
-        return reset_data
+    def _step(self, tensordict, next_tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = torch.tensor(
+            [tensordict["lives"] < lives], device=self.parent.device
+        )
+        end_of_life = end_of_life | next_tensordict.get("done")
+        next_tensordict.set("eol", end_of_life)
+        next_tensordict.set("lives", lives)
+        return next_tensordict
+
+    def reset(self, tensordict):
+        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        end_of_life = False
+        tensordict.set("eol", [end_of_life])
+        tensordict.set("lives", lives)
+        return tensordict
+
+    def transform_observation_spec(self, observation_spec):
+        full_done_spec = self.parent.output_spec["full_done_spec"]
+        observation_spec["eol"] = full_done_spec["done"].clone()
+        observation_spec["lives"] = UnboundedDiscreteTensorSpec(
+            self.parent.batch_size, device=self.parent.device
+        )
+        return observation_spec
 
 
 def make_base_env(
     env_name="BreakoutNoFrameskip-v4", frame_skip=4, device="cpu", is_test=False
 ):
     env = gym.make(env_name)
-    if not is_test:
-        env = EpisodicLifeEnv(env)
     env = GymWrapper(
         env, frame_skip=frame_skip, from_pixels=True, pixels_only=False, device=device
     )
-    env = TransformedEnv(env)
+    env = TransformedEnv(env, EndOfLifeTransform())
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
         reader = default_info_dict_reader(["end_of_life"])
@@ -120,8 +127,8 @@ def make_ppo_modules_pixels(proof_environment):
         num_outputs = proof_environment.action_spec.shape
         distribution_class = TanhNormal
         distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
+            "min": proof_environment.action_spec.space.low,
+            "max": proof_environment.action_spec.space.high,
         }
 
     # Define input keys
@@ -233,6 +240,6 @@ def eval_model(actor, test_env, num_episodes=3):
             max_steps=10_000_000,
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_rewards.append(reward.cpu())
     del td_test
-    return test_rewards.mean()
+    return torch.cat(test_rewards, 0).mean()

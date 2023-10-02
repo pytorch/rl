@@ -103,6 +103,7 @@ class A2CLoss(LossModule):
         ...         "observation": torch.randn(*batch, n_obs),
         ...         "action": action,
         ...         ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...         ("next", "reward"): torch.randn(*batch, 1),
         ...         ("next", "observation"): torch.randn(*batch, n_obs),
         ...     }, batch)
@@ -120,7 +121,7 @@ class A2CLoss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and critic.
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and critic.
     The return value is a tuple of tensors in the following order:
     ``["loss_objective"]``
         + ``["loss_critic"]`` if critic_coef is not None
@@ -154,6 +155,7 @@ class A2CLoss(LossModule):
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),
         ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated = torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
@@ -167,6 +169,7 @@ class A2CLoss(LossModule):
         ...     observation = torch.randn(*batch, n_obs),
         ...     action = spec.rand(batch),
         ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),
+        ...     next_terminated = torch.zeros(*batch, 1, dtype=torch.bool),
         ...     next_reward = torch.randn(*batch, 1),
         ...     next_observation = torch.randn(*batch, n_obs))
         >>> loss_obj.backward()
@@ -193,6 +196,9 @@ class A2CLoss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -201,6 +207,7 @@ class A2CLoss(LossModule):
         action: NestedKey = "action"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
@@ -257,6 +264,7 @@ class A2CLoss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor.in_keys,
             *[("next", key) for key in self.actor.in_keys],
         ]
@@ -288,6 +296,7 @@ class A2CLoss(LossModule):
                 value=self.tensor_keys.value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
 
     def reset(self) -> None:
@@ -399,5 +408,6 @@ class A2CLoss(LossModule):
             "value_target": self.tensor_keys.value_target,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)

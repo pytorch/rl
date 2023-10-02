@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import numpy as np
 import torch.nn
 import torch.optim
 
@@ -51,8 +50,8 @@ def make_ppo_models_state(proof_environment):
     num_outputs = proof_environment.action_spec.shape[-1]
     distribution_class = TanhNormal
     distribution_kwargs = {
-        "min": proof_environment.action_spec.space.minimum,
-        "max": proof_environment.action_spec.space.maximum,
+        "min": proof_environment.action_spec.space.low,
+        "max": proof_environment.action_spec.space.high,
         "tanh_loc": False,
     }
 
@@ -136,6 +135,6 @@ def eval_model(actor, test_env, num_episodes=3):
             max_steps=10_000_000,
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
-        test_rewards = np.append(test_rewards, reward.cpu().numpy())
+        test_rewards.append(reward.cpu())
     del td_test
-    return test_rewards.mean()
+    return torch.cat(test_rewards, 0).mean()
