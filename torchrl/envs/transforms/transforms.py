@@ -74,7 +74,15 @@ def _apply_to_composite(function):
     def new_fun(self, observation_spec):
         if isinstance(observation_spec, CompositeSpec):
             d = observation_spec._specs
-            for in_key, out_key in zip(self.in_keys, self.out_keys):
+
+            in_keys = self.in_keys
+            if in_keys is None:
+                in_keys = []
+            out_keys = self.out_keys
+            if out_keys is None:
+                out_keys = []
+
+            for in_key, out_key in zip(in_keys, out_keys):
                 if in_key in observation_spec.keys(True, True):
                     d[out_key] = function(self, observation_spec[in_key].clone())
             return CompositeSpec(
@@ -102,7 +110,9 @@ def _apply_to_composite_inv(function):
             state_spec = CompositeSpec(shape=input_spec.shape, device=input_spec.device)
         else:
             state_spec = state_spec.clone()
-        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+        in_keys_inv = self.in_keys_inv
+        out_keys_inv = self.out_keys_inv
+        for in_key, out_key in zip(in_keys_inv, out_keys_inv):
             if in_key != out_key:
                 # we only change the input spec if the key is the same
                 continue
@@ -155,26 +165,70 @@ class Transform(nn.Module):
         out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         super().__init__()
-        if in_keys is None:
-            in_keys = []
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
+        if isinstance(in_keys_inv, (str, tuple)):
+            in_keys_inv = [in_keys_inv]
+        if isinstance(out_keys_inv, (str, tuple)):
+            out_keys_inv = [out_keys_inv]
 
         self.in_keys = in_keys
         if out_keys is None:
-            out_keys = copy(self.in_keys)
+            out_keys = copy(in_keys)
         self.out_keys = out_keys
-        if in_keys_inv is None:
-            in_keys_inv = []
         self.in_keys_inv = in_keys_inv
         if out_keys_inv is None:
-            out_keys_inv = copy(self.in_keys_inv)
+            out_keys_inv = copy(in_keys_inv)
         self.out_keys_inv = out_keys_inv
         self._missing_tolerance = False
         self.__dict__["_container"] = None
         self.__dict__["_parent"] = None
+
+    @property
+    def in_keys(self):
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys is None:
+            return []
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value):
+        self._in_keys = value
+
+    @property
+    def out_keys(self):
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is None:
+            return []
+        return out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
+    @property
+    def in_keys_inv(self):
+        in_keys_inv = self.__dict__.get("_in_keys_inv", None)
+        if in_keys_inv is None:
+            return []
+        return in_keys_inv
+
+    @in_keys_inv.setter
+    def in_keys_inv(self, value):
+        self._in_keys_inv = value
+
+    @property
+    def out_keys_inv(self):
+        out_keys_inv = self.__dict__.get("_out_keys_inv", None)
+        if out_keys_inv is None:
+            return []
+        return out_keys_inv
+
+    @out_keys_inv.setter
+    def out_keys_inv(self, value):
+        self._out_keys_inv = value
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Resets a transform if it is stateful."""
@@ -2726,14 +2780,22 @@ class DTypeCastTransform(Transform):
         tensor. For large data structures, this can impact performance as this
         scanning doesn't come for free. The keys to be
         transformed will not be cached.
+        Note that, in this case, the out_keys (resp.
+        out_keys_inv) cannot be passed as the order on which the keys are processed
+        cannot be anticipated precisely.
 
     Args:
         dtype_in (torch.dtype): the input dtype (from the env).
         dtype_out (torch.dtype): the output dtype (for model training).
         in_keys (sequence of NestedKey, optional): list of ``dtype_in`` keys to be converted to
             ``dtype_out`` before being exposed to external objects and functions.
+        out_keys (sequence of NestedKey, optional): list of destination keys.
+            Defaults to ``in_keys`` if not provided.
         in_keys_inv (sequence of NestedKey, optional): list of ``dtype_out`` keys to be converted to
             ``dtype_in`` before being passed to the contained base_env or storage.
+        out_keys_inv (sequence of NestedKey, optional): list of destination keys for inverse
+            transform.
+            Defaults to ``in_keys_inv`` if not provided.
 
     Examples:
         >>> td = TensorDict(
@@ -2817,78 +2879,143 @@ class DTypeCastTransform(Transform):
         dtype_in: torch.dtype,
         dtype_out: torch.dtype,
         in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
         self.dtype_in = dtype_in
         self.dtype_out = dtype_out
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+
+    @property
+    def in_keys(self):
+        in_keys = self.__dict__.get("_in_keys", None)
         if in_keys is None:
-            self._keys_unset = True
+            parent = self.parent
+            if parent is None:
+                # in_keys=None means all entries of dtype_in will be mapped to dtype_out
+                return None
             in_keys = []
-        else:
-            self._keys_unset = False
+            for key, spec in parent.observation_spec.items(True, True):
+                if spec.dtype == self.dtype_in:
+                    in_keys.append(unravel_key(key))
+            for key, spec in parent.full_reward_spec.items(True, True):
+                if spec.dtype == self.dtype_in:
+                    in_keys.append(unravel_key(key))
+            self._in_keys = in_keys
+            if self.__dict__.get("_out_keys", None) is None:
+                self.out_keys = copy(in_keys)
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._in_keys = value
+
+    @property
+    def out_keys(self):
+        return self.__dict__.get("_out_keys", None)
+
+    @out_keys.setter
+    def out_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._out_keys = value
+
+    @property
+    def in_keys_inv(self):
+        in_keys_inv = self.__dict__.get("_in_keys_inv", None)
         if in_keys_inv is None:
-            self._keys_inv_unset = True
+            parent = self.parent
+            if parent is None:
+                # in_keys_inv=None means all entries of dtype_out will be mapped to dtype_in
+                return None
             in_keys_inv = []
-        else:
-            self._keys_inv_unset = False
+            for key, spec in parent.full_action_spec.items(True, True):
+                if spec.dtype == self.dtype_in:
+                    in_keys_inv.append(unravel_key(key))
+            for key, spec in parent.full_state_spec.items(True, True):
+                if spec.dtype == self.dtype_in:
+                    in_keys_inv.append(unravel_key(key))
+            self._in_keys_inv = in_keys_inv
+            if self.__dict__.get("_out_keys_inv", None) is None:
+                self.out_keys_inv = copy(in_keys_inv)
+        return in_keys_inv
 
-        super().__init__(in_keys=in_keys, in_keys_inv=in_keys_inv)
+    @in_keys_inv.setter
+    def in_keys_inv(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._in_keys_inv = value
 
-    def _set_in_keys(self):
-        env_base = self.parent
-        if env_base is not None:
-            # retrieve the specs that are self.dtype_in
-            if self._keys_unset:
-                in_keys = []
-                observation_spec = env_base.observation_spec
-                for key, spec in observation_spec.items(True, True):
-                    if spec.dtype == self.dtype_in:
-                        in_keys.append(unravel_key(key))
-                reward_spec = env_base.reward_spec
-                if reward_spec.dtype == self.dtype_in:
-                    in_keys.append(unravel_key(env_base.reward_key))
+    @property
+    def out_keys_inv(self):
+        return self.__dict__.get("_out_keys_inv", None)
 
-                self.in_keys = self.out_keys = in_keys
-                self._keys_unset = False
-            if self._keys_inv_unset:
-                in_keys_inv = []
-                state_spec = env_base.state_spec
-                if state_spec is not None:
-                    for key, spec in state_spec.items(True, True):
-                        if spec.dtype == self.dtype_in:
-                            in_keys_inv.append(unravel_key(key))
-                action_spec = env_base.action_spec
-                if action_spec.dtype == self.dtype_in:
-                    in_keys_inv.append(unravel_key(env_base.action_key))
-                self.in_keys_inv = self.out_keys_inv = in_keys_inv
-                self._keys_inv_unset = False
-            self._container.empty_cache()
+    @out_keys_inv.setter
+    def out_keys_inv(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._out_keys_inv = value
 
     @dispatch(source="in_keys", dest="out_keys")
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform."""
-        if self._keys_unset:
-            self._set_in_keys()
-            for in_key, data in tensordict.items(True, True):
-                if data.dtype == self.dtype_in:
-                    out_key = in_key
-                    data = self._apply_transform(data)
-                    tensordict.set(out_key, data)
-            return tensordict
-        return super().forward(tensordict)
+        in_keys = self.in_keys
+        out_keys = self.out_keys
+        if in_keys is None:
+            if out_keys is not None:
+                raise ValueError(
+                    "in_keys wasn't provided and couldn't be retrieved. However, "
+                    "out_keys was passed to the constructor. Since the order of the "
+                    "entries mapped from dtype_in to dtype_out cannot be guaranteed, "
+                    "this functionality is not covered. Consider passing the in_keys "
+                    "or not passing any out_keys."
+                )
+            for in_key, item in list(tensordict.items(True, True)):
+                if item.dtype == self.dtype_in:
+                    item = self._apply_transform(item)
+                    tensordict.set(in_key, item)
+        else:
+            # we made sure that if in_keys is not None, out_keys is not None either
+            for in_key, out_key in zip(in_keys, out_keys):
+                item = self._apply_transform(tensordict.get(in_key))
+                tensordict.set(out_key, item)
+        return tensordict
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        if self._keys_inv_unset:
-            self._set_in_keys()
-            # we can't differentiate between content of forward and inverse
-            tensordict = tensordict.clone(False)
-            for in_key, data in tensordict.items(True, True):
-                if data.dtype == self.dtype_out:
-                    out_key = in_key
-                    data = self._inv_apply_transform(data)
-                    tensordict.set(out_key, data)
+        in_keys_inv = self.in_keys_inv
+        out_keys_inv = self.out_keys_inv
+        if in_keys_inv is None:
+            if out_keys_inv is not None:
+                raise ValueError(
+                    "in_keys_inv wasn't provided and couldn't be retrieved. However, "
+                    "out_keys_inv was passed to the constructor. Since the order of the "
+                    "entries mapped from dtype_in to dtype_out cannot be guaranteed, "
+                    "this functionality is not covered. Consider passing the in_keys_inv "
+                    "or not passing any out_keys_inv."
+                )
+            for in_key_inv, item in list(tensordict.items(True, True)):
+                if item.dtype == self.dtype_out:
+                    item = self._inv_apply_transform(item)
+                    tensordict.set(in_key_inv, item)
             return tensordict
-        return super()._inv_call(tensordict)
+        else:
+            return super()._inv_call(tensordict)
 
     def _apply_transform(self, obs: torch.Tensor) -> torch.Tensor:
         return obs.to(self.dtype_out)
@@ -2901,52 +3028,81 @@ class DTypeCastTransform(Transform):
             for key in spec:
                 self._transform_spec(spec[key])
         else:
+            spec = spec.clone()
             spec.dtype = self.dtype_out
             space = spec.space
             if isinstance(space, ContinuousBox):
                 space.low = space.low.to(self.dtype_out)
                 space.high = space.high.to(self.dtype_out)
+        return spec
 
     def transform_input_spec(self, input_spec: TensorSpec) -> TensorSpec:
-        if self._keys_inv_unset:
-            self._set_in_keys()
-        action_spec = input_spec["full_action_spec"]
-        state_spec = input_spec["full_state_spec"]
-        for key in self.in_keys_inv:
-            if key in action_spec.keys(True):
-                _spec = action_spec
-            elif state_spec is not None and key in state_spec.keys(True):
-                _spec = state_spec
+        full_action_spec = input_spec["full_action_spec"]
+        full_state_spec = input_spec["full_state_spec"]
+        # if this method is called, then it must have a parent and in_keys_inv will be defined
+        if self.in_keys_inv is None:
+            raise NotImplementedError(
+                f"Calling transform_input_spec without a parent environment isn't supported yet for {type(self)}."
+            )
+        for in_key_inv, out_key_inv in zip(self.in_keys_inv, self.out_keys_inv):
+            if in_key_inv in full_action_spec.keys(True):
+                _spec = full_action_spec[in_key_inv]
+                target = "action"
+            elif in_key_inv in full_state_spec.keys(True):
+                _spec = full_state_spec[in_key_inv]
+                target = "state"
             else:
-                raise KeyError(f"Key {key} not found in state_spec and action_spec.")
-            if _spec[key].dtype != self.dtype_in:
-                raise TypeError(
-                    f"input_spec[{key}].dtype is not {self.dtype_in}: {input_spec[key].dtype}"
+                raise KeyError(
+                    f"Key {in_key_inv} not found in state_spec and action_spec."
                 )
-            self._transform_spec(_spec[key])
+            if _spec.dtype != self.dtype_in:
+                raise TypeError(
+                    f"input_spec[{in_key_inv}].dtype is not {self.dtype_in}: {in_key_inv.dtype}"
+                )
+            _spec = self._transform_spec(_spec)
+            if target == "action":
+                full_action_spec[out_key_inv] = _spec
+            elif target == "state":
+                full_state_spec[out_key_inv] = _spec
+            else:
+                # unreachable
+                raise RuntimeError
         return input_spec
 
-    @_apply_to_composite
-    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        reward_key = self.parent.reward_key if self.parent is not None else "reward"
-        if unravel_key(reward_key) in self.in_keys:
-            if reward_spec.dtype != self.dtype_in:
-                raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
+    def transform_output_spec(self, output_spec: CompositeSpec) -> CompositeSpec:
+        if self.in_keys is None:
+            raise NotImplementedError(
+                f"Calling transform_reward_spec without a parent environment isn't supported yet for {type(self)}."
+            )
+        full_reward_spec = output_spec["full_reward_spec"]
+        for reward_key, reward_spec in list(full_reward_spec.items(True, True)):
+            # find out_key that match the in_key
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
+                if reward_key == in_key:
+                    if reward_spec.dtype != self.dtype_in:
+                        raise TypeError(f"reward_spec.dtype is not {self.dtype_in}")
+                    full_reward_spec[out_key] = self._transform_spec(reward_spec)
+        output_spec["full_observation_spec"] = self.transform_observation_spec(
+            output_spec["full_observation_spec"]
+        )
+        return output_spec
 
-            self._transform_spec(reward_spec)
-        return reward_spec
-
-    def transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        if self._keys_unset:
-            self._set_in_keys()
-        return self._transform_observation_spec(observation_spec)
-
-    @_apply_to_composite
-    def _transform_observation_spec(self, observation_spec: TensorSpec) -> TensorSpec:
-        self._transform_spec(observation_spec)
-        return observation_spec
+    def transform_observation_spec(self, observation_spec):
+        full_observation_spec = observation_spec
+        for observation_key, observation_spec in list(
+            full_observation_spec.items(True, True)
+        ):
+            # find out_key that match the in_key
+            for in_key, out_key in zip(self.in_keys, self.out_keys):
+                if observation_key == in_key:
+                    if observation_spec.dtype != self.dtype_in:
+                        raise TypeError(
+                            f"observation_spec.dtype is not {self.dtype_in}"
+                        )
+                    full_observation_spec[out_key] = self._transform_spec(
+                        observation_spec
+                    )
+        return full_observation_spec
 
     def __repr__(self) -> str:
         s = (
@@ -2973,12 +3129,20 @@ class DoubleToFloat(DTypeCastTransform):
         tensor. For large data structures, this can impact performance as this
         scanning doesn't come for free. The keys to be
         transformed will not be cached.
+        Note that, in this case, the out_keys (resp.
+        out_keys_inv) cannot be passed as the order on which the keys are processed
+        cannot be anticipated precisely.
 
     Args:
         in_keys (sequence of NestedKey, optional): list of double keys to be converted to
             float before being exposed to external objects and functions.
+        out_keys (sequence of NestedKey, optional): list of destination keys.
+            Defaults to ``in_keys`` if not provided.
         in_keys_inv (sequence of NestedKey, optional): list of float keys to be converted to
             double before being passed to the contained base_env or storage.
+        out_keys_inv (sequence of NestedKey, optional): list of destination keys for inverse
+            transform.
+            Defaults to ``in_keys_inv`` if not provided.
 
     Examples:
         >>> td = TensorDict(
@@ -3060,9 +3224,18 @@ class DoubleToFloat(DTypeCastTransform):
     def __init__(
         self,
         in_keys: Optional[Sequence[NestedKey]] = None,
+        out_keys: Optional[Sequence[NestedKey]] = None,
         in_keys_inv: Optional[Sequence[NestedKey]] = None,
+        out_keys_inv: Optional[Sequence[NestedKey]] = None,
     ):
-        super().__init__(torch.double, torch.float, in_keys, in_keys_inv)
+        super().__init__(
+            dtype_in=torch.double,
+            dtype_out=torch.float,
+            in_keys=in_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys=out_keys,
+            out_keys_inv=out_keys_inv,
+        )
 
 
 class DeviceCastTransform(Transform):
