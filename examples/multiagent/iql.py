@@ -21,6 +21,7 @@ from torchrl.modules import EGreedyWrapper, QValueModule, SafeSequential
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DQNLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
+from utils.utils import DoneTransform
 
 
 def rendering_callback(env, td):
@@ -111,6 +112,7 @@ def train(cfg: "DictConfig"):  # noqa: F821
         storing_device=cfg.train.device,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
+        postproc=DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys),
     )
 
     replay_buffer = TensorDictReplayBuffer(
@@ -125,6 +127,8 @@ def train(cfg: "DictConfig"):  # noqa: F821
         action=env.action_key,
         value=("agents", "chosen_action_value"),
         reward=env.reward_key,
+        done=("agents", "done"),
+        terminated=("agents", "terminated"),
     )
     loss_module.make_value_estimator(ValueEstimators.TD0, gamma=cfg.loss.gamma)
     target_net_updater = SoftUpdate(loss_module, eps=1 - cfg.loss.tau)
@@ -143,13 +147,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
         print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-
-        tensordict_data.set(
-            ("next", "done"),
-            tensordict_data.get(("next", "done"))
-            .unsqueeze(-1)
-            .expand(tensordict_data.get(("next", env.reward_key)).shape),
-        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames
