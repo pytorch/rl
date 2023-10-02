@@ -1,6 +1,6 @@
 # task and env
 env:
-  name: Walker2d-v3
+  name: HalfCheetah-v3
   task: ""
   exp_name: ${env.name}_TD3
   library: gym
