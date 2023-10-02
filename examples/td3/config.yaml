@@ -5,7 +5,7 @@ env:
   exp_name: ${env.name}_TD3
   library: gym
   seed: 42
-  max_episode_steps: 5000
+  max_episode_steps: 1000
 
 # collector
 collector:
@@ -32,7 +32,7 @@ optim:
   loss_function: l2
   lr: 3.0e-4
   weight_decay: 0.0
-  adam_eps: 1e-8
+  adam_eps: 1e-4
   batch_size: 256
   target_update_polyak: 0.995
   policy_update_delay: 2

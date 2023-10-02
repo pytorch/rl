@@ -127,19 +127,17 @@ def main(cfg: "DictConfig"):  # noqa: F821
                 sampled_tensordict = replay_buffer.sample().clone()
 
                 # Compute loss
-                loss_td = loss_module(sampled_tensordict)
-
-                actor_loss = loss_td["loss_actor"]
-                q_loss = loss_td["loss_qvalue"]
+                q_loss, *_ = loss_module.value_loss(sampled_tensordict)
 
                 # Update critic
                 optimizer_critic.zero_grad()
-                q_loss.backward(retain_graph=update_actor)
+                q_loss.backward()
                 optimizer_critic.step()
                 q_losses.append(q_loss.item())
 
                 # Update actor
                 if update_actor:
+                    actor_loss, *_ = loss_module.actor_loss(sampled_tensordict)
                     optimizer_actor.zero_grad()
                     actor_loss.backward()
                     optimizer_actor.step()

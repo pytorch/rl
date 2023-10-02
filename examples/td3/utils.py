@@ -2,6 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import tempfile
+from contextlib import nullcontext
 
 import torch
 
@@ -16,6 +18,7 @@ from torchrl.envs import (
     InitTracker,
     ParallelEnv,
     RewardSum,
+    StepCounter,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import GymEnv, set_gym_backend
@@ -39,26 +42,31 @@ from torchrl.objectives.td3 import TD3Loss
 # -----------------
 
 
-def env_maker(task, device="cpu", from_pixels=False, max_episode_steps=1000):
+def env_maker(
+    task,
+    device="cpu",
+    from_pixels=False,
+):
     with set_gym_backend("gym"):
         return GymEnv(
             task,
             device=device,
             from_pixels=from_pixels,
-            max_episode_steps=max_episode_steps,
         )
 
 
-def apply_env_transforms(env, reward_scaling=1.0):
+def apply_env_transforms(env, max_episode_steps, reward_scaling=1.0):
     transformed_env = TransformedEnv(
         env,
         Compose(
+            StepCounter(max_steps=max_episode_steps),
             InitTracker(),
-            RewardScaling(loc=0.0, scale=reward_scaling),
-            DoubleToFloat("observation"),
-            RewardSum(),
+            DoubleToFloat(),
         ),
     )
+    if reward_scaling != 1.0:
+        transformed_env.append_transform(RewardScaling(loc=0.0, scale=reward_scaling))
+    transformed_env.append_transform(RewardSum())
     return transformed_env
 
 
@@ -66,24 +74,18 @@ def make_environment(cfg):
     """Make environments for training and evaluation."""
     parallel_env = ParallelEnv(
         cfg.collector.env_per_collector,
-        EnvCreator(
-            lambda: env_maker(
-                task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-            )
-        ),
+        EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
     )
     parallel_env.set_seed(cfg.env.seed)
 
-    train_env = apply_env_transforms(parallel_env)
+    train_env = apply_env_transforms(
+        parallel_env, max_episode_steps=cfg.env.max_episode_steps
+    )
 
     eval_env = TransformedEnv(
         ParallelEnv(
             cfg.collector.env_per_collector,
-            EnvCreator(
-                lambda: env_maker(
-                    task=cfg.env.name, max_episode_steps=cfg.env.max_episode_steps
-                )
-            ),
+            EnvCreator(lambda task=cfg.env.name: env_maker(task=task)),
         ),
         train_env.transform.clone(),
     )
@@ -115,35 +117,40 @@ def make_replay_buffer(
     batch_size,
     prb=False,
     buffer_size=1000000,
-    buffer_scratch_dir="/tmp/",
+    buffer_scratch_dir=None,
     device="cpu",
     prefetch=3,
 ):
-    if prb:
-        replay_buffer = TensorDictPrioritizedReplayBuffer(
-            alpha=0.7,
-            beta=0.5,
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    else:
-        replay_buffer = TensorDictReplayBuffer(
-            pin_memory=False,
-            prefetch=prefetch,
-            storage=LazyMemmapStorage(
-                buffer_size,
-                scratch_dir=buffer_scratch_dir,
-                device=device,
-            ),
-            batch_size=batch_size,
-        )
-    return replay_buffer
+    with (
+        tempfile.TemporaryDirectory()
+        if buffer_scratch_dir is None
+        else nullcontext(buffer_scratch_dir)
+    ) as scratch_dir:
+        if prb:
+            replay_buffer = TensorDictPrioritizedReplayBuffer(
+                alpha=0.7,
+                beta=0.5,
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        else:
+            replay_buffer = TensorDictReplayBuffer(
+                pin_memory=False,
+                prefetch=prefetch,
+                storage=LazyMemmapStorage(
+                    buffer_size,
+                    scratch_dir=scratch_dir,
+                    device=device,
+                ),
+                batch_size=batch_size,
+            )
+        return replay_buffer
 
 
 # ====================================================================
