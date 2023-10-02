@@ -208,10 +208,10 @@ class Transform(nn.Module):
         :meth:`TransformedEnv.reset`.
 
         """
-        tensordict_keys = set(tensordict.keys(include_nested=True))
         for in_key, out_key in zip(self.in_keys, self.out_keys):
-            if in_key in tensordict_keys:
-                observation = self._apply_transform(tensordict.get(in_key))
+            value = tensordict.get(in_key, default=None)
+            if value is not None:
+                observation = self._apply_transform(value)
                 tensordict.set(
                     out_key,
                     observation,
