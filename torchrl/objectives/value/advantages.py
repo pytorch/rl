@@ -242,9 +242,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 and ``"next"`` tensordict state as returned by the environment)
                 necessary to compute the value estimates and the TDEstimate.
                 The data passed to this module should be structured as
-                :obj:`[*B, T, F]` where :obj:`B` are
+                :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the
-                feature dimension(s).
+                feature dimension(s). The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -500,9 +500,9 @@ class TD0Estimator(ValueEstimatorBase):
                 tensordict state as returned by the environment) necessary to
                 compute the value estimates and the TDEstimate.
                 The data passed to this module should be structured as
-                :obj:`[*B, T, F]` where :obj:`B` are
+                :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the
-                feature dimension(s).
+                feature dimension(s). The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -701,8 +701,9 @@ class TD1Estimator(ValueEstimatorBase):
                 ``("next", "done")``, ``("next", "terminated")``,
                 and ``"next"`` tensordict state as returned by the environment)
                 necessary to compute the value estimates and the TDEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -910,8 +911,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
                 ``("next", "done")``, ``("next", "terminated")``,
                 and ``"next"`` tensordict state as returned by the environment)
                 necessary to compute the value estimates and the TDLambdaEstimate.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the
@@ -1150,8 +1152,9 @@ class GAE(ValueEstimatorBase):
                 ``("next", "done")``, ``("next", "terminated")``,
                 and ``"next"`` tensordict state as returned by the environment)
                 necessary to compute the value estimates and the GAE.
-                The data passed to this module should be structured as :obj:`[*B, T, F]` where :obj:`B` are
+                The data passed to this module should be structured as :obj:`[*B, T, *F]` where :obj:`B` are
                 the batch size, :obj:`T` the time dimension and :obj:`F` the feature dimension(s).
+                The tensordict must have shape ``[*B, T]``.
             params (TensorDictBase, optional): A nested TensorDict containing the params
                 to be passed to the functional value network module.
             target_params (TensorDictBase, optional): A nested TensorDict containing the

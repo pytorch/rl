@@ -26,6 +26,7 @@ from torchrl.modules import (
 from torchrl.modules.models.multiagent import MultiAgentMLP
 from torchrl.objectives import DDPGLoss, SoftUpdate, ValueEstimators
 from utils.logging import init_logging, log_evaluation, log_training
+from utils.utils import DoneTransform
 
 
 def rendering_callback(env, td):
@@ -140,10 +141,15 @@ def train(cfg: "DictConfig"):  # noqa: F821
         sampler=SamplerWithoutReplacement(),
         batch_size=cfg.train.minibatch_size,
     )
+    replay_buffer.append_transform(
+        DoneTransform(reward_key=env.reward_key, done_keys=env.done_keys)
+    )
 
     loss_module = DDPGLoss(
         actor_network=policy, value_network=value_module, delay_value=True
     )
+    loss_module.set_keys(done="done_expand", terminated="terminated_expand")
+
     loss_module.set_keys(
         state_action_value=("agents", "state_action_value"),
         reward=env.reward_key,
@@ -169,13 +175,6 @@ def train(cfg: "DictConfig"):  # noqa: F821
         print(f"\nIteration {i}")
 
         sampling_time = time.time() - sampling_start
-
-        tensordict_data.set(
-            ("next", "done"),
-            tensordict_data.get(("next", "done"))
-            .unsqueeze(-1)
-            .expand(tensordict_data.get(("next", env.reward_key)).shape),
-        )  # We need to expand the done to match the reward shape
 
         current_frames = tensordict_data.numel()
         total_frames += current_frames

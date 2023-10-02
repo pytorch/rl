@@ -521,7 +521,7 @@ def td1_return_estimate(
         gamma = gamma * not_terminated
         g = next_state_value[..., -1, :]
         for i in reversed(range(T)):
-            # if not done and not terminated, get the bootstrapped value
+            # if not done (and hence not terminated), get the bootstrapped value
             # if done but not terminated, get nex_val
             # if terminated, take nothing (gamma = 0)
             dnt = done_but_not_terminated[..., i, :]
