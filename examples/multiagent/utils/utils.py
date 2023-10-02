@@ -31,7 +31,7 @@ class DoneTransform(Transform):
 
     def forward(self, tensordict):
         for done_key in self.done_keys:
-            new_name = swap_last(self.reward_key, self.done_keys)
+            new_name = swap_last(self.reward_key, done_key)
             tensordict.set(
                 ("next", new_name),
                 tensordict.get(("next", done_key))
