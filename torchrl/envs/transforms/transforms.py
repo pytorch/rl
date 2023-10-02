@@ -4395,6 +4395,10 @@ class RewardSum(Transform):
 
     @in_keys.setter
     def in_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._in_keys = value
 
     @property
@@ -4409,14 +4413,18 @@ class RewardSum(Transform):
         return out_keys
 
     @out_keys.setter
-    def out_keys(self, out_keys):
+    def out_keys(self, value):
         # we must access the private attribute because this check occurs before
         # the parent env is defined
-        if len(self._in_keys) != len(out_keys):
+        if value is not None and len(self._in_keys) != len(value):
             raise ValueError(
                 "RewardSum expects the same number of input and output keys"
             )
-        self._out_keys = out_keys
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
+        self._in_keys = value
 
     @property
     def reset_keys(self):
@@ -4435,6 +4443,10 @@ class RewardSum(Transform):
 
     @reset_keys.setter
     def reset_keys(self, value):
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(val) for val in value]
         self._reset_keys = value
 
     def reset(self, tensordict: TensorDictBase) -> TensorDictBase:
