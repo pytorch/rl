@@ -297,13 +297,6 @@ def vec_generalized_advantage_estimate(
         == done.shape
         == terminated.shape
     ):
-        print(
-            next_state_value.shape,
-            state_value.shape,
-            reward.shape,
-            done.shape,
-            terminated.shape,
-        )
         raise RuntimeError(SHAPE_ERR)
     dtype = state_value.dtype
     *batch_size, time_steps, lastdim = terminated.shape
@@ -417,6 +410,7 @@ def td0_return_estimate(
     *,
     done: torch.Tensor | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    # noqa: D417
     """TD(0) discounted return estimate of a trajectory.
 
     Also known as bootstrapped Temporal Difference or one-step return.
@@ -838,6 +832,8 @@ def td_lambda_return_estimate(
             dn = done[..., i, :].int()
             nv = next_state_value[..., i, :]
             lmd = lmbda[..., i, :]
+            # if done, the bootstrapped gain is the next value, otherwise it's the
+            # value we computed during the previous iter
             g = g * (1 - dn) + nv * dn
             g = returns[..., i, :] = reward[..., i, :] + gamma[..., i, :] * (
                 (1 - lmd) * nv + lmd * g
