@@ -6760,8 +6760,8 @@ class TestVIP(TransformBase):
         with pytest.raises(AssertionError):
             torch.testing.assert_close(cur_embedding[:, 1:], last_embedding[:, :-1])
 
-        explicit_reward = -torch.norm(cur_embedding - goal_embedding, dim=-1) - (
-            -torch.norm(last_embedding - goal_embedding, dim=-1)
+        explicit_reward = -torch.linalg.norm(cur_embedding - goal_embedding, dim=-1) - (
+            -torch.linalg.norm(last_embedding - goal_embedding, dim=-1)
         )
         torch.testing.assert_close(explicit_reward, td["next", "reward"].squeeze())
 
