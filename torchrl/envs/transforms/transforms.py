@@ -4225,7 +4225,9 @@ class RewardSum(Transform):
                     else:
                         tensordict.set(
                             out_key,
-                            value.masked_fill(expand_as_right(_reset, value), 0.0),
+                            value.masked_fill(
+                                expand_as_right(_reset.squeeze(-1), value), 0.0
+                            ),
                         )
                 else:
                     # Since the episode reward is not in the tensordict, we need to allocate it
