@@ -4145,32 +4145,6 @@ class RewardSum(Transform):
         reset_keys: Optional[Sequence[NestedKey]] = None,
     ):
         """Initialises the transform. Filters out non-reward input keys and defines output keys."""
-        # if in_keys is None:
-        #     in_keys = ["reward"]
-        # if out_keys is None:
-        #     out_keys = [
-        #         _replace_last(in_key, f"episode_{_unravel_key_to_tuple(in_key)[-1]}")
-        #         for in_key in in_keys
-        #     ]
-        # if len(in_keys) != len(out_keys):
-        #     raise ValueError(
-        #         "RewardSum expects the same number of input and output keys"
-        #     )
-        # if done_keys is None:
-        #     # The default if done_keys is not provided is that we expect
-        #     # to find the dones in the same tensordicts as the in_keys
-        #     self._done_keys = [_replace_last(in_key, "done") for in_key in in_keys]
-        # elif isinstance(done_keys, list) and len(done_keys) == 1:
-        #     # If there is one done key than it is used for all rewards
-        #     self._done_keys = done_keys * len(in_keys)
-        # elif isinstance(done_keys, list) and len(done_keys) == len(in_keys):
-        #     # The full list of done_keys has been provided
-        #     self._done_keys = done_keys
-        # else:
-        #     raise ValueError(
-        #         f"Provided done_keys should be a list of length 1 or length equals to the number of in_keys, got {done_keys}"
-        #     )
-        #
         super().__init__(in_keys=in_keys, out_keys=out_keys)
         self._reset_keys = reset_keys
 
@@ -4244,8 +4218,8 @@ class RewardSum(Transform):
             _reset = tensordict.get(reset_key, None)
 
             if _reset is None or _reset.any():
-                if out_key in tensordict.keys(True, True):
-                    value = tensordict.get(out_key)
+                value = tensordict.get(out_key, default=None)
+                if value is not None:
                     if _reset is None:
                         tensordict.set(out_key, torch.zeros_like(value))
                     else:
@@ -4260,7 +4234,6 @@ class RewardSum(Transform):
                         out_key,
                         self.parent.full_reward_spec[in_key].zero(),
                     )
-
         return tensordict
 
     def _step(

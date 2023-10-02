@@ -4546,7 +4546,7 @@ class TestRewardSum(TransformBase):
             t = RewardSum()
         env = TransformedEnv(
             base_env,
-            Compose(RewardSum()),
+            Compose(t),
         )
         policy = MultiKeyCountingEnvPolicy(
             full_action_spec=env.action_spec, deterministic=True
