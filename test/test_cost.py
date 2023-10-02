@@ -5730,12 +5730,12 @@ class TestA2C(LossModuleTestBase):
     seed = 0
 
     def _create_mock_actor(
-        self,
-        batch=2,
-        obs_dim=3,
-        action_dim=4,
-        device="cpu",
-        observation_key="observation",
+            self,
+            batch=2,
+            obs_dim=3,
+            action_dim=4,
+            device="cpu",
+            observation_key="observation",
     ):
         # Actor
         action_spec = BoundedTensorSpec(
@@ -5747,20 +5747,20 @@ class TestA2C(LossModuleTestBase):
         )
         actor = ProbabilisticActor(
             module=module,
+            distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
-            distribution_class=TanhNormal,
         )
         return actor.to(device)
 
     def _create_mock_value(
-        self,
-        batch=2,
-        obs_dim=3,
-        action_dim=4,
-        device="cpu",
-        out_keys=None,
-        observation_key="observation",
+            self,
+            batch=2,
+            obs_dim=3,
+            action_dim=4,
+            device="cpu",
+            out_keys=None,
+            observation_key="observation",
     ):
         module = nn.Linear(obs_dim, 1)
         value = ValueOperator(
@@ -5769,6 +5769,63 @@ class TestA2C(LossModuleTestBase):
             out_keys=out_keys,
         )
         return value.to(device)
+
+    def _create_mock_actor_value(self, batch=2, obs_dim=3, action_dim=4, device="cpu"):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        base_layer = nn.Linear(obs_dim, 5)
+        net = NormalParamWrapper(
+            nn.Sequential(base_layer, nn.Linear(5, 2 * action_dim))
+        )
+        module = TensorDictModule(
+            net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        module = nn.Sequential(base_layer, nn.Linear(5, 1))
+        value = ValueOperator(
+            module=module,
+            in_keys=["observation"],
+        )
+        return actor.to(device), value.to(device)
+
+    def _create_mock_actor_value_shared(
+            self, batch=2, obs_dim=3, action_dim=4, device="cpu"
+    ):
+        # Actor
+        action_spec = BoundedTensorSpec(
+            -torch.ones(action_dim), torch.ones(action_dim), (action_dim,)
+        )
+        base_layer = nn.Linear(obs_dim, 5)
+        common = TensorDictModule(
+            base_layer, in_keys=["observation"], out_keys=["hidden"]
+        )
+        net = nn.Sequential(nn.Linear(5, 2 * action_dim), NormalParamExtractor())
+        module = TensorDictModule(net, in_keys=["hidden"], out_keys=["loc", "scale"])
+        actor_head = ProbabilisticActor(
+            module=module,
+            distribution_class=TanhNormal,
+            in_keys=["loc", "scale"],
+            spec=action_spec,
+        )
+        module = nn.Linear(5, 1)
+        value_head = ValueOperator(
+            module=module,
+            in_keys=["hidden"],
+        )
+        model = ActorValueOperator(common, actor_head, value_head).to(device)
+        return model, model.get_policy_operator(), model.get_value_operator()
+
+    def _create_mock_distributional_actor(
+            self, batch=2, obs_dim=3, action_dim=4, atoms=0, vmin=1, vmax=5
+    ):
+        raise NotImplementedError
 
     def _create_mock_common_layer_setup(
         self, n_obs=3, n_act=4, ncells=4, batch=2, n_hidden=2, T=10

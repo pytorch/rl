@@ -16,7 +16,7 @@ from torchrl.envs import (
     ExplorationType,
     GrayScale,
     NoopResetEnv,
-    ObservationNorm,
+    VecNorm,
     ParallelEnv,
     Resize,
     RewardClipping,
@@ -97,11 +97,7 @@ def make_parallel_env(env_name, num_envs, device, is_test=False):
     if not is_test:
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(DoubleToFloat())
-    env.append_transform(
-        ObservationNorm(
-            in_keys=["pixels"], scale=1 / 255.0, loc=-0.5, standard_normal=False
-        )
-    )
+    env.append_transform(VecNorm(in_keys=["pixels"]))
     return env
 
 

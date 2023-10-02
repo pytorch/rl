@@ -94,6 +94,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         entropy_coef=cfg.loss.entropy_coef,
         critic_coef=cfg.loss.critic_coef,
     )
+    loss_module.set_keys(done="eol")
 
     # Create optimizer
     optim = torch.optim.RMSprop(
@@ -144,10 +145,6 @@ def main(cfg: "DictConfig"):  # noqa: F821
                     / len(episode_length),
                 }
             )
-
-        # Apply episodic end of life
-        data["done"].copy_(data["eol"])
-        data["next", "done"].copy_(data["next", "eol"])
 
         if len(accumulator) < batch_size:
             accumulator.append(data)
