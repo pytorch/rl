@@ -379,7 +379,7 @@ class Transform(nn.Module):
 
     def clone(self):
         self_copy = copy(self)
-        state = copy(self.__dict__)
+        state = deepcopy(self.__dict__)
         state["_container"] = None
         state["_parent"] = None
         self_copy.__dict__.update(state)
