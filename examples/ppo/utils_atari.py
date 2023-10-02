@@ -83,6 +83,7 @@ def make_base_env(
         pixels_only=False,
         device=device,
     )
+    env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
         env.append_transform(EndOfLifeTransform())
