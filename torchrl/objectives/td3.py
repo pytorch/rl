@@ -109,6 +109,7 @@ class TD3Loss(LossModule):
         ...      "observation": torch.randn(*batch, n_obs),
         ...      "action": action,
         ...      ("next", "done"): torch.zeros(*batch, 1, dtype=torch.bool),
+        ...      ("next", "terminated"): torch.zeros(*batch, 1, dtype=torch.bool),
         ...      ("next", "reward"): torch.randn(*batch, 1),
         ...      ("next", "observation"): torch.randn(*batch, n_obs),
         ...  }, batch)
@@ -128,7 +129,7 @@ class TD3Loss(LossModule):
     This class is compatible with non-tensordict based modules too and can be
     used without recurring to any tensordict-related primitive. In this case,
     the expected keyword arguments are:
-    ``["action", "next_reward", "next_done"]`` + in_keys of the actor and qvalue network
+    ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network
     The return value is a tuple of tensors in the following order:
     ``["loss_actor", "loss_qvalue", "pred_value", "state_action_value_actor", "next_state_value", "target_value",]``.
 
@@ -162,6 +163,7 @@ class TD3Loss(LossModule):
         ...         observation=torch.randn(*batch, n_obs),
         ...         action=action,
         ...         next_done=torch.zeros(*batch, 1, dtype=torch.bool),
+        ...         next_terminated=torch.zeros(*batch, 1, dtype=torch.bool),
         ...         next_reward=torch.randn(*batch, 1),
         ...         next_observation=torch.randn(*batch, n_obs))
         >>> loss_actor.backward()
@@ -187,6 +189,9 @@ class TD3Loss(LossModule):
             done (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is done. Will be used for the underlying value estimator.
                 Defaults to ``"done"``.
+            terminated (NestedKey): The key in the input TensorDict that indicates
+                whether a trajectory is terminated. Will be used for the underlying value estimator.
+                Defaults to ``"terminated"``.
         """
 
         action: NestedKey = "action"
@@ -194,6 +199,7 @@ class TD3Loss(LossModule):
         priority: NestedKey = "td_error"
         reward: NestedKey = "reward"
         done: NestedKey = "done"
+        terminated: NestedKey = "terminated"
 
     default_keys = _AcceptedKeys()
     default_value_estimator = ValueEstimators.TD0
@@ -313,6 +319,7 @@ class TD3Loss(LossModule):
                 value=self._tensor_keys.state_action_value,
                 reward=self.tensor_keys.reward,
                 done=self.tensor_keys.done,
+                terminated=self.tensor_keys.terminated,
             )
         self._set_in_keys()
 
@@ -321,6 +328,7 @@ class TD3Loss(LossModule):
             self.tensor_keys.action,
             ("next", self.tensor_keys.reward),
             ("next", self.tensor_keys.done),
+            ("next", self.tensor_keys.terminated),
             *self.actor_network.in_keys,
             *[("next", key) for key in self.actor_network.in_keys],
             *self.qvalue_network.in_keys,
@@ -503,5 +511,6 @@ class TD3Loss(LossModule):
             "value": self.tensor_keys.state_action_value,
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
+            "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
