@@ -108,17 +108,9 @@ def make_ppo_modules_pixels(proof_environment):
     input_shape = proof_environment.observation_spec["pixels"].shape
 
     # Define distribution class and kwargs
-    if isinstance(proof_environment.action_spec.space, DiscreteBox):
-        num_outputs = proof_environment.action_spec.space.n
-        distribution_class = OneHotCategorical
-        distribution_kwargs = {}
-    else:  # is ContinuousBox
-        num_outputs = proof_environment.action_spec.shape
-        distribution_class = TanhNormal
-        distribution_kwargs = {
-            "min": proof_environment.action_spec.space.minimum,
-            "max": proof_environment.action_spec.space.maximum,
-        }
+    num_outputs = proof_environment.action_spec.space.n
+    distribution_class = OneHotCategorical
+    distribution_kwargs = {}
 
     # Define input keys
     in_keys = ["pixels"]
