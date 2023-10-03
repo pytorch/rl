@@ -20,7 +20,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import RayCollector
+    from torchrl.collectors.distributed import RayCollector, RPCDataCollector, DistributedSyncDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -39,9 +39,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Extract other config parameters
     batch_size = cfg.loss.batch_size  # Number of rollouts per batch
-    num_workers = (
-        cfg.collector.num_workers
-    )  # Number of parallel workers collecting rollouts
+    num_workers = cfg.collector.num_workers  # Number of parallel workers collecting rollouts
     lr = cfg.optim.lr
     anneal_lr = cfg.optim.anneal_lr
     sgd_updates = cfg.loss.sgd_updates
@@ -51,7 +49,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         total_frames // (frames_per_batch * batch_size)
     ) * cfg.loss.sgd_updates
 
-    # Create models (check utils_atari.py)
+    # Create models (check utils.py)
     actor, critic = make_ppo_models(cfg.env.env_name)
     actor, critic = actor.to(device), critic.to(device)
 
@@ -62,7 +60,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         "memory": 2 * 1024**3,
     }
     collector = RayCollector(
-        create_env_fn=[make_env(cfg.env.env_name, device)] * 1,
+        create_env_fn=[make_env(cfg.env.env_name, device)] * num_workers,
         policy=actor,
         collector_class=SyncDataCollector,
         frames_per_batch=frames_per_batch,
@@ -72,6 +70,23 @@ def main(cfg: "DictConfig"):  # noqa: F821
         sync=False,
         update_after_each_batch=True,
     )
+
+    # collector = RPCDataCollector(
+    #     create_env_fn=[make_env(cfg.env.env_name, device)] * 1,
+    #     policy=actor,
+    #     collector_class=SyncDataCollector,
+    #     frames_per_batch=frames_per_batch,
+    #     total_frames=total_frames,
+    #     max_frames_per_traj=-1,
+    #     slurm_kwargs={
+    #         "timeout_min": 10,
+    #         "slurm_partition": "3090",
+    #         "slurm_cpus_per_task": 1,
+    #         "slurm_gpus_per_node": 0,
+    #     },
+    #     sync=False,
+    #     update_after_each_batch=True,
+    # )
 
     # Create data buffer
     sampler = SamplerWithoutReplacement()
@@ -160,6 +175,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
             for acc_data in accumulator:
 
+                acc_data = acc_data.to(device)
                 with torch.no_grad():
                     acc_data = adv_module(acc_data)
                 acc_data_reshape = acc_data.reshape(-1)
