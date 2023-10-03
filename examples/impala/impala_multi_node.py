@@ -20,7 +20,10 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import RayCollector, RPCDataCollector, DistributedSyncDataCollector
+    from torchrl.collectors.distributed import (
+        RayCollector,
+        RPCDataCollector,
+    )
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -39,7 +42,9 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     # Extract other config parameters
     batch_size = cfg.loss.batch_size  # Number of rollouts per batch
-    num_workers = cfg.collector.num_workers  # Number of parallel workers collecting rollouts
+    num_workers = (
+        cfg.collector.num_workers
+    )  # Number of parallel workers collecting rollouts
     lr = cfg.optim.lr
     anneal_lr = cfg.optim.anneal_lr
     sgd_updates = cfg.loss.sgd_updates

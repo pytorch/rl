@@ -151,6 +151,17 @@ def _call_value_nets(
     return value, value_
 
 
+def _call_actor_net(
+    actor_net: TensorDictModuleBase,
+    data: TensorDictBase,
+    params: TensorDictBase,
+    log_prob_key: NestedKey,
+):
+    # TODO: extend to handle time dimension (and vmap?)
+    log_pi = actor_net(data.select(actor_net.in_keys)).get(log_prob_key)
+    return log_pi
+
+
 class ValueEstimatorBase(TensorDictModuleBase):
     """An abstract parent class for value function modules.
 
@@ -1543,11 +1554,12 @@ class VTrace(ValueEstimatorBase):
 
         # Compute log prob with current policy
         with hold_out_net(self.actor_network):
-            log_pi = (
-                self.actor_network(tensordict.select(self.actor_network.in_keys))
-                .get(self.tensor_keys.sample_log_prob)
-                .view_as(value)
-            )
+            log_pi = _call_actor_net(
+                actor_net=self.actor_network,
+                data=tensordict,
+                params=None,
+                log_prob_key=self.tensor_keys.sample_log_prob,
+            ).view_as(value)
 
         # Compute the V-Trace correction
         done = tensordict.get(("next", self.tensor_keys.done))

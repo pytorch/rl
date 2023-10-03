@@ -6216,7 +6216,9 @@ class TestA2C(LossModuleTestBase):
             device=device,
         )
 
-        actor = self._create_mock_actor(device=device, sample_log_prob_key=tensor_keys["sample_log_prob"])
+        actor = self._create_mock_actor(
+            device=device, sample_log_prob_key=tensor_keys["sample_log_prob"]
+        )
         value = self._create_mock_value(device=device, out_keys=[tensor_keys["value"]])
 
         if advantage == "gae":
