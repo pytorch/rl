@@ -1030,17 +1030,23 @@ class InPlaceSampler:
         return self.out
 
 
-def _reduce(tensor: torch.Tensor, reduction: str, dim: Optional[int] = None):
+def _reduce(
+    tensor: torch.Tensor, reduction: str, dim: Optional[int] = None
+) -> Union[float, torch.Tensor]:
     """Reduces a tensor given the reduction method."""
     if reduction == "max":
-        return tensor.max().item() if dim is None else tensor.max(dim=dim)[0]
+        result = tensor.max(dim=dim)
     elif reduction == "min":
-        return tensor.min().item() if dim is None else tensor.min(dim=dim)[0]
+        result = tensor.min(dim=dim)
     elif reduction == "mean":
-        return tensor.mean().item() if dim is None else tensor.mean(dim=dim)
+        result = tensor.mean(dim=dim)
     elif reduction == "median":
-        return tensor.median().item() if dim is None else tensor.median(dim=dim)
-    raise NotImplementedError(f"Unknown reduction method {reduction}")
+        result = tensor.median(dim=dim)
+    else:
+        raise NotImplementedError(f"Unknown reduction method {reduction}")
+    if isinstance(result, tuple):
+        result = result[0]
+    return result.item() if dim is None else result
 
 
 def stack_tensors(list_of_tensor_iterators: List) -> Tuple[torch.Tensor]:
