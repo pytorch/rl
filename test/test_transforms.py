@@ -6,6 +6,7 @@ import abc
 import argparse
 
 import itertools
+import pickle
 import sys
 from copy import copy
 from functools import partial
@@ -7326,6 +7327,15 @@ class TestVecNorm:
         if not env_t.is_closed:
             env_t.close()
         self.SEED = 0
+
+    def test_pickable(self):
+
+        transform = VecNorm()
+        serialized = pickle.dumps(transform)
+        transform2 = pickle.loads(serialized)
+        assert transform.__dict__.keys() == transform2.__dict__.keys()
+        for key in sorted(transform.__dict__.keys()):
+            assert isinstance(transform.__dict__[key], type(transform2.__dict__[key]))
 
 
 def test_added_transforms_are_in_eval_mode_trivial():
