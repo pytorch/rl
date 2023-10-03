@@ -689,12 +689,12 @@ class TensorDictReplayBuffer(ReplayBuffer):
         priority = tensordict.get(self.priority_key, None)
         if priority is None:
             return torch.tensor(
-                [self._sampler.default_priority],
+                self._sampler.default_priority,
                 dtype=torch.float,
                 device=tensordict.device,
             ).expand(tensordict.shape[0])
 
-        priority = priority.view(priority.shape[0], -1)
+        priority = priority.reshape(priority.shape[0], -1)
         priority = _reduce(priority, self._sampler.reduction, dim=1)
 
         return priority
