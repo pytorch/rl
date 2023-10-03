@@ -409,5 +409,6 @@ class A2CLoss(LossModule):
             "reward": self.tensor_keys.reward,
             "done": self.tensor_keys.done,
             "terminated": self.tensor_keys.terminated,
+            "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)

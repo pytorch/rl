@@ -138,7 +138,7 @@ class LossModule(TensorDictModuleBase):
         """
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dict__:
-                raise ValueError(f"{key} it not an accepted tensordict key")
+                raise ValueError(f"{key} is not an accepted tensordict key")
             if value is not None:
                 setattr(self.tensor_keys, key, value)
             else:

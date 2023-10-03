@@ -5750,6 +5750,7 @@ class TestA2C(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         return actor.to(device)
 
@@ -5787,6 +5788,7 @@ class TestA2C(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         module = nn.Sequential(base_layer, nn.Linear(5, 1))
         value = ValueOperator(
@@ -5813,6 +5815,7 @@ class TestA2C(LossModuleTestBase):
             distribution_class=TanhNormal,
             in_keys=["loc", "scale"],
             spec=action_spec,
+            return_log_prob=True,
         )
         module = nn.Linear(5, 1)
         value_head = ValueOperator(
@@ -6166,7 +6169,10 @@ class TestA2C(LossModuleTestBase):
             "action": "action",
             "reward": "reward",
             "done": "done",
+            "sample_log_prob": "sample_log_prob",
         }
+
+        import ipdb; ipdb.set_trace()
 
         self.tensordict_keys_test(
             loss_fn,
@@ -6184,7 +6190,9 @@ class TestA2C(LossModuleTestBase):
             "value": ("value", "value_state_test"),
             "reward": ("reward", "reward_test"),
             "done": ("done", ("done", "test")),
+            "sample_log_prob": ("sample_log_prob", "sample_log_prob_test"),
         }
+
         self.set_advantage_keys_through_loss_test(loss_fn, td_est, key_mapping)
 
     @pytest.mark.parametrize("advantage", ("gae", "vtrace", "td", "td_lambda", None))

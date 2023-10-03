@@ -183,9 +183,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 whether a trajectory is done.  Defaults to ``"done"``.
             terminated (NestedKey): The key in the input TensorDict that indicates
                 whether a trajectory is terminated.  Defaults to ``"terminated"``.
-            steps_to_next_obs_key (NestedKey): The key in the input tensordict
+            steps_to_next_obs (NestedKey): The key in the input tensordict
                 that indicates the number of steps to the next observation.
                 Defaults to ``"steps_to_next_obs"``.
+            sample_log_prob (NestedKey): The key in the input tensordict that
+                indicates the log probability of the sampled action. Defaults to ``"sample_log_prob"``.
         """
 
         advantage: NestedKey = "advantage"
@@ -227,6 +229,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
     @property
     def steps_to_next_obs_key(self):
         return self.tensor_keys.steps_to_next_obs
+
+    @property
+    def sample_log_prob_key(self):
+        return self.tensor_keys.sample_log_prob
 
     @abc.abstractmethod
     def forward(
@@ -346,7 +352,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise ValueError("tensordict keys cannot be None")
             if key not in self._AcceptedKeys.__dict__:
                 raise KeyError(
-                    f"{key} it not an acceptedaccepted tensordict key for advantages"
+                    f"{key} is not an accepted tensordict key for advantages"
                 )
             if (
                 key == "value"
