@@ -7,6 +7,7 @@
 This script reproduces the IMPALA Algorithm
 results from Espeholt et al. 2018 for the on Atari Environments.
 """
+
 import hydra
 
 
@@ -20,10 +21,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
 
     from tensordict import TensorDict
     from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import (
-        RayCollector,
-        RPCDataCollector,
-    )
+    from torchrl.collectors.distributed import RayCollector, RPCDataCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -73,6 +71,7 @@ def main(cfg: "DictConfig"):  # noqa: F821
         max_frames_per_traj=-1,
         remote_configs=remote_config,
         sync=False,
+        storing_device=device,
         update_after_each_batch=True,
     )
 

@@ -3,6 +3,16 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
+
+# To pickle the environment, in particular the EndOfLifeTransform, we need to
+# add the utils path to the PYTHONPATH
+utils_path = os.path.abspath(os.path.abspath(os.path.dirname(__file__)))
+current_pythonpath = os.environ.get("PYTHONPATH", "")
+new_pythonpath = f"{utils_path}:{current_pythonpath}"
+os.environ["PYTHONPATH"] = new_pythonpath
+
+
 import torch.nn
 import torch.optim
 from tensordict.nn import TensorDictModule
@@ -41,7 +51,8 @@ from torchrl.modules import (
 
 class EndOfLifeTransform(Transform):
     def _step(self, tensordict, next_tensordict):
-        lives = self.parent.base_env._env.unwrapped.ale.lives()
+        # lives = self.parent.base_env._env.unwrapped.ale.lives()
+        lives = 0
         end_of_life = torch.tensor(
             [tensordict["lives"] < lives], device=self.parent.device
         )
@@ -73,7 +84,7 @@ def make_env(env_name, device, is_test=False):
     env = TransformedEnv(env)
     env.append_transform(NoopResetEnv(noops=30, random=True))
     if not is_test:
-        # env.append_transform(EndOfLifeTransform())
+        env.append_transform(EndOfLifeTransform())
         env.append_transform(RewardClipping(-1, 1))
     env.append_transform(ToTensorImage(from_int=False))
     env.append_transform(GrayScale())
